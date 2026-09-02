@@ -2640,6 +2640,87 @@ produced (a paused spinner, a breathing halo, under 30 pixels each).
   on every width (Youssef's call), and the phone shows the same coming-soon
   notice.
 
+## The phone got its own look: paper and ink (v3.81.0, 2 Sept 2026)
+
+Youssef, on the v3.80.0 phone build: "Nah you need to figure out with a new
+COMPELTLE new look for mobile ONLY." He was right -- that release solved the
+LAYOUT (a second template over the same bindings) and then dressed it in the
+desktop's dark charcoal and gold, so the phone read as the same app squeezed
+smaller. The layout was never the complaint.
+
+- **The phone is now paper.** Warm paper ground (#F4EFE4), white cards with
+  soft shadows instead of hairline borders, **Fraunces** for every heading
+  (loaded from Google Fonts with the stylesheet link MEDIA-SCOPED to the phone
+  query, so a desktop pays nothing for it), gold as INK (#A2762C) rather than
+  as glow, emerald for done and rust for refused, 18px gutters, and a tab bar
+  that floats as a rounded slab clear of the safe area with a raised gold
+  Create button. Nothing about the desktop changed: every rule still lives
+  inside the one 820px query and `test/studio-mobile.test.mjs` fails if a
+  single one escapes it.
+- **Two grounds, deliberately.** The workspace is paper; the STAGE is night --
+  the focused review, the video player, the Start-job panel, the live bar and
+  the design export's own overlays. That is where a clip is watched and judged,
+  and those surfaces belong to the generated export, which this sheet may
+  reskin but must not rewrite. Paper app, dark stage.
+- **Five more screens are drawn by the shell now**, so the phone is one design
+  end to end rather than paper chrome around a dark app: Templates (the live
+  9:16 preview docks into `#dcmPvFrame`), the Nasheed library, Performance,
+  Tokens & billing and DeenAI. All from the SAME `StudioAdapter.bindings()`
+  object the desktop renders from -- rendered against the real bindings, every
+  one comes back with an EMPTY `missing` list, so not one control lost its
+  handler.
+- **The three screens still framed from the desktop DOM take dark chrome with
+  them.** Help, Owner and the gated editor are host- or export-rendered in the
+  dark studio; `body.dcm-on:not(.dcm-own)` flips the header and tab bar to
+  night for exactly those, because paper chrome around a night screen looks
+  broken and a half-lit screen is worse than a consistent dark one.
+- **The shell needed its own ground.** `#dcMobile` is transparent, so behind
+  the translucent header and under the floating tab bar sat the desktop's dark
+  studio -- the header photographed grey and the strip under the tabs black.
+  `body.dcm-own #dcMobile { background: var(--dcm-paper) }`; scoped to `own`,
+  or the framed screens would be hidden behind paper.
+- **The paste field rendered BLACK on paper**, because it carries
+  `data-tour="paste"` and studio-motion.css gives that a dark ground, a gold
+  ring and a breathing halo -- written for the desktop and inherited here. An
+  id (`#dcMobile .dcm-input`) outranks that class rule without touching it.
+  Same family as the v3.76.6 lesson: when a phone control looks like the
+  desktop's, look for a rule keyed on an attribute the export owns.
+- **A control that measures 40px is not a 44px target, whatever its hit area
+  is.** `::before { inset: -11px -4px }` widened the switch's hit region and
+  the audit still reported 40x23, because a rect is measured on the element.
+  The switch is a 48x44 button that DRAWS a 40x22 track (`::before`) and an
+  18px knob (`::after`).
+- **A band between 360 and 389 fails where 390 and 320 pass.** At 375 the
+  two-up clip grid leaves a 163px card, and three side-by-side actions in it
+  measure 40px; the month's cells miss 44 by a fraction. Both fixed in their
+  own `@media (max-width: 389px)` block -- the primary action takes its own
+  row, the month tightens its padding and gaps. **Audit every width, not the
+  round ones**: 390 and 320 both reported zero while 375 had 42 failures.
+- Measured after: **zero sub-44px targets at 320, 375 and 390**, no
+  page-level horizontal overflow at 320/375/390/430 or in landscape, and the
+  only text under 12px is badges and letter-spaced uppercase micro-labels.
+- **The desktop was pixel-diffed again**: 42 pairs across 1280/1440/1920,
+  **38 identical**, and the four that differ are 12-47 pixels each in the
+  topbar and home card -- the breathing paste halo and the idle brand light
+  pass, both infinite animations the capture deliberately does not freeze.
+  That is the same signature a second capture of an UNCHANGED baseline
+  produced last release.
+
+### Every row in the More sheet closes it (v3.81.0)
+
+Youssef: "with the button saying more when I click ANY tab it should open the
+page close the more selection page."
+
+- One wrapper, `closeThen`, clears `M.sheet` and then delegates to the handler
+  the RAIL itself uses -- no destination is re-implemented in the sheet, only
+  the dismissal is added. Applied to every nav row and to Connections, Tokens,
+  Account settings, the tour and Sign out.
+- **It repaints AFTER the handler as well as before.** Account settings opens
+  a host DIALOG rather than changing the screen, so nothing triggered a studio
+  paint and the sheet stayed on screen with `M.sheet` already null -- shut in
+  state and open in front of you. Verified by tapping all seven: each one
+  navigates and the sheet is gone from the DOM.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

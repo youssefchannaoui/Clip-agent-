@@ -13,6 +13,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@400;500;600;700&family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
+<!-- The phone dashboard's serif (studio-mobile.css). Media-scoped to the phone
+     query, so it is applied only where those rules apply. -->
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" media="(max-width: 820px), (pointer: coarse) and (max-height: 500px)">
 <style>
 /* The mushaf face the render burns ayat in (KFGQPC HAFS v2.1, see
    worker/fonts/NOTICE.md), self-hosted so previews draw the same glyphs --
@@ -2760,7 +2763,12 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          now, so pinning the finder to one value meant the frame became
          unfindable the moment it was changed. Once docked, its own parent is
          the answer. */
-      const frame=(pvEl.parentElement&&getComputedStyle(pvEl.parentElement).aspectRatio!=='auto')
+      /* The phone shell carries its own 9:16 frame for this sample while it
+         owns the Templates screen; the desktop frame is hidden there. */
+      const mframe=document.getElementById('dcmPvFrame');
+      const frame=mframe
+        ? mframe
+        : (pvEl.parentElement&&getComputedStyle(pvEl.parentElement).aspectRatio!=='auto')
         ? pvEl.parentElement
         : [...document.querySelectorAll('#studio div,#studio section')]
             .find(n=>n!==pvEl&&!pvEl.contains(n)&&getComputedStyle(n).aspectRatio!=='auto');
@@ -3949,7 +3957,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       tplLayout=null;
     }
     function paintTemplatesLayout(){
-      if(StudioAdapter.ui.screen!=='templates'){clearTemplatesLayout();return}
+      if(StudioAdapter.ui.screen!=='templates'||document.body.classList.contains('dcm-on')){clearTemplatesLayout();return}
       const frame=pvEl.parentElement;
       if(!frame||getComputedStyle(frame).aspectRatio==='auto'){clearTemplatesLayout();return}
       /* The row is the common ancestor of the preview frame and the caption

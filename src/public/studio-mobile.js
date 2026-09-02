@@ -44,7 +44,7 @@
   // 390px-tall window is no use to anyone. Desktops report a fine pointer and
   // tablets are taller than 500px in landscape, so neither is caught.
   var MQ = '(max-width: 820px), (pointer: coarse) and (max-height: 500px)';
-  var OWNED = ['home', 'queue', 'library', 'detail', 'schedule'];
+  var OWNED = ['home', 'queue', 'library', 'detail', 'schedule', 'templates', 'music', 'performance', 'tokens', 'deenai'];
   var CLIPS = ['queue', 'library', 'detail'];
   // Root-level overlays in the ORDER the template declares them after <main>.
   // Each renders nothing when its flag is false, so the open ones are exactly
@@ -109,6 +109,7 @@
     play: 'M8 5v14l11-7z',
     compass: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M15.5 8.5l-2 5-5 2 2-5z',
     warn: 'M12 3 2.5 20h19zM12 10v4M12 17.5v.5',
+    trash: 'M4 7h16M9 7V5h6v2M6.5 7l1 13h9l1-13M10 11v6M14 11v6',
   };
   function svg(d, extra) {
     var a = { viewBox: '0 0 24 24', width: '22', height: '22', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8',
@@ -150,15 +151,19 @@
     return h('button', { type: 'button', class: cat('dcm-tab ', b(clsPath)), on: { click: click } }, kids);
   }
   function tabs() {
+    // The bar floats: an outer track that holds it clear of the safe area and
+    // an inner slab that carries the ground, the border and the shadow.
     return h('nav', { class: 'dcm-tabs', 'data-tour': 'rail', 'aria-label': 'Main' }, [
-      tab('m.tabHome', 'm.goHome', I.home, 'Home'),
-      tab('m.tabClips', 'm.goClips', I.clips, 'Clips', 'needsCount'),
-      h('button', { type: 'button', class: 'dcm-tab dcm-tab-create', on: { click: 'm.openCreate' }, 'aria-label': 'Create clips' }, [
-        h('span', { class: 'dcm-plus' }, [svg(I.plus, { 'stroke-width': '2.4' })]),
-        h('span', { class: 'dcm-tab-l' }, 'Create'),
+      h('div', { class: 'dcm-tabs-in' }, [
+        tab('m.tabHome', 'm.goHome', I.home, 'Home'),
+        tab('m.tabClips', 'm.goClips', I.clips, 'Clips', 'needsCount'),
+        h('button', { type: 'button', class: 'dcm-tab dcm-tab-create', on: { click: 'm.openCreate' }, 'aria-label': 'Create clips' }, [
+          h('span', { class: 'dcm-plus' }, [svg(I.plus, { 'stroke-width': '2.4' })]),
+          h('span', { class: 'dcm-tab-l' }, 'Create'),
+        ]),
+        tab('m.tabSchedule', 'm.goSchedule', I.cal, 'Schedule'),
+        tab('m.tabMore', 'm.openMore', I.more, 'More'),
       ]),
-      tab('m.tabSchedule', 'm.goSchedule', I.cal, 'Schedule'),
-      tab('m.tabMore', 'm.openMore', I.more, 'More'),
     ]);
   }
   function sheet(flag, title, body, opts) {
@@ -543,13 +548,13 @@
   function moreSheet() {
     return sheet('m.sheetMore', 'More', [
       h('div', { class: 'dcm-menu' }, [
-        each('m.nav', 'it', [row({ on: { click: 'it.click' } }, [phb('it.icon'), h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('it.label')])]), iff('it.count', [h('span', { class: 'dcm-count' }, [tx('it.count')])]), svg(I.next, { width: '15', height: '15' })])]),
+        each('m.nav', 'it', [row({ on: { click: 'it.go' } }, [phb('it.icon'), h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('it.label')])]), iff('it.count', [h('span', { class: 'dcm-count' }, [tx('it.count')])]), svg(I.next, { width: '15', height: '15' })])]),
         row({ on: { click: 'm.openConnections' } }, [ph('ph ph-plugs-connected'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Publishing connections'), h('i', {}, [tx('connSummary')])]), svg(I.next, { width: '15', height: '15' })]),
-        row({ on: { click: 'goTokens' } }, [ph('ph-fill ph-coins'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Tokens & billing'), h('i', {}, [tx('tokenBalance'), ' tokens · ', tx('currentPlan')])]), svg(I.next, { width: '15', height: '15' })]),
-        row({ on: { click: 'accountSettings' } }, [ph('ph ph-user-circle'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Account settings')]), svg(I.next, { width: '15', height: '15' })]),
-        row({ on: { click: 'startTour' } }, [ph('ph ph-compass'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Take the tour')]), svg(I.next, { width: '15', height: '15' })]),
+        row({ on: { click: 'm.goTokens' } }, [ph('ph-fill ph-coins'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Tokens & billing'), h('i', {}, [tx('tokenBalance'), ' tokens · ', tx('currentPlan')])]), svg(I.next, { width: '15', height: '15' })]),
+        row({ on: { click: 'm.accountSettings' } }, [ph('ph ph-user-circle'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Account settings')]), svg(I.next, { width: '15', height: '15' })]),
+        row({ on: { click: 'm.startTour' } }, [ph('ph ph-compass'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Take the tour')]), svg(I.next, { width: '15', height: '15' })]),
         h('a', { class: 'dcm-row', href: 'https://deenclipped.online' }, [ph('ph ph-arrow-square-out'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Back to main website')])]),
-        row({ class: 'dcm-row-quiet', on: { click: 'signOut' } }, [ph('ph ph-sign-out'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Sign out')])]),
+        row({ class: 'dcm-row-quiet', on: { click: 'm.signOut' } }, [ph('ph ph-sign-out'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Sign out')])]),
       ]),
     ]);
   }
@@ -641,6 +646,232 @@
     ])]);
   }
 
+  // ── Templates ────────────────────────────────────────────────────────────
+  // The desktop screen is a two-column workbench with a live 9:16 preview
+  // beside the setting rows. On a phone the preview leads and the rows follow,
+  // and every row is the SAME `open` handler the desktop calls -- the option
+  // picker is a host dialog, which this shell already lays out as a sheet.
+  function tplRows(path, title) {
+    return h('section', { class: 'dcm-sec' }, [
+      secHead(title),
+      h('div', { class: 'dcm-list' }, [
+        each(path, 'r', [row({ on: { click: 'r.open' } }, [
+          phb('r.icon'), h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('r.label')])]),
+          h('span', { class: 'dcm-row-v' }, [tx('r.value')]), svg(I.next, { width: '15', height: '15' }),
+        ])]),
+      ]),
+    ]);
+  }
+  function templatesScreen() {
+    return [
+      h('div', { class: 'dcm-tplhead' }, [
+        h('div', { class: 'dcm-pv', id: 'dcmPvFrame' }),
+        h('div', { class: 'dcm-tplpick' }, [
+          h('span', { class: 'dcm-k' }, 'Clip style'),
+          h('select', { class: 'dcm-select', on: { change: 'setActiveTpl' }, 'aria-label': 'Clip style' }, [
+            each('m.tplOpts', 'o', [h('option', { selected: b('o.on') }, [tx('o.label')])]),
+          ]),
+          h('p', { class: 'dcm-muted' }, [tx('tplDirtyLabel')]),
+        ]),
+      ]),
+      tplRows('tplStyleRows', 'Style'),
+      tplRows('tplBrandRows', 'Placement'),
+      h('section', { class: 'dcm-sec' }, [
+        secHead('Processing'),
+        h('div', { class: 'dcm-list' }, [
+          each('tplAIRows', 'r', [h('div', { class: 'dcm-row' }, [
+            phb('r.icon'), h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('r.label')]), h('i', {}, [tx('r.note')])]),
+            h('button', { type: 'button', class: cat('dcm-switch ', b('r.onCls')), on: { click: 'r.toggle' }, 'aria-label': 'Toggle' }),
+          ])]),
+        ]),
+      ]),
+      h('div', { class: 'dcm-acts' }, [
+        h('button', { type: 'button', class: 'dcm-btn dcm-btn-p dcm-btn-big', on: { click: 'saveTpl' } }, 'Save and apply'),
+        h('button', { type: 'button', class: 'dcm-btn', on: { click: 'saveAsStyle' } }, 'Save as new style'),
+      ]),
+      h('p', { class: 'dcm-fine' }, 'A style applies to every clip cut from now on. Clips already rendered keep the style they were made with.'),
+    ];
+  }
+
+  // ── Nasheed library ──────────────────────────────────────────────────────
+  function musicScreen() {
+    return [
+      h('div', { class: 'dcm-card dcm-create' }, [
+        h('div', { class: 'dcm-card-h' }, [h('strong', {}, 'Nasheed bed'), h('span', { class: 'dcm-pill' }, [tx('nasheedVolLabel')])]),
+        h('p', { class: 'dcm-muted' }, [tx('nasheedDb')]),
+        h('input', { class: 'dcm-slider', type: 'range', min: '0', max: '100', value: b('nasheedVol'), on: { input: 'setVol' }, 'aria-label': 'Nasheed volume' }),
+        h('label', { class: 'dcm-btn dcm-btn-p dcm-btn-wide dcm-upload' }, [
+          svg(I.plus, { width: '18', height: '18' }), 'Add a nasheed',
+          h('input', { class: 'dcm-file', type: 'file', accept: 'audio/*', on: { change: 'onFile' } }),
+        ]),
+      ]),
+      h('section', { class: 'dcm-sec' }, [
+        secHead('In rotation'),
+        iff('m.noTracks', [empty('No nasheeds yet. Every clip renders silent under the speech until you add one.')]),
+        iff('m.hasTracks', [h('div', { class: 'dcm-list' }, [
+          each('nasheedList', 't', [h('div', { class: 'dcm-track' }, [
+            h('button', { type: 'button', class: 'dcm-track-p', on: { click: 't.play' }, 'aria-label': 'Play' }, [phb('t.playIcon')]),
+            h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('t.name')]), h('i', {}, [tx('t.mood'), ' · ', tx('t.dur')])]),
+            h('button', { type: 'button', class: 'dcm-btn dcm-btn-ico dcm-btn-ghost', on: { click: 't.remove' }, 'aria-label': 'Remove' }, [svg(I.trash)]),
+          ])]),
+        ])]),
+      ]),
+      h('p', { class: 'dcm-fine' }, 'The Quran template never carries a nasheed, whatever is in rotation.'),
+    ];
+  }
+
+  // ── Performance ──────────────────────────────────────────────────────────
+  function barRows(path, emptyPath, emptyText) {
+    return [
+      iff(emptyPath, [empty(emptyText)]),
+      each(path, 'r', [h('div', { class: 'dcm-brow' }, [
+        h('span', { class: 'dcm-brow-n' }, [tx('r.name')]),
+        h('span', { class: 'dcm-brow-t' }, [h('span', { class: 'dcm-brow-b', st: 'r.mBar' })]),
+        h('b', {}, [tx('r.value')]),
+      ])]),
+    ];
+  }
+  function performanceScreen() {
+    return [
+      h('div', { class: 'dcm-chips' }, [
+        each('perfRanges', 'r', [h('button', { type: 'button', class: cat('dcm-chip ', b('r.onCls')), on: { click: 'r.select' } }, [tx('r.label')])]),
+      ]),
+      h('p', { class: 'dcm-hint' }, [tx('perfRangeNote')]),
+      h('div', { class: 'dcm-tiles' }, [
+        each('perfTiles', 't', [h('div', { class: 'dcm-tile' }, [
+          h('b', {}, [tx('t.value')]), h('span', { class: 'dcm-tile-l' }, [tx('t.label')]), h('i', {}, [tx('t.note')]),
+        ])]),
+      ]),
+      h('section', { class: 'dcm-sec' }, [
+        secHead('Made to posted'),
+        h('div', { class: 'dcm-list' }, [
+          each('perfFunnel', 'f', [h('div', { class: 'dcm-fun' }, [
+            h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('f.name')]), h('i', {}, [tx('f.rate')])]),
+            h('strong', {}, [tx('f.value')]),
+          ])]),
+        ]),
+        h('p', { class: 'dcm-fine' }, [tx('perfFunnelNote')]),
+      ]),
+      h('section', { class: 'dcm-sec' }, [secHead('Where clips went')].concat(barRows('perfDests', 'perfDestsEmpty', 'Nothing has been published yet.'))),
+      h('section', { class: 'dcm-sec' }, [secHead('When they post')].concat(barRows('perfSlots', 'perfSlotsEmpty', 'No clip has posted yet, so there is no pattern to read.'))),
+      h('section', { class: 'dcm-sec' }, [
+        secHead('Lectures worth clipping'),
+        iff('perfLecturesEmpty', [empty('Import a lecture and this fills in.')]),
+        h('div', { class: 'dcm-list' }, [
+          each('perfLectures', 'l', [row({ on: { click: 'l.open' } }, [
+            h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('l.name')]), h('i', {}, [tx('l.clips'), ' clips · ', tx('l.kept'), ' kept · ', tx('l.posted'), ' posted'])]),
+            h('span', { class: 'dcm-row-v' }, [tx('l.score')]), svg(I.next, { width: '15', height: '15' }),
+          ])]),
+        ]),
+      ]),
+      h('section', { class: 'dcm-sec' }, [
+        secHead('Strongest clips'),
+        iff('perfBoardEmpty', [empty('No clips in this window.')]),
+        h('div', { class: 'dcm-list' }, [
+          each('perfBoard', 'c', [h('div', { class: 'dcm-brd' }, [
+            h('span', { class: 'dcm-brd-r' }, [tx('c.rank')]),
+            h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('c.caption')]), h('i', {}, [tx('c.duration'), ' · ', tx('c.where')])]),
+            h('span', { class: cat('dcm-tag ', b('c.mState')) }, [tx('c.state')]),
+          ])]),
+        ]),
+        h('p', { class: 'dcm-fine' }, [tx('perfBoardNote')]),
+      ]),
+      h('p', { class: 'dcm-fine' }, [tx('perfFootNote')]),
+    ];
+  }
+
+  // ── Tokens & billing ─────────────────────────────────────────────────────
+  function tokensScreen() {
+    return [
+      h('div', { class: 'dcm-card dcm-create' }, [
+        h('span', { class: 'dcm-k' }, 'Your plan'),
+        h('div', { class: 'dcm-card-h' }, [h('strong', {}, [tx('currentPlan')]), h('span', { class: 'dcm-pill' }, [tx('tokenBalance'), ' tokens'])]),
+        h('p', { class: 'dcm-muted' }, [tx('planNote')]),
+        h('div', { class: 'dcm-acts' }, [
+          h('button', { type: 'button', class: 'dcm-btn', on: { click: 'changeCard' } }, 'Manage billing'),
+          iff('resumeShow', [h('button', { type: 'button', class: 'dcm-btn dcm-btn-p', on: { click: 'resumeSub' } }, 'Resume plan')]),
+        ]),
+        h('div', { class: 'dcm-spend' }, [
+          each('spendRows', 'r', [h('span', {}, [phb('r.icon'), tx('r.label'), h('b', {}, [tx('r.cost')])])]),
+        ]),
+      ]),
+      h('section', { class: 'dcm-sec' }, [
+        secHead('Plans'),
+        h('div', { class: 'dcm-seg' }, [
+          each('billingPeriods', 'p', [h('button', { type: 'button', class: cat('dcm-seg-b ', b('p.onCls')), on: { click: 'p.select' } }, [tx('p.label')])]),
+        ]),
+        iff('periodNote', [h('p', { class: 'dcm-hint' }, [tx('periodNote')])]),
+        h('div', { class: 'dcm-list' }, [
+          each('tierCards', 't', [h('div', { class: cat('dcm-plan ', b('t.mCls')) }, [
+            h('div', { class: 'dcm-card-h' }, [
+              h('strong', {}, [tx('t.name')]),
+              iff('t.tag', [h('span', { class: 'dcm-pill' }, [tx('t.tag')])]),
+            ]),
+            h('p', { class: 'dcm-muted' }, [tx('t.tagline')]),
+            h('div', { class: 'dcm-price' }, [h('b', {}, [tx('t.price')]), h('span', {}, [tx('t.per')])]),
+            iff('t.tokens', [h('span', { class: 'dcm-k' }, [tx('t.tokens')])]),
+            h('span', { class: 'dcm-k' }, [tx('t.linesLabel')]),
+            h('ul', { class: 'dcm-ticks' }, [each('t.lines', 'l', [h('li', {}, [tx('l.text')])])]),
+            h('button', { type: 'button', class: cat('dcm-btn dcm-btn-wide ', b('t.mBtn')), on: { click: 't.choose' } }, [tx('t.cta')]),
+            iff('t.foot', [h('p', { class: 'dcm-fine' }, [tx('t.foot')])]),
+          ])]),
+        ]),
+      ]),
+      h('section', { class: 'dcm-sec' }, [
+        secHead('Top up'),
+        h('div', { class: 'dcm-list' }, [
+          each('packs', 'p', [h('div', { class: 'dcm-pack' }, [
+            h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('p.name')]), h('i', {}, [tx('p.tokens'), ' tokens · ', tx('p.rate')])]),
+            h('button', { type: 'button', class: 'dcm-btn dcm-btn-sm dcm-btn-p', on: { click: 'p.buy' } }, [tx('p.price')]),
+          ])]),
+        ]),
+        h('p', { class: 'dcm-fine' }, 'Top-up tokens never expire and are spent after your plan allowance.'),
+      ]),
+    ];
+  }
+
+  // ── DeenAI ───────────────────────────────────────────────────────────────
+  function deenaiScreen() {
+    return [
+      h('div', { class: 'dcm-card dcm-create' }, [
+        h('div', { class: 'dcm-card-h' }, [h('strong', {}, 'Ask DeenAI'), iff('aiCount', [h('span', { class: 'dcm-pill' }, [tx('aiCount')])])]),
+        h('p', { class: 'dcm-muted' }, [tx('aiSub')]),
+        h('input', { class: 'dcm-input', type: 'text', value: b('aiQ'), placeholder: 'What should I do next?', on: { input: 'aiSetQ' }, 'aria-label': 'Ask DeenAI' }),
+        h('div', { class: 'dcm-chips dcm-chips-flat' }, [
+          each('aiPrompts', 'p', [h('button', { type: 'button', class: 'dcm-chip', on: { click: 'p.pick' } }, [tx('p.text')])]),
+        ]),
+        h('button', { type: 'button', class: 'dcm-btn dcm-btn-p dcm-btn-wide', on: { click: 'aiAsk' } }, [tx('aiAskLabel')]),
+        h('p', { class: 'dcm-fine' }, [tx('aiAskNote')]),
+        iff('aiHasAnswer', [h('p', { class: 'dcm-answer' }, [tx('aiAnswer')])]),
+      ]),
+      iff('aiAskGate', [h('div', { class: 'dcm-card dcm-card-warn' }, [
+        h('p', { class: 'dcm-muted' }, [tx('aiGateNote')]),
+        h('button', { type: 'button', class: 'dcm-btn dcm-btn-p dcm-btn-wide', on: { click: 'aiUpgrade' } }, [tx('aiGateCta')]),
+      ])]),
+      iff('aiHeadShow', [h('div', { class: 'dcm-card dcm-explain' }, [
+        iff('aiHeadKicker', [h('span', { class: 'dcm-k' }, [tx('aiHeadKicker')])]),
+        h('strong', {}, [tx('aiHeadTitle')]),
+        iff('aiHeadFigureShow', [h('div', { class: 'dcm-price' }, [h('b', {}, [tx('aiHeadFigure')]), h('span', {}, [tx('aiHeadFigureLabel')])])]),
+        h('p', {}, [tx('aiHeadBody')]),
+      ])]),
+      h('div', { class: 'dcm-tiles' }, [
+        each('aiMetrics', 'm2', [h('div', { class: 'dcm-tile' }, [
+          h('b', {}, [tx('m2.value')]), h('span', { class: 'dcm-tile-l' }, [tx('m2.label')]), h('i', {}, [tx('m2.note')]),
+        ])]),
+      ]),
+      h('section', { class: 'dcm-sec' }, [
+        secHead('What your records say'),
+        iff('aiEmpty', [empty('Not enough decided clips yet for a pattern worth printing.')]),
+        h('div', { class: 'dcm-list' }, [
+          each('aiCards', 'c', [h('div', { class: 'dcm-ai' }, [
+            phb('c.icon'), h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('c.title')]), h('i', {}, [tx('c.body')])]),
+          ])]),
+        ]),
+      ]),
+      h('p', { class: 'dcm-fine' }, [tx('aiFootnote')]),
+    ];
+  }
+
   function buildTemplate() {
     return [
       header(),
@@ -651,6 +882,11 @@
         iff('isLibrary', libraryScreen()),
         iff('isDetail', detailScreen()),
         iff('isSchedule', scheduleScreen()),
+        iff('isTemplates', templatesScreen()),
+        iff('isMusic', musicScreen()),
+        iff('isPerf', performanceScreen()),
+        iff('isTokens', tokensScreen()),
+        iff('isDeenai', deenaiScreen()),
       ])]),
       tabs(),
       moreSheet(), searchSheet(), activitySheet(), accountSheet(), createSheet(), reviewSheet(),
@@ -832,6 +1068,23 @@
       if (!it || ['home', 'queue', 'schedule'].indexOf(it.key) !== -1 || navSeen[it.key]) return false;
       navSeen[it.key] = true; return true;
     });
+    // Youssef, 2 Sept 2026: "when I click ANY tab it should open the page
+    // close the more selection page". Every row in the More sheet therefore
+    // goes through one wrapper that clears the sheet BEFORE delegating to the
+    // handler the rail itself uses -- the destination is never re-implemented
+    // here, only the dismissal is added.
+    var closeThen = function (fn) {
+      // Repaint AFTER the handler as well as before it: a destination that
+      // opens a host DIALOG rather than changing the screen (Account settings)
+      // never triggers a studio paint of its own, so the sheet stayed on
+      // screen with M.sheet already null -- shut in state and open on screen.
+      return act(function (e) { M.sheet = null; if (typeof fn === 'function') fn(e); repaint(); });
+    };
+    m.nav = m.nav.map(function (it) { return Object.assign({}, it, { go: closeThen(it.click) }); });
+    m.goTokens = closeThen(vals.goTokens);
+    m.accountSettings = closeThen(vals.accountSettings);
+    m.startTour = closeThen(vals.startTour);
+    m.signOut = closeThen(vals.signOut);
     var q = String(ui.query || '').trim().toLowerCase();
     m.search = M.sheet === 'search' ? searchRows(q, DATA, ui) : [];
     m.searchHas = m.search.length > 0; m.searchNone = Boolean(q) && !m.searchHas; m.searchIdle = !q;
@@ -877,6 +1130,31 @@
       }
     }
     if (!m.rvOn) m.rv = { close: act(function () {}), prev: act(function () {}), next: act(function () {}), primary: act(function () {}), reject: act(function () {}), edit: act(function () {}), openLecture: act(function () {}) };
+
+
+    // ── the screens the shell now draws itself ────────────────────────────
+    // Fields only: every handler below is the adapter's own, so the phone and
+    // the desktop cannot disagree about what a control does.
+    m.tplOpts = (vals.tplList || []).map(function (label) {
+      return { label: label, on: label === vals.activeTpl ? 'selected' : false };
+    });
+    (vals.tplAIRows || []).forEach(function (r) { r.onCls = r.on ? 'on' : ''; });
+    m.hasTracks = (vals.nasheedList || []).length > 0;
+    m.noTracks = !m.hasTracks;
+    (vals.perfRanges || []).forEach(function (r) { r.onCls = r.on ? 'on' : ''; });
+    var barFill = function (r, bad) {
+      r.mBar = 'width: ' + (r.pct || 3) + '%; background: ' + (bad ? '#A64738' : '#A2762C') + ';';
+    };
+    (vals.perfDests || []).forEach(function (r) { barFill(r, r.failed); });
+    (vals.perfSlots || []).forEach(function (r) { barFill(r, false); });
+    (vals.perfBoard || []).forEach(function (c) {
+      c.mState = c.state === 'Posted' ? 'is-ok' : c.state === 'Discarded' ? 'is-bad' : c.state === 'Approved' ? 'is-gold' : 'is-quiet';
+    });
+    (vals.billingPeriods || []).forEach(function (pr) { pr.onCls = pr.on ? 'on' : ''; });
+    (vals.tierCards || []).forEach(function (t) {
+      t.mCls = (t.isCurrent ? 'is-current ' : '') + (t.tier === 'studio' ? 'is-top' : '');
+      t.mBtn = t.disabled ? 'dcm-btn-dim' : 'dcm-btn-p';
+    });
 
     var out = Object.create(vals);
     out.m = m;

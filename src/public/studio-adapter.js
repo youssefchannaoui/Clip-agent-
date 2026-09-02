@@ -4148,6 +4148,7 @@
       });
       return {
         name: plan.name && tier !== 'basic' ? plan.name.split(' ')[0] : (tier === 'basic' ? 'Basic' : plan.name || tier),
+        tier: tier, isCurrent: isCurrent, disabled: Boolean(isCurrent || tier === 'basic' || unconfigured),
         tagline: plan.description || '',
         icon: look.icon,
         iconStyle: 'font-size: 15px; color: ' + look.accent + ';',
@@ -6415,7 +6416,7 @@
         { key: 'captionBehindSubject', icon: 'ph ph-user-focus', label: 'Captions behind speaker', note: 'the speaker is cut out and laid over the text' }].map(function (r) {
         var on = Boolean(tpl[r.key]);
         return {
-          icon: r.icon, label: r.label, note: r.note,
+          icon: r.icon, label: r.label, note: r.note, on: on,
           trackStyle: 'position: relative; margin-left: auto; width: 34px; height: 19px; flex: none; border-radius: 20px; cursor: pointer; transition: background .16s ease, border-color .16s ease; border: 1px solid ' +
             (on ? 'rgba(217,180,120,.5); background: rgba(217,180,120,.22);' : '#33333A; background: #17171A;'),
           knobStyle: 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? '#F0D6A6' : '#6E6E76') + '; transition: left .16s ease, background .16s ease;',
@@ -6780,6 +6781,7 @@
         : 'Counting everything on the account.',
       perfRanges: ['Last 7 days', 'Last 30 days', 'All time'].map(function (label) {
         return {
+          on: UI.perfRange === label,
           label: label,
           style: tabStyle(UI.perfRange === label),
           select: function (e) { stop(e); setUI({ perfRange: label }); },
@@ -6861,6 +6863,8 @@
           return {
             name: name,
             value: row.failed ? row.posted + ' \u00b7 ' + row.failed + ' failed' : String(row.posted),
+            pct: Math.max(3, Math.round((total / max) * 100)),
+            failed: row.failed > 0,
             barStyle: 'position: absolute; inset: 0 auto 0 0; width: ' + Math.max(3, Math.round((total / max) * 100)) + '%; border-radius: 20px; background: '
               + (row.failed ? 'linear-gradient(90deg, #C77E6E, #E6B770)' : 'linear-gradient(90deg, #D9B478, #F0D6A6)') + ';',
           };
@@ -6883,6 +6887,7 @@
           return {
             name: name,
             value: String(tally[name]),
+            pct: Math.max(3, Math.round((tally[name] / max) * 100)),
             barStyle: 'position: absolute; inset: 0 auto 0 0; width: ' + Math.max(3, Math.round((tally[name] / max) * 100)) + '%; border-radius: 20px; background: linear-gradient(90deg, #D9B478, #F0D6A6);',
           };
         });
@@ -7428,6 +7433,7 @@
       cardLabel: 'Payment method',
       manageBilling: function (e) { stop(e); global.StudioAdapter.onBillingPortal(); },
       resumeSub: function (e) { stop(e); global.StudioAdapter.onResumeSubscription(); },
+      resumeShow: Boolean(current.cancelAtPeriodEnd),
       resumeSubStyle: current.cancelAtPeriodEnd
         ? 'display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 9px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid rgba(127,209,166,.4); background: rgba(127,209,166,.12); color: #7FD1A6;'
         // Not drawn at all when nothing is winding down (invariant 8).
@@ -7445,6 +7451,7 @@
       billingPeriods: BILLING_PERIODS.map(function (period) {
         var on = period.id === billingPeriod;
         return {
+          key: period.id, on: on,
           label: period.label,
           select: function (e) {
             stop(e);
