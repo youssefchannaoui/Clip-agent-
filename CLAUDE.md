@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1029 JS + 488 Python**
+- `npm test` and `npm run check` must pass. Currently **1029 JS + 515 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2342,6 +2342,80 @@ others look off, fix the other 3 to look better same look like original yt."
   dashboard's gold, against a deleted mark, and against the tile-strip without
   `:first-child`. Every screen was swept for these icons afterwards -- only two
   container shapes exist in the running app, and both were measured.
+
+## The worker audit, and everything it changed (v3.77.0, 2 Sept 2026)
+
+Youssef: "check my ai worker in all aspects give me a rating for it and if we
+can improve let me know", then "can we make ALL a 10". The audit read every
+line of `worker/` and rated it 7.5/10; these are the changes that moved the
+scores, each pinned in `test/test_worker_audit.py` (27 tests).
+
+- **The scoring request never declared a context window.** `refine_with_ollama`
+  sent ~2,800 tokens of prompt plus a 1,024-token answer with no `num_ctx`,
+  while the DeenAI path set 4096 and tested it. Ollama's long-standing default
+  is 2048 and it truncates from the FRONT -- so the transcript data survived
+  and the instruction block (JSON shape, "never invent a speaker", "5-12
+  words") is what was dropped. Four answer shapes, invented scholars, echoed
+  lecture titles and arrays closed after one row are all what a model does
+  when it has seen the data and not the rules. `AI_NUM_CTX = 4096` now
+  (KV cache ~0.5G under the 2G cap), per-item text 1,400 -> 1,000 chars, and
+  the budget is enforced in code: a prompt `estimate_tokens` says will not fit
+  is asked in halves, so the rules always arrive. Arabic tokenises at ~2
+  chars a token, so an all-Arabic batch of four goes as two pairs.
+- **The answer is pinned to the batch by JSON schema.** `format` carries
+  `clip_rows_schema(n)` with `minItems == maxItems == n`; Ollama constrains
+  decoding to it, so the early close is undecodable. A server that answers
+  400 to a schema gets plain JSON mode once and is remembered for the run
+  (`_SCHEMA_FORMAT_OK`). The singles retry stays as the backstop.
+  **Not yet proven on the box** -- the Ollama there is `latest` at build time;
+  if the first deploy logs a 400 fallback, the image predates schema formats.
+- **Only the Arabic is translated.** `translate_audio` re-ran Whisper over the
+  WHOLE file whenever any Arabic was heard; an English hour with forty seconds
+  of recitation paid a second full transcription. `arabic_spans()` clips the
+  pass to the Arabic segments (padded 0.6s, merged) through faster-whisper's
+  `clip_timestamps`; a pinned non-English language or Arabic in more than half
+  the file still translates whole. An older library without the argument
+  falls back to the whole file rather than failing the job.
+- **`condition_on_previous_text` is False.** The classic repeat-loop setting
+  for a small model on an hour of audio; VAD is already on.
+- **The scorer speaks Arabic.** It found words with `[a-zA-Z']` only, so a
+  lecture delivered in Arabic had NO words: -10 for under 35 words, -8 for a
+  pace of zero, no hook, no power word -- half the catalogue scored on its
+  duration and a full stop. `score_words()` tokenises both scripts (letters
+  only -- the Arabic block also holds ؟ and the digits), strips harakat, the
+  clitic و/ف/ب/ك/ل and the article so والقبر and قبر are one word; the power,
+  story, claim, payoff and context lists carry Arabic forms; ؟ is a question
+  mark and ۔ a full stop. **`QUOTE_RISK` is bilingual** -- invariant 1 had an
+  Arabic blind spot: a hadith quoted in Arabic never forced review.
+- **Filler and intro words match whole words.** `lower.count("like")` charged
+  "likely", "unlike" and "Allah likes" -- up to -14 on a clip with no filler.
+- **A job has a wall-clock budget** (`job_budget_seconds`): four times the
+  selected stretch, floored at 90 minutes, or four times `maxSourceMinutes`
+  when the length is unknown; `WORKER_JOB_BUDGET_MIN` overrides. Every ffmpeg
+  call had a timeout; Whisper had none, and a hung transcription kept the
+  heartbeat thread beating, so the app's stall detector stayed green while the
+  only slot was held for ever.
+- **Template fields cannot break the formats they land in.** Fonts and colours
+  went raw into the ASS `Style:` line and the ffmpeg graph. `safe_font` refuses
+  a comma or newline (a new style field, a new event); `safe_hex` refuses
+  anything but six hex digits (`#000000,drawtext=` is a filter injection);
+  `ass_escape` folds a bare `\r`. Fine while templates are the shipped five;
+  mandatory before the Studio custom-templates backlog item starts.
+- **Proxy credentials are redacted** from job errors -- yt-dlp quotes the proxy
+  it used, and `clean_error` copies its text into the job record, the callback
+  and the owner's feed. Every pool URL and its userinfo now.
+- **`project.timings`** on every result: import / audio / transcribe / score /
+  render / total, in seconds. The CPX41 rescale is a decision about exactly
+  this and there was no number to make it with.
+- A cache hit is **hardlinked** into the job (`place_local`) instead of copied
+  a second time -- 1.5GB of writes per job saved on a hit. `/readiness` reports
+  the quick lane's depth. `verify-deploy.sh` checks the four new markers.
+
+**What is still not a ten, and why:** AI titling quality is bounded by
+qwen3:1.7b and Arabic transcription by Whisper `small`; both are unlocked by
+the CPX41 rescale (open item 5), not by code. The schema format and the
+clipped translation are proven by test, not yet on the box -- watch the first
+deploy's log for a 400 fallback and read `timings` off the first real job.
 
 ## Open items
 

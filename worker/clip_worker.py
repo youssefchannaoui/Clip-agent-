@@ -31,6 +31,7 @@ import tempfile
 import sys
 import time
 import threading
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -345,12 +346,12 @@ def copy_or_download(job: dict[str, Any], destination: Path) -> tuple[Path, str]
         local = Path(source[7:]).expanduser().resolve()
         if not local.exists():
             raise RuntimeError("The local source file does not exist.")
-        shutil.copy2(local, destination)
+        place_local(local, destination)
         return destination, title or local.stem
 
     local_candidate = Path(source).expanduser()
     if local_candidate.exists():
-        shutil.copy2(local_candidate.resolve(), destination)
+        place_local(local_candidate.resolve(), destination)
         return destination, title or local_candidate.stem
 
     if not re.match(r"^https?://", source, re.I):
@@ -414,6 +415,23 @@ def copy_or_download(job: dict[str, Any], destination: Path) -> tuple[Path, str]
             destination.unlink()
         shutil.move(str(actual), str(destination))
     return destination, title or detected_title or "Untitled lecture"
+
+
+def place_local(local: Path, destination: Path) -> None:
+    """The service's file, under this job's name, without a second copy.
+
+    A source-cache hit already arrives as a hardlink into the job's scratch;
+    copying it again here wrote another 1.5GB per job for a lecture the disk
+    already held twice. A link is instant and costs nothing; the copy remains
+    for a source on another volume, where a link cannot reach.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        destination.unlink()
+    try:
+        os.link(local, destination)
+    except OSError:
+        shutil.copy2(local, destination)
 
 
 def trim_source_window(ffmpeg: str, source: Path, destination: Path, start_sec: float, duration_sec: float) -> None:
@@ -494,7 +512,12 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
         "vad_filter": True,
         "vad_parameters": {"min_silence_duration_ms": 450},
         "word_timestamps": True,
-        "condition_on_previous_text": True,
+        # False, deliberately. With the previous window fed back as context, a
+        # small model on an hour of audio falls into the classic repeat loop --
+        # one phrase transcribed over and over until the VAD breaks it -- and
+        # drifts after any misheard passage. VAD is already on, so each window
+        # stands on its own; nothing is lost but the failure mode.
+        "condition_on_previous_text": False,
         "task": settings.get("task") or DEFAULT_WHISPER_TASK,
     }
     language = str(settings.get("language") or "").strip()
@@ -573,17 +596,69 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
         and settings.get("translateCaptions") is not False
     )
     if wants_english:
+        # Only the stretches that actually need translating. The second pass
+        # used to re-run Whisper over the WHOLE file whenever any Arabic was
+        # heard, so an English lecture with forty seconds of recitation paid
+        # a second full transcription for those forty seconds. A lecture that
+        # is Arabic throughout (a pinned non-English language, or Arabic in
+        # most of it) still translates the whole file -- clipping buys nothing
+        # there and the clip list would be the file.
+        spans = arabic_spans(output, duration_sec)
+        whole = bool(language and not language.lower().startswith("en")) or spans is None
         progress("Translating speech to English", 61,
-                 model=model_name, spokenLanguage=spoken, etaSec=None)
-        english = translate_audio(model, audio_file, kwargs)
+                 model=model_name, spokenLanguage=spoken, etaSec=None,
+                 translatedSec=None if whole else round(sum(b - a for a, b in spans), 1))
+        english = translate_audio(model, audio_file, kwargs, spans=None if whole else spans)
         attach_english(output, english)
     return output
 
-def translate_audio(model: Any, audio_file: Path, kwargs: dict[str, Any]) -> list[dict[str, Any]]:
+
+# Padding either side of an Arabic segment, so a translation pass clipped to it
+# hears the whole phrase rather than a word cut mid-syllable.
+TRANSLATE_PAD_SEC = 0.6
+# Above this share of the file, clipping is not worth it: translate everything.
+TRANSLATE_WHOLE_ABOVE = 0.5
+
+
+def arabic_spans(segments: list[dict[str, Any]], duration_sec: float) -> list[tuple[float, float]] | None:
+    """The stretches of audio holding Arabic, padded and merged -- or None when
+    they cover so much of the file that clipping would not save anything."""
+    raw: list[tuple[float, float]] = []
+    for item in segments:
+        if not contains_arabic(item.get("text")):
+            continue
+        start = max(0.0, float(item.get("start") or 0.0) - TRANSLATE_PAD_SEC)
+        end = float(item.get("end") or 0.0) + TRANSLATE_PAD_SEC
+        if duration_sec > 0:
+            end = min(duration_sec, end)
+        if end > start:
+            raw.append((start, end))
+    if not raw:
+        return None
+    raw.sort()
+    merged: list[tuple[float, float]] = [raw[0]]
+    for start, end in raw[1:]:
+        if start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    covered = sum(end - start for start, end in merged)
+    if duration_sec > 0 and covered / duration_sec > TRANSLATE_WHOLE_ABOVE:
+        return None
+    return merged
+
+def translate_audio(model: Any, audio_file: Path, kwargs: dict[str, Any],
+                    spans: list[tuple[float, float]] | None = None) -> list[dict[str, Any]]:
     """The same audio read out in English, as timed lines.
 
     Word timings are not asked for: the English is drawn as one line under the
     speech, never word by word, and asking for them costs time for nothing.
+
+    `spans` restricts the pass to those stretches (faster-whisper's
+    clip_timestamps); the timestamps it returns stay on the file's own clock,
+    so attach_english needs no offset. VAD is dropped alongside it -- the
+    library ignores the filter when clips are given, and the spans are already
+    speech.
     """
     options: dict[str, Any] = {
         "beam_size": kwargs.get("beam_size", 1),
@@ -591,7 +666,10 @@ def translate_audio(model: Any, audio_file: Path, kwargs: dict[str, Any]) -> lis
         "condition_on_previous_text": False,
         "task": "translate",
     }
-    if kwargs.get("vad_parameters"):
+    if spans:
+        options["clip_timestamps"] = [round(t, 2) for span in spans for t in span]
+        options.pop("vad_filter", None)
+    elif kwargs.get("vad_parameters"):
         options["vad_parameters"] = kwargs["vad_parameters"]
     if kwargs.get("language"):
         options["language"] = kwargs["language"]
@@ -603,7 +681,13 @@ def translate_audio(model: Any, audio_file: Path, kwargs: dict[str, Any]) -> lis
     try:
         translated = model.transcribe(str(audio_file), **options)[0]
     except TypeError:
+        # An older faster-whisper: no per-segment detection, and possibly no
+        # clip_timestamps either. The whole file is slower, not a failed job.
         options.pop("multilingual", None)
+        if options.pop("clip_timestamps", None) is not None:
+            options["vad_filter"] = kwargs.get("vad_filter", True)
+            if kwargs.get("vad_parameters"):
+                options["vad_parameters"] = kwargs["vad_parameters"]
         translated = model.transcribe(str(audio_file), **options)[0]
     for segment in translated:
         text = str(segment.text or "").strip()
@@ -652,7 +736,7 @@ FILLER = {
 HOOKS_UBIQUITOUS = {
     "allah", "quran", "prophet", "brothers", "sisters", "prayer", "salah",
 }
-HOOKS_POWER = {
+HOOKS_POWER_LATIN = {
     "death", "grave", "jannah", "jahannam", "hellfire", "paradise", "mercy",
     "forgiveness", "forgive", "repent", "repentance", "regret", "tears", "cry",
     "mother", "father", "parents", "heart", "test", "hardship", "ease",
@@ -660,8 +744,62 @@ HOOKS_POWER = {
     "rizq", "halal", "haram", "marriage", "akhirah", "dunya", "judgment",
     "accountability", "trial", "blessing", "reward", "intention", "sincerity",
 }
+# The same stakes vocabulary in Arabic script. Before this the scorer found
+# words with [a-zA-Z'] only, so a lecture delivered in Arabic had NO words at
+# all: minus ten for being under 35 words, minus eight for a pace of zero, no
+# hook, no power word -- scored on its duration and a full stop. On an Islamic
+# clipper that is half the catalogue scored blind. Bare forms without the
+# definite article, matched as whole words after normalisation strips the
+# tashkeel; the article is stripped by the tokeniser below.
+HOOKS_POWER_ARABIC = {
+    "موت", "قبر", "جنة", "جهنم", "نار", "رحمة", "مغفرة", "توبة", "ندم",
+    "دموع", "بكاء", "أم", "أب", "والدين", "قلب", "ابتلاء", "صبر", "شكر",
+    "بركة", "رزق", "حلال", "حرام", "زواج", "آخرة", "دنيا", "حساب", "قيامة",
+    "شيطان", "ذنب", "معصية", "دعاء", "نية", "إخلاص", "أجر", "ثواب", "فتنة",
+    "موتى", "عذاب", "نعمة",
+}
+HOOKS_POWER = HOOKS_POWER_LATIN | HOOKS_POWER_ARABIC
+HOOKS_UBIQUITOUS_ARABIC = {"الله", "قرآن", "نبي", "رسول", "إخوة", "أخوات", "صلاة"}
+HOOKS_UBIQUITOUS = HOOKS_UBIQUITOUS | HOOKS_UBIQUITOUS_ARABIC
 # Kept for compatibility with anything that imports HOOKS.
 HOOKS = HOOKS_UBIQUITOUS | HOOKS_POWER
+
+# One tokeniser for both scripts. Arabic words carry their definite article
+# and the harakat Whisper occasionally emits; both are stripped so "الجنة"
+# and "جنة" are the same word to the scorer and to the lecture frequency
+# table alike.
+_WORD_RE = re.compile(r"[a-zA-Z'\u0620-\u0652\u0670-\u06D3\u06D5]+")
+_ARABIC_MARKS = re.compile(r"[\u064B-\u0652\u0670\u0640]")
+
+
+def score_words(text: str) -> list[str]:
+    """The words a scorer counts, lower-cased, article-stripped, mark-free."""
+    out: list[str] = []
+    for word in _WORD_RE.findall(str(text or "").lower()):
+        if contains_arabic(word):
+            word = _ARABIC_MARKS.sub("", word)
+            # A clitic conjunction or preposition is written joined to the
+            # word: "والقبر" is "and the grave". Peel "و"/"ف" (and), then
+            # "ب"/"ل"/"ك" only when the article follows, then the article.
+            if len(word) > 4 and word[0] in "وف" and word[1:].startswith("ال"):
+                word = word[1:]
+            if len(word) > 4 and word[0] in "بكل" and word[1:].startswith("ال"):
+                word = word[1:]
+            if len(word) > 3 and word.startswith("ال"):
+                word = word[2:]
+            for hamza, plain in (("أ", "ا"), ("إ", "ا"), ("آ", "ا")):
+                word = word.replace(hamza, plain)
+        if word:
+            out.append(word)
+    return out
+
+
+def _bounded(items: Iterable[str]) -> re.Pattern[str]:
+    """Whole-word matcher for a phrase list. `lower.count("like")` used to
+    charge "likely", "unlike" and "Allah likes" as filler -- up to -14 on a
+    clip with no filler in it -- and "channel" in INTRO_WORDS hit "channels".
+    """
+    return re.compile(r"(?<!\w)(?:" + "|".join(re.escape(item) for item in sorted(items, key=len, reverse=True)) + r")(?!\w)")
 WEAK_START = (
     "and ", "but ", "so ", "because ", "then ", "he ", "she ", "they ",
     "this ", "that ", "it ", "which ", "these ", "those ", "also ",
@@ -676,6 +814,8 @@ CONTEXT_DEPENDENT = (
     "the second thing", "the third thing", "the fourth thing",
     "the next thing", "the next point", "another thing", "another point",
     "the second one", "the third one", "moving on",
+    "كما قلت", "كما قلنا", "كما ذكرنا", "كما ذكرت", "الأمر الثاني", "الأمر الثالث",
+    "النقطة الثانية", "النقطة الثالثة", "نرجع إلى",
 )
 # Openings that promise a story. In this niche the repentance/companion story
 # is the single most-shared shape there is, and a window that opens on one
@@ -683,6 +823,7 @@ CONTEXT_DEPENDENT = (
 STORY_OPENERS = (
     "there was", "there is a", "one day", "a man", "a woman", "imagine",
     "i remember", "i met", "we had a", "once ", "let me tell you",
+    "كان هناك", "ذات يوم", "رجل", "امرأة", "تخيل", "أذكر", "قصة",
 )
 # Claim/stakes words that make a first sentence read as worth the next ten
 # seconds -- the bold-statement hook, in this register.
@@ -690,6 +831,7 @@ CLAIM_HEAD = (
     "never", "always", "nothing", "everything", "every single", "the only",
     "no one", "nobody", "everyone", "most people", "the worst", "the best",
     "the biggest", "the greatest", "the most",
+    "أبدا", "دائما", "لا أحد", "كل واحد", "أعظم", "أسوأ", "أفضل", "الوحيد",
 )
 # Endings that land a takeaway rather than trailing off. The research shape
 # is hook -> body -> payoff; punctuation alone cannot see the payoff.
@@ -697,13 +839,26 @@ PAYOFF_TAIL = (
     "that is why", "that's why", "this is why", "this is the", "so that",
     "remember", "never forget", "ask allah", "make dua", "turn to allah",
     "inshallah", "insha'allah", "ameen", "may allah",
+    "لذلك", "لهذا", "تذكر", "لا تنس", "ادع الله", "اللهم", "آمين", "إن شاء الله",
 )
 PAYOFF_IMPERATIVE = (
     "make ", "say ", "ask ", "keep ", "leave ", "remember ", "turn ",
     "seek ", "hold ", "trust ", "thank ", "be ",
 )
-INTRO_WORDS = {"welcome", "subscribe", "channel", "podcast", "episode", "sponsor", "like and subscribe"}
-QUOTE_RISK = re.compile(r"\b(quran says|allah says|prophet said|hadith|verse|surah)\b", re.I)
+INTRO_WORDS = {"welcome", "subscribe", "channel", "podcast", "episode", "sponsor", "like and subscribe",
+               "اشتركوا", "اشترك", "القناة", "الحلقة", "بودكاست"}
+_FILLER_RE = _bounded(FILLER)
+_INTRO_RE = _bounded(INTRO_WORDS)
+# Bilingual, because invariant 1 -- scripture forces human review -- had an
+# Arabic blind spot: a hadith quoted in Arabic never tripped it. The Arabic
+# forms are the ones a speaker actually says before quoting: "Allah said",
+# "the Prophet said", "the Messenger of Allah said", the salawat, and the
+# words for hadith, ayah and surah.
+QUOTE_RISK = re.compile(
+    r"(?<!\w)(quran says|allah says|prophet said|hadith|verse|surah"
+    r"|قال الله|قال تعالى|قال النبي|قال رسول الله|صلى الله عليه وسلم|(?:ال)?(?:حديث|آية|سورة))(?!\w)",
+    re.I,
+)
 
 
 @dataclass
@@ -729,8 +884,12 @@ class Candidate:
         return self.end - self.start
 
 
+# The Arabic question mark and the Urdu full stop end a sentence too.
+_SENTENCE_END = "[.!?…\u061F\u06D4]"
+
+
 def punctuation_boundary(text: str) -> bool:
-    return bool(re.search(r"[.!?…]['\"]?$", text.strip()))
+    return bool(re.search(_SENTENCE_END + "['\"]?$", text.strip()))
 
 
 def score_candidate(
@@ -754,7 +913,7 @@ def score_candidate(
     """
     duration = end - start
     lower = " ".join(text.lower().split())
-    words = re.findall(r"[a-zA-Z']+", lower)
+    words = score_words(lower)
     head = " ".join(words[:12])
     head_raw = lower[:90]
     tail_words = words[-15:]
@@ -773,7 +932,7 @@ def score_candidate(
 
     # ── the opening: the three seconds that decide everything ──
     hook_points = 0.0
-    if "?" in text[: max(40, len(head_raw))]:
+    if any(mark in text[: max(40, len(head_raw))] for mark in "?\u061F"):
         hook_points += 10
         reasons.append("question opening")
     if any(head_raw.startswith(opener) or f" {opener}" in f" {head_raw}" for opener in STORY_OPENERS):
@@ -804,29 +963,30 @@ def score_candidate(
         reasons.append("complete ending")
     else:
         score -= 10
-    last_sentence = re.split(r"[.!?…]", text.strip().rstrip(".!?…"))[-1].strip().lower()
+    last_sentence = re.split(_SENTENCE_END, text.strip().rstrip(".!?…\u061F\u06D4"))[-1].strip().lower()
     if any(marker in tail for marker in PAYOFF_TAIL) or last_sentence.startswith(PAYOFF_IMPERATIVE):
         score += 8
         reasons.append("lands on a takeaway")
-    elif last_sentence.endswith("?") or (text.strip().endswith("?") and "?" not in text[:60]):
+    elif last_sentence.endswith(("?", "\u061F")) or (text.strip().endswith(("?", "\u061F")) and "?" not in text[:60]):
         # A question raised at the end and never answered leaves the loop open.
         score -= 5
 
     # ── the arc: a question asked early and answered late ──
     third = max(1, len(text) // 3)
-    if "?" in text[:third] and re.search(r"\b(because|the answer|so |that is|that's)\b", text[-third:].lower()):
+    if any(mark in text[:third] for mark in "?\u061F") and re.search(r"\b(because|the answer|so |that is|that's)\b", text[-third:].lower()):
         score += 7
         reasons.append("asks and answers")
 
     # ── stakes-and-emotion vocabulary, tiered ──
-    power_hits = [word for word in HOOKS_POWER if re.search(rf"\b{re.escape(word)}\b", lower)]
+    present = set(words)
+    power_hits = [word for word in HOOKS_POWER if word in present]
     if power_hits:
         bonus = min(12, 3 * len(power_hits))
         if any(word in head for word in power_hits):
             bonus = min(15, bonus + 3)
         score += bonus
         reasons.append("strong reminder language")
-    ubiquitous_hits = sum(1 for word in HOOKS_UBIQUITOUS if word in lower)
+    ubiquitous_hits = sum(1 for word in HOOKS_UBIQUITOUS if word in present or word in lower)
     score += min(3, ubiquitous_hits)
 
     # ── distinctiveness: this lecture's moment, not its wallpaper ──
@@ -859,10 +1019,10 @@ def score_candidate(
     elif word_rate < 60 or word_rate > 235:
         score -= 8
 
-    filler_count = sum(lower.count(item) for item in FILLER)
+    filler_count = len(_FILLER_RE.findall(lower))
     score -= min(14, filler_count * 2.5)
 
-    intro_hits = sum(1 for item in INTRO_WORDS if item in lower)
+    intro_hits = len(set(_INTRO_RE.findall(lower)))
     score -= intro_hits * 10
     if intro_hits:
         reasons.append("contains intro or promotion")
@@ -917,7 +1077,7 @@ def build_candidates(segments: list[dict[str, Any]], minimum: float, maximum: fl
     # can tell this lecture's distinctive moments from its wallpaper.
     lecture_freq: dict[str, int] = {}
     for seg in segments:
-        for word in re.findall(r"[a-zA-Z']+", str(seg.get("text", "")).lower()):
+        for word in score_words(str(seg.get("text", ""))):
             if len(word) > 4:
                 lecture_freq[word] = lecture_freq.get(word, 0) + 1
     for start_index in range(count):
@@ -1101,6 +1261,82 @@ shortlist is roughly three minutes of a job that already takes many -- paid
 deliberately, because the alternative is most clips shipping with a
 transcript-head title.
 """
+
+AI_NUM_CTX = 4096
+"""The context window the scoring request declares.
+
+It declared NONE before, and that is the likeliest root of every symptom this
+file patches around. The DeenAI path sets 4096 and says why; this request
+sent ~2,800 tokens of prompt plus a 1,024-token answer with no `num_ctx`, so
+it ran on whatever the server defaulted to -- 2048 for most of Ollama's life.
+Ollama truncates an over-long prompt from the FRONT, keeping the tail: the
+transcript data survived and the instruction block (the JSON shape, "never
+invent a speaker", "5-12 words") was what got dropped. Four different answer
+shapes, invented scholars, echoed lecture titles and arrays closed after one
+row are all what a model answers when it has seen the data and not the rules.
+
+4096 is what fits beside a 1.8G model under the container's 2G cap -- the KV
+cache for qwen3:1.7b at 4096 is about half a gigabyte. Raise it with the box.
+"""
+
+AI_NUM_PREDICT = 1024
+AI_ITEM_CHARS = 1000
+"""Transcript characters per candidate in the prompt. 1,400 made a 4-row ask
+~2,800 tokens; 1,000 lands it near 2,300, so instructions + data + answer fit
+inside AI_NUM_CTX with room. A candidate is 20-90 seconds of speech, so 1,000
+characters is most of it and always its opening and its ending -- the two
+things the rubric actually scores."""
+
+
+def estimate_tokens(text: str) -> int:
+    """A deliberately pessimistic token count for a prompt.
+
+    English runs about four characters a token in this family's tokeniser;
+    Arabic nearer one and a half, and a recitation-heavy lecture is mostly
+    Arabic. Overestimating splits a batch that would have fitted, which costs
+    one more request; underestimating truncates the rules, which costs the
+    whole batch's quality without saying so.
+    """
+    value = str(text or "")
+    arabic = sum(1 for ch in value if "\u0600" <= ch <= "\u06FF")
+    return int(arabic / 2.0 + (len(value) - arabic) / 3.6) + 1
+
+
+def prompt_fits(prompt: str) -> bool:
+    return estimate_tokens(prompt) + AI_NUM_PREDICT <= AI_NUM_CTX
+
+
+def clip_rows_schema(count: int) -> dict[str, Any]:
+    """A JSON schema pinning the answer to exactly `count` rows.
+
+    Ollama (0.5+) takes a schema in `format` and constrains decoding to it, so
+    the model physically cannot close the array after one row -- the "early
+    close" every batch-size experiment in this file was working around. An
+    older server that rejects a schema answers HTTP 400; the caller then falls
+    back to plain JSON mode for the rest of the run and the singles retry
+    below carries on as before.
+    """
+    row = {
+        "type": "object",
+        "properties": {
+            "index": {"type": "integer"},
+            "score": {"type": "integer"},
+            "title": {"type": "string"},
+            "description": {"type": "string"},
+            "reason": {"type": "string"},
+        },
+        "required": ["index", "score", "title", "description", "reason"],
+    }
+    return {
+        "type": "object",
+        "properties": {"clips": {"type": "array", "minItems": count, "maxItems": count, "items": row}},
+        "required": ["clips"],
+    }
+
+
+# Whether this server accepted a schema in `format`. None until asked; False
+# once it has answered 400 to one, so the fallback is paid at most once a run.
+_SCHEMA_FORMAT_OK: bool | None = None
 
 AI_RETRY_SINGLES = 8
 """How many unanswered rows are re-asked one at a time after the batches.
@@ -1498,6 +1734,7 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any], le
 
     def ask(batch: list[Candidate], offset: int) -> None:
         nonlocal skipped
+        global _SCHEMA_FORMAT_OK
         # Indexes are LOCAL to the batch, so the model counts 0..n-1 every
         # time. Asking it to answer with index 17 of a 24-row list is the
         # kind of bookkeeping a 1.7B model is worst at.
@@ -1506,33 +1743,44 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any], le
                 "index": local,
                 "duration": round(candidate.duration, 1),
                 "heuristicScore": candidate.score,
-                "text": candidate.text[:1400],
+                "text": candidate.text[:AI_ITEM_CHARS],
             }
             for local, candidate in enumerate(batch)
         ]
-        request_body = json.dumps({
-            "model": model,
-            "prompt": build_clip_prompt(items, lecture_title),
-            "stream": False,
-            "format": "json",
-            # qwen3 is a thinking model: without this it spends its budget
-            # inside a think block that format=json then fights, and the
-            # production failure was a 194-token answer to a 24-candidate
-            # ask. Ollama has accepted the flag since 0.9; the box runs 0.32.
-            "think": False,
-            # 0.1 wrote the ranking and the titles with one setting, and it
-            # is the wrong setting for one of them: near-greedy decoding on a
-            # writing task makes every title in a batch come out the same
-            # shape. The score can afford the variance -- it is blended 45/55
-            # with the heuristic below, so the ranking stays anchored.
-            "options": {"temperature": 0.6, "num_predict": 1024},
-        }).encode("utf-8")
-        request = urllib.request.Request(
-            base_url + "/api/generate",
-            data=request_body,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+        prompt = build_clip_prompt(items, lecture_title)
+        # The budget is enforced HERE, not trusted to the server: a prompt that
+        # would not fit is asked in halves, so the rules always reach the
+        # model. A single candidate that does not fit is asked anyway -- there
+        # is nothing smaller to ask -- and the estimate is pessimistic enough
+        # that this is an Arabic passage of several minutes, not a normal clip.
+        if len(batch) > 1 and not prompt_fits(prompt):
+            half = len(batch) // 2
+            ask(batch[:half], offset)
+            ask(batch[half:], offset + half)
+            return
+
+        def body(use_schema: bool) -> bytes:
+            return json.dumps({
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+                # A schema pins the answer to exactly len(batch) rows -- see
+                # clip_rows_schema. Plain JSON mode is the fallback for a
+                # server that predates schema formats.
+                "format": clip_rows_schema(len(batch)) if use_schema else "json",
+                # qwen3 is a thinking model: without this it spends its budget
+                # inside a think block that format=json then fights, and the
+                # production failure was a 194-token answer to a 24-candidate
+                # ask. Ollama has accepted the flag since 0.9.
+                "think": False,
+                # 0.1 wrote the ranking and the titles with one setting, and it
+                # is the wrong setting for one of them: near-greedy decoding on a
+                # writing task makes every title in a batch come out the same
+                # shape. The score can afford the variance -- it is blended 45/55
+                # with the heuristic below, so the ranking stays anchored.
+                "options": {"temperature": 0.6, "num_predict": AI_NUM_PREDICT, "num_ctx": AI_NUM_CTX},
+            }).encode("utf-8")
+
         # Per BATCH, not per run. A failure on the third request used to
         # abandon the whole function -- while the first two batches had
         # already written blended scores onto their candidates. The ranking
@@ -1540,8 +1788,28 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any], le
         # the same measure, and nothing said so. One bad batch now costs
         # only that batch, and the count below reports it.
         try:
-            with urllib.request.urlopen(request, timeout=180) as response:
-                outer = json.loads(response.read().decode("utf-8"))
+            use_schema = _SCHEMA_FORMAT_OK is not False
+            while True:
+                request = urllib.request.Request(
+                    base_url + "/api/generate", data=body(use_schema),
+                    headers={"Content-Type": "application/json"}, method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(request, timeout=180) as response:
+                        outer = json.loads(response.read().decode("utf-8"))
+                except urllib.error.HTTPError as http_error:
+                    # A 400 to the schema request is the server saying it
+                    # does not know schema formats. Fall back once, remember,
+                    # and never pay this again in the run. Any other error is
+                    # the batch's own failure.
+                    if use_schema and http_error.code == 400:
+                        _SCHEMA_FORMAT_OK = False
+                        use_schema = False
+                        continue
+                    raise
+                if use_schema:
+                    _SCHEMA_FORMAT_OK = True
+                break
             inner = json.loads(str(outer.get("response") or "{}"))
             rows = ollama_clip_rows(inner)
             if rows is None:
@@ -1599,10 +1867,34 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any], le
         return candidates
 
 
+_HEX_RE = re.compile(r"^#?([0-9A-Fa-f]{6})$")
+_FONT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,59}$")
+
+
+def safe_hex(value: Any, fallback: str) -> str:
+    """A six-digit hex colour, or the fallback. Every colour a template carries
+    is interpolated into the ASS header or the ffmpeg filter graph, and neither
+    is a place a customer's string may reach unchecked: `#000000,drawtext=...`
+    is a filter injection and `,,,,,,` breaks the style line."""
+    match = _HEX_RE.match(str(value or "").strip())
+    return "#" + match.group(1).upper() if match else fallback
+
+
+def safe_font(value: Any, fallback: str) -> str:
+    """A font family name that cannot break out of an ASS Style line.
+
+    Letters, digits, spaces, dots, underscores and hyphens: every family this
+    image installs fits that, and a comma or newline -- the two characters that
+    would start a new style field or a new event -- cannot. Not restricted to
+    the installed list on purpose: an unknown face is a display concern that
+    fontconfig substitutes for; this guards the file format.
+    """
+    text = str(value or "").strip()
+    return text if _FONT_RE.match(text) else fallback
+
+
 def ass_color(hex_color: str, alpha: str = "00") -> str:
-    value = str(hex_color or "#FFFFFF").lstrip("#")
-    if len(value) != 6:
-        value = "FFFFFF"
+    value = safe_hex(hex_color, "#FFFFFF").lstrip("#")
     red, green, blue = value[0:2], value[2:4], value[4:6]
     return f"&H{alpha}{blue}{green}{red}"
 
@@ -1618,7 +1910,9 @@ def ass_time(seconds: float) -> str:
 def ass_escape(text: str) -> str:
     value = html.unescape(text)
     value = value.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
-    return value.replace("\n", "\\N")
+    # A bare carriage return is a line break to the parser too, and a break
+    # inside a Dialogue line starts a new event.
+    return value.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\N")
 
 
 def contains_arabic(text: str) -> bool:
@@ -2589,9 +2883,9 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
         candidate = replace(candidate, segments=shift_segments(candidate.segments, timing_offset))
     width = int(template.get("width", 1080))
     height = int(template.get("height", 1920))
-    font = str(template.get("captionFont", "DejaVu Sans"))
-    highlight_font = str(template.get("captionHighlightFont", "DejaVu Serif"))
-    arabic_font = str(template.get("captionArabicFont", "Amiri"))
+    font = safe_font(template.get("captionFont", "DejaVu Sans"), "DejaVu Sans")
+    highlight_font = safe_font(template.get("captionHighlightFont", "DejaVu Serif"), "DejaVu Serif")
+    arabic_font = safe_font(template.get("captionArabicFont", "Amiri"), "Amiri")
     # Quranic script for an ayah, general Arabic for everything else, sized up
     # to compensate for the mushaf faces' tall vertical metrics.
     ayah_font = quran_font(arabic_font)
@@ -3527,7 +3821,7 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
             # A matte follows the sharp foreground wherever it is placed, so
             # the blurred-background mode mattes like contain does: the person
             # only ever appears in the fitted layer.
-            background = "black" if matte else str(template.get("frameBackground", "#000000")).replace("#", "0x")
+            background = "black" if matte else safe_hex(template.get("frameBackground", "#000000"), "#000000").replace("#", "0x")
             return (
                 f"[{label}]{lead}scale={width}:{height}:force_original_aspect_ratio=decrease,"
                 f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={background},setsar=1[{out}]"
@@ -3576,7 +3870,7 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
     captions = f"ass='{subtitle}':shaping=complex"
     brand = ""
     if bool(template.get("brandLineEnabled", False)):
-        color = str(template.get("brandLineColor", "#D9B478")).replace("#", "0x")
+        color = safe_hex(template.get("brandLineColor", "#D9B478"), "#D9B478").replace("#", "0x")
         line_height = int(template.get("brandLineHeight", 8))
         brand = f",drawbox=x=0:y=ih-{line_height}:w=iw:h={line_height}:color={color}:t=fill"
 
@@ -4336,6 +4630,7 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
 
     settings = job["settings"]
     requested = max(1, min(20, int(job.get("requestedCount") or settings.get("clipsPerVideo", 8))))
+    clock = StageClock()
     progress("Loading saved lecture and transcript", 5, requestedClips=requested, reusedSource=True, reusedTranscript=True)
 
     candidates = filter_length_bands(build_candidates(
@@ -4350,6 +4645,7 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
     selected = select_candidates(candidates, requested)
     # The shortlist is a guess at what will ship; this is what actually ships.
     selected = title_selected_clips(selected, settings, str(job.get("title") or ""))
+    clock.lap("score")
     if not selected:
         raise RuntimeError("No unused moments remain within the selected clip-duration range. Try a different duration range.")
 
@@ -4372,6 +4668,7 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
         # uploads it and the review queue shows it while the rest still render.
         emit("clip_ready", clip=rendered[-1], index=index, total=total)
 
+    clock.lap("render")
     result = {
         "project": {
             "id": job.get("projectId"),
@@ -4379,6 +4676,7 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
             "clipCount": len(rendered),
             "reusedSource": True,
             "reusedTranscript": True,
+            "timings": clock.report(),
         },
         "clips": rendered,
     }
@@ -4386,6 +4684,28 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
     result_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     progress("More clips are ready", 100, currentClip=total, totalClips=total, etaSec=0, reusedSource=True, reusedTranscript=True)
     emit("result", resultPath=str(result_file))
+
+
+class StageClock:
+    """Seconds spent in each stage of a job, for the result record.
+
+    "Where does the time go" was unanswerable without reading the box's logs,
+    and the CPX41 rescale is a decision about exactly that. The dict lands on
+    `project.timings` so every finished lecture carries its own answer.
+    """
+
+    def __init__(self) -> None:
+        self.started = time.time()
+        self.at = self.started
+        self.stages: dict[str, float] = {}
+
+    def lap(self, name: str) -> None:
+        now = time.time()
+        self.stages[name] = round(self.stages.get(name, 0.0) + (now - self.at), 1)
+        self.at = now
+
+    def report(self) -> dict[str, float]:
+        return {**self.stages, "total": round(time.time() - self.started, 1)}
 
 
 def process(job_file: Path) -> None:
@@ -4416,6 +4736,7 @@ def process(job_file: Path) -> None:
     if not job.get("template", {}).get("id"):
         raise RuntimeError("A valid app-owned template is mandatory.")
 
+    clock = StageClock()
     progress("Downloading source video", 1, etaSec=None)
     requested_start = max(0.0, float(job.get("sourceStartSec") or 0.0))
     requested_end_raw = job.get("sourceEndSec")
@@ -4486,8 +4807,10 @@ def process(job_file: Path) -> None:
     if duration <= 0:
         raise RuntimeError("The selected source range could not be read as video.")
 
+    clock.lap("import")
     progress("Extracting speech audio", 9, sourceDurationSec=round(duration, 2), etaSec=None)
     extract_audio(job["ffmpeg"], source_file, audio_file)
+    clock.lap("audio")
 
     progress("Preparing transcription", 12, sourceDurationSec=round(duration, 2), etaSec=None)
     cached_transcript = transcript_cache_lookup(job, selected_start, selected_end)
@@ -4499,6 +4822,7 @@ def process(job_file: Path) -> None:
         segments = transcribe(job, audio_file, duration)
         transcript_cache_store(job, selected_start, selected_end, segments)
     transcript_file.write_text(json.dumps(segments, ensure_ascii=False, indent=2), encoding="utf-8")
+    clock.lap("transcribe")
 
     progress("Analysing transcript", 61, sourceDurationSec=round(duration, 2), processedSec=round(duration, 2), etaSec=None)
     settings = job["settings"]
@@ -4511,6 +4835,7 @@ def process(job_file: Path) -> None:
     candidates = refine_with_ollama(candidates, settings, str(job.get("title") or ""))
     selected = select_candidates(candidates, int(settings.get("clipsPerVideo", 8)))
     selected = title_selected_clips(selected, settings, str(job.get("title") or ""))
+    clock.lap("score")
     if not selected:
         raise RuntimeError("No complete clip candidates fit the selected duration range.")
 
@@ -4574,10 +4899,12 @@ def process(job_file: Path) -> None:
         emit("clip_ready", clip=rendered[-1], index=index, total=total)
 
     audio_file.unlink(missing_ok=True)
+    clock.lap("render")
     result = {
         "project": {
             "id": job["id"],
             "title": detected_title,
+            "timings": clock.report(),
             "durationSec": duration,
             "sourceFullDurationSec": known_full_duration,
             "sourceStartSec": selected_start,

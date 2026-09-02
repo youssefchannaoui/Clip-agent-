@@ -61,6 +61,14 @@ check_code "viral titling prompt"           "TRANSCRIPT DATA"     /app/worker/cl
 # CRF alone has no ceiling: a grainy 52s clip rendered at 453MB and silently
 # failed to publish. The ceiling is the difference between posting and not.
 check_code "render bitrate ceiling"         "maxrate"             /app/worker/clip_worker.py
+# The 2 Sept 2026 audit: the scoring request declares its context window and
+# pins the answer to the batch by schema; the translate pass is clipped to the
+# Arabic; a hung job is stopped at its budget. Each is invisible in a build
+# log and shows up only as a worse clip or a held slot.
+check_code "AI request declares num_ctx"     "AI_NUM_CTX"          /app/worker/clip_worker.py
+check_code "AI answer pinned by schema"      "clip_rows_schema"    /app/worker/clip_worker.py
+check_code "translate clipped to the Arabic" "clip_timestamps"     /app/worker/clip_worker.py
+check_code "job wall-clock budget"           "job_budget_seconds"  /app/worker/service.py
 
 echo
 

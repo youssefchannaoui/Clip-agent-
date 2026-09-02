@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import capacity
-from import_providers import ImportedSource, ImportProviderError, download_https, import_with_fallback, prewarm_hosted_import, provider_for
+from import_providers import ImportedSource, ImportProviderError, download_https, import_with_fallback, prewarm_hosted_import, provider_for, proxy_pool
 from object_storage import ObjectStorage
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -331,6 +331,21 @@ def clean_error(exc: BaseException) -> str:
         secret = os.getenv(secret_name, "")
         if secret:
             text = text.replace(secret, "[redacted]")
+    # The proxy pool is twenty URLs of the shape user:pass@host:port, and
+    # yt-dlp quotes the proxy it used inside its own error strings -- which
+    # this function copies into the job record, the callback and the owner's
+    # feed. The whole URL is redacted, and its userinfo separately, so a
+    # message that names only the credential is caught too.
+    for proxy in [*proxy_pool(), os.getenv("VIDEO_IMPORT_PROXY", "").strip()]:
+        proxy = str(proxy or "").strip()
+        if not proxy:
+            continue
+        text = text.replace(proxy, "[proxy]")
+        userinfo = urllib.parse.urlsplit(proxy if "://" in proxy else "http://" + proxy)
+        if userinfo.password:
+            text = text.replace(userinfo.password, "[redacted]")
+        if userinfo.username and len(userinfo.username) >= 6:
+            text = text.replace(userinfo.username, "[redacted]")
     return text[-1500:] or "Processing failed."
 
 
@@ -679,6 +694,33 @@ class Processor:
         return {"mode": str(background["mode"]), "path": str(destination),
                 "introSeconds": float(background.get("introSeconds") or 3), "name": str(background.get("name") or "")}
 
+    def job_budget_seconds(self, job_id: str) -> int:
+        """How long a job may run before it is killed as hung.
+
+        Every ffmpeg call has a timeout; Whisper has none, and a hung
+        transcription kept the heartbeat thread beating -- it re-emits the last
+        state every ten seconds -- so the app's stall detector stayed green
+        while the only slot was held for ever. The budget is generous, because
+        a real three-hour lecture on two cores is hours of honest work: four
+        times the selected stretch, floored at ninety minutes, or four times
+        the processing limit when the stretch is not known. WORKER_JOB_BUDGET_MIN
+        overrides it outright.
+        """
+        override = os.getenv("WORKER_JOB_BUDGET_MIN", "").strip()
+        if override:
+            return max(60, int(float(override) * 60))
+        try:
+            payload = self.store.payload(job_id)
+        except (OSError, ValueError):
+            payload = {}
+        settings = payload.get("settings") or {}
+        window = window_of(payload)
+        if window and window[1] is not None:
+            selected_min = max(1.0, (window[1] - window[0]) / 60.0)
+        else:
+            selected_min = float(settings.get("maxSourceMinutes") or 180)
+        return int(max(90, selected_min * 4) * 60)
+
     def run_clip_worker(self, job_id: str, job_file: Path, result_path: Path) -> dict[str, Any]:
         env = {
             **os.environ,
@@ -703,6 +745,20 @@ class Processor:
 
         threading.Thread(target=collect_stderr, daemon=True).start()
         reported_error = ""
+        # The wall-clock guard. Fires whether or not the child is still
+        # printing -- a hung Whisper prints heartbeats -- and is cancelled the
+        # moment the child exits on its own.
+        budget = self.job_budget_seconds(job_id)
+        over_budget = threading.Event()
+
+        def _expire() -> None:
+            over_budget.set()
+            if child.poll() is None:
+                child.terminate()
+
+        budget_timer = threading.Timer(budget, _expire)
+        budget_timer.daemon = True
+        budget_timer.start()
 
         def note(**fields: Any) -> None:
             """Record progress against the job, tolerating it having gone away.
@@ -774,10 +830,16 @@ class Processor:
                         fields[key] = event[key]
                 note(**fields)
         code = child.wait()
+        budget_timer.cancel()
         with self.lock:
             self.running.pop(job_id, None)
         if self.cancelled(job_id):
             raise ImportProviderError("Job cancelled.")
+        if over_budget.is_set():
+            raise RuntimeError(
+                f"Processing exceeded its time budget of {budget // 60} minutes and was stopped. "
+                "The lecture may be far longer than the selected range, or the worker is overloaded."
+            )
         if code != 0 or not result_path.exists():
             detail = reported_error or " ".join(stderr_lines[-10:]).strip()
             if not detail:
@@ -1121,7 +1183,8 @@ class Handler(BaseHTTPRequestHandler):
             ready = bool(ObjectStorage().configured and free >= MIN_FREE_BYTES)
             return self.send_json(200 if ready else 503, {
                 "ready": ready, "freeBytes": free,
-                "queueDepth": PROCESSOR.queue.qsize(), "running": len(PROCESSOR.running),
+                "queueDepth": PROCESSOR.queue.qsize(), "quickQueueDepth": PROCESSOR.quick_queue.qsize(),
+                "running": len(PROCESSOR.running),
                 "capabilities": worker_capabilities(),
             })
         if self.command == "POST" and path == "/ai/advise":
