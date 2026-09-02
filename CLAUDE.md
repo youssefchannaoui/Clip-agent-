@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1115 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1117 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3160,6 +3160,37 @@ Mozilla's autopush and Apple's are not reachable from this container, so the
 proof stops at "the bytes are provably right and the worker provably shows
 them". The first real notification is the confirmation, and it costs one
 lecture: turn the switch on in Chrome, close the tab, and import something.
+
+## The Day view drags too, and a card that can move says so (v3.93.0, 3 Sept)
+
+Youssef: "the drag icon needs to be added, weekly only works daily should also
+work or use any logo or icon that makes sense to show you can drag it."
+
+- **One implementation serves both views**, because a Day card and a Week cell
+  are the same thing: one clip on one slot. The Day card carries `data-slot`,
+  `data-slot-clip` and `data-slot-title` and `wireScheduleDrag` is pointed at
+  its list as well as `[data-dc-week]`. Month is still deliberately out -- a
+  day is not a time, so there is nothing to swap onto.
+- **The Day list is found by its CARDS, not by a container hook.** Home's
+  "Posting today" list renders the identical `<article data-dc-sched-card>`,
+  so tagging the markup wholesale would have made the home screen draggable
+  into a schedule it does not show. Only the schedule's card was given a slot,
+  and the test asserts exactly that split -- two cards in the design, one of
+  them draggable.
+- **The grip is a real element, not a background.** Six dots, inline SVG, top
+  right, injected on every paint and removed again the moment a cell stops
+  being movable (a posted clip, or a slot now in the past). It is an element
+  so it can carry `touch-action: none`: on a phone a drag starting anywhere
+  else has to be allowed to scroll the calendar instead.
+- **The ghost names the clip.** A week cell holds only the title, but a Day
+  card also holds its time and every destination's state -- dragged, that read
+  as "07:00YouTube — failed1 failingNever lose h". Hence `data-slot-title`.
+- `npm run design:import` was proven byte-stable before and after both
+  attribute additions (generated CSS identical, no hashed class name moved) --
+  the same route `data-dc-week` and `data-dc-wave` established.
+- Driven with real bubbling PointerEvents in both views: grip -> ghost -> gold
+  outline on the target -> the two clips swap on the server. Both new tests
+  were proven RED against the missing attributes and a renamed grip class.
 
 ## Open items
 

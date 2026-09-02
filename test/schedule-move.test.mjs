@@ -121,3 +121,38 @@ test('rubbish input is refused rather than scheduling something at zero', () => 
   }
   assert.throws(() => agent.moveClipToSlot('nope', soon() + 14 * HOUR), /no longer exists/);
 });
+
+/**
+ * The Day view drags too, and a card that can be picked up says so.
+ *
+ * Youssef, 3 Sept 2026: "the drag icon needs to be added, weekly only works
+ * daily should also work or use any logo or icon that makes sense."
+ *
+ * Both halves are silent when they break — the Day list simply stops
+ * responding to a drag, and the grip simply stops being drawn — so each is
+ * asserted separately. The last assertion is the one that matters most: Home's
+ * "Posting today" list renders the SAME article, and tagging that one would
+ * have made the home screen draggable into a schedule it does not show.
+ */
+test('the Day view carries the same drag hooks as the Week grid', () => {
+  const design = fs.readFileSync(new URL('../design/studio-dashboard.dc.html', import.meta.url), 'utf8');
+  const cards = design.split('\n').filter(l => l.includes('data-dc-sched-card'));
+  assert.equal(cards.length, 2, 'two lists render this card: the Day view and Home');
+
+  const draggable = cards.filter(l => l.includes('data-slot='));
+  assert.equal(draggable.length, 1, 'only the schedule Day card may be draggable');
+  const day = draggable[0];
+  for (const attr of ['data-slot="{{ post.at }}"', 'data-slot-clip="{{ post.clipId }}"', 'data-slot-title="{{ post.caption }}"']) {
+    assert.ok(day.includes(attr), `the Day card must carry ${attr}`);
+  }
+});
+
+test('a draggable cell is given a grip, and only while it can move', () => {
+  const host = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  assert.ok(/\.dc-grip\s*\{/.test(host), 'the grip needs a style, or it draws nothing');
+  assert.ok(host.includes("g.className='dc-grip'"), 'the grip is injected by the host');
+  // A posted clip cannot be rescheduled, and neither can one whose slot has
+  // passed: showing them a handle promises something the server refuses.
+  assert.ok(host.includes("Number(cell.dataset.slot)>=Date.now()"), 'the grip is gated on the slot still being ahead');
+  assert.ok(host.includes("dayCard.parentElement"), 'the Day list is wired as well as the week grid');
+});

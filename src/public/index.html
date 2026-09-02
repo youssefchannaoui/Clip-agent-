@@ -200,7 +200,19 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
   color: var(--dc-ink, #F2F2F4); font: 600 11.5px/1.3 Inter, system-ui, sans-serif;
   box-shadow: 0 14px 34px rgba(0,0,0,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-[data-slot][data-slot-clip]:not([data-slot-clip=""]) { cursor: grab; }
+/* A card you can pick up says so. Six dots is the grip every list-reordering
+   UI has settled on, and it is drawn as a real element rather than a
+   background so it can carry touch-action:none -- on a phone, a drag that
+   starts anywhere else has to be allowed to scroll the calendar instead. */
+[data-slot][data-slot-clip]:not([data-slot-clip=""]) { cursor: grab; position: relative; }
+[data-slot][data-slot-clip]:not([data-slot-clip=""]):active { cursor: grabbing; }
+.dc-grip {
+  position: absolute; top: 4px; right: 4px; width: 12px; height: 16px; z-index: 2;
+  touch-action: none; cursor: grab; opacity: .45; transition: opacity .15s ease;
+  background: no-repeat center / 10px 16px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 16'%3E%3Cg fill='%23A0A0A8'%3E%3Ccircle cx='2.5' cy='3' r='1.4'/%3E%3Ccircle cx='7.5' cy='3' r='1.4'/%3E%3Ccircle cx='2.5' cy='8' r='1.4'/%3E%3Ccircle cx='7.5' cy='8' r='1.4'/%3E%3Ccircle cx='2.5' cy='13' r='1.4'/%3E%3Ccircle cx='7.5' cy='13' r='1.4'/%3E%3C/g%3E%3C/svg%3E");
+}
+[data-slot]:hover > .dc-grip { opacity: .95; }
+@media (prefers-reduced-motion: reduce) { .dc-grip { transition: none; } }
 @media (prefers-reduced-motion: reduce) { .dc-sched-ghost { box-shadow: none; } }
 .slh-empty { display: flex; align-items: center; gap: 11px; padding: 15px 16px; font-size: 11.5px; color: var(--dc-ink-faint, #6E6E76); }
 .slh-empty > i { font-size: 16px; color: var(--dc-n-4a4a52, #4A4A52); flex: none; }
@@ -7264,10 +7276,37 @@ function paintLibraryAside(vals){
    class is named and a re-import cannot break it. */
 const DRAG_START_PX = 5;
 function paintScheduleDrag(){
-  const grid=document.querySelector('[data-dc-week]');
-  if(!grid||grid.dataset.dragWired==='1')return;
-  grid.dataset.dragWired='1';
+  /* Both the Week grid and the Day list are wired, because a card in either is
+     the same thing: one clip on one slot, carrying data-slot and
+     data-slot-clip. Month is deliberately left out -- a day is not a time, so
+     there is nothing to swap a clip onto.
 
+     The Day list is found by its cards rather than by a container hook: Home's
+     "Posting today" list renders the SAME article, so [data-dc-sched-card]
+     alone would have made that draggable too. Only the schedule's cards carry
+     a slot. */
+  const containers=[document.querySelector('[data-dc-week]')];
+  const dayCard=document.querySelector('[data-dc-sched-card][data-slot]');
+  if(dayCard&&dayCard.parentElement)containers.push(dayCard.parentElement);
+
+  /* Grips are re-injected on every paint -- a render replaces the cells, and
+     the wiring flag below only survives because it lives on the container. */
+  document.querySelectorAll('[data-slot][data-slot-clip]').forEach(cell=>{
+    const on=!!cell.dataset.slotClip&&Number(cell.dataset.slot)>=Date.now();
+    const has=cell.querySelector(':scope > .dc-grip');
+    if(on&&!has){
+      const g=document.createElement('span');
+      g.className='dc-grip';
+      g.setAttribute('aria-hidden','true');
+      g.title='Drag to move this post';
+      cell.appendChild(g);
+    }else if(!on&&has){has.remove()}
+  });
+
+  containers.forEach(grid=>{ if(grid&&grid.dataset.dragWired!=='1'){grid.dataset.dragWired='1';wireScheduleDrag(grid)} });
+}
+
+function wireScheduleDrag(grid){
   let from=null, ghost=null, over=null, moved=false, startX=0, startY=0;
 
   const cellAt=(x,y)=>{
@@ -7302,7 +7341,10 @@ function paintScheduleDrag(){
       from.style.opacity='.35';
       ghost=document.createElement('div');
       ghost.className='dc-sched-ghost';
-      ghost.textContent=(from.textContent||'Clip').trim().slice(0,42);
+      /* A week cell holds only the title; a Day card also holds its time and
+         every destination's state, which reads as noise on a ghost. The card
+         names its clip explicitly for that reason. */
+      ghost.textContent=(from.dataset.slotTitle||from.textContent||'Clip').trim().slice(0,42);
       document.body.appendChild(ghost);
       try{from.setPointerCapture(e.pointerId)}catch(err){}
     }

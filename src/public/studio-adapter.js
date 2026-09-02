@@ -2469,6 +2469,12 @@
     var startOfDay = function (t) { var d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
     var today = startOfDay(Date.now());
     function scheduleItem(c) {
+            var slotAt = Number(c.scheduledAt) || 0;
+            // The Day view is a list, not a grid, but a card there is the same
+            // thing as a cell in the week: one clip on one slot. It carries the
+            // same two attributes so ONE drag implementation serves both, and
+            // neither has to guess a card's identity from its position.
+            var slotAt = Number(c.scheduledAt) || 0;
             var target = (c.targets && c.targets[0]) || {};
             var platform = target.platform || target.provider || '';
             // The four checks the design requires before anything may go out.
@@ -2495,6 +2501,10 @@
               ? (c.targets || []).filter(function (t) { return t.status !== 'posted'; })[0] || null
               : null;
             return {
+              // The slot this card sits on, and the clip on it — the two things
+              // a drag needs, identical to what a week cell carries.
+              at: slotAt,
+              clipId: slotAt && !c.postedAt ? String(c.id) : '',
               failReason: failedTarget ? String(failedTarget.error) : '',
               time: timeOf(c.scheduledAt),
               dest: PLATFORM_NAMES[platform] || 'No account',
