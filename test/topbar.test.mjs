@@ -73,8 +73,15 @@ test('the plan is named in the topbar, and Basic does not wear the gold', () => 
   // the lesson v3.53.5 paid three attempts for.
   assert.ok(host.includes('paintPlanChip((DATA.billing&&DATA.billing.current)||{})'),
     'the chip is repainted with the rest of the studio');
-  assert.ok(host.includes("#dcPlanChip[data-paid=\"1\"]"),
-    'paid tiers are styled apart from Basic');
+  assert.ok(host.includes("#dcTokenChip[data-paid=\"0\"]"),
+    'Basic is styled apart from the paid tiers');
+  // ONE pill, not two. Youssef, 3 Sept 2026: "make subscription name with the
+  // other pill, too many pills." A separate #dcPlanChip is the older shape and
+  // must not come back beside this one.
+  assert.ok(!/id='dcPlanChip'|id="dcPlanChip"/.test(host),
+    'the plan rides in the token pill, it does not get one of its own');
+  assert.ok(!design.includes('tokens · {{ currentPlan }}'),
+    'a coin and a number need no label — the pill carries the plan instead');
   // An operator's plan name IS "Unlimited", and the token chip beside it
   // already says so. The Account panel shipped that duplication once.
   assert.ok(host.includes("if(cur.unlimited)name='Owner'"),

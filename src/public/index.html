@@ -228,24 +228,24 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 /* The bell and the account are a cluster: who you are and what wants you.
    A hairline says so without adding an element to the export. */
 #dcTopbar > div:has(> button > i.ph-bell) { padding-left: 12px; border-left: 1px solid var(--dc-n-1e1e22, #1E1E22); }
-/* The plan, named in the one place a phone and a desktop both read it. The
-   rail badge that used to carry it was removed in v3.73.1; this is where it
-   lives now. Basic wears the quiet border -- gold is what a paid tier wears
-   across this app, and spending it on the free plan spends its meaning. */
-#dcPlanChip {
-  display: inline-flex; align-items: center; height: 34px; box-sizing: border-box;
-  padding: 0 12px; border-radius: 20px; cursor: pointer; font-family: inherit;
-  font-size: 10.5px; font-weight: 700; letter-spacing: .085em; text-transform: uppercase;
-  border: 1px solid var(--dc-n-26262a, #26262A); background: var(--dc-bg-raised, #17171A);
-  color: var(--dc-ink-soft, #BCBCC3); transition: border-color .14s ease, background .14s ease;
+/* The plan rides IN the token pill rather than beside it. Youssef, 3 Sept
+   2026: "make subscription name with the other pill, too many pills maybe
+   make how tokens look as in number look simple token icon and number."
+
+   It was ALREADY in there and unreadable as a plan: the pill said
+   "tokens · Unlimited", which parses as a description of the tokens. The word
+   "tokens" is gone (a coin and a number need no label), and what remains is
+   the plan, set apart by a rule rather than by an element -- adding one to the
+   export costs a re-import and every hashed class name in the app. */
+#dcTokenChip > span {
+  padding-left: 9px; margin-left: 2px;
+  border-left: 1px solid rgba(217,180,120,.32);
+  font-size: 10px; font-weight: 700; letter-spacing: .085em; text-transform: uppercase;
 }
-#dcPlanChip[data-paid="1"] {
-  border-color: rgba(217,180,120,.34); background: rgba(217,180,120,.08);
-  color: var(--dc-gold-lit, #F0D6A6);
-}
-#dcPlanChip:hover { border-color: var(--dc-ink-faint, #34343A); }
-#dcPlanChip[data-paid="1"]:hover { border-color: rgba(217,180,120,.6); }
-@media (max-width: 1180px) { #dcPlanChip { display: none; } }
+/* Basic does not wear the gold: gold is what every paid tier wears across this
+   app, and spending it on the free plan spends its meaning. */
+#dcTokenChip[data-paid="0"] > span { color: var(--dc-ink-dim, #8B8B93); }
+@media (max-width: 1180px) { #dcTokenChip > span { display: none; } }
 /* A card you can pick up says so. Six dots is the grip every list-reordering
    UI has settled on, and it is drawn as a real element rather than a
    background so it can carry touch-action:none -- on a phone, a drag that
@@ -7151,43 +7151,40 @@ function paintClipWaveforms(vals){
   });
 }
 function paintPlanChip(cur){
-  /* The plan, named in the topbar. It had NO home on this screen: the rail
-     badge that carried it was removed in v3.73.1 and the token chip counts
-     tokens, which is a different question -- so the one thing a customer most
-     wants confirmed after paying was written nowhere in the app's chrome.
+  /* The plan, named in the token pill. It had no honest home on this screen:
+     the rail badge that carried it was removed in v3.73.1, and the pill's own
+     "tokens · Unlimited" read as a label for the tokens rather than as the
+     subscription.
 
-     Host-injected rather than added to the design export: a new element there
-     regenerates every hashed class name in the app for one pill. Rebuilt on
-     every paint like every other host panel, and registered in paintStudio's
-     list rather than on a MutationObserver (the lesson v3.53.5 paid three
-     attempts for). */
-  const bar=document.getElementById('dcTopbar');
-  const tokens=document.getElementById('dcTokenChip');
-  if(!bar||!tokens)return;
+     Host-written rather than left to the binding, because two of the four
+     cases need a judgement the binding cannot make. Registered in
+     paintStudio's list like every other host panel. */
   cur=cur||{};
-  let name=String(cur.planName||'').trim();
-  /* An operator's plan name IS "Unlimited", and the token chip beside it
-     already says "tokens · Unlimited" -- the Account panel shipped exactly
-     that duplication once (v3.75.3) and it read as broken. Say the true
-     thing instead: they are the owner. */
-  if(cur.unlimited)name='Owner';
-  if(!name){const old=document.getElementById('dcPlanChip');if(old)old.remove();return}
+  const chip=document.getElementById('dcTokenChip');
+  if(!chip)return;
+  /* An earlier release put this in a pill of its own. */
+  const stray=document.getElementById('dcPlanChip');
+  if(stray)stray.remove();
+  const seg=chip.querySelector('span');
+  if(!seg)return;
 
-  let chip=document.getElementById('dcPlanChip');
-  if(!chip){
-    chip=document.createElement('button');
-    chip.id='dcPlanChip';
-    chip.type='button';
-    chip.addEventListener('click',()=>{StudioAdapter.ui.screen='tokens';paintStudio()});
-  }
-  if(chip.textContent!==name)chip.textContent=name;
-  /* Basic does not wear the gold: gold is what every paid tier wears across
-     this app, and spending it on the free plan spends its meaning. */
+  const full=String(cur.planName||'').trim();
+  /* The TIER, not the tier and its billing period: "Studio · yearly" set in
+     letter-spaced caps is 173px of chrome, and which month you are billed in
+     is not what a header is for. The whole name is in the tooltip, and the
+     Tokens screen states it outright. */
+  let name=full.split('·')[0].trim();
+  /* An operator's plan name IS "Unlimited", and the balance beside it is
+     already ∞ -- "∞ Unlimited" says one thing twice. The Account panel
+     shipped exactly that duplication once (v3.75.3) and it read as broken. */
+  if(cur.unlimited)name='Owner';
+  if(seg.textContent!==name)seg.textContent=name;
+  seg.style.display=name?'':'none';
+
   const paid=cur.unlimited||(cur.plan&&cur.plan!=='free'&&cur.plan!=='basic')?'1':'0';
   if(chip.dataset.paid!==paid)chip.dataset.paid=paid;
-  const title=cur.unlimited?'You are the operator':('You are on '+name);
+  const title=name?(cur.unlimited?'Tokens · you are the operator':('Tokens · you are on '+(full||name))):'Token balance';
   if(chip.title!==title)chip.title=title;
-  if(chip.nextSibling!==tokens)bar.insertBefore(chip,tokens);
 }
 
 function paintBrandSeal(){

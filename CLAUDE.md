@@ -3296,14 +3296,22 @@ somethings missing." Three faults, and two of them were silent.
   the widest thing in the row, saying nothing. It shows the account's NAME,
   falling back to the email's local part and then to "Account". The full
   address is still in the dropdown, where there is room.
-- **The plan was named NOWHERE in the chrome.** The rail badge that carried it
-  was removed in v3.73.1 and the token chip counts TOKENS, which is a different
-  question -- so the one thing a customer most wants confirmed after paying was
-  written nowhere. `#dcPlanChip` sits before the token chip and opens Tokens &
-  billing. Basic wears the quiet border; gold is what a paid tier wears across
-  this app, and spending it on the free plan spends its meaning. An operator
-  reads **Owner**, not "Unlimited" -- the token chip beside it already says
-  Unlimited, and the Account panel shipped exactly that duplication once.
+- **The plan was named nowhere a reader would find it.** It WAS in the token
+  pill, as "tokens · Unlimited" -- which parses as a description of the tokens,
+  not as the subscription. v3.94.0 gave it a pill of its own; v3.96.1 put it
+  back INSIDE the token pill, because three pills in a row is what Youssef was
+  looking at when he said "too many pills": "make subscription name with the
+  other pill ... make how tokens look as in number look simple token icon and
+  number." So the word "tokens" is gone -- a coin and a number need no label --
+  and the plan follows it, set apart by a rule rather than by an element
+  (adding one to the export costs a re-import and every hashed class name).
+  The pill names the TIER, not the period: "Studio · yearly" in letter-spaced
+  caps is 173px of chrome, and the whole name is in the tooltip. Measured:
+  229px across two pills before, 98-118px in one after. Basic's segment is
+  quiet grey; gold is what a paid tier wears across this app, and spending it
+  on the free plan spends its meaning. An operator reads **Owner**, not
+  "Unlimited" -- the balance beside it is already ∞, and the Account panel
+  shipped exactly that duplication once.
 - **The row had no rhythm, measured rather than felt**: five controls at five
   heights (search 33, setup 26, tokens 29, bell 32, account 35). All 34 now.
 - **The search was anchored to the HEADING**, so it moved as you navigated:
