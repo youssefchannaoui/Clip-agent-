@@ -226,10 +226,10 @@
  * worse than either honest option.
  */
 @media (max-width: 700px) {
-  /* The "coming soon" notice is the exception: it is the thing being said, not
-     part of the editor being hidden. When the editor ships, studio-editor-gate
-     goes away and this selector stops matching anything. */
-  #studio [data-dc-editor] > *:not(#dcEditorSoon) { display: none !important; }
+  /* The editor shipped on 2 Sept 2026 (v3.78.0); the coming-soon notice that
+     used to be exempted here is gone with its gate. Every child is hidden and
+     the ::before below says why. */
+  #studio [data-dc-editor] > * { display: none !important; }
   #studio [data-dc-editor]::before {
     content: 'The clip editor needs a wider screen. Everything else works on a phone — open this clip on a laptop to edit its captions, framing and trim.';
     display: block;

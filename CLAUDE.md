@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1029 JS + 527 Python**
+- `npm test` and `npm run check` must pass. Currently **1033 JS + 527 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -455,6 +455,14 @@ Habits the tests now enforce, and why:
 ---
 
 ## The editor is gated for launch (27 Aug 2026, Youssef's call)
+
+**SHIPPED 2 Sept 2026 (v3.78.0)** at Youssef's "fix all" on the week-one gaps.
+The gate is unlinked from index.html, the server allowlist and the phone rule,
+and `test/editor-gate.test.mjs` now proves it is GONE. The two files
+`src/public/editor-gate.js` and `src/public/studio-editor-gate.css` are still
+on disk only because the cloud session could not delete files -- `git rm` them
+from the Mac; nothing links or serves them. The section below stays as the
+record of why the gate existed.
 
 It opens from the queue and draws itself, blurred, behind a "coming soon"
 notice. Youssef's words: "the editor for opening will be coming soon so they
@@ -2416,6 +2424,64 @@ qwen3:1.7b and Arabic transcription by Whisper `small`; both are unlocked by
 the CPX41 rescale (open item 5), not by code. The schema format and the
 clipped translation are proven by test, not yet on the box -- watch the first
 deploy's log for a 400 fallback and read `timings` off the first real job.
+
+## The editor shipped, with section cuts (v3.78.0, 2 Sept 2026)
+
+Youssef, on the audit's "week one" list: "fix all". The editor was the one
+gap that was code rather than a decision, and it was smaller than it looked:
+the render pipeline has cut on a LIST of keep ranges since 26 Aug
+(`cutsSec`, `retime_for_cuts`), `agent.updateClip` has clamped and stored
+that list since the trim shipped, and the editor's own comment said "split and
+delete-a-section are the same primitive with more ranges". Only the control
+was missing.
+
+- **Section cuts are two presses of one button.** "Cut a section from here"
+  marks the playhead; move it; "Cut to here" removes the stretch between. The
+  removed stretch is hatched on the timeline (`#dcCutLayer`, inside the
+  export's own `#dcTrimLane`), each carries a Restore chip, and "Use the whole
+  clip" clears sections as well as the trim. Under half a second between the
+  presses is a double-press, not a cut. The trim envelope plus the cut-outs
+  become `edKeeps`, and Save sends that whole list -- one shape from the
+  handle to the render.
+- **A saved list reads back as its gaps**, so a clip opened again shows the
+  cuts it already carries, not only its outer trim. The keep-shading gradient
+  darkens every removed stretch in one rule.
+- **Host-rendered, no re-import.** The button row sits after "Use the whole
+  clip", found by its TEXT; the hatching is positioned from its own inline
+  styles; `paintTrimTools` is in paintStudio's list. Driven with real clicks:
+  armed -> cut -> hatched -> "Keeping 0:34 of 0:42 in 2 sections" -> survives
+  two repaints -> Restore. Screenshotted at 1440x950: 0 elements overflowing,
+  no page scroll.
+- **The gate is gone, and every claim that it existed moved with it**: the
+  help article is now "Trim a clip, or cut a section out of the middle"; the
+  FAQ, the features chapter, the terms and three SEO pages say what the editor
+  does and does not do (trim, cuts, caption words -- no overlays, extra media
+  or keyframes). `seo-architecture` now fails a page that STILL calls the
+  editor gated, the reverse of what it asserted before; one page was caught by
+  it. The features chapter's image stays tagged "Concept preview" -- it draws
+  tools that do not exist.
+- **The editor's own beta popup is back** and true again: edits do save on
+  Save.
+
+**Declined from the same list, on purpose, and why:**
+- **View counts.** The privacy policy states, and `youtube-compliance` pins,
+  that no YouTube statistics are requested. Adding Analytics scope makes that
+  sentence false and reopens compliance. Youssef's decision, not a fix.
+- **Custom templates as NEW templates.** The catalogue is deliberately one
+  template per content type (`createTemplate`/`duplicateTemplate` throw; edits
+  are per-account overrides on the built-ins), because copies once turned two
+  templates into eight. Every account already customises every template.
+  Reversing that needs a spec, not a session.
+- **A warm Whisper process.** The per-job model load is ~10s on a job that
+  runs minutes to hours, and a resident model steals headroom from renders
+  under the 2G cap. Revisit after the rescale, when concurrency > 1 makes it
+  matter.
+- **`state.json` -> a database.** Every route reads and mutates one in-memory
+  object with an atomic, coalesced, retried save. That is fine at eight
+  accounts and the migration touches every route; it is a project, and easier
+  at eight accounts than eight hundred.
+- **Active-speaker framing.** Needs a real face on a real video to verify;
+  wiring it in unseen is the failure this file exists to prevent.
 
 ## Open items
 

@@ -9,8 +9,8 @@
  * worse than none:
  *
  *  1. **It describes what the app ACTUALLY does today.** Where something is not
- *     built — the clip editor is behind its coming-soon gate, no platform sends
- *     audience numbers back — the article says so. Someone who finds that out
+ *     built — the clip editor trims and cuts but has no frame-level tools, no
+ *     platform sends audience numbers back — the article says so. Someone who finds that out
  *     after paying is a refund and a bad review; someone who reads it here is
  *     just informed.
  *  2. **Every screenshot is a real capture of this app**, taken from the running
@@ -400,16 +400,21 @@ export const CATEGORIES = Object.freeze([
         ],
       },
       {
-        id: 'editor-soon',
-        title: 'The clip editor says coming soon',
-        summary: 'It is deliberately switched off while it is finished.',
+        id: 'editor-trim',
+        title: 'Trim a clip, or cut a section out of the middle',
+        summary: 'Open a clip from the queue; the timeline at the bottom is where the cut is made.',
         image: 'queue.webp',
         imageAlt: 'The review queue',
         steps: [
-          'Everything else works without it: styles set how captions look, and the review deck decides what goes out.',
+          'Open the clip from the Review queue with Edit. Drag either gold handle on the timeline to trim the start or the end.',
+          'To remove a section from the middle, move the playhead to where the cut should start and press "Cut a section from here", then move it to where the cut should end and press "Cut to here". The removed stretch is hatched on the timeline.',
+          'Press Restore on a hatched section to put it back, or "Use the whole clip" to clear every cut.',
+          'Press Save clip. The cut is rendered into the video — captions are retimed word by word to the new timeline — and the queue shows the new render when it is ready.',
         ],
         notes: [
-          'It is gated rather than hidden so you can see it is coming. Nothing you do in the app depends on it.',
+          'A cut shorter than half a second is ignored: it would render as a flash of one frame, which reads as a glitch rather than an edit.',
+          'The editor needs a laptop-width screen. On a phone the clip can still be reviewed, approved and scheduled; the timeline is hidden.',
+          'What the editor does not do yet: frame-by-frame tools, overlays or media beyond the clip and its captions.',
         ],
       },
     ],

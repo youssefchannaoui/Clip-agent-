@@ -51,7 +51,6 @@
 <!-- The clip editor is held back for launch: it opens, blurred, behind a
      "coming soon" notice. Deleting these two lines and the two files they name
      turns it back on. -->
-<link rel="stylesheet" href="/studio-editor-gate.css">
 <style>
 /* The Studio shell owns the viewport; the legacy dashboard keeps page scrolling.
    The mount point stays a plain block on purpose: the design's own root element is
@@ -2339,7 +2338,6 @@ select:focus{outline:none;border-color:var(--blue)}
 <script src="/studio-template.generated.js"></script>
 <script src="/studio-runtime.js"></script>
 <script src="/studio-adapter.js"></script>
-<script src="/editor-gate.js"></script>
 
 <script>
 'use strict';
@@ -6609,6 +6607,53 @@ function paintBrandSeal(){
     +'<textPath href="#dcRailSealPath">IMPORT \u00b7 FIND \u00b7 REVIEW \u00b7 PUBLISH \u00b7</textPath></text>';
   seal.insertBefore(ring,seal.firstChild);
 }
+/* Section cuts on the editor timeline.
+   The trim handles are generated markup; the removed sections and the button
+   that makes them are host-rendered so this costs no design re-import. The
+   hatching lives in #dcTrimLane (an id the export already carries) and the
+   controls sit after "Use the whole clip", found by its text -- never by a
+   hashed class. Registered in paintStudio's list like every other host panel,
+   so a state poll cannot wipe it. */
+function paintTrimTools(vals){
+  const lane=document.getElementById('dcTrimLane');
+  const old=document.getElementById('dcCutTools');
+  if(!lane){ if(old) old.remove(); return }
+  let layer=document.getElementById('dcCutLayer');
+  if(!layer||layer.parentNode!==lane){
+    if(layer) layer.remove();
+    layer=document.createElement('span'); layer.id='dcCutLayer';
+    layer.style.cssText='position:absolute;inset:0;pointer-events:none;';
+    lane.insertBefore(layer, lane.firstChild ? lane.firstChild.nextSibling : null);
+  }
+  const sections=Array.isArray(vals.edCutSections)?vals.edCutSections:[];
+  let html=sections.map(c=>`<span title="Removed ${esc(c.label)}" style="position:absolute;top:0;bottom:0;left:${esc(c.leftPct)}%;width:${esc(c.widthPct)}%;background:repeating-linear-gradient(135deg,rgba(224,135,112,.32) 0 5px,rgba(224,135,112,.10) 5px 10px);border-left:1px solid rgba(224,135,112,.8);border-right:1px solid rgba(224,135,112,.8);border-radius:4px"></span>`).join('');
+  if(vals.edCutMarkPct!==null&&vals.edCutMarkPct!==undefined){
+    html+=`<span style="position:absolute;top:-4px;bottom:-4px;left:${esc(vals.edCutMarkPct)}%;width:2px;margin-left:-1px;background:#E08770;box-shadow:0 0 0 1px rgba(8,8,10,.6)"></span>`;
+  }
+  if(layer.innerHTML!==html) layer.innerHTML=html;
+  const editor=lane.closest('[data-dc-editor]');
+  const reset=editor?[...editor.querySelectorAll('button')].find(b=>b.textContent.trim()==='Use the whole clip'):null;
+  if(!reset){ if(old) old.remove(); return }
+  let tools=old;
+  if(!tools||tools.previousElementSibling!==reset){
+    if(tools) tools.remove();
+    tools=document.createElement('span'); tools.id='dcCutTools';
+    tools.style.cssText='display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:8px;';
+    reset.insertAdjacentElement('afterend', tools);
+  }
+  const armed=Boolean(vals.edCutArmed);
+  const btn=(label,attr,accent)=>`<button type="button" ${attr} style="padding:4px 10px;border:1px solid ${accent?'rgba(224,135,112,.6)':'#26262A'};border-radius:7px;background:${accent?'rgba(224,135,112,.12)':'transparent'};color:${accent?'#F0B7A4':'#D9B478'};font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer">${label}</button>`;
+  let inner=btn(esc(vals.edCutButtonLabel||'Cut a section'),'data-dc-cut',armed);
+  if(armed) inner+=btn('Cancel','data-dc-cut-cancel',false);
+  inner+=sections.map(c=>btn('Restore '+esc(c.label),`data-dc-cut-restore="${c.index}"`,false)).join('');
+  if(tools.innerHTML!==inner){
+    tools.innerHTML=inner;
+    tools.querySelector('[data-dc-cut]').onclick=e=>{const b=StudioAdapter.bindings(DATA); if(b.markCut) b.markCut(e)};
+    const cancel=tools.querySelector('[data-dc-cut-cancel]'); if(cancel) cancel.onclick=e=>{const b=StudioAdapter.bindings(DATA); if(b.cancelCutMark) b.cancelCutMark(e)};
+    tools.querySelectorAll('[data-dc-cut-restore]').forEach(el=>{el.onclick=e=>{e.preventDefault();const b=StudioAdapter.bindings(DATA); if(b.restoreCut) b.restoreCut(Number(el.getAttribute('data-dc-cut-restore')))}});
+  }
+}
+
 function paintLibraryAside(vals){
   /* The Lecture library's sidebar used to end in "Before you import" -- three
      warnings, in the most valuable column on the screen, that nobody reads
@@ -6880,6 +6925,7 @@ function paintStudio(){
   paintEditorVideo(vals);
   paintEditorPlayer(vals);
   paintEditorLayout(vals);
+  paintTrimTools(vals);
   paintEditorScrub();
   stepDirection();
   paintJobStyleRow(vals);

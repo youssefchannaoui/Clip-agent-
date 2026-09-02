@@ -104,6 +104,12 @@
     edBlockDraft: null,
     // The unsaved trim, as {from,to} in clip-local seconds. null = untouched.
     edTrim: null,
+    // Sections removed from INSIDE the trim, as [from, to] pairs; null means
+    // "whatever the clip has saved". edCutMark is the first end of a cut in
+    // progress -- the playhead position when "Cut a section from here" was
+    // pressed -- or null.
+    edCutOuts: null,
+    edCutMark: null,
     capTextStepAt: 0,
     // null means no upload in flight; 0-100 while bytes are moving.
     uploadPct: null,
@@ -2243,7 +2249,7 @@
         // Approve / edit / reject is the card's action row; `third` is reject.
         third: function (e) { stop(e); reject(c.id); },
         thirdIcon: 'ph ph-x',
-        edit: function (e) { stop(e); setUI({ screen: 'editor', edClipId: c.id, edStyleDraft: null, edBlockDraft: null, edTrim: null, edBlock: 0, edTime: 0, edPlayhead: 0 }); },
+        edit: function (e) { stop(e); setUI({ screen: 'editor', edClipId: c.id, edStyleDraft: null, edBlockDraft: null, edTrim: null, edCutOuts: null, edCutMark: null, edBlock: 0, edTime: 0, edPlayhead: 0 }); },
         openLecture: function (e) { stop(e); setUI({ screen: 'detail', openProject: c.projectId }); },
       };
     }
@@ -3028,6 +3034,47 @@
      * server here: the trim is part of the unsaved edit, and Save is what
      * renders it, in keeping with render-on-save.
      */
+    // The ranges of the clip that survive: the trim envelope with every removed
+    // section taken out of it. This is the list the worker cuts on -- a trim
+    // is one range, a section cut is a gap in it, and both are the same
+    // primitive to the render (retime_for_cuts in clip_worker.py).
+    function keepRanges(trim, cutOuts, duration) {
+      var from = Math.max(0, Number(trim.from) || 0);
+      var to = Math.min(duration, Number(trim.to) || duration);
+      if (to <= from) return [];
+      var keeps = [[from, to]];
+      var cuts = (cutOuts || []).map(function (c) { return [Number(c[0]), Number(c[1])]; })
+        .filter(function (c) { return isFinite(c[0]) && isFinite(c[1]) && c[1] > c[0]; })
+        .sort(function (a, b) { return a[0] - b[0]; });
+      for (var i = 0; i < cuts.length; i++) {
+        var next = [];
+        for (var k = 0; k < keeps.length; k++) {
+          var a = keeps[k][0], b = keeps[k][1], ca = cuts[i][0], cb = cuts[i][1];
+          if (cb <= a || ca >= b) { next.push([a, b]); continue; }
+          if (ca > a) next.push([a, ca]);
+          if (cb < b) next.push([cb, b]);
+        }
+        keeps = next;
+      }
+      // A sliver under a quarter second is a mis-click, and ffmpeg renders it
+      // as a flash of one frame -- the same floor agent.updateClip applies.
+      return keeps.filter(function (r) { return r[1] - r[0] >= 0.25; });
+    }
+
+    // Removed sections, merged where they touch, so two cuts drawn over each
+    // other read as one hatched stretch rather than a stack.
+    function mergeCutOuts(cutOuts) {
+      var sorted = (cutOuts || []).map(function (c) { return [Math.min(c[0], c[1]), Math.max(c[0], c[1])]; })
+        .sort(function (a, b) { return a[0] - b[0]; });
+      var out = [];
+      for (var i = 0; i < sorted.length; i++) {
+        if (out.length && sorted[i][0] <= out[out.length - 1][1]) {
+          out[out.length - 1][1] = Math.max(out[out.length - 1][1], sorted[i][1]);
+        } else out.push([sorted[i][0], sorted[i][1]]);
+      }
+      return out;
+    }
+
     function startTrimDrag(e, edge, duration, current) {
       stop(e);
       var handle = e.dcTarget || (this && this.nodeType === 1 ? this : null) || e.currentTarget;
@@ -3267,13 +3314,28 @@
     // The trim being edited, or the clip's saved one, or the whole clip. Held
     // as a single kept range: split and delete-a-section are the same primitive
     // with more ranges, and the worker already takes a list.
+    var edSavedCuts = (edClip && Array.isArray(edClip.cutsSec) && edClip.cutsSec.length) ? edClip.cutsSec : null;
     var edTrim = (function () {
       if (UI.edTrim) return UI.edTrim;
-      var saved = edClip && Array.isArray(edClip.cutsSec) && edClip.cutsSec.length ? edClip.cutsSec : null;
-      if (!saved) return { from: 0, to: edDuration };
-      return { from: Math.max(0, Number(saved[0][0]) || 0), to: Math.min(edDuration, Number(saved[saved.length - 1][1]) || edDuration) };
+      if (!edSavedCuts) return { from: 0, to: edDuration };
+      return { from: Math.max(0, Number(edSavedCuts[0][0]) || 0), to: Math.min(edDuration, Number(edSavedCuts[edSavedCuts.length - 1][1]) || edDuration) };
     })();
-    var edTrimmed = edTrim.from > 0.05 || edTrim.to < edDuration - 0.05;
+    // The sections removed from inside that envelope. A saved list of several
+    // keep ranges is read back as its gaps, so a clip opened again shows the
+    // cuts it already carries rather than only its outer trim.
+    var edCutOuts = (function () {
+      if (Array.isArray(UI.edCutOuts)) return UI.edCutOuts;
+      if (!edSavedCuts || edSavedCuts.length < 2) return [];
+      var gaps = [];
+      for (var g = 1; g < edSavedCuts.length; g++) {
+        var ga = Number(edSavedCuts[g - 1][1]), gb = Number(edSavedCuts[g][0]);
+        if (gb - ga >= 0.25) gaps.push([ga, gb]);
+      }
+      return gaps;
+    })();
+    var edKeeps = keepRanges(edTrim, edCutOuts, edDuration);
+    var edKeptSec = edKeeps.reduce(function (sum, r) { return sum + (r[1] - r[0]); }, 0);
+    var edTrimmed = edTrim.from > 0.05 || edTrim.to < edDuration - 0.05 || edKeeps.length > 1;
     // Which block is being spoken *now*. This is what the preview overlay shows,
     // so the caption on screen follows the video instead of showing whichever
     // block was last clicked. Blocks without timings (the flat-transcript
@@ -4995,7 +5057,7 @@
       // instead lets the overlays resolve against <main> and cover the tool rail.
       edThumbStyle: 'position: relative; container-type: inline-size; width: 100%; max-width: 268px; aspect-ratio: 9 / 16; border-radius: 13px; overflow: hidden; border: 1px solid #26262A; background: ' +
         thumb(edClip && edClip.thumbUrl) + '; box-shadow: 0 26px 60px rgba(0,0,0,.5);',
-      closeEditor: function (e) { stop(e); setUI({ screen: 'queue', edClipId: null, edStyleDraft: null, edBlockDraft: null, edTrim: null }); },
+      closeEditor: function (e) { stop(e); setUI({ screen: 'queue', edClipId: null, edStyleDraft: null, edBlockDraft: null, edTrim: null, edCutOuts: null, edCutMark: null }); },
 
       // The SELECTED CAPTION box edits the chosen block, not the whole clip.
       // It was bound to the entire transcript and stayed empty because nothing
@@ -5276,12 +5338,19 @@
       // the ruler by even a little would be worse than no trim at all.
       edTrimLaneStyle: 'position: absolute; inset: 0; pointer-events: none;',
       edTrimKeepStyle: (function () {
-        var a = (edTrim.from / edDuration) * 100;
-        var b = (edTrim.to / edDuration) * 100;
+        // Dark wherever the clip is NOT kept: outside the trim, and across
+        // every removed section, in one gradient.
+        var stops = [];
+        var cursor = 0;
+        var pct = function (t) { return ((t / edDuration) * 100).toFixed(2) + '%'; };
+        edKeeps.forEach(function (r) {
+          if (r[0] > cursor) stops.push('rgba(8,8,10,.72) ' + pct(cursor) + ' ' + pct(r[0]));
+          stops.push('transparent ' + pct(r[0]) + ' ' + pct(r[1]));
+          cursor = r[1];
+        });
+        if (cursor < edDuration) stops.push('rgba(8,8,10,.72) ' + pct(cursor) + ' 100%');
         return 'position: absolute; top: 0; bottom: 0; left: 0; right: 0;'
-          + ' background: linear-gradient(90deg, rgba(8,8,10,.72) 0 ' + a.toFixed(2) + '%,'
-          + ' transparent ' + a.toFixed(2) + '% ' + b.toFixed(2) + '%,'
-          + ' rgba(8,8,10,.72) ' + b.toFixed(2) + '% 100%);'
+          + ' background: linear-gradient(90deg, ' + (stops.join(', ') || 'transparent 0 100%') + ');'
           + ' border-radius: 7px; pointer-events: none;'
           + (edTrimmed ? '' : ' opacity: 0;');
       })(),
@@ -5292,9 +5361,12 @@
         + '%; width: 10px; margin-left: -5px; border-radius: 4px; cursor: ew-resize; pointer-events: auto;'
         + ' background: linear-gradient(180deg, #F0D6A6, #D9B478); box-shadow: 0 0 0 1px rgba(8,8,10,.6);',
       edTrimLabel: edTrimmed
-        ? 'Keeping ' + secsToClock(edTrim.to - edTrim.from) + ' of ' + secsToClock(edDuration)
-          + ' · ' + secsToClock(edTrim.from) + ' to ' + secsToClock(edTrim.to) + ' · Save to render the cut'
-        : 'Drag either handle to trim. The whole clip is kept.',
+        ? 'Keeping ' + secsToClock(edKeptSec) + ' of ' + secsToClock(edDuration)
+          + (edKeeps.length > 1
+            ? ' in ' + edKeeps.length + ' sections'
+            : ' · ' + secsToClock(edTrim.from) + ' to ' + secsToClock(edTrim.to))
+          + ' · Save to render the cut'
+        : 'Drag either handle to trim, or cut a section from the middle. The whole clip is kept.',
       edTrimResetStyle: 'padding: 4px 10px; border: 1px solid #26262A; border-radius: 7px; background: transparent;'
         + ' color: ' + (edTrimmed ? '#F0D6A6' : '#4A4A52') + '; font-family: inherit; font-size: 10.5px; font-weight: 600;'
         + ' cursor: ' + (edTrimmed ? 'pointer' : 'default') + ';',
@@ -5302,8 +5374,64 @@
       dragTrimEnd: function (e) { startTrimDrag(e, 'to', edDuration, edTrim); },
       resetTrim: function (e) {
         stop(e);
-        if (!edTrimmed) return;
+        if (!edTrimmed && UI.edCutMark === null) return;
         UI.edTrim = null;
+        UI.edCutOuts = edSavedCuts ? [] : null;
+        UI.edCutMark = null;
+        UI.edDirty = true;
+        paintNow();
+      },
+
+      // ── Section cuts ───────────────────────────────────────────────────
+      // Two presses of one button: the playhead marks where the cut starts,
+      // then where it ends. Host-rendered beside "Use the whole clip" (the
+      // timeline is generated markup, and a design re-import would regenerate
+      // every class name in the app for one button), so these bindings are
+      // data the host reads rather than template slots.
+      edKeeps: edKeeps,
+      edCutSections: edCutOuts.map(function (c, i) {
+        return {
+          index: i, from: c[0], to: c[1],
+          label: secsToClock(c[0]) + '\u2013' + secsToClock(c[1]),
+          leftPct: ((c[0] / edDuration) * 100).toFixed(2),
+          widthPct: (((c[1] - c[0]) / edDuration) * 100).toFixed(2),
+        };
+      }),
+      edCutMarkAt: (UI.edCutMark === null || UI.edCutMark === undefined) ? null : UI.edCutMark,
+      edCutMarkPct: (UI.edCutMark === null || UI.edCutMark === undefined) ? null : ((UI.edCutMark / edDuration) * 100).toFixed(2),
+      edCutButtonLabel: (UI.edCutMark === null || UI.edCutMark === undefined)
+        ? 'Cut a section from here (' + secsToClock(edTime) + ')'
+        : (Math.abs(edTime - UI.edCutMark) < 0.5
+          ? 'Move the playhead, then cut to here'
+          : 'Cut to here (' + secsToClock(Math.min(UI.edCutMark, edTime)) + '\u2013' + secsToClock(Math.max(UI.edCutMark, edTime)) + ')'),
+      edCutArmed: !(UI.edCutMark === null || UI.edCutMark === undefined),
+      markCut: function (e) {
+        stop(e);
+        if (!edClip) return;
+        if (UI.edCutMark === null || UI.edCutMark === undefined) {
+          UI.edCutMark = edTime;
+          paintNow();
+          return;
+        }
+        var a = Math.min(UI.edCutMark, edTime), b = Math.max(UI.edCutMark, edTime);
+        UI.edCutMark = null;
+        // Under half a second is a double-press, not a cut.
+        if (b - a < 0.5) { paintNow(); return; }
+        UI.edCutOuts = mergeCutOuts(edCutOuts.concat([[a, b]]));
+        // The envelope has to be held explicitly once a cut exists, or Save
+        // would see no trim state and drop the sections with it.
+        UI.edTrim = UI.edTrim || { from: edTrim.from, to: edTrim.to };
+        UI.edDirty = true;
+        paintNow();
+      },
+      cancelCutMark: function (e) {
+        stop(e);
+        UI.edCutMark = null;
+        paintNow();
+      },
+      restoreCut: function (index) {
+        UI.edCutOuts = edCutOuts.filter(function (_, i) { return i !== index; });
+        UI.edTrim = UI.edTrim || { from: edTrim.from, to: edTrim.to };
         UI.edDirty = true;
         paintNow();
       },
@@ -5463,9 +5591,14 @@
         // An untouched trim sends nothing rather than a range covering the
         // whole clip, so a clip with no cut keeps no cut.
         var payload = { transcript: text || edClip.transcript };
-        if (UI.edTrim) {
-          payload.cutsSec = edTrimmed ? [[edTrim.from, edTrim.to]] : [];
+        if (UI.edTrim || Array.isArray(UI.edCutOuts)) {
+          // The whole list of kept ranges: the trim with its sections cut
+          // out. agent.updateClip clamps and orders it and the worker cuts
+          // on it -- one shape from the handle to the render.
+          payload.cutsSec = edTrimmed ? edKeeps : [];
           UI.edTrim = null;
+          UI.edCutOuts = null;
+          UI.edCutMark = null;
         }
         global.StudioAdapter.onSaveClip(edClip.id, payload);
       },
@@ -7523,7 +7656,7 @@
     onBulkClips: function () {},
     onBulkProjects: function () {},
     onSaveClip: function () {},
-    clipSaved: function () { UI.edSaving = false; UI.edDirty = false; UI.edCaption = null; UI.edBlockDraft = null; UI.edTrim = null; refresh(); },
+    clipSaved: function () { UI.edSaving = false; UI.edDirty = false; UI.edCaption = null; UI.edBlockDraft = null; UI.edTrim = null; UI.edCutOuts = null; UI.edCutMark = null; refresh(); },
     // Called by the host once /api/source-info resolves, so the range picker can
     // open against the real duration.
     openJob: function (source) {
