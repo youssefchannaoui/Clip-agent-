@@ -85,6 +85,28 @@ progress: everything below was entered into the browser and is lost if the tab
 reloads before a video exists. Every value is recorded here for exactly that
 reason.
 
+### Re-entered 3 Sept 2026 — the form is now ONE error from submittable
+
+Everything below is typed into the Production draft again and the error count
+reads **1: "Please upload at least one video"**. Category, icon, description,
+both URLs, platform, the Web URL and the 996-character review note are all in.
+Products and Scopes were NOT lost in August and did not need re-entering --
+they persist separately from App details, which is why the count went 7 -> 1
+without touching them.
+
+**It is unsaved, and Save is still refused** (tested today: filling the review
+note alone and pressing Save returned "This form has 7 errors"). So the tab
+holding it must not be reloaded or navigated. **Record the demo in a DIFFERENT
+BROWSER** -- Safari -- or the recording will destroy the form and it has to be
+retyped a third time.
+
+Two portal quirks worth knowing, both cost a retry today:
+- `form_input` on the Platforms checkbox reports success and does NOT register
+  with React. It needs a real click.
+- The Category dropdown's options must be clicked by element reference, not by
+  coordinate: clicking where the option appears while the list is still fading
+  in closes the menu without selecting.
+
 ### Entered and correct (as of 24 Aug, unsaved)
 
 - App name `DeenClipped`, Category Education
