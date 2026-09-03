@@ -200,16 +200,18 @@ These were each a real bug and each has a test named after it.
 ## Verification standard
 
 - `npm test` and `npm run check` must pass. Currently **1175 JS + 572 Python**
-  (0 Python skipped). These numbers were once wrong by more than a factor of
+  (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
   output), so this line cannot quietly drift again; a shrinking count is
   reported as tests having VANISHED rather than as a number to update.
-- **There are no skips any more (v3.101.2).** The seven were
-  `SpeakerTrackingTests`, waiting on a video file nothing ever created; they
-  build their own with ffmpeg now and run in CI. The crop ARITHMETIC is
-  exercised. What is still untested is face DETECTION on a real face, which
-  needs a real video and a look at the frame -- see the open items below.
+- **The 7 skips are `SpeakerTrackingTests`, and they skip ONLY where ffmpeg
+  is absent** (v3.101.2). They build their own fixture with ffmpeg and run
+  wherever it exists -- all seven pass here in 0.9s -- but the CI runner has
+  no working ffmpeg, so there they skip, counted as seven skips with the
+  reason in each. The crop ARITHMETIC is therefore exercised by anyone running
+  the suite with ffmpeg installed, and NOT by CI; face DETECTION on a real
+  face is still untested anywhere -- see the open items below.
 - **Test executed output, not source strings.** Several tests have failed only
   because code moved into a function, while real behaviour changes passed.
 - **A green suite is not verification for anything visual.** Every layout bug
@@ -3817,10 +3819,18 @@ a product fault wearing a test problem's clothes.
   "the deterministic paths -- the ones that do not depend on real faces". They
   waited on `/tmp/track_test.mp4`, which nothing created, so the crop maths --
   ratio kept, inside the source, biases ordered left to right -- had never run
-  in CI. `setUpClass` builds a 6s testsrc with ffmpeg (1.3s for all seven) and
-  skips only where ffmpeg is genuinely absent, so a clean checkout still runs.
-  The handover guard reads the skip count, so `(0 Python skipped)` is enforced
-  rather than remembered.
+  anywhere. The class builds a 6s testsrc with ffmpeg (native `mpeg4`, since
+  libx264 is not in every build) and skips per TEST where ffmpeg is absent, so
+  a clean checkout still runs and the skips are COUNTED rather than vanishing.
+  **The first cut got both of those wrong and turned the branch red twice**:
+  it asked for libx264, and it raised SkipTest from `setUpClass`, which counts
+  as ONE skip while the seven tests drop out of the total -- the handover
+  guard read "541 (1 skipped)" and rightly said seven tests had VANISHED.
+  **The CI runner has no working ffmpeg**, measured: with the native codec and
+  per-test skips it reports exactly "572 (7 skipped)". So these seven run for
+  anyone with ffmpeg and skip in CI, and the count above says so. Installing
+  ffmpeg in `ci.yml` (~30s a run) would make them run there; that is a
+  trade-off for Youssef, not a default.
 - **What this does NOT prove**: that face detection finds a face. testsrc has
   none, `bias=auto` correctly declines, and nothing here replaces the real
   video and the look at a frame the open items still ask for.
