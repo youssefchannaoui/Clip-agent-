@@ -3753,11 +3753,14 @@ next step and it is not done" since.
    further actions from you at this time."* There is no 8 Sept deadline and
    nothing is drafted-and-unsent. This entry said the opposite for three days,
    which is why it is corrected here rather than deleted.
-   **One thing left in the mailbox:** the stale 25 Aug draft is still there,
-   in a DETACHED thread (`1a039b45…`, not the review thread `19fd1e1f…`), and
-   it says "please find attached screenshots" while carrying no attachments.
-   It re-answers a question already answered on 26 Aug. Sending it into a
-   closed review would be an unforced error — delete it, do not send it.
+   **The mailbox is clear too, checked 3 Sept 2026 rather than assumed.** This
+   entry warned for days about a stale 25 Aug draft sitting in a DETACHED
+   thread (`1a039b45…`) saying "please find attached screenshots" with no
+   attachments. It is GONE: the account holds five drafts in total, none in
+   that thread, none addressed to Google, and none dated 25 Aug. Nothing is
+   waiting to be deleted and nothing is at risk of being sent into a closed
+   review. Kept rather than removed because a session acting on the old
+   wording would go hunting for a draft that does not exist.
    **What this does NOT prove:** that uploads now arrive public. The audit was
    the reason Google forced them private, and that reason is gone, but nobody
    has posted a clip since (the stored token is expired — open item 6). The
