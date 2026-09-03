@@ -208,11 +208,20 @@ test('posting everywhere still queues one clip per window', () => {
 });
 
 test('a clip going nowhere still queues account-wide', () => {
-  // Publishing off, or a local export: it has no lane to be alone in, and
-  // letting it stack on top of everything would put two exports on one slot.
+  // A local export: it has no lane to be alone in, and letting it stack on top
+  // of everything would put two exports on one slot.
+  //
+  // It used to reach that state by switching the account's master publishing
+  // switch off. That switch is retired (v3.116.0), so this now does it the way
+  // a customer would -- by unticking every destination, which is the control
+  // that still exists.
   const a = clip('a', 1); const b = clip('b', 2);
   seed({ clips: [a, b] });
-  state.userSettings[userId].publishingSettings.enabled = false;
+  for (const provider of ['youtube', 'instagram', 'facebook', 'tiktok']) {
+    if (state.userSettings[userId].publishingSettings[provider]) {
+      state.userSettings[userId].publishingSettings[provider].enabled = false;
+    }
+  }
   for (const x of [a, b]) x.status = 'approved';
   agent.scheduleApprovedClip(a);
   agent.scheduleApprovedClip(b);

@@ -1682,7 +1682,7 @@ const BILLING_STATE = {
       studio_monthly: { id: 'studio_monthly', tier: 'studio', name: 'Studio Monthly', interval: 'monthly', tokens: 1600, priceLabel: '£29', enabled: true, description: 'Studio' },
       studio_yearly: { id: 'studio_yearly', tier: 'studio', name: 'Studio Yearly', interval: 'yearly', tokens: 22000, priceLabel: '£290', enabled: true, description: 'Studio' },
     },
-    trialDays: 3,
+    trialDays: 7,
     freeIncludes: ['Publishing and scheduling', 'The editor'],
     tierAdds: { basic: [], pro: ['Remove the watermark', 'Every template'], studio: ['Ask DeenAI', 'Jump the render queue'] },
     topups: {

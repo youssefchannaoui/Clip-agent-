@@ -53,7 +53,11 @@ export function settingDefaults() {
       skipReviewRequired: true,
     },
     publishingSettings: {
-      enabled: false,
+      // Youssef, 3 Sept 2026, looking at a connected TikTok that would not
+      // post: "doesnt WORK FIX IT KEEP AUTO UPLOAD ON ALWAYS". See the
+      // read-time correction in publishingSettings() below for why this
+      // needed both halves.
+      enabled: true,
       // With more than one channel on a platform: 'all' posts every clip to
       // every one of them, 'rotate' gives each clip to one in turn. Defaults
       // to 'all', which is what this app has always done -- turning three
@@ -400,6 +404,24 @@ export function publishingSettings(user) {
   const current = readSetting(user, 'publishingSettings') || {};
   return {
     ...fresh, ...current,
+    // The master switch is RETIRED, and this is the read-time correction that
+    // retires it -- the same device as the YouTube privacy line below.
+    //
+    // It defaulted to false and the studio has no control for it: the only
+    // checkbox that ever wrote it lives in the legacy dashboard, behind a
+    // `renderStudio()` that returns first. So EVERY account this product has
+    // ever had could connect a channel, tick it, and still find the schedule
+    // reading "Automatic publishing is off" with nothing anywhere to turn on.
+    // A hidden switch whose default breaks the product is worse than a dead
+    // control; it is invariant 9 pointing the other way.
+    //
+    // Nothing is loosened by this. The per-platform ticks in the connections
+    // dialog are the real control and still decide where a clip goes, and
+    // NOTHING posts without an approval -- that is the gate that matters.
+    // Forcing it on READ rather than migrating means an account whose record
+    // was written months ago is freed on its next request, with nobody having
+    // to go and find a setting that was never on screen.
+    enabled: true,
     // Read-time correction rather than a migration pass: an account that stored
     // `private` back when the app had a control for it publishes publicly from
     // the next upload, without anyone having to go and find the setting.

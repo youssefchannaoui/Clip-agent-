@@ -1824,7 +1824,7 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
     <div class="plan-top"><span class="badge">${esc(TIERS.basic.badge)}</span>${cur.status === 'free' || !cur.plan || cur.plan === 'free' ? '<span class="popular">Your plan</span>' : ''}</div>
     <h2>${esc(TIERS.basic.name)}</h2>
     <p>${esc(TIERS.basic.tagline)}</p>
-    <div class="money">Free<small> / ${esc(String(trialDays || 3))} days</small></div>
+    <div class="money">Free<small> / ${esc(String(trialDays || 7))} days</small></div>
     <div class="tokens"><b>${esc(String(bill.plans?.free?.tokens ?? 0))}</b><span>tokens to try it with</span></div>
     <ul>${FREE_INCLUDES.map(line => `<li>${esc(line)}</li>`).join('')}</ul>
     <button type="button" disabled>Where you start</button>
@@ -1847,7 +1847,7 @@ export function plansPage(user, { error = '', info = '', returnTo = '/' } = {}) 
   // account is actually on free — a paying customer does not need it.
   const onFree = !cur.unlimited && (cur.status === 'free' || !cur.plan || cur.plan === 'free');
   const freeTokens = Number(bill.plans?.free?.tokens ?? trialTokens ?? 0) || 40;
-  const freeStart = onFree ? `<section class="free-start"><div><span class="free-kicker">Just trying it?</span><strong>Start free — the whole workflow, no card.</strong><span>${esc(String(freeTokens))} tokens · ${esc(String(trialDays || 3))} days · import, review, templates, scheduling and publishing all included. Upgrade whenever you need more minutes.</span></div><form method="post" action="/billing/continue-free"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit">Continue with free tokens →</button></form></section>` : '';
+  const freeStart = onFree ? `<section class="free-start"><div><span class="free-kicker">Just trying it?</span><strong>Start free — the whole workflow, no card.</strong><span>${esc(String(freeTokens))} tokens · ${esc(String(trialDays || 7))} days · import, review, templates, scheduling and publishing all included. Upgrade whenever you need more minutes.</span></div><form method="post" action="/billing/continue-free"><input type="hidden" name="returnTo" value="${returnValue}"><button type="submit">Continue with free tokens →</button></form></section>` : '';
   const remaining = cur.unlimited ? '∞' : Math.round(Number(cur.remaining || 0));
   const pct = cur.unlimited ? 100 : Math.max(4, Math.min(100, (Number(cur.used || 0) / Math.max(1, Number(cur.allowance || 1))) * 100));
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Plans & token shop · DeenClipped</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Outfit:wght@400;500;600;700&display=swap"><style>

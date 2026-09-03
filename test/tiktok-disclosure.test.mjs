@@ -18,6 +18,13 @@ process.env.SOCIAL_PUBLISH_ENABLED = 'true';
 process.env.PUBLIC_BASE_URL = 'https://app.test';
 process.env.TIKTOK_CLIENT_KEY = 'tiktok-client';
 process.env.TIKTOK_CLIENT_SECRET = 'tiktok-secret';
+// Needed by the YouTube comparison below. Without them completeOAuth throws
+// "youtube OAuth is not configured", the test's own catch swallowed it, and
+// its assertion passed having exercised nothing at all -- found when the
+// assertion was strengthened from "publishing stayed off" to "the channel
+// went on".
+process.env.GOOGLE_CLIENT_ID = 'google-client';
+process.env.GOOGLE_CLIENT_SECRET = 'google-secret';
 
 const store = await import('../src/store.js');
 const social = await import('../src/social.js');
@@ -199,10 +206,11 @@ test('connecting loads the creator options, so linking is not followed by a chor
   assert.doesNotThrow(() => social.validatePublishingSettings(next, USER));
 });
 
-test('connecting switches the destination on, without starting automatic publishing', async () => {
+test('connecting switches the destination on, and TikTok still waits', async () => {
   // Linking an account and then hunting for a second toggle is a step that only
-  // exists because the two were built separately. But connecting must never
-  // start the scheduler: that posts things.
+  // existed because the two were built separately -- the second one is retired
+  // (v3.116.0). What connecting must STILL never do is preselect a TikTok
+  // audience: that is TikTok's own rule, not a preference of ours.
   store.setPublishingSettings(USER, {
     ...store.publishingSettings(USER),
     enabled: false,
@@ -228,7 +236,8 @@ test('connecting switches the destination on, without starting automatic publish
   // that fail at the API.
   assert.equal(settings.tiktok.enabled, false, 'cannot switch on before an audience exists');
   assert.equal(settings.tiktok.enableWhenReady, true, 'but it is marked to switch on once one does');
-  assert.equal(settings.enabled, false, 'connecting never starts automatic publishing');
+  // And nothing posts regardless: an approval is what sends a clip anywhere,
+  // which is the gate that was always doing this work.
 });
 
 test('YouTube switches on the moment it connects, because nothing else is required', async () => {
@@ -246,9 +255,9 @@ test('YouTube switches on the moment it connects, because nothing else is requir
   try {
     const start = social.oauthStartUrl('youtube', USER);
     await social.completeOAuth('youtube', new URL('https://app.test/auth/youtube/callback?code=abc&state=' + encodeURIComponent(start.split('state=')[1])));
-  } catch { /* the channel shape varies; what matters is the settings effect */ }
-  finally { globalThis.fetch = realFetch; }
+  } finally { globalThis.fetch = realFetch; }
 
   const settings = store.publishingSettings(USER);
-  assert.equal(settings.enabled, false, 'still no automatic publishing');
+  assert.equal(settings.youtube.enabled, true,
+    'YouTube needs no audience chosen, so connecting is the whole of switching it on');
 });

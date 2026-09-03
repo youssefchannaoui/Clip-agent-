@@ -422,13 +422,30 @@ function setTargets(clip) {
   // owner's connected accounts. Reading a global value here is how a clip ends
   // up uploaded to somebody else's channel.
   const settings = publishingSettings(ownerOfRecord(clip));
-  if (!settings.enabled) { clip.targets = []; return; }
   const targets = social.enabledTargetsForClip(clip);
   if (!targets.length) {
     if (clip.approvedBy === 'automation' && settings.tiktok?.enabled) {
       throw new Error('TikTok requires explicit consent for each post, so an automatically selected clip must be manually approved before TikTok can receive it.');
     }
-    throw new Error('Automatic publishing is enabled, but no connected destination is enabled for this clip.');
+    /*
+     * HAVING NOWHERE TO POST IS NOT AN ERROR HERE, and making it one was a
+     * regression this file caught before it shipped.
+     *
+     * It used to be unreachable: the account's master publishing switch was
+     * off for everybody, so the early return above fired first and scheduling
+     * a clip with no channels connected always succeeded quietly. Retiring
+     * that switch (store.publishingSettings) exposed the throw underneath --
+     * and it would have stopped a brand-new account, which has connected
+     * nothing yet, from scheduling anything at all.
+     *
+     * Approving and scheduling a clip before connecting a channel is a normal
+     * thing to do: the schedule row says "No account connected", tick()
+     * re-derives at the slot, and the clip is still downloadable. The place a
+     * missing destination must be REPORTED is publishNow, where somebody has
+     * pressed a button and is owed an answer.
+     */
+    clip.targets = [];
+    return;
   }
   clip.targets = targets;
 }
@@ -546,7 +563,21 @@ function applyAutomationForOwner(ownerId, ownerClips) {
   if (!settings.enabled) return;
   const publish = publishingSettings(owner);
   const enabledAutomaticProviders = ['youtube', 'instagram', 'facebook'].filter(provider => publish[provider]?.enabled);
-  if (publish.enabled && !enabledAutomaticProviders.length) return; // TikTok cannot be silently auto-consented.
+  /*
+   * TikTok cannot be silently auto-consented: its guidelines make the audience
+   * a per-POST human act, so automation must never approve a clip whose only
+   * destination is TikTok. That is the whole of this guard's intent.
+   *
+   * It used to read `publish.enabled && !enabledAutomaticProviders.length`, and
+   * with the master switch off for everybody it never fired at all. Retiring
+   * the switch (store.publishingSettings) turned it into "stand down unless
+   * YouTube, Instagram or Facebook is on" -- which stopped automation for an
+   * account with nothing connected, where it is simply approving clips to
+   * download and there is nobody to consent on behalf of. Asking about TIKTOK
+   * says what was meant, and refuses in strictly more cases than production
+   * ever did.
+   */
+  if (publish.tiktok?.enabled && !enabledAutomaticProviders.length) return;
   const projects = new Map();
   for (const clip of ownerClips) {
     if (!projects.has(clip.projectId)) projects.set(clip.projectId, []);
@@ -793,20 +824,6 @@ export async function publishNow(id) {
   } else if (['scheduled', 'publish_failed'].includes(clip.status)) {
     clip.scheduledAt = Date.now();
     if (!clip.targets?.length) setTargets(clip);
-    /*
-     * A BUTTON THAT DOES NOTHING HAS TO SAY WHY (invariant 9).
-     *
-     * setTargets returns an empty list WITHOUT throwing when the account's
-     * master automatic-publishing switch is off -- so Post now logged
-     * "Publishing started", published to nowhere, filed the clip as "ready to
-     * download and post" and reported success. From the screen: nothing
-     * happened, twice, with TikTok visibly connected.
-     */
-    if (!clip.targets?.length) {
-      throw new Error(publishingSettings(ownerOfRecord(clip)).enabled
-        ? 'This clip has no connected destination to post to. Connect a channel and switch it on first.'
-        : 'Automatic publishing is switched off for this account, so there is nowhere to post. Turn it on in Connections and try again.');
-    }
     for (const target of clip.targets || []) {
       if (target.status === 'failed') { target.status = 'retrying'; target.error = null; }
       if (target.status !== 'posted') target.nextTryAt = Date.now();
@@ -819,6 +836,22 @@ export async function publishNow(id) {
     clip.scheduledAt = Date.now(); setTargets(clip);
     for (const target of clip.targets || []) target.nextTryAt = Date.now();
     clip.status = 'scheduled'; save();
+  }
+  /*
+   * A BUTTON THAT DOES NOTHING HAS TO SAY WHY (invariant 9).
+   *
+   * setTargets returns an empty list WITHOUT throwing, so Post now used to log
+   * "Publishing started", publish to nowhere, file the clip as "ready to
+   * download and post" and report success. From the screen: nothing happened,
+   * twice, with TikTok visibly connected.
+   *
+   * The check sits AFTER the branch chain rather than inside one of them, so
+   * it covers every state Post now can be pressed in -- approved, scheduled,
+   * publish_failed and ready. It only ever guarded `scheduled` before, which
+   * is why an `approved` clip could still fall through silently.
+   */
+  if (!clip.targets?.length) {
+    throw new Error('This clip has no connected destination to post to. Connect a channel in Connections and tick it, then try again.');
   }
   const pending = (clip.targets || []).filter(target => target.status !== 'posted').map(whereText);
   log(`Publishing started for "${clip.title}"${pending.length ? ` to ${pending.join(', ')}` : ''}.`, 'info', ownerOf(clip));

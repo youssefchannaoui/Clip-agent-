@@ -126,7 +126,7 @@ test('the free window closing is announced once, at two days, and never to a pay
   sends.length = 0;
   // Two days before the window closes -- or a day after the import nudge,
   // whichever is later, because two nudges never go inside one day. The free
-  // window is a server setting (three days at the time of writing), so the
+  // window is a server setting (seven days at the time of writing), so the
   // test computes the moment rather than assuming it.
   const closing = Math.max(free.endsAt - 2 * DAY + 60_000, T0 + DAY + 1 + DAY);
   const realNow = Date.now;

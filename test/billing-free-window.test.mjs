@@ -6,13 +6,18 @@ import test from 'node:test';
 
 // Free used to be unlimited in time: 40 tokens that never expired, so an
 // account could sit on the free plan forever and never pay. The rule now is
-// three days and forty tokens, and BOTH walls have to actually stop work --
+// SEVEN days and forty tokens, and BOTH walls have to actually stop work --
 // a warning that does not block is not a limit.
+//
+// Seven, not three: production has run STRIPE_TRIAL_DAYS=7 since launch while
+// the code default said 3, so the repo and the live site disagreed about the
+// product for weeks. The default is 7 now (v3.116.0). This file still sets the
+// variable explicitly, because what it tests is the WALL, not the number.
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-freewin-'));
 process.env.DATA_DIR = dataDir;
 process.env.APP_SESSION_SECRET = 'free-window-test-secret-long-enough';
-process.env.STRIPE_TRIAL_DAYS = '3';
+process.env.STRIPE_TRIAL_DAYS = '7';
 process.env.TOKENS_FREE = '40';
 process.env.TOKENS_TRIAL = '40';
 process.env.TOKENS_MONTHLY = '500';
@@ -39,22 +44,24 @@ function makeUser(id, ageDays = 0, billingFields = {}, role = 'creator') {
   return user;
 }
 
-test('a brand new account gets its 40 free tokens and 3 days', () => {
+test('a brand new account gets its 40 free tokens and 7 days', () => {
   const user = makeUser('day-zero', 0);
   const current = billing.publicBilling(user).current;
   assert.equal(current.allowance, 40);
   assert.equal(current.freeTrial.expired, false);
-  assert.equal(current.freeTrial.daysLeft, 3);
+  assert.equal(current.freeTrial.daysLeft, 7);
 });
 
-test('day two still works', () => {
-  const user = makeUser('day-two', 2);
+test('the last day inside the window still works', () => {
+  // Day six, not day two: the boundary is the only interesting age, and a
+  // window that closes a day early is exactly the bug worth catching.
+  const user = makeUser('day-six', 6);
   assert.equal(billing.publicBilling(user).current.freeTrial.expired, false);
   assert.doesNotThrow(() => billing.assertCanStartProject(user));
 });
 
-test('after 3 days the free wallet is empty, not merely low', () => {
-  const user = makeUser('day-four', 4);
+test('after 7 days the free wallet is empty, not merely low', () => {
+  const user = makeUser('day-eight', 8);
   const current = billing.publicBilling(user).current;
   assert.equal(current.freeTrial.expired, true);
   assert.equal(current.allowance, 0, 'an expired window grants nothing');
@@ -62,7 +69,7 @@ test('after 3 days the free wallet is empty, not merely low', () => {
 });
 
 test('an expired free account is BLOCKED from starting work, with the right reason', () => {
-  const user = makeUser('blocked', 5);
+  const user = makeUser('blocked', 9);
   assert.throws(() => billing.assertCanStartProject(user), error => {
     assert.match(error.message, /free trial has ended/i,
       'the message must say the days ran out, not that tokens ran low');
@@ -85,7 +92,7 @@ test('running out of tokens inside the window says something different', () => {
 });
 
 test('an expired free account is told to choose a plan, and a notice says so', () => {
-  const user = makeUser('noticed', 6);
+  const user = makeUser('noticed', 9);
   const notices = billing.publicBilling(user).notices || [];
   const ended = notices.find(n => n.kind === 'free_ended');
   assert.ok(ended, `expected a free_ended notice, got ${JSON.stringify(notices.map(n => n.kind))}`);
@@ -94,7 +101,7 @@ test('an expired free account is told to choose a plan, and a notice says so', (
 });
 
 test('a warning arrives before the window closes, not only after', () => {
-  const user = makeUser('warned', 2);
+  const user = makeUser('warned', 6);
   const notices = billing.publicBilling(user).notices || [];
   assert.ok(notices.some(n => n.kind === 'free_ending'), 'the last day must be announced in advance');
 });

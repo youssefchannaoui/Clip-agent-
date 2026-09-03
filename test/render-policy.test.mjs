@@ -101,26 +101,37 @@ test('saving a template re-renders what is still awaiting review, and nothing el
 });
 
 test('an approval survives a clip having nowhere to go', async () => {
-  // Publishing on, nothing enabled for this clip: setTargets throws, which used
-  // to un-approve the clip inside tick().
+  // THE PROPERTY IS "an approval is never silently retracted", and it still
+  // holds -- by a better route than before.
+  //
+  // Nothing is enabled for this clip. setTargets used to THROW on that, and
+  // tick() catching the throw is what once sent the clip back to `waiting`;
+  // the fix of the day was to keep it `approved` and carry a scheduleError.
+  // Since v3.116.0 an empty destination list is not an error at all: the clip
+  // takes its slot "for local export", which is what every account in
+  // production has always done (the master publishing switch was off for
+  // everybody, so the throw was unreachable). It is still downloadable, tick()
+  // re-derives its targets at the slot if a channel is connected by then, and
+  // the approval is not merely preserved -- it is acted on.
   store.setPublishingSettings(owner, { ...store.publishingSettings(owner), enabled: true });
   const stuck = clip('rp_nowhere', 'waiting');
   agent.approveClip(stuck.id);
   await agent.tick();
 
   const after = state.clips.find(item => item.id === 'rp_nowhere');
-  assert.equal(after.status, 'approved', 'the decision was the person\'s and it stands');
-  assert.ok(after.scheduleError, 'and the clip carries the reason it has no slot');
+  assert.notEqual(after.status, 'waiting', 'the decision was the person\'s and is never retracted');
+  assert.equal(after.status, 'scheduled', 'it took a slot rather than sitting in limbo');
+  assert.deepEqual(after.targets, [], 'with nowhere to send it, which is honest');
 
   const shown = await (await fetch(`${base}/api/state`)).json();
   const card = shown.clips.find(item => item.id === 'rp_nowhere');
-  assert.equal(card.status, 'approved');
-  assert.ok(card.scheduleError, 'the screen is told, rather than the clip silently reappearing in the queue');
+  assert.equal(card.status, 'scheduled', 'and the screen agrees rather than showing it back in the queue');
 });
 
 test('approving again is an answer, not an error', () => {
+  // A second tap on a stale card returns the clip rather than refusing.
   const again = agent.approveClip('rp_nowhere');
-  assert.equal(again.status, 'approved');
+  assert.ok(['approved', 'scheduled'].includes(again.status), again.status);
 });
 
 // ── a clip that went out somewhere has gone out ─────────────────────────────

@@ -310,9 +310,10 @@ function enableOnConnect(userId, keys) {
     setting.enabled = true;
     setting.enableWhenReady = false;
     next[key] = setting;
-    // A destination that is on under a master switch that is off publishes
-    // nothing. Turning one on means turning the other on.
-    if (!next.enabled) next.enabled = true;
+    // Kept after the master switch was retired (store.publishingSettings), so
+    // the record this writes says on disk what the reader reports. Cheap, and
+    // it means a record written here needs no read-time correction.
+    next.enabled = true;
     changed = true;
   }
   if (changed) setPublishingSettings(userId, next);
@@ -783,7 +784,17 @@ function validateFor(next, userId) {
   const status = connectionStatus(userId);
   if (next.enabled && !config.socialPublishEnabled) throw new SocialError('Automatic social publishing is disabled by SOCIAL_PUBLISH_ENABLED.');
   const enabledProviders = PROVIDERS.filter(provider => next[provider]?.enabled);
-  if (next.enabled && !enabledProviders.length) throw new SocialError('Enable at least one connected publishing destination.');
+  // There used to be a refusal here when nothing was switched on: "Enable at
+  // least one connected publishing destination." It guarded the master switch
+  // -- turning publishing ON with nowhere to send anything is an incoherent
+  // ask -- and it was only ever reachable while that switch could be false.
+  //
+  // Retiring the switch (store.publishingSettings) made `next.enabled` always
+  // true, which turned this into a refusal of EVERY save by an account with no
+  // destination on. A new account could not have saved its publishing settings
+  // at all, and neither could anyone unticking their last platform. Caught by
+  // the suite before it shipped; there is nothing incoherent about saving with
+  // nothing switched on, and the schedule already says "No account connected".
   // Strict checks apply to what this save is asserting: a provider being
   // switched on, or one whose account is being repointed. A provider that was
   // already on and is untouched must not block the save -- Instagram and

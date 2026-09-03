@@ -3046,7 +3046,7 @@ class Component extends DCLogic {
       select: () => this.setState({ planPeriod: p })
     }));
     const planCards = [
-      { name: 'Free', tokens: '40', price: '£0', per: 'for 3 days', tag: 'Trial',
+      { name: 'Free', tokens: '40', price: '£0', per: 'for 7 days', tag: 'Trial',
         lines: ['40 tokens — about one lecture', 'DeenClipped watermark stays on', 'One connected account', 'Manual posting only'],
         cta: this.state.plan === 'Free' ? 'Current plan' : 'Downgrade', current: this.state.plan === 'Free', best: false },
       { name: 'Pro', tokens: pd.proTokens, price: pd.proPrice, per: pd.per, tag: pd.save,
@@ -3296,7 +3296,7 @@ class Component extends DCLogic {
     const sublines = {
       home: isEmpty ? 'Paste a lecture link to make your first clips' : LIBALL.length + ' lectures · ' + needsCount + ' awaiting review',
       queue: isEmpty ? 'Nothing here yet — paste a lecture on Home' : needsCount + ' clips awaiting a decision across ' + LIBALL.length + ' lectures',
-      tokens: 'Free trial · 40 tokens · 3 days',
+      tokens: 'Free trial · 40 tokens · 7 days',
       library: isEmpty ? 'No lectures yet — paste a link on Home to make your first clips' : LIBALL.length + ' lectures · ' + POOL.length + ' clips generated',
       templates: 'Set once — every clip renders with it, still editable per clip',
       schedule: 'Up to four posts a day · every clip is checked before it goes out',

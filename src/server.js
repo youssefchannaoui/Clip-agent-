@@ -1916,7 +1916,14 @@ async function route(req, res, url) {
         return { ...incoming, accountIds: ids, accountId: ids[0] || '' };
       };
       const next = {
-        enabled: Boolean(body.enabled),
+        // Retired, and stored true so the record on disk says what the reader
+        // reports. `body.enabled` is deliberately ignored: the only control
+        // that ever sent false is the legacy dashboard's checkbox, which no
+        // studio user has ever seen, and honouring it here would put an
+        // account straight back into "Automatic publishing is off" with no
+        // way out. Where a clip goes is the per-platform ticks below; whether
+        // it goes at all is the approval. See store.publishingSettings.
+        enabled: true,
         // What a clip does when a platform has more than one channel on it:
         // 'all' posts it to every one (the default, and what every record
         // written before this holds), 'rotate' gives each clip to one of them
@@ -1950,10 +1957,6 @@ async function route(req, res, url) {
       // Cleared either way, so turning it off later stays off.
       if (next.tiktok.enableWhenReady && String(next.tiktok.privacy || '') && !body.tiktok?.enabled) {
         next.tiktok.enabled = true;
-        // The completion of the connect, so it finishes the job the connect
-        // started: a platform switched on under a master switch that is off
-        // posts nothing, and the master defaults to false. See enableOnConnect.
-        if (!next.enabled) next.enabled = true;
       }
       if (String(next.tiktok.privacy || '')) next.tiktok.enableWhenReady = false;
       social.validatePublishingSettings(next, currentUser);
@@ -1961,7 +1964,11 @@ async function route(req, res, url) {
         throw new Error('Facebook Reels currently requires clips of 60 seconds or less. Set Maximum seconds to 60 before enabling Facebook.');
       }
       setPublishingSettings(currentUser, next);
-      log(`Automatic publishing ${next.enabled ? 'enabled' : 'paused'} for ${['youtube','instagram','facebook','tiktok'].filter(provider => next[provider].enabled).join(', ') || 'no destinations'}.`, 'info', currentUser.id);
+      // Names the destinations, because that is the half a save can change now.
+      const destinations = ['youtube','instagram','facebook','tiktok'].filter(provider => next[provider].enabled);
+      log(destinations.length
+        ? `Posting to ${destinations.join(', ')}.`
+        : 'No destinations are switched on, so nothing will post.', 'info', currentUser.id);
       agent.tick().catch(() => {});
       return json(res, 200, { ok: true, settings: publishingSettings(currentUser), social: social.connectionStatus(currentUser) });
     } catch (error) { return json(res, 400, { error: error.message }); }

@@ -403,7 +403,7 @@ export const config = {
   topupPrice100Label: process.env.TOPUP_PRICE_100_LABEL || 'A$6.99',
   topupPrice300Label: process.env.TOPUP_PRICE_300_LABEL || 'A$17.99',
   topupPrice750Label: process.env.TOPUP_PRICE_750_LABEL || 'A$39.99',
-  stripeTrialDays: Math.max(0, Math.round(number(process.env.STRIPE_TRIAL_DAYS, 3))),
+  stripeTrialDays: Math.max(0, Math.round(number(process.env.STRIPE_TRIAL_DAYS, 7))),
   tokensFree: Math.max(0, Math.round(number(process.env.TOKENS_FREE, 40))),
   tokensWeekly: Math.max(1, Math.round(number(process.env.TOKENS_WEEKLY, 120))),
   tokensMonthly: Math.max(1, Math.round(number(process.env.TOKENS_MONTHLY, 650))),

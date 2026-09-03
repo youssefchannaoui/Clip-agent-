@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1318 JS + 592 Python**
+- `npm test` and `npm run check` must pass. Currently **1332 JS + 592 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -7111,15 +7111,159 @@ without an approval either way.
 turn on" is a behaviour and the real OAuth path cannot be driven without a
 live TikTok.
 
-### Basic really is 40 tokens, and production really is SEVEN days
+## The switch that stopped every account posting, ever (v3.116.0, 3 Sept 2026)
+
+Youssef, with TikTok connected, ticked, an audience chosen and two approved
+clips on today's schedule reading "Automatic publishing is off":
+**"doesnt WORK FIX IT KEEP AUTO UPLOAD ON ALWAYS".**
+
+`publishingSettings.enabled` -- the account's master automatic-publishing
+switch -- **defaulted to FALSE, and the studio has no control for it.** The
+only checkbox that ever wrote it, "Enable automatic publishing globally", lives
+in the legacy dashboard behind a `renderStudio()` that returns first, so no
+studio customer has ever seen it. With it off, `setTargets` gives a clip NO
+destinations, `tick()` files it as `ready` ("ready to download and post"), and
+nothing posts -- for ever, with every visible switch on.
+
+That is **invariant 9 inverted**: not a control that does nothing, but a hidden
+control whose default silently breaks the product. It is also the honest answer
+to the First 100 funnel's oldest number -- nobody has ever completed a post,
+and this is one of the reasons why.
+
+- **It is retired on READ, not migrated** (`store.publishingSettings`), the same
+  device as the YouTube privacy correction four lines below it. Every record
+  this product has ever written holds `false`, so changing the default alone
+  would have fixed NOBODY -- Youssef's own account included, mid-recording. The
+  read-time correction frees an account on its next request.
+- **Both halves are pinned, because either alone hides the other.** A probe
+  that flipped the DEFAULT back came back green against the first cut of the
+  test, since the correction covered it. `test/publishing-always-on.test.mjs`
+  now asserts `settingDefaults()` and the read separately.
+- **Nothing is loosened.** The per-platform ticks still decide WHERE a clip
+  goes, and an approval still decides WHETHER it goes at all. A test drives an
+  account with the platform unticked and asserts it still posts nowhere.
+- The route ignores `body.enabled` and stores `true`, so the record says what
+  the reader reports; the legacy checkbox is DELETED rather than left as a
+  control that changes nothing.
+
+### THREE REGRESSIONS CAME OUT FROM UNDER IT, and the suite caught all three
+
+This is the entry worth reading. Retiring a flag that was false everywhere
+turned on code paths that had **never executed in production**, and every one
+of them was worse than the bug being fixed:
+
+1. **`setTargets` threw.** Under the early return it never reached the
+   `throw new Error('Automatic publishing is enabled, but no connected
+   destination...')` below it. With the switch on, a brand-new account -- which
+   has connected nothing -- could not schedule a clip AT ALL. Having nowhere to
+   post is not an error: the clip takes its slot "for local export", tick()
+   re-derives at the slot, and the place a missing destination is REPORTED is
+   `publishNow`, where somebody pressed a button and is owed an answer.
+2. **`validateFor` refused every save.** `if (next.enabled &&
+   !enabledProviders.length) throw 'Enable at least one connected publishing
+   destination.'` guarded turning the master ON with nowhere to send anything.
+   Always-on turned it into a refusal of every save by an account with no
+   destination ticked -- including the TikTok posting-options save Youssef was
+   in the middle of.
+3. **Automation stood down for everybody.** `if (publish.enabled &&
+   !enabledAutomaticProviders.length) return;` meant to say *TikTok cannot be
+   silently auto-consented*; always-on made it say *stand down unless YouTube,
+   Instagram or Facebook is on*. It asks about **TikTok** now, which is what it
+   always meant, and refuses in strictly more cases than production ever did.
+
+**The general lesson: a flag that has been false in production for the life of
+the product is not a flag, it is dead code holding live code hostage.** Turning
+it on is a bigger change than it reads as in the diff, and the paths underneath
+it have never been run by anyone. Run the whole suite and read every failure as
+a possible regression before assuming it is a stale assertion -- twelve of the
+fifteen were stale, three were not, and they looked identical in the list.
+
+### Two tests were passing for free, and strengthening them found it
+
+- `tiktok-disclosure` asserted `settings.enabled === false` after a YouTube
+  connect. It passed because the connect **threw** -- the file sets no
+  `GOOGLE_CLIENT_ID`, so `completeOAuth` raised "youtube OAuth is not
+  configured" straight into the test's own `catch { }`. Nothing about YouTube
+  was ever exercised. Google credentials are set now and the swallow is gone.
+- `render-policy`'s "an approval survives a clip having nowhere to go" tested a
+  throw that could not happen in production. The PROPERTY -- an approval is
+  never silently retracted -- still holds, by a better route: the clip is
+  scheduled rather than parked with a `scheduleError`.
+
+### The remaining "Publishing off" is a DIFFERENT switch and stays
+
+`DATA.directPublishingEnabled` is `config.socialPublishEnabled`
+(`SOCIAL_PUBLISH_ENABLED`, **default true**) -- an operator setting for the
+whole deployment, not a per-account one, and a deployment with no social
+credentials should not offer Post now at all. Confusing the two cost a run
+here, so `test/publishing-always-on.test.mjs` states the distinction and pins
+its default.
+
+### And Post now answers from every state
+
+The empty-destination guard used to sit inside the `scheduled` branch alone, so
+an `approved` or `ready` clip still fell through to "Publishing started" and a
+success toast. It sits AFTER the branch chain now and covers approved,
+scheduled, publish_failed and ready -- which is what makes invariant 9 true
+here rather than true-in-one-case.
+
+### Basic is 40 tokens over SEVEN days, and the repo now says so (v3.116.0)
 
 Asked to check. `plans().free` is `tokens: config.tokensFree` (40) over a
-window of `config.stripeTrialDays` (3 in the code), and the allowance drops to
-ZERO when the window closes rather than to something smaller -- otherwise
-cancelling and re-subscribing mints a fresh free wallet every lap.
+window of `config.stripeTrialDays`, and the allowance drops to ZERO when the
+window closes rather than to something smaller -- otherwise cancelling and
+re-subscribing mints a fresh free wallet every lap.
 
-**Production is not running the code default.** The live banner reads "Your 7
-free days are up", and that sentence is built from `config.stripeTrialDays`, so
-`STRIPE_TRIAL_DAYS=7` is set on Render. The app is self-consistent -- the
-number it advertises is the number it enforces -- but it is 7, not the 3 the
-repo defaults to. A deliberate override to leave or change, not a bug.
+**Production was not running the code default, and had never been.** The live
+banner reads "Your 7 free days are up", built from `config.stripeTrialDays`, so
+`STRIPE_TRIAL_DAYS=7` is set on Render -- while the repo defaulted to 3.
+Youssef's call on hearing that: "let's change everything to seven days ... make
+sure everything is all correct." The default is **7** now, so the repo and the
+live site describe one product.
+
+**The number was named in SIX independent places and they did not agree**,
+which is why this needed more than one edit:
+
+| where | said | now |
+|---|---|---|
+| `config.js` default | 3 | **7** |
+| `billing.js` x2 (`config.stripeTrialDays \|\| 7`) | 7 | 7 |
+| `billing.js` x2, plans page (`trialDays \|\| 3`) | 3 | **7** |
+| `studio-adapter.js`, Basic card (`\|\| 3`) | 3 | **7** |
+| `seo-copy.js`, ten claims across the landing pages | seven | seven |
+| Render `STRIPE_TRIAL_DAYS` | 7 | 7 |
+
+- **Nothing was broken, and that is what made it dangerous.** Every reader that
+  mattered went through `config.stripeTrialDays`, which the environment set
+  correctly -- so the app never contradicted itself in front of a customer. But
+  a fallback is what runs the day somebody forgets the variable, and then the
+  dashboard would have offered "Free / 3 days" beside twenty-two landing pages
+  promising seven.
+- **The env var stays.** Leaving it set is harmless now that it agrees with the
+  code, and removing it would mean a deploy whose only effect is to make the
+  live number depend on the deploy having landed. Change the number in ONE
+  place -- Render -- and the code default is the honest floor underneath it.
+- **`test/trial-length.test.mjs` pins one number across all six surfaces**: the
+  loaded config default, every `trialDays || N` fallback, every `N-day trial`
+  claim in the SEO copy (digits AND words), any digit hardcoded into a trial
+  sentence in billing/marketing/mailer, and the design file's sample data. It
+  is deliberately a SOURCE test, which this file normally warns against -- a
+  fallback only fires when the environment is absent, so there is no executed
+  output to read for it; the default itself IS executed. All six probes were
+  proven red.
+- **A guard that fires on ordinary prose gets deleted**, so the pattern matches
+  only number-words and digits. The first cut allowed any word and flagged
+  "the first paid day" in a sentence that mentioned the trial two clauses
+  later.
+- **The nudge timing got better for free.** `UPGRADE_DAYS_LEFT` is 2, so the
+  "your free days are closing" email goes at 2 days left. On a 3-day window
+  that was day one, colliding with the 24h import nudge and the one-a-day gap;
+  on 7 it is day five, which is when somebody has actually tried the product.
+  No code change -- it is worth writing down because it looked like a bug
+  waiting to happen and stopped being one.
+- **`billing-free-window.test.mjs` still sets the variable explicitly** and now
+  tests the boundary rather than the middle: day six passes, day eight is
+  expired. What it tests is the WALL, not the number.
+- Two literals in `design/studio-dashboard.dc.html` moved with it. Sample data
+  only -- the generated template carries neither string -- and
+  `npm run design:import` was proven byte-stable before and after.

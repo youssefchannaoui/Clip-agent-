@@ -18,14 +18,30 @@ process.env.DATA_DIR = dataDir;
 const store = await import('../src/store.js');
 
 test('a new account does not publish anything without being asked', () => {
+  // THE SAFETY IS UNCHANGED; ONE OF ITS THREE LOCKS IS GONE.
+  //
+  // `publishingSettings.enabled` -- the account's master automatic-publishing
+  // switch -- used to be asserted false here. It is retired in v3.116.0: it
+  // defaulted to off with no control anywhere in the studio, so it stopped
+  // every account from ever posting and nobody could turn it on
+  // (test/publishing-always-on.test.mjs). It was the third lock on a door
+  // that already had two, and it was the one with no key.
+  //
+  // The two that actually carry this test's promise are below, and both still
+  // hold: nothing is auto-approved, and no destination is connected or on.
   const { automationSettings, publishingSettings } = store.settingDefaults();
   assert.equal(automationSettings.enabled, false, 'clips wait for a person');
-  assert.equal(publishingSettings.enabled, false, 'and nothing is sent anywhere');
+  assert.equal(publishingSettings.enabled, true, 'publishing itself needs no switch found');
+  for (const provider of ['youtube', 'instagram', 'facebook', 'tiktok']) {
+    assert.equal(publishingSettings[provider].enabled, false,
+      `${provider} is off, so there is nowhere for a clip to be sent`);
+  }
 });
 
 test('every publishing destination is off until it is switched on', () => {
-  // The master switch alone is not enough: publishingSettings.enabled going true
-  // with a provider already enabled would start posting to it immediately.
+  // This is now the WHOLE of "nothing is sent anywhere" on a new account, so
+  // it matters more than it did: a provider pre-enabled here would be a
+  // destination nobody chose.
   const { publishingSettings } = store.settingDefaults();
   for (const provider of ['youtube', 'instagram', 'facebook', 'tiktok']) {
     assert.equal(publishingSettings[provider].enabled, false, provider);
@@ -49,8 +65,9 @@ test('an untouched account reads back the defaults rather than something looser'
   // asks for an account that has never saved anything.
   const user = { id: 'user_never_configured' };
   assert.equal(store.automationSettings(user).enabled, false);
-  assert.equal(store.publishingSettings(user).enabled, false);
-  assert.equal(store.publishingSettings(user).youtube.enabled, false);
+  assert.equal(store.publishingSettings(user).enabled, true, 'retired, and reads as on');
+  assert.equal(store.publishingSettings(user).youtube.enabled, false,
+    'while the destination that decides where anything goes is still off');
 });
 
 test('the default is commented, so it is not "tidied" back on', () => {

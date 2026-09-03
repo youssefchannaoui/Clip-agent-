@@ -130,7 +130,7 @@ test('the schedule row stops claiming nothing is connected when something is', (
 });
 
 /*
- * TWO SWITCHES, and only reading the near one (v3.115.3).
+ * TWO SWITCHES, and only reading the near one (v3.115.3) -- then ONE (v3.116.0).
  *
  * "im confused i click post now nothing happnes" -- with TikTok visibly
  * connected and the sidebar reading "Posting". The Render log said it all:
@@ -139,100 +139,112 @@ test('the schedule row stops claiming nothing is connected when something is', (
  *   Publishing started for "A Reminder of Mercy…".
  *   "A Reminder of Mercy…" is ready to download and post.
  *
- * `setTargets` returns an EMPTY list without throwing when the account's
- * master automatic-publishing switch is off. So the clip scheduled to nowhere,
- * Post now published to nowhere and reported success, and three separate
- * surfaces read TikTok's OWN switch while the master one was off.
+ * `setTargets` returns an EMPTY list without throwing, so the clip scheduled
+ * to nowhere, Post now published to nowhere and reported success, and three
+ * separate surfaces read TikTok's OWN switch while the account's master
+ * automatic-publishing switch was off.
+ *
+ * v3.115.3 taught all three surfaces to read both switches. v3.116.0 RETIRED
+ * the master one instead -- it defaulted to false with no control anywhere in
+ * the studio, so it was never a decision anybody made. These tests now assert
+ * the simpler shape that replaced it: a platform's own tick is the whole
+ * answer. See test/publishing-always-on.test.mjs.
  */
 test('Post now says why instead of silently doing nothing', async () => {
-  const clip = seed({ connected: true });
-  // Master switch off, TikTok's own switch on -- exactly the live state.
-  state.userSettings[userId].publishingSettings.enabled = false;
+  const clip = seed({ connected: false });
   clip.status = 'scheduled';
   clip.targets = [];
   save();
 
   await assert.rejects(() => agent.publishNow('c1'), error => {
-    assert.match(error.message, /Automatic publishing is switched off/i,
-      'it names the switch that is actually stopping it');
-    assert.match(error.message, /Connections/i, 'and where to turn it on');
+    assert.match(error.message, /no connected destination/i, 'it says what is missing');
+    assert.match(error.message, /Connections/i, 'and where to fix it');
     return true;
   });
   assert.notEqual(state.clips[0].status, 'posted');
 });
 
-test('with publishing on but nothing connected it still refuses clearly', async () => {
-  const clip = seed({ connected: false });
-  clip.status = 'scheduled';
-  clip.targets = [];
-  save();
-  await assert.rejects(() => agent.publishNow('c1'), /no connected destination/i);
+test('and it says so from EVERY state the button can be pressed in', async () => {
+  // The guard used to sit inside the `scheduled` branch alone, so an approved
+  // or ready clip still fell through to "Publishing started" and a success
+  // toast. It sits after the branch chain now, which is what makes the
+  // invariant true rather than true-in-one-case.
+  for (const status of ['approved', 'ready', 'publish_failed']) {
+    const clip = seed({ connected: false });
+    clip.status = status;
+    clip.targets = [];
+    save();
+    await assert.rejects(() => agent.publishNow('c1'), /no connected destination/i, status);
+    assert.notEqual(state.clips[0].status, 'posted', status);
+  }
 });
 
-test('the three surfaces all read the master switch, not just the platform one', () => {
+test('the surfaces read the platform tick, and nothing else', () => {
   const source = fs.readFileSync(new URL('../src/public/studio-adapter.js', import.meta.url), 'utf8');
-  assert.match(source, /var autoPublishOn = \(DATA\.publishingSettings \|\| \{\}\)\.enabled !== false;/,
-    'one reading of the master switch');
-  // The sidebar stops saying "Posting" when nothing can post.
+  assert.ok(!/autoPublishOn/.test(source), 'the retired master switch is gone from the adapter');
+
+  // The sidebar dot and the row have to keep agreeing with each other, which
+  // is the property the two-switch version existed to protect.
   const at = source.indexOf('schedOutlets: providers.map');
   const outlets = source.slice(at, at + 900);
-  assert.match(outlets, /p\.connected && p\.enabled && autoPublishOn/, 'the dot needs both switches');
-  assert.match(outlets, /Publishing off/, 'and says which one is off');
-  // The row names the blocker rather than blaming the connection.
+  assert.match(outlets, /var live = p\.connected && p\.enabled;/, 'the dot needs the channel on');
+  assert.match(outlets, /Switched off/, 'and says so when it is not');
+
   const rowAt = source.indexOf('dests: destinations(c).length');
-  assert.match(source.slice(rowAt, rowAt + 1600), /Automatic publishing is off/);
+  const row = source.slice(rowAt, rowAt + 1200);
+  assert.match(row, /anyOutletLive\(\)/, 'the row asks the same question');
+  assert.match(row, /No account connected/);
 });
 
 /*
- * Connecting a channel is asking to publish to it (v3.115.4).
+ * Connecting a channel is asking to publish to it (v3.115.4, simplified in
+ * v3.116.0).
  *
  * Youssef: "as soon as I have my thing connected ... it should work normally
  * ... I shouldn't be doing extra steps."
  *
- * The master automatic-publishing switch DEFAULTS TO FALSE, and enableOnConnect
- * only ever set the platform's own switch. So out of the box a customer could
- * connect TikTok, see "successfully linked", pick an audience, watch the dot go
- * green — and never have one clip post. That is every new account, not just his.
+ * It took TWO switches then: the platform's, and a master one defaulting to
+ * false. So out of the box a customer could connect TikTok, see "successfully
+ * linked", pick an audience, watch the dot go green -- and never have one clip
+ * post. The master switch is retired, so connecting has one switch to set.
  */
-test('connecting a channel switches publishing on, not just the channel', async () => {
+test('connecting a channel is the whole of switching it on', async () => {
   const { publishingSettings, setPublishingSettings } = await import('../src/store.js');
   const social = await import('../src/social.js');
   seed({ connected: true });
 
-  // The out-of-the-box state: nothing on at all.
-  setPublishingSettings(userId, { enabled: false, youtube: { enabled: false } });
-  assert.equal(publishingSettings(userId).enabled, false, 'the master starts off — this is the default');
+  setPublishingSettings(userId, { youtube: { enabled: false } });
+  assert.equal(publishingSettings(userId).youtube.enabled, false, 'off to start with');
 
   social.enableOnConnectForTests(userId, ['youtube']);
 
   const after = publishingSettings(userId);
   assert.equal(after.youtube.enabled, true, 'the channel is on');
-  assert.equal(after.enabled, true,
-    'AND publishing is on — a channel under a master switch that is off posts nothing');
+  assert.equal(after.enabled, true, 'and there is no second switch left to find');
 });
 
-test('TikTok waits for its audience, then turns both on together', async () => {
+test('TikTok still waits for its audience', async () => {
   const { publishingSettings, setPublishingSettings } = await import('../src/store.js');
   const social = await import('../src/social.js');
   seed({ connected: true });
-  setPublishingSettings(userId, { enabled: false, tiktok: { enabled: false, privacy: '' } });
+  setPublishingSettings(userId, { tiktok: { enabled: false, privacy: '' } });
 
   // TikTok's guidelines forbid a preselected audience, so connecting may not
-  // switch it on — it is marked and waits.
+  // switch it on -- it is marked and waits. Retiring the master switch must
+  // not have loosened this: it is the one platform gate that is a rule rather
+  // than a preference.
   social.enableOnConnectForTests(userId, ['tiktok']);
   const waiting = publishingSettings(userId);
   assert.equal(waiting.tiktok.enabled, false, 'not enabled without an audience');
   assert.equal(waiting.tiktok.enableWhenReady, true, 'but marked for the moment one is chosen');
-  assert.equal(waiting.enabled, false, 'and nothing is claimed on the master switch yet');
 });
 
 test('the settings route finishes the job when the audience arrives', () => {
   // The other half lives in the route, because that is where an audience is
-  // first saved. Both must set the master or the flow stops half-done.
+  // first saved.
   const source = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
   const at = source.indexOf('if (next.tiktok.enableWhenReady && String(next.tiktok.privacy');
+  assert.ok(at > 0, 'found the branch');
   const block = source.slice(at, at + 700);
   assert.match(block, /next\.tiktok\.enabled = true;/);
-  assert.match(block, /if \(!next\.enabled\) next\.enabled = true;/,
-    'the master switch goes on with it');
 });
