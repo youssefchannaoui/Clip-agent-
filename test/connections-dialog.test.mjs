@@ -173,3 +173,46 @@ test('the channels stack rather than wrapping into a tag cloud', () => {
     'a column, or the labels flow inline and wrap two-per-line');
   assert.ok(/\.studio-conn-account \{\s*width: 100%;/.test(host), 'and each row fills the width');
 });
+
+/**
+ * Every connected channel gets a row.
+ *
+ * Youssef, 3 Sept 2026, comparing us with OpusClip: "opus layout is better
+ * like ours is good but not great and no layout to see 3 connected channels
+ * with each @".
+ *
+ * The list used to render only once a SECOND account existed, so a platform
+ * with one channel showed a count and no channel — and even at three, the rows
+ * were bare names in wrapping pills.
+ */
+test('the channel list is drawn whenever there is a channel', () => {
+  const at = host.indexOf('function accountPicker');
+  const body = host.slice(at, at + 1400);
+  assert.ok(body.includes("if(accounts.length===0)return ''"),
+    'nothing to list is the ONLY reason to draw nothing');
+  assert.ok(!/if\(accounts\.length<2\)\{\s*if\(max<2\|\|accounts\.length===0\)return ''/.test(body),
+    'a single connected channel must still be listed');
+});
+
+test('a channel row carries its face, its name and its handle', () => {
+  const at = host.indexOf('function accountRows');
+  assert.ok(at > -1, 'the rows have their own builder');
+  const body = host.slice(at, at + 1800);
+  assert.ok(body.includes('studio-conn-face'), 'an avatar, or initials when there is none');
+  assert.ok(body.includes('studio-conn-acct-who'), 'name and handle together');
+  // TikTok is the one platform that hands us a real username. An @ invented
+  // from a display name is a handle that may not exist.
+  assert.ok(body.includes("a.creatorInfo.creator_username"),
+    'the handle comes from the platform, never from the display name');
+  assert.ok(body.includes('data-conn-drop'), 'and its own disconnect');
+});
+
+test('the channels stack instead of wrapping into pills', () => {
+  // Two rows side by side leave a ragged third on its own line once each row
+  // carries a face, a name and a handle. Id-scoped because the older chip rule
+  // was too, and specificity decides.
+  assert.ok(/#studioConnList \.studio-conn-accounts \{[^}]*flex-direction: column/.test(host),
+    'the container stacks');
+  assert.ok(/#studioConnList \.studio-conn-account \{[^}]*display: grid/.test(host),
+    'and each row is a grid, not an inline pill');
+});

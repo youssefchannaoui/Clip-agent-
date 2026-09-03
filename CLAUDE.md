@@ -4029,6 +4029,35 @@ to see 3 connected channels with each @".
   Both were updated to follow the code rather than deleted -- the behaviour
   they protect is unchanged.
 
+## Every connected channel gets a row of its own (v3.103.1, 3 Sept 2026)
+
+Youssef, comparing us with OpusClip: "opus layout is better like ours is good
+but not great and no layout to see 3 connected channels with each @".
+
+He was right, and the gap was structural rather than cosmetic. The dialog was
+one row per PLATFORM, and the channel list rendered only once a SECOND account
+existed -- so a platform with one channel showed a count and no channel, and
+even at three they were bare names in wrapping pills.
+
+- **The list is drawn whenever there is anything to list.** Nothing to show is
+  now the only reason to show nothing.
+- **A row carries a face, a name and a handle**: the account's avatar (initials
+  when the platform gives none), its display name, and its @handle.
+- **The @ comes from the platform, never from the display name.** TikTok's
+  `creator_info` hands us a real `creator_username`; YouTube and Meta give a
+  display name and nothing else. Inventing "@DeenClipped" from a display name
+  would be putting a handle on screen that may not exist, so where there is no
+  username the name stands alone.
+- **They stack full width.** As chips they wrapped two-across and left a ragged
+  third on its own line -- fine when a channel was a name, wrong once each row
+  carries three pieces of information. The rule is id-scoped (`#studioConnList
+  .studio-conn-account`) because the older chip rule was, and specificity
+  decides; a plain class rule was written first and lost silently.
+- The tick (post here) and the per-channel × are unchanged, and the × is still
+  drawn only for YouTube and TikTok -- Facebook and Instagram are Pages inside
+  ONE Meta login, where a per-account disconnect would tear out that login and
+  take the other platform with it (v3.56.0).
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
