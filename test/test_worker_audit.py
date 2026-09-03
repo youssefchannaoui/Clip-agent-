@@ -385,13 +385,18 @@ class AyahOutlineTests(unittest.TestCase):
     """
 
     def test_floor_lifts_an_under_outlined_template(self):
-        self.assertEqual(max(1.0, cw.AYAH_OUTLINE_MIN), 3.0)
+        # The floor moved 3.0 -> 2.0 when the reference clip was matched
+        # properly: it carries almost no outline, and at AYAH_SIZE_SCALE 8.26
+        # the ayah is large enough to hold the frame on its own. What the test
+        # pins is that a template asking for 1 is still LIFTED.
+        self.assertGreater(cw.AYAH_OUTLINE_MIN, 1.0)
+        self.assertEqual(max(1.0, cw.AYAH_OUTLINE_MIN), cw.AYAH_OUTLINE_MIN)
 
     def test_a_heavy_outline_is_left_alone(self):
         # A 3x MULTIPLE was written first and would have given Clean Line an
         # 18px edge -- a black blob round every letter. Templates that already
         # set a heavy outline are right for their own face.
-        for caption in (5.0, 6.0, 9.0):
+        for caption in (5.0, 6.0, 9.0):  # all above the floor
             self.assertEqual(max(caption, cw.AYAH_OUTLINE_MIN), caption)
 
     def test_the_ayah_style_uses_its_own_width(self):

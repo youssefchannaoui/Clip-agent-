@@ -2359,7 +2359,16 @@ AYAH_FADE_OUT_MS = 450
 # on every per-account override. Whatever the right ratio is, it should be
 # DERIVED from one of them rather than emerging from both.
 #
-# 5.80, and this one is MEASURED rather than reasoned about.
+# 8.26, measured against the reference Youssef asked to match exactly.
+#
+# The proportions come off his screenshot of that TikTok (2.2M likes), scaled
+# from its 607-wide player up to a 1080-wide render:
+#
+#     reference   ayah 35.6px   gloss 19.6px   ratio 1.82
+#     ours (5.80) ayah 25.0px   gloss 18.0px   ratio 1.39
+#
+# The gloss was already right; only the ayah was short, by x1.42.
+# 5.80 x 1.42 = 8.26.
 #
 # The history is worth keeping because it is the whole lesson. 3.54 was tuned
 # from a claim that the ayah drew "about twice the visual height of the gloss".
@@ -2383,13 +2392,20 @@ AYAH_FADE_OUT_MS = 450
 # letter bodies with the Latin cap height. Multiply this constant by
 # (latin rows / arabic rows). Do NOT trust the arithmetic in the block above --
 # it has now been disproved by two separate frames.
-AYAH_SIZE_SCALE = 5.80
+AYAH_SIZE_SCALE = 8.26
 
 # The least outline an ayah may have, whatever the template asks for the Latin
-# caption. See the note beside `ayah_outline` in write_ass: a mushaf face has
-# hairline strokes where a Latin sans has stems, so an edge that suits the
-# gloss can leave scripture hard to read over a bright frame.
-AYAH_OUTLINE_MIN = 3.0
+# caption. A mushaf face has hairline strokes where a Latin sans has stems, so
+# an edge that suits the gloss can leave scripture hard to read over a bright
+# frame.
+#
+# 3.0 -> 2.0 when the reference was matched properly: that clip has almost no
+# outline at all, and at 8.26 the ayah is large enough to hold the frame on its
+# own. This is the one place where "match it exactly" and "readable on bright
+# lecture footage" pull apart -- the reference sits on still water at night.
+# Two is the compromise, and it is a single number to move if a real clip says
+# otherwise.
+AYAH_OUTLINE_MIN = 2.0
 
 # libass sizes a font by its Win cell (usWinAscent + usWinDescent, in em).
 # The mushaf faces have very tall cells, so the same nominal size draws them
