@@ -468,3 +468,25 @@ class PromoBarTests(unittest.TestCase):
         rescale = src.index("flags=fast_bilinear[vout]")
         overlay = src.index("promo_bar_graph(promo, promo_index")
         self.assertLess(rescale, overlay)
+
+    def test_the_image_input_is_looped(self):
+        """A bare PNG input is ONE FRAME AT t=0, and that fails silently.
+
+        Measured on a real 10s render with the artwork in place and no
+        `-loop 1`: exit code 0, and a completely flat frame at every
+        timestamp -- zero lit pixels, the bar nowhere. The reason is that
+        `fade=in:st=3` only ever sees a frame timestamped 0, which is before
+        its start, so alpha stays 0; overlay's default eof_action then repeats
+        that transparent frame for the whole clip.
+
+        With the flag, the same render measures nothing at t=2.9, half-risen
+        at t=3.1 (rows 1661..1706), at rest through t=4.5 (1610..1706),
+        sliding out at t=5.7 (1634..1722) and gone by t=5.95.
+
+        `-t` bounds the loop, or the input never ends.
+        """
+        src = Path(cw.__file__).read_text()
+        at = src.index("PROMO_BAR_FILE)]),")
+        wiring = src[at - 220:at + 20]
+        self.assertIn('"-loop", "1"', wiring)
+        self.assertIn('"-t", f"{candidate.duration:.3f}"', wiring)

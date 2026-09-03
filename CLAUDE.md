@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1245 JS + 581 Python**
+- `npm test` and `npm run check` must pass. Currently **1245 JS + 582 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4266,6 +4266,37 @@ monogram. He chose the wordmark.
   dependencies on purpose, and that is what lets a phone session run the suite.
 - **A home-screen icon already added does NOT update.** iOS copies it when the
   shortcut is created. Remove the shortcut and add it again to see the change.
+
+## The promo bar drew nothing, and ffmpeg said it was fine (v3.109.2, 3 Sept 2026)
+
+The bar itself shipped in v3.106.0 -- template fields, the Templates row under
+Watermark, the fade-and-slide graph, six tests -- and was inert because the
+artwork was never on disk. With the artwork in place it was still inert, and
+NOTHING said so.
+
+- **A bare `-i file.png` is ONE FRAME AT t=0.** So `fade=in:st=3` only ever saw
+  a frame timestamped before its own start, held alpha at 0, and overlay's
+  default eof_action repeated that transparent frame for the whole clip. Exit
+  code 0, no warning, a completely flat render: measured at seven timestamps,
+  **zero lit pixels at every one**. `-loop 1` with a `-t` to bound it fixes it;
+  the same render then measures nothing at t=2.9, half-risen at t=3.1 (rows
+  1661..1706), at rest through t=4.5 (1610..1706), sliding out at t=5.7
+  (1634..1722) and gone by t=5.95 -- fade AND slide, proven at both ends.
+- **Six passing tests could not have caught this**, and that is the point. They
+  assert the PLAN and the GRAPH STRING, both of which were correct; the fault
+  was one missing input flag two hundred characters away. The seventh test pins
+  the flag and was proven red against its removal. Anything composited over a
+  render must be measured on a frame, not inferred from a filter graph -- this
+  file's oldest rule, hit from a new direction.
+- **The artwork is generated, not a supplied file.** `design/promo-bar.svg`
+  rasterises through the headless Chrome already on this machine (the route the
+  app icon established), so there is no image dependency and no binary anybody
+  has to keep. Swapping in different artwork is dropping a PNG with
+  transparency at `worker/assets/promo-bar.png`; `worker/assets/README.md`
+  states the requirements (~8:1, at least 1600px wide).
+- **A missing asset is still never an error.** `promo_bar_plan` returns None
+  when the file is absent, so a box that has not pulled it renders exactly as
+  it did before.
 
 ## Open items
 

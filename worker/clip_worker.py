@@ -4804,7 +4804,14 @@ def render_clip(
         *([] if track is None else ["-stream_loop", "-1", "-i", str(track["path"])]),
         *([] if not bg_visual else ["-stream_loop", "-1", "-t", f"{candidate.duration + 2:.3f}", "-i", str(background["path"])]),
         *([] if matte_file is None else ["-i", str(matte_file)]),
-        *([] if promo is None else ["-i", str(PROMO_BAR_FILE)]),
+        # `-loop 1` is load-bearing and its absence is SILENT: a bare PNG input
+        # is one frame at t=0, so `fade=in:st=3` only ever sees a frame before
+        # its start and holds alpha 0 -- overlay then repeats that transparent
+        # frame for the whole clip and the bar never appears. Measured: a flat
+        # background, zero lit pixels at every timestamp, exit code 0.
+        # `-t` bounds the loop, or the input never ends.
+        *([] if promo is None else
+          ["-loop", "1", "-t", f"{candidate.duration:.3f}", "-i", str(PROMO_BAR_FILE)]),
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-threads", ffmpeg_threads,
