@@ -23,9 +23,34 @@ feels redundant, it is not — it is the evidence for a scope.
 - [ ] Sign in to TikTok as **`deenclipped`** in that browser first. It is the
       registered sandbox target user; no other account can authorise.
 - [ ] In the app, **disconnect TikTok**. You are going to connect it on camera.
-- [ ] Have one approved clip ready in the review queue.
+- [ ] Have one approved clip ready in the review queue — see **Which clip**
+      below. Since v3.114.0 the wrong choice puts a two-minute render in the
+      middle of beat 5.
 - [ ] Close every other tab. One window, nothing personal on screen.
 - [ ] Record the browser window, not the whole desktop.
+
+---
+
+## Which clip to use (added v3.114.0)
+
+The app now renders TikTok its own copy of a clip without the DeenClipped
+watermark, because TikTok refuses video carrying another app's mark. It is
+automatic and it takes the worker a minute or two — which would land in the
+middle of beat 5 as "Rendering a copy TikTok will accept". Accurate, and dead
+air you do not want on camera.
+
+**Use a clip made with the Quran Recitation template.** Nothing is ever drawn
+over scripture, so that template carries no watermark, no copy is needed and
+Post goes straight to uploading. Every other shipped template carries the mark
+by default (v3.72.8), so every other clip triggers the extra render.
+
+Turning the watermark off on the Templates screen does NOT help a clip that is
+already rendered: `marksTheFrame` reads the clip's own template SNAPSHOT, which
+is the honest record of what was burned into the file. It would only help a
+clip re-rendered afterwards.
+
+If you would rather use an ordinary clip, that is fine — stop the recording
+while the copy renders and resume when it moves on.
 
 ---
 
@@ -86,6 +111,11 @@ shown.*
 
 Press post. Stay on screen while it uploads. Show the success state in the app,
 then **open TikTok and show the video on the `deenclipped` account.**
+
+The post is PRIVATE — `SELF_ONLY` is the only level an unaudited app may use —
+so this is showing it on your own profile, not publicly. That is what the
+reviewer expects to see, and beat 4's spoken line is what stops them reading
+it as the app ignoring their privacy rules.
 
 *Proves: the integration actually works end to end. A recording that stops at
 "uploading" proves nothing.*
