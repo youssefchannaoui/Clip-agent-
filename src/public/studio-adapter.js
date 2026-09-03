@@ -2203,7 +2203,82 @@
 
     var pending = awaitingReview(clips);
     var needsCount = pending.length;
+    /*
+     * THE CHANNELS THIS ACCOUNT POSTS TO, one lane each.
+     *
+     * Youssef, 3 Sept 2026: "with the three accounts, there should be three
+     * different schedules ... you should auto detect. If it has two accounts,
+     * it should show [two] different schedules that you can switch between."
+     *
+     * Derived from the connections and the publishing settings rather than
+     * stored: a channel disconnected yesterday must not leave a lane behind,
+     * and one connected this morning needs no migration to appear. The key is
+     * `provider:accountId`, which is exactly the id a target already carries
+     * (social.js), so a clip's lane needs no lookup.
+     */
+    // The destination's lane key. The server sends `id`; a payload written
+    // before it did is derived the same way social.js builds it, so a browser
+    // holding an older /api/state still filters correctly instead of showing
+    // every lane empty.
+    function targetLane(t) {
+      return t.id || ((t.provider || '') + ':' + (t.accountId || 'default'));
+    }
+    var schedLanes = (function () {
+      var social = DATA.social || {};
+      var provs = social.providers || {};
+      var ps = DATA.publishingSettings || {};
+      var out = [];
+      ['youtube', 'tiktok', 'instagram', 'facebook'].forEach(function (key) {
+        var item = ps[key];
+        var conn = provs[key];
+        if (!item || !item.enabled || !conn || !conn.connected) return;
+        var ids = (item.accountIds && item.accountIds.length) ? item.accountIds : [item.accountId];
+        ids.filter(Boolean).forEach(function (id) {
+          var laneKey = key + ':' + (id || 'default');
+          var account = (conn.accounts || []).filter(function (a) { return String(a.id) === String(id); })[0];
+          // The connection's own name, then the name a target recorded when it
+          // was built, then the id. Three chips all reading "YouTube" would be
+          // a switcher you cannot use -- and a connection can come back with an
+          // empty name (an older record, or one whose channel title was never
+          // fetched), so the fallback has to distinguish rather than default.
+          var fromTarget = '';
+          for (var ci = 0; ci < clips.length && !fromTarget; ci += 1) {
+            (clips[ci].targets || []).forEach(function (t) {
+              if (!fromTarget && targetLane(t) === laneKey && t.accountName) fromTarget = String(t.accountName);
+            });
+          }
+          var named = (account && (account.name || account.pageName || account.instagramName)) || fromTarget;
+          out.push({
+            key: laneKey,
+            provider: key,
+            accountId: String(id || ''),
+            name: named || ((PLATFORM_NAMES[key] || key) + ' · ' + String(id || '').slice(0, 8)),
+            named: Boolean(named),
+            platform: PLATFORM_NAMES[key] || key,
+            icon: PLATFORM_ICONS[key] || 'ph ph-share-network',
+          });
+        });
+      });
+      return out;
+    }());
+    // '' is every channel at once. A key that no longer exists (its channel was
+    // disconnected while the tab was open) falls back to that rather than
+    // showing an empty schedule with no explanation.
+    // How much is waiting on each lane. A switcher with bare names says which
+    // channels exist; with counts it says which one needs attention, which is
+    // the question somebody opens this screen with.
+    var allScheduled = clips.filter(function (c) { return c.scheduledAt && !c.postedAt; });
+    schedLanes.forEach(function (lane) {
+      lane.count = allScheduled.filter(function (c) {
+        return (c.targets || []).some(function (t) { return targetLane(t) === lane.key; });
+      }).length;
+    });
+    var schedChannel = schedLanes.filter(function (l) { return l.key === UI.schedChannel; })[0] ? UI.schedChannel : '';
     var scheduled = clips.filter(function (c) { return c.scheduledAt && !c.postedAt; })
+      .filter(function (c) {
+        if (!schedChannel) return true;
+        return (c.targets || []).some(function (t) { return targetLane(t) === schedChannel; });
+      })
       .sort(function (a, b) { return new Date(a.scheduledAt) - new Date(b.scheduledAt); });
     var recent4 = clips.slice(-4).reverse();
 
@@ -2855,7 +2930,12 @@
         cells: weekDayStarts.map(function (ds) {
           var at = instantOn(ds, t);
           slotInstants[at] = true;
-          var held = scheduled.filter(function (c) { return Number(c.scheduledAt) === at; })[0];
+          // Slots are claimed per CHANNEL now, so two clips going to different
+          // channels legitimately share one instant. The cell can only draw
+          // one of them, and drawing one while silently hiding the other is
+          // how a schedule starts lying about what is going out.
+          var onSlot = scheduled.filter(function (c) { return Number(c.scheduledAt) === at; });
+          var held = onSlot[0];
           var past = at < Date.now();
           return {
             filled: Boolean(held),
@@ -2867,6 +2947,10 @@
             // clip's card.
             at: at,
             clipId: held ? String(held.id) : '',
+            // How many MORE are on this instant. Only ever above zero in the
+            // "All channels" view -- inside one lane a slot holds one clip, by
+            // construction.
+            more: Math.max(0, onSlot.length - 1),
             title: held ? String(held.title || 'Clip') : '',
             style: 'position: relative; display: flex; flex-direction: column; justify-content: flex-end; flex: 1 1 0; min-width: 0;'
               + ' height: 100%; min-height: 56px; padding: 6px 7px; border-radius: 9px; overflow: hidden; text-align: left; font-family: inherit; cursor: '
@@ -5132,6 +5216,17 @@
       // The supply. An empty calendar has two very different causes -- nothing
       // approved, or plenty approved and none of it placed -- and the screen
       // could not tell them apart.
+      // The switcher. Only ever drawn at two or more -- with one channel there
+      // is nothing to switch between and a lone tab is noise (his "auto
+      // detect"). "All channels" leads, so the default view is unchanged for
+      // everybody who has always had one.
+      schedLanes: schedLanes,
+      schedHasLanes: schedLanes.length > 1,
+      schedChannel: schedChannel,
+      schedLaneTotal: allScheduled.length,
+      schedChannelName: schedChannel
+        ? (schedLanes.filter(function (l) { return l.key === schedChannel; })[0] || {}).name || ''
+        : 'All channels',
       schedWaitingCount: waitingForSlot.length,
       schedHasWaiting: waitingForSlot.length > 0,
       schedWaitingLabel: plural(waitingForSlot.length, 'clip') + ' approved, no slot yet',
@@ -8050,6 +8145,7 @@
     onPublishingToggle: function () {},
     onPostNow: function () {},
     onSendBack: function () {},
+    setSchedChannel: function (key) { UI.schedChannel = key || ''; refresh(); },
     onUnschedule: function () {},
     onScheduleClip: function () {},
     onRestore: function () {},

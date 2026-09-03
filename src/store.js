@@ -54,6 +54,11 @@ export function settingDefaults() {
     },
     publishingSettings: {
       enabled: false,
+      // With more than one channel on a platform: 'all' posts every clip to
+      // every one of them, 'rotate' gives each clip to one in turn. Defaults
+      // to 'all', which is what this app has always done -- turning three
+      // channels into three different schedules is a choice the account makes.
+      spread: 'all',
       // Each provider carries accountIds -- the destinations a clip goes to on
       // that platform -- with accountId kept as its first entry so every reader
       // written before multi-account keeps working. See withAccountList and
