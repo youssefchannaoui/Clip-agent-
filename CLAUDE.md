@@ -4207,6 +4207,36 @@ out by word count, which drifts against a reciter who holds a madd.
 will always drift, however many times it is run. Testing the sync work needs a
 fresh import of a recitation, not a re-render of an existing one.
 
+## The home-screen icon is a solid mark now, and the tab icon differs (v3.108.0)
+
+Youssef, with a photo of his home screen: "Can we make deenclipped look better
+it's not nice", then "Maybe add text or something idk", then "b".
+
+**The fault was the outline, not the size.** The arch was `fill="none"` with a
+4.4/64 stroke -- the only hairline drawing on a screen where iMessage, ChatGPT,
+Waze, Facebook and TikTok are all SOLID silhouettes. A thin gold stroke on
+near-black recedes among them however well it is drawn. The arch is filled now
+with the play knocked out of it by `fill-rule="evenodd"`, so the mark is a
+shape rather than a line.
+
+**The text question was settled by rendering it, not by arguing.** Three
+options were rasterised at a true 60px: mark only, mark + wordmark, and a "DC"
+monogram. He chose the wordmark.
+
+- **"DEEN", not "DEENCLIPPED".** Eleven characters across a 60px tile is a grey
+  smear and forces the arch down to nothing; four are readable and leave the
+  mark its room. The label under the icon says the rest.
+- **THE TWO ASSETS NOW DIFFER, and that is the point.** Rendered at 16px the
+  wordmark is an unreadable smudge AND it shrinks the arch, so the browser tab
+  loses twice. `favicon.svg` is the mark alone at full size for tabs;
+  `design/icon-app.svg` carries the wordmark and is the source rasterised to
+  `apple-touch-icon.png` for the home screen. One design, two crops, each
+  legible at the size it is actually seen.
+- Rasterised with the Chromium already on the machine -- this repo has no npm
+  dependencies on purpose, and that is what lets a phone session run the suite.
+- **A home-screen icon already added does NOT update.** iOS copies it when the
+  shortcut is created. Remove the shortcut and add it again to see the change.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
