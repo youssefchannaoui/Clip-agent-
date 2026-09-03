@@ -216,3 +216,44 @@ test('the channels stack instead of wrapping into pills', () => {
   assert.ok(/#studioConnList \.studio-conn-account \{[^}]*display: grid/.test(host),
     'and each row is a grid, not an inline pill');
 });
+
+/**
+ * The watermark and the promo bar belong to the account, not to a caption style.
+ *
+ * Youssef, 3 Sept 2026: "the watermark and promotion should not need to save
+ * with template it just works with all templates once on it turns on for all."
+ *
+ * Switching the watermark on for Clean Line and then rendering a Quran clip
+ * without it is not a choice anybody meant to make.
+ */
+test('both brand switches write to every template', () => {
+  assert.ok(/async function applyToAllTemplates\(patch\)\{/.test(host),
+    'one helper, so the two switches cannot drift apart');
+  assert.ok(/for\(const tpl of list\)\{[\s\S]{0,220}Object\.assign\(\{\},tpl,patch\)/.test(host),
+    'it loops the account’s templates rather than patching the selected one');
+  // The paywall stays server-side: each save is checked, so a free account is
+  // refused on the first one and the loop stops there.
+  const wm = host.indexOf("toggle.addEventListener('change'");
+  assert.ok(host.slice(wm, wm + 900).includes('applyToAllTemplates(patch)'), 'watermark uses it');
+  const pb = host.indexOf("bar.addEventListener('change'");
+  assert.ok(host.slice(pb, pb + 700).includes('applyToAllTemplates({promoBarEnabled:want})'), 'promo bar uses it');
+});
+
+/**
+ * The schedule shows the platform, not a sentence about it.
+ *
+ * Youssef: "for the logos here dont be writing just put logos that are
+ * posting." A row going to two places read as "YouTube · DeenClipped —
+ * waiting  TikTok · DeenClipped — waiting".
+ */
+test('a healthy destination is its logo; a broken one keeps its word', () => {
+  const adapter = fs.readFileSync(path.join(root, 'src/public/studio-adapter.js'), 'utf8');
+  const at = adapter.indexOf('function destinations');
+  const body = adapter.slice(at, at + 1800);
+  assert.ok(/var quiet = t\.status === 'scheduled' \|\| t\.status === 'publishing' \|\| t\.status === 'posted'/.test(body),
+    'waiting, posting and posted are the quiet states');
+  assert.ok(/state: quiet \? '' :/.test(body), 'anything else still prints its word');
+  // This app has already shipped the bug where a clip live on YouTube with a
+  // refused TikTok "looked entirely fine on the row" (v3.28.0).
+  assert.ok(body.includes('title: label'), 'the full sentence stays available on hover');
+});

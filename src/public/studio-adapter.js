@@ -1604,14 +1604,26 @@
     return (clip.targets || []).map(function (t) {
       var platform = t.platform || t.provider || '';
       var state = TARGET_STATES[t.status] || TARGET_STATES.scheduled;
-      // The account, when there is more than one place a platform could mean.
+      var label = (PLATFORM_NAMES[platform] || platform || 'Unknown')
+        + (t.accountName ? ' · ' + t.accountName : '') + ' — ' + state.word;
+      // THE LOGO CARRIES IT WHEN NOTHING IS WRONG. Youssef, 3 Sept 2026, on
+      // the schedule: "for the logos here dont be writing just put logos that
+      // are posting." A row going to two places read as
+      // "YouTube · DeenClipped — waiting  TikTok · DeenClipped — waiting",
+      // which is two sentences to say what two marks say.
+      //
+      // A PROBLEM STILL GETS ITS WORD. Colour alone would be carrying it, and
+      // this app has already shipped the bug where a clip live on YouTube with
+      // a refused TikTok "looked entirely fine on the row" (v3.28.0). Anything
+      // that needs a person keeps its text; waiting, posting and posted do not.
+      var quiet = t.status === 'scheduled' || t.status === 'publishing' || t.status === 'posted';
       return {
-        name: PLATFORM_NAMES[platform] || platform || 'Unknown',
-        // Its own part, so a phone can drop the account without losing which
-        // platform it was or what happened there. Three of these at 375px read
-        // as three wrapped paragraphs when they are one string.
-        who: t.accountName ? ' · ' + t.accountName : '',
-        state: ' — ' + state.word,
+        name: '',
+        who: '',
+        state: quiet ? '' : ' ' + state.word,
+        // The whole sentence is still there, on hover, for the rows that no
+        // longer print it.
+        title: label,
         icon: PLATFORM_ICONS[platform] || 'ph ph-share-network',
         style: 'display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: ' + state.colour + ';',
       };
