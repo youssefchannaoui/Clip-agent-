@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1163 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1163 JS + 548 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3540,7 +3540,7 @@ adapter's `firstRun` flag but not the PAINTER's own gate, so deleting
 `!ob.imported` from the painter broke nothing; and the showcase probe replaced
 a string that no longer existed, so it silently tested the unchanged file. Both
 are pinned properly now and both were re-proven red.
-## The scripture template is free (v3.99.0, 3 Sept 2026)
+## The scripture template is free (v3.99.1, 3 Sept 2026)
 
 Youssef: "quran recitation should allow basic plans as well so one quran one
 lecture." So Basic gets TWO styles -- Clean Line for a lecture, Quran
@@ -3610,6 +3610,74 @@ Measured rather than guessed, and it was two faults stacked:
 - The whole studio render is ~11ms on an empty account and ~45ms with the job
   panel open, and THAT was never the problem -- worth remembering before
   optimising the renderer. The latency was all waiting.
+
+## The renderer reads the lecture, not the clip (v3.101.0, 3 Sept 2026)
+
+v3.77.1 rebuilt the Quran matcher around one idea -- recitation runs in order,
+so the verse before this one is context worth having -- and walked the WHOLE
+lecture once to get it. Then it used that walk for one thing only: moving a
+clip's EDGES onto a verse. `write_ass` threw it away and re-derived every
+caption from the clip's own segments **in isolation**, which is exactly the
+isolation the walk exists to escape. That is why one clip out of that
+recitation still captioned nothing, and why this file has carried "that is the
+next step and it is not done" since.
+
+- **The premise was measured before anything was built, and it is the whole
+  argument.** Whisper wrote 39:71 as "وسيك الذي كفرو بجها لمذمرا حت جا اتحت
+  بوبها". Matched on its own that reaches **nothing** -- blind search holds a
+  strict floor and this is under it. Matched after the verse before it, it is a
+  named hypothesis rather than a search and comes back at **0.713**. The clip's
+  words never change; what changes is whether the lecture in front of them is
+  there to be read. `ThePremiseTests` pins both halves, so the fix cannot be
+  believed without the failure being reproducible.
+- **The walk happens ONCE and both consumers read it.** `lecture_ayat` returns
+  `{start, end, ayah}` in media time; `ayah_spans` (the snapper) is derived
+  from it, and `attach_lecture_ayat` slices each clip's own share onto
+  `Candidate.ayat`. Walking twice would be two answers to one question, which
+  is how the edges a clip snaps to and the verses it captions drift apart.
+- **It runs for EVERY lecture now, not only the Quran template**, because
+  scripture is captioned on every template (invariant 7) and the cost is
+  nothing: measured at real corpus size (6236 ayat), **0.53s over an
+  eight-thousand-word English lecture and 0.07s over Arabic**, against a job
+  that runs minutes to hours. `quran.load()` is cache-only and memoised, so
+  this adds no download and no second read.
+- **It is only ever ADDITIVE.** The map is authoritative wherever it speaks --
+  it read the recitation running INTO the clip and the per-segment match
+  cannot -- and where it says nothing, the old per-segment match still runs.
+  `lecture_covers` uses a half-overlap rule: a segment the map already holds
+  half of is a verse the map is already drawing, and letting the weaker guess
+  draw over it is two ayat on screen at once; below half there is real
+  uncovered speech and the old path gets its turn.
+- **A re-render takes exactly the path it always did.** `process_rerender`
+  rebuilds ONE segment from the stored transcript and there is no lecture to
+  walk, so `ayat` is None and nothing changes. **Empty and absent are
+  deliberately different statements**: `[]` means a lecture was walked and this
+  clip holds no scripture, `None` means nobody walked one. A test drives the
+  re-render path, per this file's standing rule that a caption feature must be
+  tested on both.
+- **`retime_for_cuts` remaps the map, and that was a real find rather than a
+  fix to something broken.** `dataclasses.replace` would have carried `ayat`
+  through UNTOUCHED, so after a cut scripture would be drawn at the wrong
+  second -- silently, because nothing downstream can tell a stale time from a
+  fresh one. Today the two cannot meet (cuts arrive only on a re-render, which
+  has no map), so this is written for the release that changes that, not for
+  one that has already shipped.
+- **`matched_ayahs` is sorted before it returns.** The lecture's verses are
+  appended ahead of the per-segment ones, so the list stopped being in the
+  order the clip plays -- and the editor draws its caption blocks from it
+  (invariant 4), where an out-of-order list reads as the clip jumping about.
+- **Counting `,Ayah,,` counts PAGES, not scripture.** A long verse is paged
+  across the time it is recited: one ayah, three Dialogue events. The first cut
+  of the double-caption test asserted on that count and failed against correct
+  code. It asserts on `write_ass`'s returned rows now -- executed output, the
+  rule this file keeps restating.
+- All four probes were **proven RED** against the behaviour they pin: the
+  quran path not reading the map, the covered-stretch skip removed, a cut not
+  retiming the map, and attach forgetting the clip-local conversion.
+- **Worker change, so `deploy-worker.yml` deploys it on push**, and it affects
+  lectures processed from now on. Clips already rendered keep the captions they
+  have. **Not yet seen on a real recitation** -- the proof here is the matcher
+  and the ASS file, not a frame; the confirmation costs one Quran import.
 
 ## Open items
 
@@ -4950,12 +5018,12 @@ real lecture, 15 ayat found across it, clips 01 and 03 snapped by +0.6s and
 -2.4s, and the two whose nearest verse was 22s and 37s away were correctly
 left alone.
 
-**One clip still captions nothing, and that is honest.** Its recitation was
-transcribed as "وسيق الذين كفروا بجها لمذمرا حتى جا اتحت بوابها" -- too far from
-39:71 for even a named hypothesis. A wrong ayah on screen is worse than none.
-The fix for it is to caption from the LECTURE-wide ayah map rather than
-re-matching per clip at render time: the lecture walk does find verses across
-that clip's window. That is the next step and it is not done.
+**One clip still captioned nothing, and that was honest at the time.** Its
+recitation was transcribed as "وسيق الذين كفروا بجها لمذمرا حتى جا اتحت بوابها",
+and a wrong ayah on screen is worse than none. The fix named here -- caption
+from the LECTURE-wide ayah map rather than re-matching per clip at render time
+-- **is done as of v3.101.0** (see *The renderer reads the lecture, not the
+clip* below).
 
 
 ## The bars under a review card are that clip's own audio (v3.78.1, 2 Sept 2026)

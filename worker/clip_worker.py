@@ -932,6 +932,14 @@ class Candidate:
     # not as a different kind of render, but as an ordinary candidate that
     # keeps less of the source.
     cuts: list | None = None
+    # The ayat this clip contains, in CLIP-LOCAL time, sliced out of the
+    # lecture-wide walk before the clip was cut (invariant 5: clip-local vs
+    # media time, converted in exactly one place -- attach_lecture_ayat).
+    # None means nobody walked a lecture for this clip, which is every
+    # re-render: process_rerender rebuilds one segment from the stored
+    # transcript and there is no lecture to read. The renderer's own
+    # per-segment match stays for exactly that case.
+    ayat: list | None = None
 
     @property
     def duration(self) -> float:
@@ -1220,26 +1228,48 @@ def lecture_word_timeline(segments: list[dict[str, Any]]) -> list[tuple[str, flo
     return timeline
 
 
-def ayah_spans(segments: list[dict[str, Any]], corpus: Any) -> list[tuple[float, float]]:
-    """When each recited ayah starts and ends, across the whole lecture.
+def lecture_ayat(segments: list[dict[str, Any]], corpus: Any) -> list[dict[str, Any]]:
+    """Every ayah recited across the WHOLE lecture, with the media time of each.
 
     Walked ONCE over the whole transcript rather than per clip. That is not
     only cheaper -- it is more accurate, because the walk identifies verses by
     continuing the recitation, and a clip handed to it in isolation has no
     preceding verse to continue from. It is exactly why a clip that began
     mid-verse used to caption nothing until several verses in.
+
+    Measured on the real recitation that prompted this: Whisper wrote 39:71 as
+    "وسيك الذي كفرو بجها لمذمرا حت جا اتحت بوبها". Matched on its own that
+    reaches NOTHING -- blind search over six thousand verses holds a strict
+    floor, and it is under it. Matched after the verse before it, it is a named
+    hypothesis rather than a search, and it comes back at 0.713. The clip's own
+    words never change; what changes is whether the lecture in front of them is
+    there to be read.
+
+    The whole cost is one pass: 0.53s over an eight-thousand-word English
+    lecture at real corpus size, 0.07s over Arabic. That is why it now runs for
+    every lecture rather than only for the Quran template.
     """
     timeline = lecture_word_timeline(segments)
     if not timeline or corpus is None:
         return []
     transcript = " ".join(word for word, _, _ in timeline)
-    spans: list[tuple[float, float]] = []
+    found: list[dict[str, Any]] = []
     for hit in corpus.match_sequence(transcript):
         first = int(hit.get("wordStart", 0))
         last = min(int(hit.get("wordEnd", 0)), len(timeline))
         if 0 <= first < last:
-            spans.append((timeline[first][1], timeline[last - 1][2]))
-    return spans
+            found.append({
+                "start": timeline[first][1],
+                "end": timeline[last - 1][2],
+                "ayah": hit["ayah"],
+            })
+    return found
+
+
+def ayah_spans(segments: list[dict[str, Any]], corpus: Any) -> list[tuple[float, float]]:
+    """When each recited ayah starts and ends. Derived from the one walk above,
+    so the edges a clip snaps to and the verses it captions cannot disagree."""
+    return [(hit["start"], hit["end"]) for hit in lecture_ayat(segments, corpus)]
 
 
 # How far a clip edge may be moved to land on a verse. Wide enough to reach the
@@ -1248,11 +1278,47 @@ def ayah_spans(segments: list[dict[str, Any]], corpus: Any) -> list[tuple[float,
 AYAH_SNAP_TOLERANCE = 12.0
 
 
+def attach_lecture_ayat(
+    selected: list[Candidate],
+    ayat: list[dict[str, Any]],
+) -> list[Candidate]:
+    """Hand each clip the verses the LECTURE found inside its window.
+
+    Youssef, 2 Sept 2026, on a recitation that captioned two clips in five:
+    v3.77.1 fixed the walk itself and left one clip still captioning nothing,
+    because the renderer never read the walk -- it re-matched each clip's own
+    segments in isolation at render time, which is the very thing the walk
+    exists to stop. This carries the walk's answer through to the render.
+
+    Times are converted to CLIP-LOCAL here and nowhere else, so there is one
+    place where invariant 5 is applied. It runs AFTER snap_clips_to_ayat, so
+    the edges are final; a candidate the walk found nothing inside keeps
+    `ayat = []`, which is a different statement from None and is why the
+    renderer can tell "a lecture was walked and this clip has no scripture"
+    from "nobody walked a lecture".
+    """
+    if not selected:
+        return selected
+    for candidate in selected:
+        mine: list[dict[str, Any]] = []
+        for hit in ayat:
+            start = max(0.0, float(hit["start"]) - candidate.start)
+            end = min(candidate.duration, float(hit["end"]) - candidate.start)
+            # A verse only half inside the clip is still captioned for the half
+            # that is here -- that is what a clip opening mid-recitation looks
+            # like, and leaving it bare was the reported symptom.
+            if end - start > 0.05:
+                mine.append({"start": start, "end": end, "ayah": hit["ayah"]})
+        candidate.ayat = mine
+    return selected
+
+
 def snap_clips_to_ayat(
     selected: list[Candidate],
     segments: list[dict[str, Any]],
     template: dict[str, Any],
     settings: dict[str, Any],
+    ayat: list[dict[str, Any]] | None = None,
 ) -> list[Candidate]:
     """Start a recitation clip at the start of an ayah, and end it at the end of one.
 
@@ -1273,10 +1339,16 @@ def snap_clips_to_ayat(
     """
     if str(template.get("captionMode", "")) != "quran" or not selected:
         return selected
-    corpus = quran.load() if quran else None
-    if corpus is None:
-        return selected
-    spans = ayah_spans(segments, corpus)
+    # The caller normally hands the walk in, so the lecture is read once and
+    # the edges a clip snaps to are cut from the same map the renderer will
+    # caption from. Walking again here would be a second answer to one
+    # question, which is how those two silently drift apart.
+    if ayat is None:
+        corpus = quran.load() if quran else None
+        if corpus is None:
+            return selected
+        ayat = lecture_ayat(segments, corpus)
+    spans = [(hit["start"], hit["end"]) for hit in ayat]
     if not spans:
         return selected
     starts = sorted({span[0] for span in spans})
@@ -3170,6 +3242,41 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     # unasked: a false positive here would replace ordinary Arabic speech with
     # an ayah nobody recited, which is far worse than leaving it as spoken.
     auto_ayahs: list[dict[str, Any]] = []
+    # What the LECTURE found inside this clip, walked once over the whole
+    # transcript before any clip was cut (attach_lecture_ayat). It is
+    # authoritative wherever it speaks, because it read the recitation running
+    # INTO this clip and the per-segment match below cannot: measured on the
+    # clip that prompted this, its own words reach nothing while the same words
+    # behind the verse before them reach 39:71 at 0.713.
+    #
+    # It is only ever ADDITIVE. Where the map says nothing the per-segment
+    # match still runs, and a re-render -- where `ayat` is None because there
+    # is no lecture to walk -- takes exactly the path it always did.
+    lecture_hits = [
+        {"start": float(hit["start"]), "end": float(hit["end"]), "found": hit["ayah"]}
+        for hit in (candidate.ayat or [])
+        if float(hit["end"]) > float(hit["start"])
+    ]
+
+    def lecture_covers(start: float, end: float) -> bool:
+        """Whether the lecture map already captions most of this stretch.
+
+        Half, not all: a segment the map holds half of is a verse the map
+        already draws, and letting the weaker per-segment guess draw over the
+        top of it is two ayat on screen at once. Below half there is real
+        uncovered speech, so the old path still gets its turn.
+        """
+        if not lecture_hits:
+            return False
+        span = max(1e-6, end - start)
+        covered = sum(
+            max(0.0, min(end, hit["end"]) - max(start, hit["start"]))
+            for hit in lecture_hits
+        )
+        return covered / span >= 0.5
+
+    if mode != "quran":
+        auto_ayahs.extend(lecture_hits)
     if mode != "quran" and quran is not None:
         auto_corpus = quran.load()
         if auto_corpus is not None:
@@ -3177,6 +3284,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 start = max(0.0, float(segment["start"]) - candidate.start)
                 end = min(candidate.duration, float(segment["end"]) - candidate.start)
                 if end <= start:
+                    continue
+                if lecture_covers(start, end):
                     continue
                 seg_text = str(segment.get("text") or "")
                 found = auto_corpus.match(seg_text, minimum=0.72)
@@ -3246,10 +3355,36 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         else:
             show_translation = bool(template.get("captionTranslation", True))
             captioned = 0
+            # The lecture's verses go down first. This is the whole of the fix:
+            # the walk that v3.77.1 built was only ever used to move a clip's
+            # EDGES onto a verse, and the caption was then re-derived from the
+            # clip's own segments in isolation -- which is the isolation the
+            # walk exists to escape. One clip out of that recitation captioned
+            # nothing at all for exactly this reason.
+            for hit in lecture_hits:
+                found = hit["found"]
+                captioned += 1
+                matched_ayahs.append({
+                    "start": round(hit["start"], 3), "end": round(hit["end"], 3),
+                    "surah": found["surah"], "ayah": found["ayah"],
+                    "surahName": found["surahName"], "arabic": found["arabic"],
+                    "translation": found.get("translation") or "",
+                    "confidence": found.get("confidence"),
+                })
+                events.extend(ayah_events(
+                    found, ornament=ornament_text(ayah_font, found["ayah"]),
+                    start=hit["start"], end=hit["end"],
+                    latin_font=font, translation_size=translation_size,
+                    show_translation=show_translation, ayah_size=ayah_size,
+                    mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
+                    ayah_font=ayah_font,
+                ))
             for segment in candidate.segments:
                 start = max(0.0, float(segment["start"]) - candidate.start)
                 end = min(candidate.duration, float(segment["end"]) - candidate.start)
                 if end <= start:
+                    continue
+                if lecture_covers(start, end):
                     continue
                 seg_text = str(segment.get("text") or "")
                 found = corpus.match(seg_text)
@@ -3373,6 +3508,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 emit("progress", stage="Matching recited ayahs", progress=72,
                      ayahsMatched=captioned, etaSec=None)
             ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
+            # The lecture's verses were appended before the per-segment ones,
+            # so the list is no longer in the order the clip plays. The editor
+            # draws caption blocks from it (invariant 4 -- the blocks show the
+            # matched verse), and a block list out of order reads as the clip
+            # jumping about.
+            matched_ayahs.sort(key=lambda row: row["start"])
             return matched_ayahs
     if mode == "dynamic-stack" and words:
         for frame in dynamic_caption_frames(candidate, template):
@@ -3547,6 +3688,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             ayah_font=ayah_font,
         ))
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
+    # Same reason as the Quran branch: the lecture's verses were seeded ahead
+    # of the per-segment ones, so this is sorted before the editor sees it.
+    matched_ayahs.sort(key=lambda row: row["start"])
     return matched_ayahs
 
 
@@ -4186,8 +4330,27 @@ def retime_for_cuts(candidate: Candidate, keeps: list[tuple[float, float]]) -> C
         copy["words"] = words
         if copy["end"] - copy["start"] >= 0.05:
             segments.append(copy)
+    # The lecture's ayat move with everything else, or they do not move at all.
+    # `dataclasses.replace` would carry them through UNTOUCHED, which after a
+    # cut means scripture drawn at the wrong second -- silently, because
+    # nothing downstream can tell a stale time from a fresh one. Today the two
+    # never meet (cuts arrive only on a re-render, which has no lecture map),
+    # so this is here for the release that changes that rather than for one
+    # that has already shipped.
+    ayat: list[dict[str, Any]] | None = None
+    if candidate.ayat is not None:
+        ayat = []
+        for hit in candidate.ayat:
+            media_a = float(hit["start"]) + candidate.start
+            media_b = float(hit["end"]) + candidate.start
+            kept = sum(max(0.0, min(media_b, b) - max(media_a, a)) for a, b in keeps)
+            if kept < 0.05:
+                continue
+            moved_a, moved_b = remap_clamped(media_a), remap_clamped(media_b)
+            if moved_b - moved_a > 0.05:
+                ayat.append({"start": moved_a, "end": moved_b, "ayah": hit["ayah"]})
     from dataclasses import replace
-    return replace(candidate, start=0.0, end=total, segments=segments, cuts=None)
+    return replace(candidate, start=0.0, end=total, segments=segments, cuts=None, ayat=ayat)
 
 
 def render_cut_plate(ffmpeg: str, source: Path, keeps: list[tuple[float, float]],
@@ -4833,7 +4996,10 @@ def process_more_clips(job: dict[str, Any], job_file: Path) -> None:
     selected = select_candidates(candidates, requested)
     # Before titling, so a title is written from the words the clip will really
     # contain rather than the ones it had before its edges moved.
-    selected = snap_clips_to_ayat(selected, segments, job.get("template") or {}, settings)
+    lecture_verses = lecture_ayat(segments, quran.load() if quran else None)
+    selected = snap_clips_to_ayat(selected, segments, job.get("template") or {}, settings,
+                                  ayat=lecture_verses)
+    selected = attach_lecture_ayat(selected, lecture_verses)
     # The shortlist is a guess at what will ship; this is what actually ships.
     selected = title_selected_clips(selected, settings, str(job.get("title") or ""))
     clock.lap("score")
@@ -5025,7 +5191,10 @@ def process(job_file: Path) -> None:
     progress("Finding and scoring clips", 69, candidateCount=len(candidates), etaSec=None)
     candidates = refine_with_ollama(candidates, settings, str(job.get("title") or ""))
     selected = select_candidates(candidates, int(settings.get("clipsPerVideo", 8)))
-    selected = snap_clips_to_ayat(selected, segments, job.get("template") or {}, settings)
+    lecture_verses = lecture_ayat(segments, quran.load() if quran else None)
+    selected = snap_clips_to_ayat(selected, segments, job.get("template") or {}, settings,
+                                  ayat=lecture_verses)
+    selected = attach_lecture_ayat(selected, lecture_verses)
     selected = title_selected_clips(selected, settings, str(job.get("title") or ""))
     clock.lap("score")
     if not selected:
