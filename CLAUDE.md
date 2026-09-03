@@ -3665,7 +3665,14 @@ the app and types a code while it is still thinking about its email address.
   trimmed: a credential pasted into that field picks up a trailing newline
   routinely.
 
-### Switching email on must not lock out the people already here
+### Switching email on must not lock out the people already here (v3.101.1, 3 Sept)
+
+**It shipped as v3.101.1, whatever its commit subject says.** That commit is
+titled "(v3.100.1)" and the `package.json` inside it reads `3.101.1` -- two
+sessions were bumping the same minute and the subject was written before the
+rebump. The version in `package.json` is the one the worker deploy compares
+against the running container, so that is the number this file records.
+
 
 Found by asking what `EMAIL_API_KEY` actually DOES the moment it is set, rather
 than by testing the feature: `verificationRequired()` flips false -> true for
