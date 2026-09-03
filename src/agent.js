@@ -888,6 +888,29 @@ export async function tick() {
       }
       if (clip.renderQuality === 'draft' && clip.status === 'scheduled') continue;
       if (clip.status === 'scheduled' && clip.scheduledAt && clip.scheduledAt <= Date.now()) {
+        /*
+         * A CLIP ASKS WHERE IT IS GOING WHEN IT POSTS, not when it was
+         * scheduled.
+         *
+         * `clip.targets` is stamped once by setTargets at schedule time, and
+         * nothing refreshed it afterwards -- so a clip scheduled while nothing
+         * was connected reached its slot with an empty list and was filed
+         * `ready` ("ready to download and post"), silently, for ever. Connect a
+         * channel an hour later and it still never posts: the schedule row read
+         * "No account connected" beside a sidebar reading "TikTok - Posting",
+         * and both were telling the truth about different things.
+         *
+         * publishNow has re-derived here since it was written; the timer did
+         * not, so pressing the button worked and letting the slot arrive did
+         * not. One rule now, both paths.
+         *
+         * Only ever when the list is EMPTY: re-deriving targets that already
+         * exist would discard in-flight uploads and their retry state.
+         */
+        if (publishingSettings(ownerOfRecord(clip)).enabled && !clip.targets?.length) {
+          try { setTargets(clip); }
+          catch { /* still nowhere to go — the honest fall-through below */ }
+        }
         if (publishingSettings(ownerOfRecord(clip)).enabled && clip.targets?.length) await publishClip(clip);
         else { clip.status = 'ready'; clip.readyAt = Date.now(); log(`"${clip.title}" is ready to download and post.`, 'info', ownerOf(clip)); }
       } else if (clip.status === 'publishing' || clip.targets?.some(target => activeTarget(target) && (!target.nextTryAt || target.nextTryAt <= Date.now()))) {

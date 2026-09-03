@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1308 JS + 592 Python**
+- `npm test` and `npm run check` must pass. Currently **1312 JS + 592 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -7009,3 +7009,43 @@ not a documented guarantee.
 
 **So "is the client key the app is sending the sandbox one?" is now answered by
 reading the error**, rather than by trusting that a paste worked.
+
+## "No account connected" beside "TikTok · Posting" (v3.115.2, 3 Sept 2026)
+
+Youssef, on the Schedule screen: "once I get to the end to then click post now
+or when it goes to the scheduler, it says no accounts are connected. Even
+though on the right side, you can clearly see that there has been accounts
+connected and TikTok is connected."
+
+**Both halves were telling the truth about different things.** The ROW reads
+`clip.targets`, stamped once by `setTargets` at schedule time; the SIDEBAR
+(`schedOutlets`) reads the live connections. Schedule a clip while nothing is
+connected, connect TikTok an hour later, and the two disagree for ever --
+nothing refreshed the clip.
+
+### The label was the small half
+
+**At its slot, `tick()` filed a clip with no targets as `ready`** ("ready to
+download and post") and it silently never posted, however many channels were
+connected by then. `publishNow` has re-derived since it was written -- so
+pressing Post now worked and letting the slot arrive did not, which is the
+worst shape a scheduling bug can have: the manual path proves the automatic
+one, and the automatic one is the product.
+
+A clip now asks where it is going when it POSTS, not when it was scheduled.
+**Only ever when the list is EMPTY** -- re-deriving targets that already exist
+would discard an in-flight upload's status and retry state -- and a clip with
+still nowhere to go falls through to `ready` exactly as before.
+
+### The row says something true now
+
+`anyOutletLive()` is ONE answer to "does this account have anywhere to post
+right now", shared with the sidebar that renders "Posting", so the two cannot
+disagree on screen again. With a live outlet the row reads **"Set when it
+posts"**, which is now literally what happens; with none it keeps "No account
+connected", which is then true.
+
+**The probe reproduces the original bug rather than describing it**: it seeds a
+clip with `targets: []` whose slot has arrived, connects TikTok afterwards, and
+drives the real `tick()`. Proven red by removing the re-derive -- the clip
+comes back `ready` with nowhere to go.

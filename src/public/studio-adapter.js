@@ -2316,6 +2316,12 @@
     var ctx = { projects: projects, clips: clips, tracks: tracks, needsCount: needsCount, planLabel: planLabel, postSlots: daySlots };
 
     var providers = PLATFORMS.map(function (k) { return providerInfo(DATA, k); });
+    // "Does this account have anywhere to post RIGHT NOW" -- the same test the
+    // schedule sidebar makes (schedOutlets calls it "Posting"), so a row and
+    // the panel beside it cannot answer it differently.
+    var anyOutletLive = function () {
+      return providers.some(function (p) { return p.connected && p.enabled; });
+    };
     var byKey = {};
     providers.forEach(function (p) { byKey[p.key] = p; });
 
@@ -2634,11 +2640,25 @@
               // with no destinations says so rather than showing an empty gap:
               // "nowhere yet" is the most useful thing a schedule can tell you
               // about a clip that is about to go nowhere.
-              dests: destinations(c).length ? destinations(c) : [{
-                name: 'No account connected', who: '', state: '',
-                icon: 'ph ph-warning-circle',
-                style: 'display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dc-n-e6b770, #E6B770);',
-              }],
+              // A clip with no destinations of its OWN is two different
+              // situations, and calling both "No account connected" made the
+              // app contradict itself: this row said it beside a sidebar
+              // reading "TikTok - Posting", because the row reads the clip's
+              // frozen targets and the sidebar reads the live account. Both
+              // were true. The clip was scheduled before anything was
+              // connected, and a clip asks where it is going when it POSTS
+              // (agent.js), so once a channel is live this one has somewhere
+              // to go after all -- and saying otherwise is simply false.
+              dests: destinations(c).length ? destinations(c) : [
+                anyOutletLive() ? {
+                  name: 'Set when it posts', who: '', state: '',
+                  icon: 'ph ph-arrow-clockwise',
+                  style: 'display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dc-ink-dim, #8B8B93);',
+                } : {
+                  name: 'No account connected', who: '', state: '',
+                  icon: 'ph ph-warning-circle',
+                  style: 'display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dc-n-e6b770, #E6B770);',
+                }],
               caption: c.title || '',
               score: c.score || '',
               duration: secsToClock((c.durationMs || 0) / 1000),
