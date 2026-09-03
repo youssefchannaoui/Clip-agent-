@@ -398,8 +398,29 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
    "that loading animation and the box behind are both rotating it looks so
    bad." The tile holds still and only the glyph turns, which is what a spinner
    in a chip is supposed to look like. */
+/* Youssef, 3 Sept 2026: "this rounding circle is not centered. Remove that
+   background box because we don't need it, and just leave the rotating
+   circle." The tile earns its keep behind a settled job's mark; behind a
+   spinner it is a second ring drawn around a ring. The 32px FOOTPRINT stays,
+   so nothing beside it shifts when a job stops spinning, and the glyph grows
+   into the room the border gave up -- centred by place-items on a square 1em
+   box, never by a margin. */
 #studioLiveHome .slh-row > i.ph-circle-notch,
-#studioLiveBar .slh-row > i.ph-circle-notch { animation: none; }
+#studioLiveBar .slh-row > i.ph-circle-notch {
+  animation: none; border-color: transparent; background: none;
+  /* The title's own line box, starting at the same y (the 1px nudge the
+     boxed tile carries is dropped here) -- measured before: the circle's
+     centre sat 7px below the title's. The 32px WIDTH stays, so the column
+     does not shift when a job stops spinning. */
+  height: var(--slh-line); margin-top: 0;
+  /* !important on the size ALONE, and for the reason this file has now
+     recorded three times: the row's iconStyle binding writes `font-size: 14px`
+     as an INLINE style, which no stylesheet can outrank. The border and the
+     background above need no such help -- the binding does not set them.
+     Measured before adding it: border and background went transparent while
+     the glyph stayed at 14px. */
+  font-size: 21px !important;
+}
 /* An inline-block ::before rotates about the centre of its own LINE BOX, and
    an icon-font glyph's line box carries the face's ascent and descent -- so
    the ring turned about a point above its own middle and read as off-centre
@@ -410,14 +431,18 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
   display: grid; place-items: center; width: 1em; height: 1em; line-height: 1;
   transform-origin: 50% 50%; animation: dcSpin 1.1s linear infinite;
 }
-.slh-row { display: flex; align-items: center; gap: 12px; padding: 12px 15px; border-bottom: 1px solid var(--dc-n-16161a, #16161A); }
+/* --slh-line is the TITLE's line box, and the spinner's height is the same
+   token: given equal heights and the same starting y, their centres
+   coincide by construction rather than by a margin that measures right on
+   the day and drifts the moment a font size moves. */
+.slh-row { --slh-line: 20px; display: flex; align-items: center; gap: 12px; padding: 12px 15px; border-bottom: 1px solid var(--dc-n-16161a, #16161A); }
 .slh-row:last-child { border-bottom: 0; }
 /* The job's mark sits in its own warm tile, so the row leads with something
    other than a bare glyph floating in space. Direct child only — the strip
    and the clip lines carry their own icons. */
 .slh-row > i { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border: 1px solid rgba(217,180,120,.24); border-radius: 9px; background: rgba(217,180,120,.08); font-size: 14px; color: var(--dc-gold-lit, #F0D6A6); align-self: flex-start; margin-top: 1px; }
 .slh-row .what { flex: 1; min-width: 0; }
-.slh-row .what b { display: block; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slh-row .what b { display: block; font-size: 12.5px; line-height: var(--slh-line); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* One line. A long stage plus an ETA wrapped to two and pushed the percentage
    out of line with the title. Scoped past .slh-track and the stage strip,
    which are also spans. */
@@ -1182,7 +1207,34 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .bgt-card.on .bgt-thumb{border-color:rgba(240,214,166,.8)}
 .bgt-name{display:block;margin-top:7px;font:400 12px Outfit,Inter,sans-serif;color:var(--dc-ink-dim, #8B8B93);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bgt-card.on .bgt-name{color:var(--dc-n-f6f6f8, #F6F6F8);font-weight:600}
+/* The four destination tiles on the last step. The platform marks are drawn
+   as backgrounds by the rules above, which strip the tile from any box whose
+   FIRST child is one of them -- so the glyph sits inside a wrapper with the
+   label after it, and the box here is the button, not the mark. */
+.jd-row{display:flex;gap:9px;flex-wrap:wrap}
+.jd{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:0 13px;border-radius:10px;cursor:pointer;font:600 12.5px Outfit,Inter,sans-serif;border:1px solid var(--dc-line, #26262A);background:var(--dc-bg-deep, #101013);color:var(--dc-ink-dim, #8B8B93);transition:border-color .16s ease,color .16s ease,background .16s ease,opacity .16s ease;opacity:.55}
+.jd i{font-size:18px;line-height:1;flex:none}
+.jd:hover{border-color:var(--dc-n-4a4a52, #4A4A52);opacity:.8}
+/* A destination that is ON is at full strength; one turned off for this
+   lecture is dimmed rather than removed, so the row still says what exists. */
+.jd.on{opacity:1;color:var(--dc-ink, #F2F2F4);border-color:rgba(240,214,166,.5);background:rgba(217,180,120,.1)}
+.jd:focus-visible{outline:2px solid rgba(240,214,166,.6);outline-offset:2px}
+.jd-k{min-width:9px;font-size:11px;color:var(--dc-gold-lit, #F0D6A6)}
 .bgt-badge{position:absolute;top:4px;left:4px;padding:1px 5px;border-radius:6px;background:rgba(10,10,12,.78);border:1px solid rgba(217,180,120,.4);color:var(--dc-gold-lit, #F0D6A6);font:700 6.5px Outfit,sans-serif;letter-spacing:.04em}
+/* A submission waiting on a human wears the neutral badge, not the gold one:
+   gold is what a published DeenClipped video wears, and spending it on
+   something nobody has watched yet would say the opposite of the truth. */
+.bgt-wait{border-color:var(--dc-n-4a4a52, #4A4A52);color:var(--dc-ink-soft, #A2A2AA)}
+.bgt-by{display:block;margin-top:2px;font:400 9.5px Outfit,Inter,sans-serif;color:var(--dc-ink-faint, #6E6E76);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bgt-votes{display:flex;justify-content:center;gap:4px;margin-top:4px}
+/* 24px tall rather than the text's own height: these are tap targets on a
+   phone, where the whole card is 124px wide. */
+.bgv{display:inline-flex;align-items:center;gap:3px;min-height:24px;padding:0 7px;border-radius:7px;border:1px solid var(--dc-line, #26262A);background:var(--dc-n-131315, #131315);font:600 10px Outfit,Inter,sans-serif;color:var(--dc-ink-dim, #8B8B93);cursor:pointer;transition:color .16s ease,border-color .16s ease,background .16s ease}
+.bgv i{font-size:11px;line-height:1}
+.bgv:hover{color:var(--dc-ink, #F2F2F4);border-color:var(--dc-n-4a4a52, #4A4A52)}
+.bgv.on{color:var(--dc-gold-lit, #F0D6A6);border-color:rgba(240,214,166,.5);background:rgba(217,180,120,.14)}
+.bgv.ok{color:var(--dc-gold-lit, #F0D6A6);border-color:rgba(240,214,166,.45)}
+.bgv.no{color:var(--dc-ink-dim, #8B8B93)}
 .bgt-del{position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:5px;border:0;background:rgba(10,10,12,.72);color:var(--dc-n-b9b9c0, #B9B9C0);font-size:11px;line-height:1;cursor:pointer;display:grid;place-items:center;opacity:0;transition:opacity .12s ease}
 .bgt-card:hover .bgt-del{opacity:1}
 .bgt-ph{display:grid;place-items:center;color:var(--dc-ink-dim, #8B8B93);font-size:18px}
@@ -4846,15 +4898,25 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          the next left this block returning early with whatever it drew last --
          so the style row simply never appeared on its own step. */
       const showStyle=Boolean(vals.jobIsStepStyle),showBands=Boolean(vals.jobIsStepLengths);
-      const sig=[tplNames.join('.'),active,JSON.stringify(bands),showStyle?'s':'',showBands?'b':''].join('|');
-      if(jobStyleEl.dataset.sig===sig)return;
+      /* The signature carries STRUCTURE only -- which cards exist, on which
+         step. It used to carry the selection too, so every band press rebuilt
+         all four cards through innerHTML: the nodes were replaced, so none of
+         the transitions the stylesheet declares could run, and `lbGrow` reran
+         on all four bars at once. That is the "weird refresh". Selection is
+         applied in place below, on every paint, so a press only changes two
+         class lists and the sentence under them. */
+      const sig=[tplNames.join('.'),showStyle?'s':'',showBands?'b':''].join('|');
+      const structural=jobStyleEl.dataset.sig!==sig;
       jobStyleEl.dataset.sig=sig;
       jobStyleEl.style.cssText='display:block;margin:2px 0 0';
       const pill=on=>'padding:6px 11px;border-radius:999px;font:500 11.5px Outfit,Inter,sans-serif;cursor:pointer;'
         +'border:1px solid '+(on?'rgba(240,214,166,.9)':'var(--dc-line, #26262A)')+';'
         +'background:'+(on?'rgba(217,180,120,.14)':'var(--dc-n-131315, #131315)')+';color:'+(on?'var(--dc-gold-lit, #F0D6A6)':'var(--dc-ink-soft, #A2A2AA)')+';';
-      if(!showStyle&&!showBands){jobStyleEl.classList.add('hide');jobStyleEl.innerHTML='';jobStyleEl.dataset.enteredAs='';return}
-      slideIn(jobStyleEl);
+      if(!showStyle&&!showBands){
+        if(structural){jobStyleEl.classList.add('hide');jobStyleEl.innerHTML='';jobStyleEl.dataset.enteredAs=''}
+        return;
+      }
+      if(structural)slideIn(jobStyleEl);
       let html=!showStyle?'':'<div class="bgt-row">'
         +(DATA.templates||[]).map(t=>{
           const on=t.name===active;
@@ -4873,7 +4935,6 @@ function studioWanted(){return window.STUDIO_SHELL===true}
            the bar puts them on one scale so the difference is visible before
            the words are. Scaled against the longest band the worker cuts. */
         const SPAN=LENGTH_BANDS[LENGTH_BANDS.length-1][1];
-        const chosen=LENGTH_BANDS.filter(([lo,hi])=>bandOn(lo,hi));
         html+='<div class="lb-row">'
           +LENGTH_BANDS.map(([lo,hi,label])=>{
             const on=bandOn(lo,hi);
@@ -4884,51 +4945,71 @@ function studioWanted(){return window.STUDIO_SHELL===true}
               +'</button>';
           }).join('')
           +'</div>'
-          +'<div style="font-size:12.5px;color:var(--dc-ink-faint, #6E6E76);margin-top:14px">'
-          +(chosen.length
-            ? `Cut between ${Math.min(...chosen.map(b=>b[0]))}s and ${Math.max(...chosen.map(b=>b[1]))}s \u2014 anything shorter or longer is skipped.`
-            : 'Nothing can be cut until at least one length is allowed.')
-          +'</div>';
+          +'<div class="lb-note" style="font-size:12.5px;color:var(--dc-ink-faint, #6E6E76);margin-top:14px"></div>';
       }
-      jobStyleEl.innerHTML=html;
-      if(entered(jobStyleEl,showStyle?'style':'lengths'))stagger(jobStyleEl,'.bgt-card,.lb');
-      jobStyleEl.querySelectorAll('[data-tpl-name]').forEach(b=>b.onclick=e=>{
-        e.preventDefault();
-        /* The server refuses this too. Saying so here means the answer is
-           immediate and names the style, rather than arriving as a 402. */
-        if(b.dataset.tplLocked){
-          const free=(DATA.templates||[]).find(x=>!x.pro);
-          toast(`"${b.dataset.tplName}" is a Pro style${free?` \u2014 ${free.name} is included free`:''}. Any paid plan unlocks the rest.`);
-          return;
-        }
-        /* Through the design's own binding, clash-numbered exactly as its
-           option labels are, so behaviour cannot drift from the hidden select. */
-        const names=(DATA.templates||[]).map(x=>x.name);
-        const t=(DATA.templates||[]).find(x=>x.name===b.dataset.tplName);
-        const i=(DATA.templates||[]).indexOf(t);
-        const clash=names.filter(n=>n===t.name).length>1;
-        StudioAdapter.bindings(DATA).setTpl({target:{value:clash?t.name+' ('+(i+1)+')':t.name},preventDefault(){}});
-      });
-      jobStyleEl.querySelectorAll('[data-band]').forEach(b=>b.onclick=e=>{
-        e.preventDefault();
-        const [lo,hi]=b.dataset.band.split('-').map(Number);
-        /* A legacy single range that matches no preset is not a real chip;
-           the first press replaces it instead of dragging it along as an
-           invisible band that quietly widens the filter. */
-        const presets=bands.filter(x=>LENGTH_BANDS.some(([a,c])=>Number(x[0])===a&&Number(x[1])===c));
-        const base=presets.length?presets:[];
-        let next=base.filter(x=>!(Number(x[0])===lo&&Number(x[1])===hi));
-        if(next.length===base.length)next=[...base,[lo,hi]];
-        if(!next.length)return; /* at least one length stays chosen */
-        next=next.map(x=>[Number(x[0]),Number(x[1])]).sort((a,c)=>a[0]-c[0]);
-        StudioAdapter.onClipSettings({
-          clipMinSeconds:Math.min(...next.map(x=>x[0])),
-          clipMaxSeconds:Math.max(...next.map(x=>x[1])),
-          clipLengthBands:next,
+      if(structural){
+        jobStyleEl.innerHTML=html;
+        if(entered(jobStyleEl,showStyle?'style':'lengths'))stagger(jobStyleEl,'.bgt-card,.lb');
+        jobStyleEl.querySelectorAll('[data-tpl-name]').forEach(b=>b.onclick=e=>{
+          e.preventDefault();
+          /* The server refuses this too. Saying so here means the answer is
+             immediate and names the style, rather than arriving as a 402. */
+          if(b.dataset.tplLocked){
+            const free=(DATA.templates||[]).find(x=>!x.pro);
+            toast(`"${b.dataset.tplName}" is a Pro style${free?` \u2014 ${free.name} is included free`:''}. Any paid plan unlocks the rest.`);
+            return;
+          }
+          /* Through the design's own binding, clash-numbered exactly as its
+             option labels are, so behaviour cannot drift from the hidden select. */
+          const names=(DATA.templates||[]).map(x=>x.name);
+          const t=(DATA.templates||[]).find(x=>x.name===b.dataset.tplName);
+          const i=(DATA.templates||[]).indexOf(t);
+          const clash=names.filter(n=>n===t.name).length>1;
+          StudioAdapter.bindings(DATA).setTpl({target:{value:clash?t.name+' ('+(i+1)+')':t.name},preventDefault(){}});
         });
-      });
-    }
+        jobStyleEl.querySelectorAll('[data-band]').forEach(b=>b.onclick=e=>{
+          e.preventDefault();
+          const [lo,hi]=b.dataset.band.split('-').map(Number);
+          /* A legacy single range that matches no preset is not a real chip;
+             the first press replaces it instead of dragging it along as an
+             invisible band that quietly widens the filter. */
+          const live=(DATA.clipSettings||{}).clipLengthBands;
+          const now=Array.isArray(live)&&live.length?live:bands;
+          const presets=now.filter(x=>LENGTH_BANDS.some(([a,c])=>Number(x[0])===a&&Number(x[1])===c));
+          const base=presets.length?presets:[];
+          let next=base.filter(x=>!(Number(x[0])===lo&&Number(x[1])===hi));
+          if(next.length===base.length)next=[...base,[lo,hi]];
+          if(!next.length)return; /* at least one length stays chosen */
+          next=next.map(x=>[Number(x[0]),Number(x[1])]).sort((a,c)=>a[0]-c[0]);
+          StudioAdapter.onClipSettings({
+            clipMinSeconds:Math.min(...next.map(x=>x[0])),
+            clipMaxSeconds:Math.max(...next.map(x=>x[1])),
+            clipLengthBands:next,
+          });
+        });
 
+      }
+
+      /* Applied on EVERY paint, rebuild or not. Two class lists and one
+         sentence -- the nodes stay, so the stylesheet's own transitions on
+         .lb, .lb-t, .lb-fill and .lb-k are what carry the change, and
+         `lbGrow` is not re-triggered on the bars that did not move. */
+      jobStyleEl.querySelectorAll('[data-tpl-name]').forEach(el=>{
+        el.classList.toggle('on',el.dataset.tplName===active);
+      });
+      jobStyleEl.querySelectorAll('[data-band]').forEach(el=>{
+        const [lo,hi]=el.dataset.band.split('-').map(Number);
+        el.classList.toggle('on',bandOn(lo,hi));
+      });
+      const note=jobStyleEl.querySelector('.lb-note');
+      if(note){
+        const picked=LENGTH_BANDS.filter(([lo,hi])=>bandOn(lo,hi));
+        const text=picked.length
+          ? `Cut between ${Math.min(...picked.map(x=>x[0]))}s and ${Math.max(...picked.map(x=>x[1]))}s \u2014 anything shorter or longer is skipped.`
+          : 'Nothing can be cut until at least one length is allowed.';
+        if(note.textContent!==text)note.textContent=text;
+      }
+    }
     /* The Quran flow's background choice, docked under the kind cards.
        'own' plays the source video as always; 'stock' plays a background
        video for the whole clip; 'intro' opens on the source for a few seconds
@@ -4978,6 +5059,78 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       catch(e){stop();if(note)note.fail('That did not work',e.message);else toast(e.message,'bad');
         StudioAdapter.settled();if(onFail)onFail(e.message);renderAll();recoverFrom(e)}};
 
+    /* WHERE THIS LECTURE POSTS, on the last step.
+       Youssef, 3 Sept 2026: "once you get to the end where it says ready to
+       go ... attach four icons, the YouTube, TikTok, and Instagram and
+       Facebook, and then they can deselect or select depending on each video
+       ... always keep it saved from last goal."
+
+       So Connections is the starting point EVERY time -- this never writes
+       back to it. A tile turned off here narrows this lecture only, and the
+       account's own settings are untouched for the next one. The server
+       intersects rather than substitutes (enabledTargetsForClip), so a
+       platform disconnected between the job starting and a clip posting still
+       cannot be posted to. */
+    const jobDestEl=document.createElement('div');jobDestEl.id='studioJobDest';
+    const DEST_MARKS=[['youtube','YouTube','ph-youtube-logo'],['tiktok','TikTok','ph-tiktok-logo'],
+      ['instagram','Instagram','ph-instagram-logo'],['facebook','Facebook','ph-facebook-logo']];
+    function paintJobDest(vals){
+      alive(jobDestEl);
+      const ui=StudioAdapter.ui;
+      const open=Boolean(ui.job)&&Boolean(vals.jobIsStepReview);
+      jobDestEl.classList.toggle('hide',!open);
+      if(!open){jobDestEl.dataset.sig='';return}
+      const slot=$('#studioJobSlot');
+      if(slot&&jobDestEl.parentElement!==slot)slot.appendChild(jobDestEl);
+      const ps=(DATA&&DATA.publishingSettings)||{};
+      const provs=((DATA&&DATA.social)||{}).providers||{};
+      /* Connected AND switched on in Connections. A platform that is neither
+         is not offered here: a tile that cannot post is a dead control, and
+         the line under the row says where to fix it. */
+      const usable=DEST_MARKS.filter(m=>provs[m[0]]&&provs[m[0]].connected&&ps[m[0]]&&ps[m[0]].enabled);
+      /* Seeded from the account's settings the first time this step is
+         opened for this job, which is what "keep it saved from last goal"
+         means -- not a value carried over from the last lecture. */
+      if(!Array.isArray(ui.jobPublishTo))ui.jobPublishTo=usable.map(m=>m[0]);
+      const chosen=ui.jobPublishTo.filter(k=>usable.some(m=>m[0]===k));
+      const sig=[usable.map(m=>m[0]).join('.'),chosen.join('.')].join('|');
+      if(jobDestEl.dataset.sig===sig)return;
+      jobDestEl.dataset.sig=sig;
+      jobDestEl.style.cssText='display:block;margin:14px 0 0';
+      if(!usable.length){
+        jobDestEl.innerHTML='<div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;'
+          +'color:var(--dc-n-7e7a82, #7E7A82);margin:0 0 8px">Posting to</div>'
+          +'<div style="font-size:12px;line-height:1.6;color:var(--dc-ink-faint, #6E6E76)">'
+          +'Nowhere yet \u2014 connect a channel in Connections and these clips will have somewhere to go. '
+          +'They still get made, reviewed and scheduled.</div>';
+        return;
+      }
+      jobDestEl.innerHTML='<div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;'
+        +'color:var(--dc-n-7e7a82, #7E7A82);margin:0 0 9px">Posting to</div>'
+        +'<div class="jd-row">'
+        +usable.map(m=>{
+          const on=chosen.includes(m[0]);
+          const acc=((provs[m[0]]||{}).accounts||[]).length;
+          return `<button type="button" class="jd${on?' on':''}" data-dest="${m[0]}" `
+            +`aria-pressed="${on?'true':'false'}" title="${esc(m[1])}${acc>1?` \u00b7 ${acc} channels`:''}">`
+            +`<i class="ph ${m[2]}"></i><span>${esc(m[1])}</span>`
+            +`<span class="jd-k">${on?'\u2713':''}</span></button>`;
+        }).join('')
+        +'</div>'
+        +'<div style="margin-top:9px;font-size:11.5px;line-height:1.55;color:var(--dc-ink-faint, #6E6E76)">'
+        +(chosen.length
+          ? 'Just this lecture. Your Connections settings stay as they are.'
+          : 'These clips will be made and reviewed, and posted nowhere.')
+        +'</div>';
+      jobDestEl.querySelectorAll('[data-dest]').forEach(b=>b.onclick=e=>{
+        e.preventDefault();
+        const k=b.dataset.dest;
+        const now=ui.jobPublishTo.filter(x=>x!==k);
+        ui.jobPublishTo=now.length===ui.jobPublishTo.length?[...ui.jobPublishTo,k]:now;
+        paintJobDest(vals);
+      });
+    }
+
     function paintJobBackground(vals){
       alive(jobBgEl);
       const ui=StudioAdapter.ui;
@@ -5014,7 +5167,8 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       const modes=[['own','The lecture itself','The speaker on screen, the whole clip'],
         ['stock','Scenery instead','Their voice over a background video'],
         ['intro','Lecture, then scenery','Opens on the speaker and hands over']];
-      const sig=[mode,ui.jobBgId,ui.jobBgIntro,list.map(b=>b.id).join('.')].join('|');
+      const sig=[mode,ui.jobBgId,ui.jobBgIntro,
+          list.map(b=>[b.id,b.likes,b.dislikes,b.myVote,b.pending?'p':'',b.shared?'s':''].join('')).join('.')].join('|');
       if(jobBgEl.dataset.sig!==sig){
         jobBgEl.dataset.sig=sig;
         jobBgEl.style.cssText='display:block;margin:0 0 12px';
@@ -5042,7 +5196,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
              first (badged), the account's own after, Upload last. Posters are
              single server-made jpg frames -- the browser never loads a video
              to paint this row. Shared entries never leave the row empty. */
-          const ordered=[...list.filter(b=>b.shared),...list.filter(b=>!b.shared)];
+          const canReview=['owner','admin'].includes(String((DATA.user&&DATA.user.role)||'').toLowerCase());
+          /* Anything waiting leads: for the uploader it is the answer to
+             "what happened to my video", and for the operator it is the
+             queue itself. */
+          const ordered=[...list.filter(b=>b.pending),...list.filter(b=>b.shared),...list.filter(b=>!b.shared&&!b.pending)];
           const card=(b)=>{
             const on=ui.jobBgId===b.id;
             const del=(b.deletable!==undefined?b.deletable:b.own);
@@ -5051,12 +5209,29 @@ function studioWanted(){return window.STUDIO_SHELL===true}
                no preview yet" instead of saying nothing. */
             const posterCss=b.posterUrl?`background-image:url('${esc(withPw(b.posterUrl))}')`:'display:flex;align-items:center;justify-content:center';
             const posterBody=b.posterUrl?'':'<i class="ph ph-film-strip" style="font-size:20px;color:var(--dc-n-4a4a52, #4A4A52)"></i>';
+            /* Nested <button> is invalid and swallows the outer click, so the
+               votes and the verdict are role="button" spans -- the same device
+               .bgt-del already uses. */
+            const vote=(v,glyph,count)=>`<span role="button" class="bgv${b.myVote===v?' on':''}" data-bg-vote="${esc(b.id)}" data-bg-v="${v}" `
+              +`title="${v>0?'Good background':'Not a good background'}"><i class="ph ph-${glyph}"></i>${count||''}</span>`;
             return `<button type="button" class="bgt-card${on?' on':''}" data-bg-id="${esc(b.id)}" title="${esc(b.name)} \u00B7 ${Math.round(b.durationSec)}s">`
               +`<span class="bgt-thumb" style="${posterCss}">${posterBody}`
               +(b.shared?'<span class="bgt-badge">DeenClipped</span>':'')
+              +(b.pending?'<span class="bgt-badge bgt-wait">In review</span>':'')
               +(del?`<span role="button" class="bgt-del" data-bg-del="${esc(b.id)}" title="Delete">\u00D7</span>`:'')
               +'</span>'
-              +`<span class="bgt-name">${esc(b.name)}</span></button>`;
+              +`<span class="bgt-name">${esc(b.name)}</span>`
+              /* Who contributed it. Shared and pending entries only -- on a
+                 private upload it would be your own name on your own video. */
+              +(b.by?`<span class="bgt-by">by ${esc(b.by)}</span>`:'')
+              +(b.shared?`<span class="bgt-votes">${vote(1,'thumbs-up',b.likes)}${vote(-1,'thumbs-down',b.dislikes)}</span>`:'')
+              +(b.pending&&canReview?'<span class="bgt-votes">'
+                +`<span role="button" class="bgv ok" data-bg-review="${esc(b.id)}" data-bg-ok="1" title="Publish to every account">Approve</span>`
+                +`<span role="button" class="bgv no" data-bg-review="${esc(b.id)}" data-bg-ok="" title="Leave it as this account's own">Decline</span>`
+                +'</span>':'')
+              +(b.pending&&!canReview?'<span class="bgt-by">Waiting on review</span>':'')
+              +(b.rejected&&b.mine?'<span class="bgt-by">Kept private \u2014 not published</span>':'')
+              +'</button>';
           };
           html+='<div class="bgt-row" style="margin-top:10px">'
             +`<button type="button" class="bgt-card${!ui.jobBgId?' on':''}" data-bg-id="" title="A different background each lecture">`
@@ -5068,12 +5243,20 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             +'<span class="bgt-name">Upload</span></button>'
             +'<input type="file" accept="video/mp4,video/quicktime,video/webm" data-bg-file style="display:none">'
             +'</div>';
-          /* The operator curates the stock set: their uploads can go into
-             every account's library, marked with a star in the picker. */
-          if(['owner','admin'].includes(String((DATA.user&&DATA.user.role)||'').toLowerCase())){
-            html+='<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font:400 11.5px Outfit,Inter,sans-serif;color:var(--dc-ink-soft, #A2A2AA);cursor:pointer">'
-              +`<input type="checkbox" data-bg-shared ${ui.jobBgShared?'checked':''} style="accent-color:var(--dc-gold, #D9B478)">`
-              +'Add to DeenClipped library \u2726 \u2014 every account sees it</label>';
+          /* Anybody may contribute to the stock set. The operator publishes
+             theirs outright; everybody else's is held until it has been
+             watched -- and the rule is stated HERE, before the upload, rather
+             than delivered as a refusal afterwards. */
+          {
+            html+='<label style="display:flex;align-items:flex-start;gap:7px;margin-top:10px;font:400 11.5px Outfit,Inter,sans-serif;color:var(--dc-ink-soft, #A2A2AA);cursor:pointer;max-width:64ch">'
+              +`<input type="checkbox" data-bg-shared ${ui.jobBgShared?'checked':''} style="accent-color:var(--dc-gold, #D9B478);margin-top:1px">`
+              +'<span>Add to DeenClipped library \u2726 \u2014 '
+              +(canReview
+                ? 'every account sees it, straight away.'
+                : 'offer it to every account. We watch it first.')
+              +'<span style="display:block;margin-top:3px;color:var(--dc-ink-faint, #6E6E76)">'
+              +'Scenery, or a speaker covered appropriately. No women, no music video, nothing immodest '
+              +'and nothing that would be wrong to play under a reminder.</span></span></label>';
           }
           if(!list.length)html+='<div style="font:400 11px Outfit,Inter,sans-serif;color:var(--dc-ink-dim, #8B8B93);margin-top:7px">Upload a scenery loop to use as the background \u2014 nature, rain, the Kaaba. Shuffle picks one per lecture.</div>';
         }
@@ -5087,6 +5270,35 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         if(entered(jobBgEl,'picture'))stagger(jobBgEl,'.bg-modes > button');
         jobBgEl.querySelectorAll('[data-bg-mode]').forEach(b=>b.onclick=e=>{e.preventDefault();ui.jobBgMode=b.dataset.bgMode;paintJobBackground(vals)});
         jobBgEl.querySelectorAll('[data-bg-id]').forEach(b=>b.onclick=e=>{e.preventDefault();ui.jobBgId=b.dataset.bgId;paintJobBackground(vals)});
+        /* stopPropagation on both: these sit INSIDE the card's own button,
+           so without it a vote would also select that background. */
+        jobBgEl.querySelectorAll('[data-bg-vote]').forEach(b=>b.onclick=e=>{
+          e.preventDefault();e.stopPropagation();
+          const id=b.dataset.bgVote,v=Number(b.dataset.bgV);
+          /* Optimistic, like every other switch in this app: a thumb that
+             waits for a round trip before it lights reads as a dead control.
+             studioDo's catch re-renders from the truth if the write fails. */
+          const row=((DATA&&DATA.backgrounds)||[]).find(x=>x.id===id);
+          if(row){
+            const had=row.myVote;
+            if(had===v){row.myVote=0;if(v>0)row.likes--;else row.dislikes--}
+            else{
+              row.myVote=v;
+              if(v>0){row.likes++;if(had<0)row.dislikes--}
+              else{row.dislikes++;if(had>0)row.likes--}
+            }
+            paintJobBackground(vals);
+          }
+          studioDo(()=>api(`/api/backgrounds/${encodeURIComponent(id)}/vote`,{method:'POST',body:JSON.stringify({vote:v})}));
+        });
+        jobBgEl.querySelectorAll('[data-bg-review]').forEach(b=>b.onclick=e=>{
+          e.preventDefault();e.stopPropagation();
+          const approve=Boolean(b.dataset.bgOk);
+          if(!approve&&!confirm('Leave this video as the uploader\u2019s own? It stays theirs \u2014 it just is not published to every account.'))return;
+          studioDo(()=>api(`/api/backgrounds/${encodeURIComponent(b.dataset.bgReview)}/review`,
+            {method:'POST',body:JSON.stringify({approve})}),
+            approve?'Published to the DeenClipped library':'Left as the uploader\u2019s own');
+        });
         jobBgEl.querySelectorAll('[data-bg-del]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();
           if(!confirm('Delete this background video?'))return;
           studioDo(async()=>{await api(`/api/backgrounds/${encodeURIComponent(b.dataset.bgDel)}`,{method:'DELETE'});
@@ -6199,6 +6411,11 @@ StudioAdapter.onProbeSource=async url=>{try{
       body.backgroundMode=StudioAdapter.ui.jobBgMode||'own';
       body.backgroundId=StudioAdapter.ui.jobBgId||'';
       body.introSeconds=StudioAdapter.ui.jobBgIntro||3;
+      /* Where this lecture's clips may post. Sent only when the last step was
+         actually reached and a choice exists -- absent means "whatever
+         Connections says", which is every job started before this and every
+         job the panel was skipped for. */
+      if(Array.isArray(StudioAdapter.ui.jobPublishTo))body.publishTo=StudioAdapter.ui.jobPublishTo;
       const r=await api('/api/videos',{method:'POST',body:JSON.stringify(body)});
       /* /api/videos answers 200 even when it refused the source — the reason is
          per-URL inside results[]. Without this a rejection ("upload a nasheed
@@ -7011,13 +7228,18 @@ StudioAdapter.onProbeSource=async url=>{try{
        The paywall is untouched: the server checks assertWatermarkAllowed on
        each save, so a free account is still refused on the first one and the
        loop stops there. */
-    async function applyToAllTemplates(patch){
-      const list=(DATA&&DATA.templates)||[];
-      for(const tpl of list){
-        await api('/api/templates',{method:'POST',
-          body:JSON.stringify({id:tpl.id, template:Object.assign({},tpl,patch), select:false, rerender:false})});
-      }
-      await refresh();
+    /* One write, to the ACCOUNT. This used to loop over every template and
+       save each one, which reached the templates that existed at the moment
+       the switch was pressed and nothing else -- "it doesn't work by template.
+       It's incorrect." The value lives on the account now and templates.js
+       lays it over every template read, so there is nothing to keep in step,
+       nothing to save, and a template added later inherits it. */
+    async function saveBrand(patch){
+      const out=await api('/api/brand',{method:'POST',body:JSON.stringify(patch)});
+      /* Fold the server's answer straight into the local copy so the panel is
+         right on the very next paint rather than after the state poll. */
+      if(DATA&&out){ if(out.brand)DATA.brand=out.brand; if(out.templates)DATA.templates=out.templates; if(out.selectedTemplate)DATA.selectedTemplate=out.selectedTemplate; }
+      return out;
     }
 
       const paintWatermark=()=>{
@@ -7041,10 +7263,25 @@ StudioAdapter.onProbeSource=async url=>{try{
           // that it is still in the right place.
           if(box.parentNode!==mount||box.previousElementSibling){ mount.insertBefore(box,mount.firstElementChild); }
           const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-          const on=Boolean(String(saved.watermark||'').trim())&&Number(saved.watermarkOpacity)>0;
-          const barOn=Boolean(saved.promoBarEnabled);
-          const barStart=Number(saved.promoBarStartSec)||3;
-          const barSecs=Number(saved.promoBarSeconds)||3;
+          /* Read from the ACCOUNT, never from the selected template. Both
+             switches apply to every template, and the scripture one is exempt
+             from both -- so with it selected the row would read "off" for a
+             setting that is on everywhere else, which is a control that looks
+             broken and is not. A payload without `brand` (an older server, or
+             an account that has never touched either switch) falls back to the
+             template, which is exactly what those values were before. */
+          const brand=(DATA&&DATA.brand)||{};
+          const has=k=>Object.prototype.hasOwnProperty.call(brand,k);
+          const wmText=has('watermark')?brand.watermark:saved.watermark;
+          const wmOp=has('watermarkOpacity')?brand.watermarkOpacity:saved.watermarkOpacity;
+          const on=Boolean(String(wmText||'').trim())&&Number(wmOp)>0;
+          const barOn=Boolean(has('promoBarEnabled')?brand.promoBarEnabled:saved.promoBarEnabled);
+          const barStart=Number(has('promoBarStartSec')?brand.promoBarStartSec:saved.promoBarStartSec)||3;
+          const barSecs=Number(has('promoBarSeconds')?brand.promoBarSeconds:saved.promoBarSeconds)||3;
+          /* Scripture is never covered, and that is not the account's to
+             waive. Said HERE, on the one template it applies to, rather than
+             letting the switches look as though they had no effect. */
+          const isQuran=String(saved.captionMode||'')==='quran';
           /* No border and no background: inside the left column this was the
              only BOXED thing, against Style and Brand which carry 0px border
              and a transparent ground. Measured before changing it -- the row
@@ -7065,7 +7302,7 @@ StudioAdapter.onProbeSource=async url=>{try{
             +'<input type="checkbox" id="dcWmOn"'+(on?' checked':'')+(paid?'':' disabled')
             +' style="width:17px;height:17px;flex:none;accent-color:var(--dc-gold, #D9B478)"></label>'
             +'<div style="margin-top:2px;padding:0 2px;font-size:11.5px;line-height:1.5;color:var(--dc-ink-muted, #75717b)">'
-            +(on?('Every clip carries <b style="color:var(--dc-n-a5a0a8, #A5A0A8)">'+esc(saved.watermark)+'</b>. Position is in Brand below.')
+            +(on?('Every clip carries <b style="color:var(--dc-n-a5a0a8, #A5A0A8)">'+esc(wmText)+'</b>. Position is in Brand below.')
                 :'Clips export clean.')
             +(paid?'':' Removing it is on Pro and Studio.')+'</div>'
             /* THE PROMO BAR, under the watermark because that is where Youssef
@@ -7081,9 +7318,29 @@ StudioAdapter.onProbeSource=async url=>{try{
             +'<input type="checkbox" id="dcPbOn"'+(barOn?' checked':'')
             +' style="width:17px;height:17px;flex:none;accent-color:var(--dc-gold, #D9B478)"></label>'
             +'<div style="margin-top:2px;padding:0 2px;font-size:11.5px;line-height:1.5;color:var(--dc-ink-muted, #75717b)">'
-            +(barOn?('Slides in at '+barStart+'s, holds '+barSecs+'s, then leaves.')
+            +(barOn?('It slides in after the first '+barStart+' seconds, stays for '+barSecs
+                     +' second'+(barSecs===1?'':'s')+', then slides away. Every clip, every template.')
                    :'The DeenClipped bar is not shown.')
-            +'</div>';
+            +'</div>'
+            /* The duration is only a question once the bar is on, so the
+               control appears with it rather than sitting there greyed out. */
+            +(isQuran?('<div style="margin-top:12px;padding:8px 10px;border-radius:8px;'
+              +'background:rgba(217,180,120,.07);border:1px solid rgba(217,180,120,.18);'
+              +'font-size:11.5px;line-height:1.5;color:var(--dc-ink-soft, #A2A2AA)">'
+              +'Nothing is drawn over scripture \u2014 neither of these appears on a recitation clip, '
+              +'whichever way they are set. They apply to every other template.</div>'):'')
+            +(barOn?('<div style="margin-top:10px;padding:0 2px">'
+              +'<div style="font-size:11px;color:var(--dc-ink-faint, #6E6E76);margin-bottom:6px">How long it stays</div>'
+              +'<div id="dcPbSecs" style="display:flex;gap:6px;flex-wrap:wrap">'
+              +[2,3,4,5,6,8].map(function(n){
+                  var sel=barSecs===n;
+                  return '<button type="button" data-pb-secs="'+n+'" style="min-height:28px;padding:0 10px;border-radius:8px;cursor:pointer;'
+                    +'font:600 11.5px Outfit,Inter,sans-serif;'
+                    +'border:1px solid '+(sel?'rgba(240,214,166,.55)':'var(--dc-line, #26262A)')+';'
+                    +'background:'+(sel?'rgba(217,180,120,.14)':'var(--dc-n-131315, #131315)')+';'
+                    +'color:'+(sel?'var(--dc-gold-lit, #F0D6A6)':'var(--dc-ink-dim, #8B8B93)')+'">'+n+'s</button>';
+                }).join('')
+              +'</div></div>'):'');
 
           const bar=document.getElementById('dcPbOn');
           if(bar&&!bar.dataset.wired){
@@ -7093,21 +7350,37 @@ StudioAdapter.onProbeSource=async url=>{try{
                  the new state at once and studioDo puts the truth back if the
                  save is refused. */
               const want=bar.checked;
-              saved.promoBarEnabled=want;
+              if(DATA)DATA.brand={...((DATA&&DATA.brand)||{}),promoBarEnabled:want};
               paintWatermark();
               try{
-                await applyToAllTemplates({promoBarEnabled:want});
-              }catch(e){ toast(e.message,'bad'); saved.promoBarEnabled=!want; paintWatermark(); }
+                await saveBrand({promoBarEnabled:want});
+              }catch(e){ toast(e.message,'bad'); saved.promoBarEnabled=!want; }
               paintWatermark();
             });
           }
+          /* Rewired on every paint: the chips are rebuilt by the innerHTML
+             above, so a `dataset.wired` guard would leave the NEW buttons
+             dead. The switch above can carry one because it survives -- these
+             cannot. */
+          box.querySelectorAll('[data-pb-secs]').forEach(function(btn){
+            btn.onclick=async function(e){
+              e.preventDefault();
+              var n=Number(btn.dataset.pbSecs);
+              var was=barSecs;
+              if(DATA)DATA.brand={...((DATA&&DATA.brand)||{}),promoBarSeconds:n};
+              paintWatermark();
+              try{ await saveBrand({promoBarSeconds:n}); }
+              catch(err){ toast(err.message,'bad'); if(DATA)DATA.brand={...((DATA&&DATA.brand)||{}),promoBarSeconds:was}; }
+              paintWatermark();
+            };
+          });
           const toggle=document.getElementById('dcWmOn');
           if(toggle&&!toggle.dataset.wired){
             toggle.dataset.wired='1';
             toggle.addEventListener('change',async()=>{
               const patch=toggle.checked
-                ? {watermark:(String(saved.watermark||'').trim()||'DEENCLIPPED'),
-                   watermarkOpacity:Number(saved.watermarkOpacity)>0?saved.watermarkOpacity:100}
+                ? {watermark:(String(wmText||'').trim()||'DEENCLIPPED'),
+                   watermarkOpacity:Number(wmOp)>0?wmOp:100}
                 : {watermark:'',watermarkOpacity:0};
               try{
                 /* POST, not PUT: the draft on this screen can carry the id
@@ -7115,7 +7388,7 @@ StudioAdapter.onProbeSource=async url=>{try{
                    And the body is the SAVED template plus the patch — basing
                    it on the draft wrote every unsaved draft field onto the
                    saved one and renamed "Clean Line" to "New Template". */
-                await applyToAllTemplates(patch);
+                await saveBrand(patch);
                 // Repaint from the NEW state. The observer only fires when the
                 // panel is missing, so without this the label kept describing
                 // the value before the change — it read "Off" beside a
@@ -7358,7 +7631,8 @@ StudioAdapter.onProbeSource=async url=>{try{
         templateId:StudioAdapter.ui.jobTplId||'',
         language:(l=>l==='auto'?'':l)(StudioAdapter.ui.jobLang||((StudioAdapter.ui.jobTplId||'')==='quran-recitation'?'ar':'en')),
         backgroundMode:StudioAdapter.ui.jobBgMode||'own',
-        backgroundId:StudioAdapter.ui.jobBgId||'',introSeconds:StudioAdapter.ui.jobBgIntro||3})})},'Upload queued');
+        backgroundId:StudioAdapter.ui.jobBgId||'',introSeconds:StudioAdapter.ui.jobBgIntro||3,
+        ...(Array.isArray(StudioAdapter.ui.jobPublishTo)?{publishTo:StudioAdapter.ui.jobPublishTo}:{})})})},'Upload queued');
     document.body.classList.add('studio-active');
   }
   paintStudio();
@@ -8647,6 +8921,7 @@ function paintStudio(){
   paintHighlight(vals);
   paintJobType(vals);
   paintJobBackground(vals);
+  paintJobDest(vals);
   paintJobMusic(vals);
   paintTemplatesLayout();
   paintHelp();

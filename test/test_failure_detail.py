@@ -20,11 +20,19 @@ produced it:
 These drive the real function with the real banner lines.
 """
 import importlib.util
+import os
 import pathlib
 import sys
+import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+# service.py builds a JobStore at module scope, which mkdirs WORKER_DATA_DIR --
+# `/var/lib/deenclipped` by default. That is fine on the CI runner and refused
+# on a Mac, so importing this module failed there with a bare PermissionError
+# and the whole file vanished from the count. Pointed at a temp directory
+# BEFORE the import, since the value is read once at module load.
+os.environ.setdefault("WORKER_DATA_DIR", tempfile.mkdtemp(prefix="dc-worker-test-"))
 sys.path.insert(0, str(ROOT / "worker"))
 _spec = importlib.util.spec_from_file_location("dc_service", ROOT / "worker" / "service.py")
 service = importlib.util.module_from_spec(_spec)

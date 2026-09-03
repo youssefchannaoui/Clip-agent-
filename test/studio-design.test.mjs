@@ -4026,8 +4026,28 @@ test('the live row spins its glyph, never the tile behind it', () => {
   }
 
   const html = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
-  assert.match(html, /#studioLiveHome \.slh-row > i\.ph-circle-notch,\s*\n#studioLiveBar \.slh-row > i\.ph-circle-notch \{ animation: none; \}/,
-    'the tile is held still');
+  const notch = html.slice(html.indexOf('#studioLiveHome .slh-row > i.ph-circle-notch,'));
+  const rule = notch.slice(0, notch.indexOf('}') + 1);
+  assert.match(rule, /animation: none;/, 'the tile is held still');
+  // v3.111.0: the tile's border and background come OFF behind a spinner --
+  // Youssef, 3 Sept 2026: "Remove that background box because we don't need
+  // it, and just leave the rotating circle." The 32px footprint stays, so
+  // nothing beside it shifts when a job stops spinning, and the glyph grows
+  // into the room the border gave up.
+  assert.match(rule, /border-color: transparent/, 'no box behind the spinner');
+  assert.match(rule, /background: none/, 'and no warm ground either');
+  assert.ok(!/width:/.test(rule), 'the 32px WIDTH stays, so the column does not shift');
+  // Centred by geometry against the TITLE, never by a margin: the spinner and
+  // the title's line box take the same --slh-line and start at the same y, so
+  // their centres coincide by construction. Measured 7px out before, 0 after.
+  assert.match(rule, /height: var\(--slh-line\)/, 'the spinner is the title\'s line tall');
+  assert.match(rule, /margin-top: 0/, 'and the boxed tile\'s 1px nudge is dropped');
+  assert.match(html, /\.slh-row \{ --slh-line:/, 'the token is declared on the row');
+  assert.match(html, /\.slh-row \.what b \{[^}]*line-height: var\(--slh-line\)/,
+    'and the title reads the same token, so the two cannot drift');
+  // The size has to beat an INLINE font-size the adapter's iconStyle writes.
+  // This file has now paid for that lesson three times.
+  assert.match(rule, /font-size: 21px !important/, 'the glyph grows into the room the border gave up');
   // v3.87.0: a square 1em box with line-height 1, because an inline-block
   // ::before rotates about the centre of its LINE box -- which for an icon
   // font carries the face's ascent and descent, so the ring turned about a

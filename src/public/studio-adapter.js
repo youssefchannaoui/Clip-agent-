@@ -7960,6 +7960,13 @@
       UI.jobStep = 1;
       UI.generating = false;
       UI.jobUrl = '';
+      // Cleared per job, so the last step ALWAYS opens on the account's own
+      // Connections settings rather than on whatever the previous lecture was
+      // narrowed to. Youssef: "keep it how it is as those settings to begin
+      // with all the time, and then they can change their mind whenever they
+      // post." A per-lecture choice that quietly became the new default would
+      // be a settings change nobody made.
+      UI.jobPublishTo = null;
       // The kind ALWAYS opens on "Islamic lecture" (Goal item 06). It used
       // to inherit the account's selected template, so an account whose
       // default style was the Quran one opened every new lecture pre-set to

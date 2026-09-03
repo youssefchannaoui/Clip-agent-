@@ -73,3 +73,42 @@ test('an isolated click paints without waiting for a frame', () => {
   assert.ok(body.includes('setTimeout(run,80)'),
     'and the timer backstop stays — rAF is suspended in an occluded window');
 });
+
+test('picking a clip length changes two classes, not four cards', () => {
+  // Youssef, 3 Sept 2026, on the length step: "when selecting forty five
+  // seconds, sixty seconds, etcetera, it does a weird, like, refresh. It
+  // should be a lot smoother."
+  //
+  // The signature carried the SELECTION, so every press rebuilt the whole
+  // block through innerHTML. The nodes were replaced, so none of the
+  // transitions the stylesheet declares on .lb / .lb-t / .lb-fill / .lb-k
+  // could run -- and `lbGrow` re-triggered on all four bars at once, which is
+  // what the "refresh" actually was.
+  //
+  // Driven in a browser before and after: with the selection in the signature
+  // all four nodes were replaced on one press (probes GONE); without it the
+  // same press left every node in place and changed two class lists and one
+  // sentence.
+  const at = host.indexOf("const sig=[tplNames.join('.')");
+  assert.ok(at > -1, 'the length/style block has a signature');
+  const sig = host.slice(at, host.indexOf('\n', at));
+  assert.ok(!sig.includes('JSON.stringify(bands)'),
+    'the selection is NOT in the signature, or every press rebuilds the row');
+  assert.ok(!/,active,/.test(sig), 'nor is the chosen template');
+  const body = host.slice(at, at + 6000);
+  assert.ok(/if\(structural\)\{/.test(body), 'the rebuild is guarded');
+  // Applied on every paint, rebuild or not.
+  assert.ok(/classList\.toggle\('on',bandOn\(lo,hi\)\)/.test(body), 'bands are toggled in place');
+  assert.ok(/classList\.toggle\('on',el\.dataset\.tplName===active\)/.test(body), 'so are styles');
+  assert.ok(/\.lb-note/.test(body), 'and the sentence is rewritten rather than rebuilt');
+});
+
+test('the band handler reads the live selection, not the one it was bound with', () => {
+  // With no rebuild the handler outlives the render that created it, so a
+  // closure over `bands` would hold whatever was selected when it was bound
+  // and the second press would undo the first.
+  const at = host.indexOf("[data-band]");
+  const body = host.slice(at, at + 900);
+  assert.ok(/\(DATA\.clipSettings\|\|\{\}\)\.clipLengthBands/.test(body),
+    'it re-reads the current bands at click time');
+});

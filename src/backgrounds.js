@@ -48,10 +48,112 @@ async function probeVideo(file) {
   return { durationSec, hasVideo };
 }
 
+function isOperator(user) {
+  return ['owner', 'admin'].includes(String(user?.role || '').toLowerCase());
+}
+
+/**
+ * What a viewer may see.
+ *
+ * The public set, their own uploads (including one still waiting on review,
+ * so the person who sent it can see what happened to it), and -- for the
+ * operator -- everything waiting, because the picker is where they review it.
+ */
 export function listBackgrounds(user) {
   const userId = user?.id || user || '';
   if (!userId) return [];
-  return loadLibrary().filter(entry => entry.shared || entry.userId === userId);
+  const operator = isOperator(user);
+  return loadLibrary().filter(entry =>
+    entry.shared || entry.userId === userId || (operator && entry.pendingShare));
+}
+
+/**
+ * The shape the browser gets. Vote TOTALS travel, never who cast them: a
+ * library where everyone can see who disliked your video is a library nobody
+ * submits to twice.
+ */
+export function publicBackground(entry, user) {
+  const userId = user?.id || user || '';
+  const votes = entry.votes && typeof entry.votes === 'object' ? entry.votes : {};
+  const tally = Object.values(votes);
+  return {
+    id: entry.id,
+    name: entry.name,
+    durationSec: entry.durationSec,
+    shared: Boolean(entry.shared),
+    // Only ever true for the uploader and the operator -- listBackgrounds
+    // does not hand a pending entry to anybody else.
+    pending: Boolean(entry.pendingShare),
+    rejected: Boolean(entry.shareRejected),
+    rejectedReason: entry.shareRejectedReason || '',
+    // Attribution belongs to the shared set. On a private upload it would be
+    // the viewer's own name on their own video, which says nothing.
+    by: entry.shared || entry.pendingShare ? (entry.by || '') : '',
+    likes: tally.filter(v => v > 0).length,
+    dislikes: tally.filter(v => v < 0).length,
+    myVote: Number(votes[userId]) || 0,
+    posterUrl: `/api/backgrounds/${encodeURIComponent(entry.id)}/poster`,
+    own: entry.userId === userId && !entry.shared,
+    mine: entry.userId === userId,
+    deletable: entry.userId === userId || (Boolean(entry.shared) && isOperator(user)),
+  };
+}
+
+/**
+ * A like or a dislike on a video in the shared library.
+ *
+ * Only on the SHARED set: a vote on your own private upload is a vote nobody
+ * else can read. One vote per account, stored by id so pressing the same
+ * button again clears it rather than stacking.
+ */
+export function voteBackground(user, id, value) {
+  const userId = user?.id || user || '';
+  if (!userId) throw new Error('Sign in to vote.');
+  const list = loadLibrary();
+  const entry = list.find(item => item.id === id);
+  if (!entry || !entry.shared) return null;
+  const vote = Number(value) > 0 ? 1 : Number(value) < 0 ? -1 : 0;
+  entry.votes = entry.votes && typeof entry.votes === 'object' ? entry.votes : {};
+  // Pressing the button you already chose clears it. Without that the only
+  // way out of a mis-tap is the opposite opinion.
+  if (!vote || entry.votes[userId] === vote) delete entry.votes[userId];
+  else entry.votes[userId] = vote;
+  writeLibrary(list);
+  return publicBackground(entry, user);
+}
+
+/** Everything submitted to the shared library and not yet decided. */
+export function pendingBackgrounds(user) {
+  if (!isOperator(user)) return [];
+  return loadLibrary().filter(entry => entry.pendingShare);
+}
+
+/**
+ * The operator's decision on a submission.
+ *
+ * A refusal does NOT delete the file -- it stays the uploader's own private
+ * background, which is what they had before they offered it. Taking somebody's
+ * video away because it was not right for everybody would be a punishment for
+ * offering.
+ */
+export function reviewBackground(user, id, approve, reason = '') {
+  if (!isOperator(user)) throw new Error('Only the operator reviews submissions.');
+  const list = loadLibrary();
+  const entry = list.find(item => item.id === id && item.pendingShare);
+  if (!entry) return null;
+  entry.pendingShare = false;
+  if (approve) {
+    entry.shared = true;
+    entry.shareRejected = false;
+    entry.shareRejectedReason = '';
+    entry.sharedAt = Date.now();
+  } else {
+    entry.shared = false;
+    entry.shareRejected = true;
+    entry.shareRejectedReason = String(reason || '').slice(0, 200);
+  }
+  writeLibrary(list);
+  return publicBackground(entry, user);
 }
 
 function ownsEntry(entry, userId) {
@@ -61,7 +163,7 @@ function ownsEntry(entry, userId) {
 /** Register a video file already sitting on this disk as a library entry.
  * Owns the file from here: it is renamed into the library on success and
  * removed on failure. */
-export async function registerBackgroundFile(user, name, sourceFile, mimeType = '', { shared = false } = {}) {
+export async function registerBackgroundFile(user, name, sourceFile, mimeType = '', { shared = false, pendingShare = false, by = '' } = {}) {
   const userId = user?.id || user || '';
   if (!userId) throw new Error('Sign in to add background videos.');
   const size = fs.statSync(sourceFile).size;
@@ -104,6 +206,15 @@ export async function registerBackgroundFile(user, name, sourceFile, mimeType = 
     durationSec: probed.durationSec,
     sizeBytes: size,
     addedAt: Date.now(),
+    // Offered to everybody, and waiting on a human. `shared` stays false
+    // until someone has watched it -- the library must never show a video
+    // nobody has seen.
+    pendingShare: Boolean(pendingShare) && !shared,
+    // Captured at upload time rather than looked up per render: the name is
+    // what the card credits, and an account that later changes its display
+    // name has not changed who contributed the video.
+    by: String(by || '').trim().slice(0, 60),
+    votes: {},
   };
   const list = loadLibrary();
   list.push(entry);
@@ -111,7 +222,7 @@ export async function registerBackgroundFile(user, name, sourceFile, mimeType = 
   return entry;
 }
 
-export async function saveBackground(user, name, base64Data, mimeType = '', { shared = false } = {}) {
+export async function saveBackground(user, name, base64Data, mimeType = '', { shared = false, pendingShare = false, by = '' } = {}) {
   const userId = user?.id || user || '';
   if (!userId) throw new Error('Sign in to add background videos.');
   const buffer = Buffer.from(String(base64Data || ''), 'base64');
@@ -119,7 +230,7 @@ export async function saveBackground(user, name, base64Data, mimeType = '', { sh
   if (buffer.length > MAX_BACKGROUND_BYTES) throw new Error('Keep each background video under 120MB — a short loop is all a clip needs.');
   const temp = path.join(backgroundsDir, `incoming-${crypto.randomBytes(6).toString('hex')}`);
   fs.writeFileSync(temp, buffer);
-  return registerBackgroundFile(user, name, temp, mimeType, { shared });
+  return registerBackgroundFile(user, name, temp, mimeType, { shared, pendingShare, by });
 }
 
 /** One poster frame per background, made server-side with ffmpeg so the

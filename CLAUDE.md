@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1247 JS + 590 Python**
+- `npm test` and `npm run check` must pass. Currently **1268 JS + 592 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4297,6 +4297,151 @@ NOTHING said so.
 - **A missing asset is still never an error.** `promo_bar_plan` returns None
   when the file is absent, so a box that has not pulled it renders exactly as
   it did before.
+
+## Six things from one sitting, and three of them were silent (v3.113.0, 3 Sept 2026)
+
+Youssef sent three screenshots and a list. Each item below is one of them.
+
+### Picking a clip length rebuilt all four cards
+
+"when selecting forty five seconds, sixty seconds, etcetera, it does a weird,
+like, refresh."
+
+- The length/style block's signature carried the SELECTION, so every press
+  replaced the whole row through `innerHTML`. The nodes were gone, so not one
+  of the transitions the stylesheet already declares on `.lb`, `.lb-t`,
+  `.lb-fill` and `.lb-k` could run -- and `lbGrow` re-triggered on all four
+  bars at once. The CSS was right all along; it was never given a chance.
+- The signature is STRUCTURE only now (which cards, on which step) and the
+  selection is applied in place on every paint: two class lists and one
+  sentence. **Proven both ways in a browser**: with the selection in the
+  signature one press left all four probes GONE; without it every node
+  survived (`sameNodes: true`) and only the classes and the note changed.
+- **The click handler had to stop trusting its closure.** With no rebuild it
+  outlives the render that bound it, so a closure over `bands` would hold
+  whatever was selected at bind time and the second press would undo the
+  first. It re-reads `DATA.clipSettings.clipLengthBands` at click time.
+- A hidden Browser pane freezes CSS animations at `currentTime: 0`, so the
+  animation-restart question CANNOT be settled by sampling it there -- that
+  reading was flat 0 before and after. Node identity is what settles it.
+
+### The live row's spinner sat in a box, off-centre
+
+"this rounding circle is not centered. Remove that background box because we
+don't need it, and just leave the rotating circle."
+
+- The tile's border and warm ground come off behind a spinner; the 32px WIDTH
+  stays, so nothing beside it shifts when a job stops spinning, and the glyph
+  grows into the room the border gave up.
+- **The size needed `!important`, and only the size.** `iconStyle` writes
+  `font-size: 14px` as an INLINE style, which no stylesheet can outrank --
+  the third time this file has recorded that trap. Measured mid-fix: border
+  and background went transparent while the glyph stayed at 14px. The border
+  and background need no help because the binding does not set them. **When a
+  CSS override provably does not apply, look for an inline style before
+  reaching for `!important` -- and then apply it to that declaration alone.**
+- **Centred by geometry against the TITLE, never by a margin.** `--slh-line`
+  (20px) is the title's line box AND the spinner's height, and the boxed
+  tile's `margin-top: 1px` nudge is dropped, so the two start at the same y
+  and their centres coincide by construction. Measured **7px out before, 0
+  after**.
+
+### The scenery library credits, votes and reviews
+
+"if they add to Deenclipped library, it should give them a couple things on
+the clip itself, which say who imported it ... a like and dislike button ...
+And then it has to go through, um, like, a review process."
+
+- **Anybody may OFFER a video now; only the operator publishes one outright.**
+  A customer's submission is held `pendingShare` and is visible to nobody but
+  them and the operator until it has been watched. The checkbox used to be
+  operator-only, so this is a new door, and the door has a gate.
+- **The content rule is stated BEFORE the upload, not delivered as a refusal
+  afterwards**: scenery, or a speaker covered appropriately; no women, no
+  music video, nothing immodest.
+- **A refusal does not delete the file.** It stays the uploader's own private
+  background -- what they had before they offered it. Taking somebody's video
+  away because it was not right for everybody would be a punishment for
+  offering.
+- **Vote TOTALS travel; who cast them never leaves the server.** A library
+  where everyone can see who disliked your video is one nobody submits to
+  twice. One vote per account, and pressing the same button again clears it --
+  without that the only way out of a mis-tap is the opposite opinion.
+- Votes are on the SHARED set only: a vote on your own private upload is a
+  vote nobody can read. The credit is shown for shared and pending entries
+  only -- on a private one it would be your own name on your own video.
+- The vote and verdict controls are `role="button"` spans with
+  `stopPropagation`, because they sit INSIDE the card's own `<button>`:
+  nested buttons are invalid, and without the guard a vote would also select
+  that background. Verified by clicking -- the count moved and the selection
+  did not.
+
+### Where a lecture posts, chosen on the last step
+
+"attach four icons ... they can deselect or select depending on each video ...
+always keep it saved from last goal."
+
+- **Connections is the starting point EVERY time.** `UI.jobPublishTo` is
+  cleared in `openJob`, so a per-lecture choice never quietly becomes the new
+  default. Verified: turning TikTok off for one lecture, then opening the
+  next, re-seeded both.
+- **The list may only NARROW, never widen.** `enabledTargetsForClip`
+  intersects it with the account's settings, so a destination since
+  disconnected -- or one the plan no longer allows -- cannot come back because
+  a job recorded it days ago. A test asserts naming a switched-off platform
+  reaches nothing.
+- **It lives on the PROJECT, not on every clip.** Clips are minted in five
+  different places (first render, re-cut, import, variants) and a field that
+  must be remembered in five places is one that will be forgotten in one. A
+  clip may still carry its own list, which wins.
+- A platform that is not connected AND enabled is not offered: a tile that
+  cannot post is a dead control (invariant 9). With none, the panel says so
+  and the clips are still made and reviewed.
+- The test reads the builder's own LOG rather than its target list: the
+  fixture holds no credentials, so the list is empty in every case and would
+  prove nothing.
+
+### The watermark and the promo bar belong to the ACCOUNT
+
+"it just works with all templates once on it turns on for all ... it doesn't
+work by template. It's incorrect."
+
+- **v3.107.0 only half-fixed this and he was right to say so.** That release
+  wrote the field to every template in a LOOP, which reached the templates
+  that existed at the moment the switch was pressed and left the value stored
+  per template. `state.userSettings[uid].brand` holds it now and
+  `withAccountEdits` -- the one function every template read already passes
+  through -- lays it over each one. Nothing to keep in step, nothing to save,
+  and a template added later inherits it.
+- **The panel reads the ACCOUNT, not the selected template.** Scripture is
+  exempt from both switches, so with the Quran template selected the row read
+  "off" for a setting that is on everywhere else -- a control that looks
+  broken and is not. It says so in a line on that template instead.
+- **The paywall is the SAME function**, `assertWatermarkAllowed`, called from
+  the new `/api/brand` route: one gate, so removing the mark cannot become
+  free by arriving through a second door. There is no templateId on that
+  route, and `''` never matches a scripture template, so the exemption cannot
+  be claimed from it.
+- `BRAND_FIELDS` is the whole list and a test pins it: a field that reached
+  this setter without being in it would be a template edit wearing a brand
+  switch's clothes -- applied account-wide, with no version bump and no save.
+- **Measured live**: one write, four templates changed, Quran untouched, and
+  no template saved.
+
+### The promo bar eases now, and its duration is the account's
+
+- Cubic ease-OUT in, cubic ease-IN out, over 58px, and the alpha fades are
+  deliberately SHORTER than the travel so the bar is still visibly moving once
+  it is fully opaque. The first version ramped position linearly, which is the
+  motion of something dragged rather than something arriving. Measured on a
+  real render: entry tops at 1663 -> 1622 -> 1610 (decelerating), exit holds
+  1612 at t=7.70 and falls to 1657 at t=7.90.
+- Duration chips (2-8s) appear only once the bar is on, and the sentence says
+  what happens: "It slides in after the first 3 seconds, stays for N seconds,
+  then slides away. Every clip, every template."
+- **The chips are rewired on EVERY paint**, not guarded by `dataset.wired`:
+  they are rebuilt by the innerHTML above them, so a wired flag would leave
+  the new buttons dead. The switch above them survives and can carry one.
 
 ## Open items
 

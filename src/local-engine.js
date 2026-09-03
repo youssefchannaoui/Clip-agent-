@@ -623,6 +623,10 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     // how old it is. Policy III.E.4 gives it 30 days.
     youtubeDataAt: sourceMeta ? Date.now() : null,
     backgroundMode, backgroundId: background?.id || null, backgroundName: background?.name || null, introSeconds,
+    // Where this lecture's clips may post. Null means "wherever Connections
+    // says", which is every lecture submitted before this existed. A list only
+    // ever NARROWS the account's settings -- see enabledTargetsForClip.
+    publishTo: Array.isArray(options.publishTo) ? options.publishTo.map(String) : null,
     sourceKind: options.sourceKind || 'link', originalFileName: options.originalFileName || null,
     uploadedInputFile: options.uploadedInputFile || null, sourceObjectKey: options.sourceKind === 'object_storage' ? value : null,
   }, user.id);

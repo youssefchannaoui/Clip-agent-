@@ -453,13 +453,52 @@ class PromoBarTests(unittest.TestCase):
                 {"promoBarEnabled": True, "promoBarStartSec": 3, "promoBarSeconds": 3}, 40.0)
         g = cw.promo_bar_graph(plan, 2, 1080, 1920)
         self.assertIn("fade=in:st=3.000", g)
-        self.assertIn("fade=out:st=5.550", g)          # ease before the end, not after it
+        # The fade ends BEFORE the end of the clip's window, not after it.
+        self.assertIn("fade=out:st=5.6", g)
         self.assertIn("enable='between(t,3.000,6.000)'", g)
         # It SLIDES as well as fades: the y expression has to move with t.
         self.assertIn("overlay=x=(W-w)/2:y='", g)
-        self.assertIn(f"{cw.PROMO_BAR_MOVE}*(1-min(1", g)
+        self.assertIn(f"{cw.PROMO_BAR_MOVE}*(1-(1-pow(", g)
         # rgba, or the transparent artwork composites as a black slab.
         self.assertIn("format=rgba", g)
+
+    def test_the_travel_is_eased_rather_than_linear(self):
+        """A straight ramp is the motion of something dragged, not arriving.
+
+        Youssef, 3 Sept 2026: "Change the animation. Animation is pretty nice,
+        but we can make it better."
+
+        The entrance is a cubic ease-OUT and the exit a cubic ease-IN, so the
+        bar covers most of its travel immediately and settles, then hangs
+        before dropping away. Measured on a real render at 25fps: entry tops
+        at y 1663 -> 1622 -> 1610 over three frames (decelerating), and the
+        exit holds 1612 at t=7.70 before falling to 1657 at t=7.90.
+
+        The fades are deliberately SHORTER than the travel, so the bar is
+        still visibly moving once it is fully opaque.
+        """
+        with self._present():
+            plan = cw.promo_bar_plan(
+                {"promoBarEnabled": True, "promoBarStartSec": 3, "promoBarSeconds": 5}, 40.0)
+        g = cw.promo_bar_graph(plan, 2, 1080, 1920)
+        self.assertIn("pow(1-min(1,max(0,(t-3.000)/", g)   # ease-out on the way in
+        self.assertIn("),3))", g)                          # cubic, both ends
+        self.assertNotIn(f"{cw.PROMO_BAR_MOVE}*(1-min(1", g)  # the old linear ramp is gone
+        fade_in = float(g.split("fade=in:st=3.000:d=")[1].split(":")[0])
+        self.assertLess(fade_in, cw.PROMO_BAR_EASE)
+
+    def test_the_duration_is_the_accounts_to_choose(self):
+        """"once ticked on, you can then change duration of how long you want
+        it" -- the hold is a stored number, not a constant."""
+        for secs in (2, 5, 8):
+            with self._present():
+                plan = cw.promo_bar_plan(
+                    {"promoBarEnabled": True, "promoBarStartSec": 3, "promoBarSeconds": secs}, 60.0)
+            self.assertEqual(plan["end"] - plan["start"], float(secs))
+            # Neither end of the animation may eat more than half the hold, or
+            # a short bar would be one continuous movement with no rest.
+            g = cw.promo_bar_graph(plan, 2, 1080, 1920)
+            self.assertIn(f"enable='between(t,3.000,{3 + secs:.3f})'", g)
 
     def test_the_bar_is_composited_after_the_draft_rescale(self):
         # A bar sized for a final would be unreadable if it were scaled down
