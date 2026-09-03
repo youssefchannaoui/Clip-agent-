@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1163 JS + 548 Python**
+- `npm test` and `npm run check` must pass. Currently **1174 JS + 548 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3611,6 +3611,68 @@ Measured rather than guessed, and it was two faults stacked:
   panel open, and THAT was never the problem -- worth remembering before
   optimising the renderer. The latency was all waiting.
 
+## Sign-up: a robot box, and a six-digit code (v3.100.0, 3 Sept 2026)
+
+Youssef: "when signing up to an account firstfly add cloudflare are you a robot
+box, also see how this pops up after email log in add verifcation so this
+doesnt pop up so we send them a 6 digit code to their email."
+
+### The dialog was right and its TIMING was wrong
+
+"Your email address is not confirmed yet, so imports are blocked" arrived after
+signing up, after picking a lecture, after seven steps of the wizard, at the
+press of Start. Nothing was broken -- the confirmation simply happened NOWHERE
+until it happened in the way. A new account now goes to `/verify` instead of
+the app and types a code while it is still thinking about its email address.
+
+- **The code and the link are one record.** `createVerification` returns
+  `{ raw, code }`, both stored hashed, so confirming either way consumes the
+  other and a code cannot be replayed after the link was used. The link stays
+  for whoever opens the mail on a different device from the one they signed up
+  on, and `/auth/verify` is untouched.
+- **Six digits is a million guesses, so the record allows SIX attempts** and
+  then is spent -- the real code stops working too, which is the half that
+  makes the limit mean anything. Resending mints a new one, which is the door a
+  real person uses. The route is throttled on top of that, per address and IP.
+- **The lookup is scoped to ONE user.** Searching every pending record for
+  matching digits would let a guesser hit every open sign-up at once instead of
+  one account's six.
+- `% 1000000` on a random 32-bit number is very slightly biased towards low
+  codes. Rejection sampling costs one loop and removes the argument.
+- The mail LEADS with the code, including in the subject, because that is what
+  a phone shows on the lock screen -- and `verificationMessage(link)` with no
+  code still sends the old mail, so nothing written before this breaks.
+
+### The robot box
+
+- **Inert without keys**, deliberately: an unconfigured deployment signs people
+  up exactly as it did rather than rendering a box that cannot load and locking
+  everybody out. That is also what keeps the suite honest -- it creates dozens
+  of accounts and none can solve a challenge.
+- **It FAILS CLOSED once configured.** A challenge that cannot be checked has
+  not been passed; an outage at Cloudflare is a bad hour, an open door is
+  worse. Proven against a rejecting fetch, a `success:false` body and a
+  `success:true` body.
+- **Checked BEFORE the password is hashed.** Hashing is deliberately expensive,
+  and letting an unsolved challenge reach it hands out a cheap way to burn the
+  CPU.
+- **The CSP admits `challenges.cloudflare.com` on `/login` ONLY**, and only
+  when the keys are set. Widening script-src app-wide for a widget on one form
+  would spend the strictness that makes the policy worth having. A blocked
+  third-party script fails SILENTLY -- the widget renders nothing, the form has
+  no answer to send, and every sign-up is refused -- so the scoping has a test.
+- `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET` on Render arm it. Both are
+  trimmed: a credential pasted into that field picks up a trailing newline
+  routinely.
+
+**Driven end to end against the real Cloudflare siteverify**, using their
+always-passes test keys: a sign-up with no answer was refused, one with an
+answer created the account and redirected to `/verify` rather than `/app`, the
+widget rendered under the live CSP, and a wrong code came back with its error
+on the page. The right-code path is proven by test rather than in the browser
+-- the code only exists inside the email, and the mail provider is not
+configured here.
+
 ## The renderer reads the lecture, not the clip (v3.101.0, 3 Sept 2026)
 
 v3.77.1 rebuilt the Quran matcher around one idea -- recitation runs in order,
@@ -3678,6 +3740,7 @@ next step and it is not done" since.
   lectures processed from now on. Clips already rendered keep the captions they
   have. **Not yet seen on a real recitation** -- the proof here is the matcher
   and the ASS file, not a frame; the confirmation costs one Quran import.
+
 
 ## Open items
 

@@ -69,11 +69,12 @@ export async function send({ to, subject, text, html }) {
   }
 }
 
-const shell = (title, body, action, actionUrl) => `<!doctype html><html><body style="margin:0;background:#0B0B0D;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#E9E9ED">
+const shell = (title, body, action, actionUrl, extraHtml = '') => `<!doctype html><html><body style="margin:0;background:#0B0B0D;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#E9E9ED">
 <div style="max-width:520px;margin:0 auto;padding:32px 24px">
   <div style="font:600 15px/1 system-ui;color:#F0D6A6;letter-spacing:-.01em;margin-bottom:26px">DeenClipped</div>
   <h1 style="margin:0 0 14px;font-size:21px;font-weight:600;letter-spacing:-.02em;color:#F6F6F8">${title}</h1>
   <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#BCBCC3">${body}</p>
+  ${extraHtml}
   <a href="${actionUrl}" style="display:inline-block;padding:11px 18px;border-radius:9px;background:#D9B478;color:#141109;font-weight:600;font-size:14px;text-decoration:none">${action}</a>
   <p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#6E6E76">If you did not ask for this, you can ignore it and nothing will change.</p>
 </div></body></html>`;
@@ -216,15 +217,27 @@ export function passwordResetMessage(link) {
   };
 }
 
-export function verificationMessage(link) {
+export function verificationMessage(link, code = '') {
+  // The CODE leads, because that is what the sign-up screen is asking for: the
+  // person is sitting in front of it right now. The link stays for whoever
+  // opens the mail on a different device from the one they signed up on.
+  const digits = String(code || '').replace(/\D/g, '');
+  const codeText = digits ? `Your code is ${digits}\n\nType it into the tab you signed up in.\n\nOr open this link instead:\n` : '';
+  const codeHtml = digits
+    ? `<p style="margin:0 0 8px;color:#6E6E76;font:600 12px/1.4 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase">Your code</p>
+       <p style="margin:0 0 24px;font:700 34px/1.1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.22em;color:#F0D6A6">${digits}</p>`
+    : '';
   return {
-    subject: 'Confirm your DeenClipped address',
-    text: `Confirm your email address to finish setting up DeenClipped:\n\n${link}\n\nThe link works once and expires in 24 hours. If you did not ask for this, ignore it.`,
+    subject: digits ? `${digits} is your DeenClipped code` : 'Confirm your DeenClipped address',
+    text: `${codeText}${link}\n\nEither one works once and expires in 24 hours. If you did not ask for this, ignore it.`,
     html: shell(
       'Confirm your address',
-      'One click and your workspace is ready. This link works once and expires in 24 hours.',
+      digits
+        ? 'Type this code into the tab you signed up in. It works once and expires in 24 hours.'
+        : 'One click and your workspace is ready. This link works once and expires in 24 hours.',
       'Confirm my address',
       link,
+      codeHtml,
     ),
   };
 }

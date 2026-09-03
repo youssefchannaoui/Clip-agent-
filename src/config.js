@@ -126,6 +126,14 @@ export const config = {
    * one, with a 400 that says nothing about why.
    */
   pushNotifsEnabled: boolean(process.env.PUSH_NOTIFS, true),
+  // Cloudflare Turnstile — the "are you a robot" box on sign-up. Both are
+  // trimmed: a credential pasted into Render's variable field picks up a
+  // trailing newline routinely, and the resulting failure is indistinguishable
+  // from the wrong key entirely. With neither set the check is INERT, so a
+  // deployment that has not configured it signs people up exactly as before
+  // rather than locking everybody out of a box that cannot render.
+  turnstileSiteKey: String(process.env.TURNSTILE_SITE_KEY || '').trim(),
+  turnstileSecret: String(process.env.TURNSTILE_SECRET || '').trim(),
   vapidPublicKey: (process.env.VAPID_PUBLIC_KEY || '').trim(),
   vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY || '').trim(),
   vapidSubject: (process.env.VAPID_SUBJECT || 'mailto:support@deenclipped.online').trim(),
