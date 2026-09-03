@@ -121,6 +121,19 @@ const DEFAULTS = Object.freeze({
   watermarkPosition: 'top-center',
   watermarkMarginV: 90,
   watermarkMarginH: 48,
+  // THE PROMO BAR: the brand call-out that slides in over the video, sits for a
+  // few seconds and leaves. Youssef, 3 Sept 2026, with the artwork: "add this
+  // under watermark ... it comes in the video after 3 seconds then for 3
+  // seconds it stays on the video then goes, add animation in and animation
+  // out as well."
+  //
+  // OFF by default, and that is deliberate: it burns a brand bar into a
+  // customer's clip, which is a decision only they get to make. The watermark
+  // above is different -- it is the free plan's price and is gated by
+  // assertWatermarkAllowed; this is a choice.
+  promoBarEnabled: false,
+  promoBarStartSec: 3,
+  promoBarSeconds: 3,
   brandLineEnabled: false,
   brandLineColor: '#D9B478',
   brandLineHeight: 8,
@@ -184,6 +197,9 @@ export const NUMBER_RANGES = {
   captionStackProbability: [0, 1], captionClearPause: [0.15, 2], captionLineHeight: [0.65, 1.4],
   hookDuration: [0.5, 8], hookFontSize: [24, 120], hookBackgroundOpacity: [0, 100],
   watermarkFontSize: [12, 90], watermarkOpacity: [0, 100], watermarkMarginV: [10, 500], watermarkMarginH: [10, 500],
+  // A bar that starts after the clip has ended shows nothing, and one that
+  // never leaves is a permanent banner rather than a call-out.
+  promoBarStartSec: [0, 60], promoBarSeconds: [1, 30],
   brandLineHeight: [2, 30],
 };
 
@@ -263,7 +279,7 @@ export function sanitiseTemplate(input = {}, { id = '', builtIn = false, userId 
   for (const key of ['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']) {
     output[key] = cleanColor(source[key], DEFAULTS[key]);
   }
-  for (const key of ['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation', 'captionBehindSubject']) {
+  for (const key of ['captionUppercase', 'brandLineEnabled', 'promoBarEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation', 'captionBehindSubject']) {
     output[key] = Boolean(source[key]);
   }
   // Opening title cards are intentionally disabled. Clips begin immediately with spoken captions.
@@ -308,7 +324,7 @@ export const CLIP_STYLE_FIELDS = Object.freeze([
   ...Object.keys(NUMBER_RANGES).filter(key => key !== 'width' && key !== 'height'),
   'frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline', 'captionBackground',
   'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor',
-  'captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation',
+  'captionUppercase', 'brandLineEnabled', 'promoBarEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation',
   'captionBehindSubject',
   'captionFont', 'captionHighlightFont', 'captionArabicFont', 'watermark',
 ]);
@@ -333,7 +349,7 @@ export const FRAMING_FIELDS = Object.freeze([
 const CLIP_STYLE_FIELD_SET = new Set(CLIP_STYLE_FIELDS);
 const COLOUR_FIELDS = new Set(['frameBackground', 'captionPrimary', 'captionHighlight', 'captionOutline',
   'captionBackground', 'hookColor', 'hookBackground', 'watermarkColor', 'brandLineColor']);
-const BOOLEAN_FIELDS = new Set(['captionUppercase', 'brandLineEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation', 'captionBehindSubject']);
+const BOOLEAN_FIELDS = new Set(['captionUppercase', 'brandLineEnabled', 'promoBarEnabled', 'voiceEnhance', 'smartFramingEnabled', 'captionHighlightItalic', 'captionTranslation', 'captionBehindSubject']);
 
 /**
  * Validate a partial style patch for a single clip.

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1204 JS + 575 Python**
+- `npm test` and `npm run check` must pass. Currently **1204 JS + 581 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4132,6 +4132,37 @@ separate frames now -- and must not be trusted over a render.
 The overflow risk of a 24% bigger line was checked rather than assumed: the
 ayah Dialogue already carries `{\q0}` (clip_worker.py:2579), so a longer line
 wraps instead of running off both edges -- invariant 8 holds.
+
+## The promo bar: a brand call-out that comes and goes (v3.106.0, 3 Sept 2026)
+
+Youssef, with the artwork: "add this under watermark ... it comes in the video
+after 3 seconds then for 3 seconds it stays on the video then goes, add
+animation in and animation out as well."
+
+- **`promoBarEnabled` is OFF by default and carries no plan gate.** It burns a
+  brand bar into a customer's clip, which is their decision. The watermark
+  above it in the same panel is the opposite -- it is the free plan's price and
+  `assertWatermarkAllowed` enforces it. Two switches side by side that look
+  alike and mean different things, so the difference is written here.
+- **A missing asset makes it inert, never an error.** `promo_bar_plan` returns
+  None when `worker/assets/promo-bar.png` is absent, so an account with the
+  switch on and no artwork installed renders exactly as before instead of
+  losing every clip to a failing overlay.
+- **A short clip brings the bar forward rather than dropping it.** A start of
+  3s on a 2s clip would otherwise show nothing at all; it is clamped back so
+  the brand still appears.
+- **It is composited AFTER the draft rescale**, and its input is appended after
+  every other, so no existing ffmpeg input index moves. A bar sized for a final
+  would be unreadable if it were scaled down with the frame to draft size, and
+  a bar added before the rescale would be.
+- **Animation is fade AND slide, at both ends**: `fade=…:alpha=1` for the
+  opacity and a `t`-dependent `y` expression on the overlay for 46px of travel.
+  `format=rgba` first, or transparent artwork composites as a black slab.
+- **`promoBarEnabled` had to be added to THREE separate boolean lists** in
+  templates.js (the coercion loop, the field list and `BOOLEAN_FIELDS`).
+  Missing any one of them drops the field silently: it reads back `undefined`
+  and the switch looks broken while every number beside it saves fine. That is
+  how it presented on the first attempt.
 
 ## Open items
 

@@ -6990,6 +6990,9 @@ StudioAdapter.onProbeSource=async url=>{try{
           if(box.parentNode!==mount||box.previousElementSibling){ mount.insertBefore(box,mount.firstElementChild); }
           const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
           const on=Boolean(String(saved.watermark||'').trim())&&Number(saved.watermarkOpacity)>0;
+          const barOn=Boolean(saved.promoBarEnabled);
+          const barStart=Number(saved.promoBarStartSec)||3;
+          const barSecs=Number(saved.promoBarSeconds)||3;
           /* No border and no background: inside the left column this was the
              only BOXED thing, against Style and Brand which carry 0px border
              and a transparent ground. Measured before changing it -- the row
@@ -7012,8 +7015,42 @@ StudioAdapter.onProbeSource=async url=>{try{
             +'<div style="margin-top:2px;padding:0 2px;font-size:11.5px;line-height:1.5;color:var(--dc-ink-muted, #75717b)">'
             +(on?('Every clip carries <b style="color:var(--dc-n-a5a0a8, #A5A0A8)">'+esc(saved.watermark)+'</b>. Position is in Brand below.')
                 :'Clips export clean.')
-            +(paid?'':' Removing it is on Pro and Studio.')+'</div>';
+            +(paid?'':' Removing it is on Pro and Studio.')+'</div>'
+            /* THE PROMO BAR, under the watermark because that is where Youssef
+               asked for it and because they are the same kind of decision: what
+               this app puts on top of your video. Unlike the watermark it is
+               NOT a paywall -- it is off by default and switching it on is the
+               customer's choice, so no plan gate. */
+            +'<div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;'
+            +'text-transform:uppercase;color:var(--dc-n-7e7a82, #7E7A82);margin:16px 0 10px">Promo bar</div>'
+            +'<label style="display:flex;align-items:center;justify-content:space-between;gap:12px;'
+            +'min-height:34px;padding:0 2px;cursor:pointer">'
+            +'<span style="font-size:13px;color:var(--dc-n-c9c4bd, #C9C4BD)">Show promo bar</span>'
+            +'<input type="checkbox" id="dcPbOn"'+(barOn?' checked':'')
+            +' style="width:17px;height:17px;flex:none;accent-color:var(--dc-gold, #D9B478)"></label>'
+            +'<div style="margin-top:2px;padding:0 2px;font-size:11.5px;line-height:1.5;color:var(--dc-ink-muted, #75717b)">'
+            +(barOn?('Slides in at '+barStart+'s, holds '+barSecs+'s, then leaves.')
+                   :'The DeenClipped bar is not shown.')
+            +'</div>';
 
+          const bar=document.getElementById('dcPbOn');
+          if(bar&&!bar.dataset.wired){
+            bar.dataset.wired='1';
+            bar.addEventListener('change',async()=>{
+              /* Optimistic, like every other switch in this app: the row shows
+                 the new state at once and studioDo puts the truth back if the
+                 save is refused. */
+              const want=bar.checked;
+              saved.promoBarEnabled=want;
+              paintWatermark();
+              try{
+                await api('/api/templates',{method:'POST',body:JSON.stringify({
+                  id:saved.id, template:{...saved, promoBarEnabled:want}, select:false, rerender:false})});
+                await refresh();
+              }catch(e){ toast(e.message,'bad'); saved.promoBarEnabled=!want; paintWatermark(); }
+              paintWatermark();
+            });
+          }
           const toggle=document.getElementById('dcWmOn');
           if(toggle&&!toggle.dataset.wired){
             toggle.dataset.wired='1';
