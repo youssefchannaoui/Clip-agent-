@@ -2351,6 +2351,27 @@ package.json.
   cannot come back red proves nothing, and one that cannot come back green
   blocks the branch.
 
+### A MERGE can fail the version guard while both sides bumped correctly
+
+Hit on 3 Sept 2026 and it will happen again every time these two sessions
+merge, so it is written down rather than re-diagnosed.
+
+`758f25f` -- a merge, no hand-written code in it at all -- failed with
+*"version stayed at 3.101.0 / changed: src/auth.js, src/config.js,
+src/mailer.js, src/server.js"*. Both sides HAD bumped: mine to 3.101.0, theirs
+to 3.100.0. The guard diffs against the FIRST parent, and because my side
+already held the higher number the merge kept 3.101.0 -- unchanged against my
+parent -- while pulling in four of their `src/` files. Their `src/` diff, no
+version movement, red branch.
+
+**The rule: when you merge and YOUR side already had the higher version, bump
+again ON the merge commit.** When theirs is higher the merge moves the number
+by itself and there is nothing to do -- which is exactly why the next merge
+that day (`deb2191`, resolving to their 3.101.1) went green without anyone
+touching it. A merge is not exempt from the release rule just because it wrote
+no code; the guard is asking what this commit ships, and a merge ships
+everything on the other side.
+
 ### The merge trap that produced that commit in the first place
 
 `git merge` printed the conflicts, `tail -6` cut the list short, and the
