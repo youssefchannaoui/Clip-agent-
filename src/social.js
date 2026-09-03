@@ -410,11 +410,52 @@ async function connectMeta(code, userId) {
   save(); log(`Connected ${accounts.length} Meta Page${accounts.length === 1 ? '' : 's'} for Facebook/Instagram publishing, and switched them on.`, 'info', userId);
 }
 
+/**
+ * What the configured TikTok credentials LOOK like -- never what they are.
+ *
+ * The same device as billing's webhookSecretNote(), and for the same reason: a
+ * pair TikTok rejects produces "Client key or secret is incorrect" and nothing
+ * else, which is unactionable. Three different mistakes make that one message
+ * -- the production key where the sandbox one belongs, only one of the two
+ * updated, or a value pasted with whitespace -- and none can be told from
+ * another without knowing the shape of what was sent.
+ *
+ * The client KEY is safe to name in full: it travels in the OAuth URL, so it
+ * is already on screen in the address bar every time anyone presses Connect.
+ * The SECRET is never described beyond its length.
+ *
+ * TikTok issues SANDBOX keys with an `sbaw` prefix and production keys with
+ * `aw`. That is a convention rather than a documented guarantee, so this
+ * REPORTS the prefix and never refuses on it.
+ */
+export function tiktokCredentialNote() {
+  const rawKey = String(process.env.TIKTOK_CLIENT_KEY || '');
+  const rawSecret = String(process.env.TIKTOK_CLIENT_SECRET || '');
+  const key = rawKey.trim();
+  const secret = rawSecret.trim();
+  if (!key || !secret) {
+    return `TIKTOK_CLIENT_KEY is ${key ? 'set' : 'NOT SET'} and TIKTOK_CLIENT_SECRET is ${secret ? 'set' : 'NOT SET'} on this deployment.`;
+  }
+  const notes = [`the client key in use is "${key}"`, `the secret is ${secret.length} characters`];
+  if (key.startsWith('sbaw')) notes.push('the key looks like a SANDBOX key, so the secret must be the sandbox one too');
+  else if (key.startsWith('aw')) notes.push('the key looks like a PRODUCTION key -- if you meant to use the sandbox, this is the wrong one');
+  if (rawKey !== key || rawSecret !== secret) notes.push('one of them was pasted with stray whitespace, which this build trims');
+  return `Check the pair: ${notes.join('; ')}.`;
+}
+
 async function connectTikTok(code, userId) {
   const token = await jsonRequest(`${config.tiktokApiBase}/v2/oauth/token/`, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cache-Control': 'no-cache' },
     body: new URLSearchParams({ client_key: config.tiktokClientKey, client_secret: config.tiktokClientSecret, code, grant_type: 'authorization_code', redirect_uri: redirectUri('tiktok') }),
-  }, 'TikTok');
+  }, 'TikTok').catch(error => {
+    // Only when TikTok has actually blamed the credentials. Appending the note
+    // to an unrelated failure -- a network blip, a used code -- would send
+    // somebody to the Render dashboard for a problem that is not there.
+    if (/client key or secret|invalid_client|client_key/i.test(String(error?.message || ''))) {
+      throw new SocialError(`${error.message} ${tiktokCredentialNote()}`, { provider: 'tiktok' });
+    }
+    throw error;
+  });
   // Never carry an absent token into the next call. Without this the failure
   // surfaces one request later as a 401 about the token, which sends you looking
   // at the wrong thing entirely.

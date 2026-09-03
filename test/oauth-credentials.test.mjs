@@ -103,3 +103,50 @@ test('a failed connection is written to the activity feed, against the account',
   assert.match(entry.message, /Client key or secret is incorrect|invalid_client/,
     'carrying the platform’s own reason, not a generic "connection failed"');
 });
+
+/*
+ * "check is there something wrong with sandbox?" -- 3 Sept 2026, after the
+ * trim fix went live at 10:14 and the connect still failed at 10:18.
+ *
+ * So whitespace was not it, and "Client key or secret is incorrect" is
+ * TikTok's OWN wording passed through verbatim -- not our translation. Three
+ * different mistakes produce that one sentence and it distinguishes none of
+ * them. TikTok's portal also MASKS the sandbox key and secret behind an eye
+ * icon, so copying a hidden field is an easy way to land here.
+ *
+ * The note names the client key outright, because it is not a secret: it
+ * travels in the OAuth URL and is on screen in the address bar every time
+ * anyone presses Connect. The secret is never described beyond its length.
+ */
+test('a rejected pair says which key is actually in use', async () => {
+  const social = await import('../src/social.js');
+  const note = social.tiktokCredentialNote();
+  assert.match(note, /sandbox-key-123/, 'the client key is named -- it is public, and it is the whole question');
+  assert.match(note, /18 characters/, 'the secret is described by length alone');
+  assert.ok(!note.includes('sandbox-secret-456'), 'and never by value');
+});
+
+test('the note tells a production key from a sandbox one', async () => {
+  const social = await import('../src/social.js');
+  const original = process.env.TIKTOK_CLIENT_KEY;
+  try {
+    // TikTok prefixes sandbox keys sbaw and production keys aw. Reported,
+    // never enforced: it is a convention, not a documented guarantee.
+    process.env.TIKTOK_CLIENT_KEY = 'awtestproductionkey';
+    assert.match(social.tiktokCredentialNote(), /PRODUCTION key/i);
+    process.env.TIKTOK_CLIENT_KEY = 'sbawtestsandboxkey';
+    assert.match(social.tiktokCredentialNote(), /SANDBOX key/i);
+  } finally { process.env.TIKTOK_CLIENT_KEY = original; }
+});
+
+test('an unrelated TikTok failure is not blamed on the credentials', async () => {
+  const social = await import('../src/social.js');
+  const source = fs.readFileSync(new URL('../src/social.js', import.meta.url), 'utf8');
+  const at = source.indexOf('async function connectTikTok');
+  const guard = source.slice(at, at + 1400);
+  assert.match(guard, /client key or secret\|invalid_client\|client_key/i,
+    'the note is appended only when TikTok blamed the credentials');
+  assert.match(guard, /throw error;/,
+    'anything else is re-thrown untouched, so a network blip does not send anyone to Render');
+  assert.ok(typeof social.tiktokCredentialNote === 'function');
+});

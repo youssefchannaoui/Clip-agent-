@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1305 JS + 592 Python**
+- `npm test` and `npm run check` must pass. Currently **1308 JS + 592 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -6982,3 +6982,30 @@ untouched, so the redirect and its toast are unchanged.
 catch that re-throws without logging. The credential test reads each
 DECLARATION rather than grepping the file for `.trim()`, because the
 neighbouring Stripe block is full of them and would have passed regardless.
+
+### And the trim was NOT the cause (v3.115.1, same day)
+
+The fix went live at 10:14 and the connect failed again at 10:18 with the same
+sentence, which settles it: whitespace was one way to produce that error and
+not the one that happened. Worth keeping anyway -- it removed the single cause
+the code could remove on its own.
+
+**"Client key or secret is incorrect" is TIKTOK'S OWN WORDING**, passed through
+`jsonRequest` verbatim; this repo does not translate it. So TikTok looked at
+the pair and rejected it. Three mistakes produce that one sentence -- the
+production key where the sandbox one belongs, only one of the two updated, or
+a masked value copied out of the portal (**TikTok hides the sandbox key and
+secret behind an eye icon**, which is the trap most likely to have been hit) --
+and the message distinguishes none of them.
+
+`tiktokCredentialNote()` is appended to the error when, and only when, TikTok
+blamed the credentials. It is billing's `webhookSecretNote()` device applied to
+OAuth, with one deliberate difference: **the client KEY is named in full**,
+because it is not a secret -- it travels in the OAuth URL and is on screen in
+the address bar every time anyone presses Connect. The SECRET is never
+described beyond its length. It reports the `sbaw` / `aw` prefix TikTok uses
+for sandbox and production keys, and never refuses on it: that is a convention,
+not a documented guarantee.
+
+**So "is the client key the app is sending the sandbox one?" is now answered by
+reading the error**, rather than by trusting that a paste worked.
