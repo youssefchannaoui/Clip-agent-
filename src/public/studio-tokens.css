@@ -638,3 +638,110 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
   background: #121214 !important;
   border-color: #26262A;
 }
+
+/* ============================================================================
+   The task ladder's rail card.
+   ==========================================================================
+
+   Youssef, 3 Sept 2026, from a screenshot of another app's nav: "this is a
+   great idea for new users also you can add that new user one so then 5 steps
+   then add tasks like upload your first 3 clips finish 1 week finish 1 month
+   and etc and they can earn tokens with it as well."
+
+   It fills the rail's OWN empty footer card rather than adding an element.
+   That div has always been in the design export, painting its border and
+   padding around nothing, and `#dcRail > div:empty` above hides it for exactly
+   that reason -- "the card returns the moment it has something to say". This
+   is the something. So the card costs no design re-import and cannot be
+   renumbered away by one. */
+
+/* THE COLLAPSE CONTROL IS ABSOLUTELY POSITIONED OVER THIS SLOT, and that is
+   the collision that killed the plan badge in v3.73.1. Measured at 1440x950:
+   the footer slot occupies y 873..934 and the collapse row y 906..938, so a
+   card dropped straight in lands underneath it. The nav above has slack and
+   does not scroll, so reserving the row's height below the slot pulls the
+   whole thing up clear of it. Scoped with :has() so it applies only while the
+   card is actually in there -- an empty slot is hidden and must not push the
+   rail around. */
+#dcRail > div:has(> #dcTaskCard) { margin-bottom: 46px; }
+
+#dcTaskCard {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  padding: 0; border: 0; background: transparent; cursor: pointer;
+  text-align: left; color: inherit; font: inherit;
+}
+#dcTaskCard:hover .dctk-title { color: #F0D6A6; }
+
+/* The ring. A conic gradient under a punched-out middle -- no SVG, so it
+   themes with everything else and there is nothing for a re-import to touch.
+   --p is the percentage, written by the host. */
+.dctk-ring {
+  position: relative; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: conic-gradient(#D9B478 calc(var(--p, 0) * 1%), #26262A 0);
+}
+.dctk-ring::before {
+  content: ""; position: absolute; inset: 3.5px; border-radius: 50%; background: #121214;
+}
+.dctk-ring b {
+  position: relative; font-size: 9px; font-weight: 800; letter-spacing: -.02em;
+  color: #D9B478; font-variant-numeric: tabular-nums;
+}
+
+.dctk-copy { min-width: 0; flex: 1; }
+.dctk-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dctk-title {
+  flex: 0 1 auto; font-size: 12px; font-weight: 700; color: #E9E9ED;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dctk-note {
+  display: block; margin-top: 2px; font-size: 10px; color: #8B8B93;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dctk-go { flex: 0 0 auto; color: #6E6E76; font-size: 13px; }
+
+/* Tokens waiting to be counted. Only ever drawn when there is something to
+   count -- a "0" here would be a badge that means nothing. */
+.dctk-earn {
+  flex: 0 0 auto; padding: 1px 6px; border-radius: 999px;
+  background: rgba(217,180,120,.14); color: #D9B478;
+  font-size: 9px; font-weight: 800; letter-spacing: .03em;
+}
+
+/* Collapsed to 68px there is no room for words. NEITHER THE BODY NOR THE RAIL
+   GAINS A CLASS WHEN THE RAIL COLLAPSES -- measured, both keep the same
+   className at 228px and at 68px -- so there is nothing in the DOM for CSS to
+   key on and the host stamps `is-tight` from the rail's measured width. */
+#dcTaskCard.is-tight .dctk-copy, #dcTaskCard.is-tight .dctk-go { display: none; }
+#dcTaskCard.is-tight { justify-content: center; }
+
+/* The panel behind it. Reuses the connections dialog's card, backdrop and
+   Escape handling rather than inventing a second modal language. */
+#dcTasks .dctk-row {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: start; gap: 12px; padding: 13px 2px;
+  border-top: 1px solid #1E1E22;
+}
+#dcTasks .dctk-row:first-of-type { border-top: 0; }
+#dcTasks .dctk-tick {
+  width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid #26262A; color: #6E6E76; font-size: 13px; font-weight: 800;
+  line-height: 1; margin-top: 1px;
+}
+#dcTasks .dctk-row.is-done .dctk-tick {
+  border-color: rgba(217,180,120,.5); background: rgba(217,180,120,.13); color: #D9B478;
+}
+#dcTasks .dctk-row strong { display: block; font-size: 13px; color: #E9E9ED; }
+#dcTasks .dctk-row.is-done strong { color: #BCBCC3; }
+#dcTasks .dctk-row span { display: block; margin-top: 3px; font-size: 11px; color: #8B8B93; line-height: 1.45; }
+#dcTasks .dctk-bar {
+  margin-top: 7px; height: 3px; border-radius: 999px; background: #1E1E22; overflow: hidden;
+}
+#dcTasks .dctk-bar i { display: block; height: 100%; border-radius: 999px; background: #D9B478; }
+#dcTasks .dctk-prize {
+  flex: 0 0 auto; padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid #26262A; color: #8B8B93; font-size: 10px; font-weight: 700;
+}
+#dcTasks .dctk-row.is-done .dctk-prize {
+  border-color: rgba(217,180,120,.4); background: rgba(217,180,120,.12); color: #D9B478;
+}

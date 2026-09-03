@@ -604,6 +604,12 @@
       h('div', { class: 'dcm-menu' }, [
         themeRow(),
         each('m.nav', 'it', [row({ on: { click: 'it.go' } }, [phb('it.icon'), h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('it.label')])]), iff('it.count', [h('span', { class: 'dcm-count' }, [tx('it.count')])]), svg(I.next, { width: '15', height: '15' })])]),
+        /* The task ladder. Opens the SAME host dialog the rail card opens --
+           the desktop dialogs already work on the phone (Account settings goes
+           through this exact road), so there is one panel rather than a second
+           phone-shaped copy of it to keep in step. Drawn only while the ladder
+           has something left to say. */
+        iff('m.tasksOn', [row({ on: { click: 'm.openTasks' } }, [ph('ph ph-target'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Your tasks'), h('i', {}, [tx('m.tasksNote')])]), svg(I.next, { width: '15', height: '15' })])]),
         row({ on: { click: 'm.openConnections' } }, [ph('ph ph-plugs-connected'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Publishing connections'), h('i', {}, [tx('connSummary')])]), svg(I.next, { width: '15', height: '15' })]),
         row({ on: { click: 'm.goTokens' } }, [ph('ph-fill ph-coins'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Tokens & billing'), h('i', {}, [tx('tokenBalance'), ' tokens · ', tx('currentPlan')])]), svg(I.next, { width: '15', height: '15' })]),
         row({ on: { click: 'm.accountSettings' } }, [ph('ph ph-user-circle'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Account settings')]), svg(I.next, { width: '15', height: '15' })]),
@@ -1192,6 +1198,17 @@
     m.nav = m.nav.map(function (it) { return Object.assign({}, it, { go: closeThen(it.click) }); });
     m.goTokens = closeThen(vals.goTokens);
     m.accountSettings = closeThen(vals.accountSettings);
+    /* Computed server-side (onboarding.tasks) and read straight off the
+       payload, exactly as the rail card reads it -- the ladder's first three
+       rungs are the journey's own steps and there must be one place that
+       decides them. */
+    var ladder = (DATA && DATA.tasks) || null;
+    m.tasksOn = Boolean(ladder && ladder.total && ladder.done < ladder.total);
+    m.tasksNote = ladder
+      ? ladder.done + ' of ' + ladder.total + ' done'
+        + (ladder.unclaimed > 0 ? ' \u00b7 ' + ladder.unclaimed + ' tokens waiting' : '')
+      : '';
+    m.openTasks = closeThen(function () { if (global.openTasks) global.openTasks(); });
     m.startTour = closeThen(vals.startTour);
     m.signOut = closeThen(vals.signOut);
     var q = String(ui.query || '').trim().toLowerCase();

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1204 JS + 581 Python**
+- `npm test` and `npm run check` must pass. Currently **1223 JS + 581 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -5998,3 +5998,109 @@ the dock topmost by real hit-test over the tour AND over a dialog, four cards
 inside the viewport, the phone dock clearing the floating tab bar with no
 overflow, dismiss by click, hover pausing the countdown, and the dock surviving
 three consecutive `paintStudio()` calls as the same node.
+
+## The task ladder, and the tokens it pays (v3.108.0, 3 Sept 2026)
+
+Youssef sent a screenshot of another app's nav -- a "Complete setup / 20%"
+card above the account row -- and said: "this is a great idea for new users
+also you can add that new user one so then 5 steps then add tasks like upload
+your first 3 clips finish 1 week finish 1 month and etc and they can earn
+tokens with it as well."
+
+### The risk was never the feature, it was the SECOND ANSWER
+
+v3.96.0 retired a five-step "Getting set up" checklist for sitting directly
+above the Create -> Review -> Publish strip and telling one person two
+different things about where they were. A ladder that recomputed "have they
+imported yet" walks straight back into that.
+
+So **the ladder's first three rungs ARE the journey's three steps, read off the
+same `journey()` call** rather than derived again. `test/task-ladder.test.mjs`
+drives four different account shapes and asserts the two agree rung for step;
+it was proven RED against a version that counted projects itself.
+
+Everything past those three continues from the same records -- `clip.postedAt`
+and nothing else -- so the whole thing stays derived and retroactive like the
+rest of `onboarding.js`. Seven rungs: import, approve, post, post three, post
+ten, seven different days, thirty different days.
+
+- **Distinct DAYS, never a consecutive streak.** A streak breaks on one missed
+  day, and this product posts on a schedule the customer chose -- so a streak
+  would punish somebody for picking four windows a day over eight, or for a
+  platform being down. Distinct days only ever go up. Thirty clips posted on
+  ONE day ticks the count rungs and not the day rungs, and a test says so.
+- **Progress is capped at the target**: 40 posted clips reads "30 of 30", never
+  "40 of 30".
+
+### The money
+
+`config.taskReward*`, five amounts, **150 tokens for the whole ladder, once per
+account, ever**. Pro monthly is A$29 for 650 tokens, so a customer who works
+all of it earns about 23% of one month spread over the thirty separate posting
+days the last rung needs. `TASK_REWARDS_ENABLED=false` turns it off without a
+deploy and every amount has its own env var.
+
+- **The first two rungs pay NOTHING, deliberately.** Importing already spends
+  tokens (paying for it is a partial refund wearing a reward badge) and
+  approving is one click. The ladder starts paying when something ships.
+- **It cannot be farmed.** Every rung is keyed and granted once through
+  `billing.grantBonusTokens`, which refuses a key it has honoured; importing
+  costs more than any rung pays; and the two largest rungs need ten posted
+  clips across thirty different days on a real connected channel.
+- **TWO RECORDS, on purpose.** `billing.processedBonusGrants` makes the money
+  idempotent and is the authority; `user.taskRewards` is what the SCREEN reads
+  so a card can say "earned" without reaching into billing's internals. A test
+  deletes the display record and asserts the grant is still refused.
+- **Settled inside the /api/state builder**, which every open tab polls. Cheap
+  (the ladder counts clips the payload already loads) and safe to run
+  constantly (the grant refuses repeats), and the tokens land the moment they
+  are earned rather than up to ten minutes later in `agent.tick()`. A test
+  polls three times and asserts the balance does not move.
+- **An operator is never paid**, because an operator cannot be: `isUnlimited`
+  makes the grant a no-op, so settling for one would write a ledger row on
+  every poll for tokens that mean nothing.
+- **It is RETROACTIVE and that is the deliberate launch.** An account that
+  posted ten clips before this shipped is paid for them on its next poll. At
+  eight accounts that is a few hundred tokens, and a ladder that opened with
+  five rungs already ticked and nothing paid would read as having missed out.
+
+### The rail card fills the rail's OWN empty footer div
+
+That div has been in the design export all along, painting its border and
+padding around nothing -- which is why studio-tokens.css hides it with
+`#dcRail > div:empty` and the comment says "the card returns the moment it has
+something to say". This is the something, so it cost no design re-import and a
+re-import cannot renumber it away. Found by being EMPTY, never by a class.
+
+- **THE COLLAPSE CONTROL IS ABSOLUTELY POSITIONED OVER THAT SLOT.** Measured at
+  1440x950: the footer slot is y 873..934 and the collapse row y 906..938, so
+  the first cut landed the card directly underneath it -- the identical
+  collision that removed the plan badge in v3.73.1. The slot reserves the row's
+  height (`#dcRail > div:has(> #dcTaskCard) { margin-bottom: 46px }`), scoped
+  with `:has()` so an empty slot still pushes nothing around. Measured after:
+  the card clears it.
+- **Neither the body nor the rail gains a class when the rail collapses** --
+  measured, both keep the same className at 228px and at 68px. Reading the
+  rail's WIDTH does not work either: it animates over 180ms, so the paint that
+  collapses it measures the OPEN width. The host stamps `is-tight` from
+  `StudioAdapter.ui.railOpen`, which is the answer at render time.
+- **The card disappears at 100%.** The slot goes back to being empty and
+  `:empty` hides it again -- a finished account is not shown a permanent badge.
+- "Complete setup" only while the setup half is genuinely unfinished; after
+  that it reads "Your tasks", because an established account working the later
+  rungs is not setting anything up.
+- The ring is a conic gradient with a punched-out middle, no SVG.
+
+### One panel, both surfaces
+
+The rail card and the phone's More-sheet row open the SAME host dialog, which
+reuses the connections dialog's card, backdrop, close button and Escape
+handling. The phone row shows "3 of 7 done · 15 tokens waiting" and is drawn
+only while the ladder has something left to say. The phone never recomputes
+anything -- a test fails if a rung's rule appears in either surface's source,
+because the copy belongs to `onboarding.js` alone.
+
+Driven in a browser at 1440x950 (night and daylight) and 390x844: card, panel,
+seven rows with their counts and prizes, the collapsed rail showing the ring
+alone, the card surviving three consecutive `paintStudio()` calls as the same
+node, and zero page errors.

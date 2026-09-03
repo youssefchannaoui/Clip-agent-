@@ -81,6 +81,37 @@ export const config = {
   referralBonusPaid: Math.max(0, number(process.env.REFERRAL_BONUS_PAID, 50)),
 
   /*
+   * The task ladder's rewards, in source minutes.
+   *
+   * Youssef, 3 Sept 2026, on the setup card: "add tasks like upload your first
+   * 3 clips finish 1 week finish 1 month and etc and they can earn tokens with
+   * it as well." That is the decision the zeroes above were waiting for, so
+   * these ship non-zero -- but the amounts below are a PROPOSAL and the env
+   * still wins, so they can be tuned without a deploy.
+   *
+   * The whole ladder is 150 tokens, once per account, ever. Pro monthly is
+   * A$29 for 650 tokens, so a customer who works through all of it earns about
+   * 23% of one month -- spread over the thirty separate posting days the last
+   * rung needs, which is months of real use.
+   *
+   * It cannot be farmed. Every rung is keyed and granted once (billing's
+   * processedBonusGrants refuses a repeat), importing a lecture COSTS more
+   * than any rung pays, and the two largest rungs need ten posted clips across
+   * thirty different days on a real connected channel. A throwaway account
+   * cannot reach them.
+   *
+   * The first two rungs pay NOTHING deliberately: importing already spends
+   * tokens and approving is one click. The ladder starts paying at the moment
+   * something of the customer's actually shipped.
+   */
+  taskRewardsEnabled: boolean(process.env.TASK_REWARDS_ENABLED, true),
+  taskRewardPublish: Math.max(0, number(process.env.TASK_REWARD_PUBLISH, 10)),
+  taskRewardThree: Math.max(0, number(process.env.TASK_REWARD_THREE, 15)),
+  taskRewardTen: Math.max(0, number(process.env.TASK_REWARD_TEN, 25)),
+  taskRewardWeek: Math.max(0, number(process.env.TASK_REWARD_WEEK, 40)),
+  taskRewardMonth: Math.max(0, number(process.env.TASK_REWARD_MONTH, 60)),
+
+  /*
    * The invite discount.
    *
    * The percentage lives in STRIPE, not here: a Stripe coupon carries the

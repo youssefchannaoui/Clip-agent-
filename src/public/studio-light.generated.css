@@ -581,9 +581,29 @@ body.dc-light #dcLibStats .dc-libx-again > i{color:#62626B}
 body.dc-light #dcLibStats .dc-libx-again strong{color:#141418}
 body.dc-light #dcLibStats .dc-libx-again > span > span{color:#86868F}
 body.dc-light [data-dc-week].dc-week-tall > div:first-child{background:linear-gradient(#ECECEE 78%, rgba(14,14,17,0))}
+body.dc-light #dcTaskCard:hover .dctk-title{color:#7E5B18}
+body.dc-light .dctk-ring{background:conic-gradient(#A2762C calc(var(--p, 0) * 1%), #D4D4DA 0)}
+body.dc-light .dctk-ring::before{background:#FFFFFF}
+body.dc-light .dctk-ring b{color:#A2762C}
+body.dc-light .dctk-title{color:#1D1D22}
+body.dc-light .dctk-note{color:#62626B}
+body.dc-light .dctk-go{color:#86868F}
+body.dc-light .dctk-earn{background:rgba(162, 118, 44, 0.161);color:#A2762C}
+body.dc-light #dcTasks .dctk-row{border-top:1px solid #E2E2E6}
+body.dc-light #dcTasks .dctk-tick{border:1px solid #D4D4DA;color:#86868F}
+body.dc-light #dcTasks .dctk-row.is-done .dctk-tick{border-color:rgba(162, 118, 44, 0.575);background:rgba(162, 118, 44, 0.149);color:#A2762C}
+body.dc-light #dcTasks .dctk-row strong{color:#1D1D22}
+body.dc-light #dcTasks .dctk-row.is-done strong{color:#33333A}
+body.dc-light #dcTasks .dctk-row span{color:#62626B}
+body.dc-light #dcTasks .dctk-bar{background:#E2E2E6}
+body.dc-light #dcTasks .dctk-bar i{background:#A2762C}
+body.dc-light #dcTasks .dctk-prize{border:1px solid #D4D4DA;color:#62626B}
+body.dc-light #dcTasks .dctk-row.is-done .dctk-prize{border-color:rgba(162, 118, 44, 0.460);background:rgba(162, 118, 44, 0.138);color:#A2762C}
 body.dc-light #dcRailNav a[style*="#D9B478"]::before{background:linear-gradient(#A2762C,#7E5B18)}
 body.dc-light #dcRailBrand{background-image:linear-gradient(115deg,transparent 42%,rgba(162, 118, 44, 0.115) 50%,transparent 58%)}
 body.dc-light [data-dc-sched-card]:hover{box-shadow:0 14px 32px rgba(58, 44, 20, 0.180)}
 body.dc-light #studio :focus-visible,body.dc-light #studioConn :focus-visible,body.dc-light #dcHelp :focus-visible{outline:2px solid #A2762C}
 body.dc-light .dc-arrive{background:#F1F1F1}
 body.dc-light .dc-arrive svg{stroke:#A2762C}
+body.dc-light body.dc-firstrun #studio [data-tour="paste"]{border-color:rgba(162, 118, 44, 0.632);box-shadow:0 0 0 4px rgba(162, 118, 44, 0.081)}
+body.dc-light body.dc-firstrun #studio [data-tour="paste"] ~ button:first-of-type{border-color:#A2762C;background:#A2762C;color:#ECECEE}

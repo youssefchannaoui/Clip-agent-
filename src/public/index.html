@@ -624,8 +624,8 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
    positioning rule of its own and rendered flush at the top-left with no
    backdrop -- it looked like part of the page. Each dialog declaring its own
    copy is how the fourth one gets missed. */
-#studioAccount, #studioBug { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
-#studioAccount.hide, #studioBug.hide { display: none; }
+#studioAccount, #studioBug, #dcTasks { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
+#studioAccount.hide, #studioBug.hide, #dcTasks.hide { display: none; }
 .studio-acct-card { width: min(520px, 100%); }
 #studioAcctBody { display: flex; flex-direction: column; gap: 14px; }
 /* who you are */
@@ -2064,6 +2064,22 @@ select:focus{outline:none;border-color:var(--blue)}
       <button type="button" class="studio-conn-x" data-acct-close aria-label="Close">&times;</button>
     </div>
     <div id="studioAcctBody"></div>
+  </div>
+</div>
+
+<!-- The task ladder. Reuses the connections dialog's card, backdrop, close
+     button and Escape handling rather than inventing a second modal language. -->
+<div id="dcTasks" class="hide" role="dialog" aria-modal="true" aria-label="Your tasks">
+  <div class="studio-conn-backdrop" data-tasks-close></div>
+  <div class="studio-conn-card studio-acct-card">
+    <div class="studio-conn-head">
+      <div>
+        <strong>Your tasks</strong>
+        <span id="dcTasksSub"></span>
+      </div>
+      <button type="button" class="studio-conn-x" data-tasks-close aria-label="Close">&times;</button>
+    </div>
+    <div id="dcTasksBody"></div>
   </div>
 </div>
 
@@ -7531,6 +7547,119 @@ function paintPlanChip(cur){
   if(chip.title!==title)chip.title=title;
 }
 
+/* ============================================================================
+   The task ladder: a progress card in the rail, and the panel behind it.
+   ==========================================================================
+
+   Youssef, 3 Sept 2026, from a screenshot of another app's nav: "this is a
+   great idea for new users also you can add that new user one so then 5 steps
+   then add tasks like upload your first 3 clips finish 1 week finish 1 month
+   and etc and they can earn tokens with it as well."
+
+   It fills the rail's OWN empty footer card. That div is in the design export
+   and has always painted its border and padding around nothing -- which is why
+   studio-tokens.css hides it with `#dcRail > div:empty` and says "the card
+   returns the moment it has something to say". So this needs no design
+   re-import and a re-import cannot renumber it away.
+
+   Everything drawn here is computed SERVER-side (onboarding.tasks), including
+   the percentage, because the ladder's first three rungs are the journey's own
+   three steps and there must be exactly one place that decides them. */
+function taskLadder(){ return (DATA&&DATA.tasks)||null; }
+
+function railFooterSlot(){
+  const rail=document.getElementById('dcRail');
+  if(!rail)return null;
+  const mine=document.getElementById('dcTaskCard');
+  if(mine&&mine.parentNode&&rail.contains(mine))return mine.parentNode;
+  /* The one direct child that paints a card around nothing. Found by being
+     EMPTY rather than by a class name -- every class in the rail is generated
+     and renumbers on a design re-import. */
+  for(const kid of rail.children){
+    if(kid.tagName==='DIV'&&!kid.children.length&&!String(kid.textContent||'').trim())return kid;
+  }
+  return null;
+}
+
+function paintTaskCard(){
+  const rows=taskLadder();
+  const slot=railFooterSlot();
+  if(!slot)return;
+  /* Nothing to say once every rung is done. The card then goes back to being
+     the empty div it was, and `:empty` hides it again -- an account that has
+     finished the ladder is not shown a permanent 100% badge. */
+  if(!rows||!rows.list||!rows.list.length||rows.done>=rows.total){ slot.innerHTML=''; return; }
+  const next=rows.next||{};
+  /* "Complete setup" only while the setup half is genuinely unfinished. An
+     established account working through the later rungs is not setting
+     anything up, and telling it so would be wrong rather than merely odd. */
+  const title=rows.setupDone?'Your tasks':'Complete setup';
+  const note=esc(next.title||'');
+  const earn=Number(rows.unclaimed||0);
+  const html='<button type="button" id="dcTaskCard" title="'+esc(title)+' \u2014 '+rows.done+' of '+rows.total+' done">'
+    +'<span class="dctk-ring" style="--p:'+Math.max(0,Math.min(100,Number(rows.percent)||0))+'"><b>'+(Number(rows.percent)||0)+'%</b></span>'
+    +'<span class="dctk-copy"><span class="dctk-head"><span class="dctk-title">'+esc(title)+'</span>'
+    +(earn>0?'<span class="dctk-earn">+'+earn+'</span>':'')+'</span>'
+    +'<span class="dctk-note">'+note+'</span></span>'
+    +'<span class="dctk-go">\u203a</span></button>';
+  if(slot.innerHTML!==html)slot.innerHTML=html;
+  /* Collapsed, the rail is 68px and there is no room for words -- and nothing
+     in the DOM says so: the body and the rail keep the same className at both
+     widths (measured). Reading the rail's WIDTH here does not work either,
+     because it animates over 180ms and this paint happens at the start of that
+     transition, so it measures 228 on the render that collapses it. The
+     adapter's own railOpen flag is the answer at the moment of the render
+     rather than 180ms later. */
+  const card=document.getElementById('dcTaskCard');
+  const open=StudioAdapter.ui.railOpen&&(window.innerWidth||1280)>820;
+  if(card)card.classList.toggle('is-tight',!open);
+}
+
+function paintTasksPanel(){
+  const root=document.getElementById('dcTasks');
+  if(!root||root.classList.contains('hide'))return;
+  const rows=taskLadder();
+  const body=document.getElementById('dcTasksBody');
+  const sub=document.getElementById('dcTasksSub');
+  if(!rows||!body)return;
+  if(sub)sub.textContent=rows.done+' of '+rows.total+' done'+(rows.earned>0?' \u00b7 '+rows.earned+' tokens earned':'');
+  body.innerHTML=rows.list.map(task=>{
+    const bar=task.progress&&task.progress.of
+      ? '<div class="dctk-bar"><i style="width:'+Math.round((task.progress.at/task.progress.of)*100)+'%"></i></div>'
+      : '';
+    const count=task.progress?' \u00b7 '+task.progress.at+' of '+task.progress.of:'';
+    /* A reward is drawn only where there is one. Two rungs pay nothing on
+       purpose, and "+0 tokens" beside them would read as a fault. */
+    const prize=task.reward>0
+      ? '<span class="dctk-prize">'+(task.paidAt?'+':'')+task.reward+' tokens</span>'
+      : '<span></span>';
+    return '<div class="dctk-row'+(task.done?' is-done':'')+'" data-task="'+esc(task.id)+'">'
+      +'<span class="dctk-tick">'+(task.done?'\u2713':'')+'</span>'
+      +'<div><strong>'+esc(task.title)+'</strong><span>'+esc(task.note)+esc(count)+'</span>'+bar+'</div>'
+      +prize+'</div>';
+  }).join('');
+}
+
+function openTasks(){
+  const root=document.getElementById('dcTasks');
+  if(!root)return;
+  root.classList.remove('hide');
+  paintTasksPanel();
+}
+function closeTasks(){
+  const root=document.getElementById('dcTasks');
+  if(root)root.classList.add('hide');
+}
+window.openTasks=openTasks;
+
+document.addEventListener('click',event=>{
+  if(event.target.closest&&event.target.closest('#dcTaskCard')){ openTasks(); return; }
+  if(event.target.closest&&event.target.closest('[data-tasks-close]'))closeTasks();
+});
+document.addEventListener('keydown',event=>{
+  if(event.key==='Escape')closeTasks();
+});
+
 function paintBrandSeal(){
   /* The marketing site's rotating seal, on the rail's arch mark. Youssef,
      1 Sept 2026: "that cool, like, animated top left logo on the main website
@@ -8381,6 +8510,8 @@ function paintStudio(){
   paintTemplatesLayout();
   paintHelp();
   paintBrandSeal();
+  paintTaskCard();
+  paintTasksPanel();
   paintPlanChip((DATA.billing&&DATA.billing.current)||{});
   paintClipWaveforms(vals);
   paintLibraryAside(vals);

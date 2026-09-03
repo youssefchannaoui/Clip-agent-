@@ -165,6 +165,114 @@ export function journey(state, userId, ctx = {}) {
   };
 }
 
+/**
+ * The task ladder — what to do next, and what it earns.
+ *
+ * Youssef, 3 Sept 2026, on a rail card showing "Complete setup 20%": "this is
+ * a great idea for new users also you can add that new user one so then 5
+ * steps then add tasks like upload your first 3 clips finish 1 week finish 1
+ * month and etc and they can earn tokens with it as well."
+ *
+ * THE FIRST THREE RUNGS ARE THE JOURNEY'S OWN THREE STEPS, read straight off
+ * `journey()`. Not "the same idea implemented again" — the same call. That is
+ * the whole reason this is safe to build: v3.96.0 retired a five-step checklist
+ * for sitting beside the Create -> Review -> Publish strip and telling one
+ * person two different things about where they were, and a ladder that
+ * recomputed "have they imported yet" would walk straight back into it.
+ *
+ * Everything past those three continues from the same records — clip.postedAt
+ * and nothing else — so this stays derived and retroactive like the rest of
+ * this module. Nothing is stamped except the fact that a reward was PAID,
+ * which is an event and belongs in the ledger rather than in a derivation.
+ */
+export const TASKS = [
+  // The three the journey already owns. `from` names the step whose state
+  // decides this rung, so there is one answer rather than two.
+  { id: 'create', from: 'create', title: 'Import your first lecture', note: 'Paste a link and pick the minutes worth clipping.', action: 'paste' },
+  { id: 'review', from: 'review', title: 'Approve your first clip', note: 'Nothing posts until you keep it.', action: 'review' },
+  { id: 'publish', from: 'publish', title: 'Post your first clip', note: 'Connect a channel and give it a slot.', action: 'schedule', reward: 'taskRewardPublish' },
+  // And the ones that continue past where the journey stops.
+  { id: 'three', title: 'Post three clips', note: 'One lecture usually produces more than three.', action: 'review', reward: 'taskRewardThree', need: 3, of: 'posted' },
+  { id: 'ten', title: 'Post ten clips', note: 'Enough for a channel to look alive.', action: 'schedule', reward: 'taskRewardTen', need: 10, of: 'posted' },
+  { id: 'week', title: 'Your first week', note: 'Post on seven different days.', action: 'schedule', reward: 'taskRewardWeek', need: 7, of: 'days' },
+  { id: 'month', title: 'Your first month', note: 'Post on thirty different days.', action: 'schedule', reward: 'taskRewardMonth', need: 30, of: 'days' },
+];
+
+/*
+ * Distinct DAYS with a post, never a consecutive-day streak.
+ *
+ * A streak breaks on one missed day, and this product posts on a schedule the
+ * customer set — so a streak would punish somebody for choosing four windows a
+ * day over eight, or for a platform being down. Distinct days only ever go up,
+ * which is the habit actually worth rewarding. Counted in UTC, the same basis
+ * the rest of the app's day buckets use.
+ */
+const postedDays = clips => new Set(clips
+  .map(c => Number(c.postedAt))
+  .filter(n => Number.isFinite(n) && n > 0)
+  .map(at => new Date(at).toISOString().slice(0, 10))).size;
+
+/**
+ * One account's ladder. `rewards` is passed in rather than imported so this
+ * module keeps its no-config, pure-data shape and the tests can drive the
+ * economics without touching the environment.
+ */
+export function tasks(state, userId, rewards = {}) {
+  const clips = ownedBy(state.clips || [], userId);
+  const posted = clips.filter(c => Number(c.postedAt) > 0);
+  const j = journey(state, userId);
+  const stepState = Object.fromEntries(j.steps.map(s => [s.key, s.state]));
+  const paid = paidRewards(state, userId);
+  const counts = { posted: posted.length, days: postedDays(posted) };
+
+  const list = TASKS.map(task => {
+    const at = task.of ? counts[task.of] : 0;
+    const done = task.from ? stepState[task.from] === 'done' : at >= task.need;
+    const reward = Math.max(0, Number(rewards[task.reward] || 0));
+    return {
+      id: task.id, title: task.title, note: task.note, action: task.action,
+      done, reward,
+      // Shown only where there is something to count towards. "0 of 30" on a
+      // brand new account is discouraging rather than informative, so a rung
+      // nobody has started reports its target and no progress bar.
+      progress: task.of ? { at: Math.min(at, task.need), of: task.need } : null,
+      // When the reward actually landed, not when the rung was reached. The
+      // rung's completion is derived and has no single moment; the payment is
+      // an event and does.
+      paidAt: paid[task.id] || null,
+    };
+  });
+
+  const done = list.filter(t => t.done).length;
+  const next = list.find(t => !t.done) || null;
+  return {
+    list,
+    done,
+    total: list.length,
+    // Whole percent, floored — 99% on a finished ladder would read as broken.
+    percent: list.length ? Math.round((done / list.length) * 100) : 0,
+    // What the rail card says. "Complete setup" only while the setup half is
+    // genuinely unfinished, so an established account is not told to set up.
+    setupDone: list.slice(0, 3).every(t => t.done),
+    next,
+    earned: list.reduce((sum, t) => sum + (t.paidAt ? t.reward : 0), 0),
+    unclaimed: list.reduce((sum, t) => sum + (t.done && !t.paidAt ? t.reward : 0), 0),
+  };
+}
+
+/** What this account has already been paid for, by task id. */
+export function paidRewards(state, userId) {
+  const user = (state.authUsers || []).find(u => String(u.id || '') === String(userId || ''));
+  const rows = user?.taskRewards;
+  if (!rows || typeof rows !== 'object') return {};
+  const out = {};
+  for (const [id, row] of Object.entries(rows)) {
+    const at = Number(row?.at ?? row);
+    if (Number.isFinite(at) && at > 0) out[id] = at;
+  }
+  return out;
+}
+
 function bucket(state, userId) {
   const key = String(userId || '');
   if (!state.userSettings[key]) state.userSettings[key] = {};

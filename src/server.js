@@ -324,6 +324,53 @@ function grantReferralMinutes(user, minutes, reason, subjectId = '') {
   return true;
 }
 
+/**
+ * Pay out any task-ladder rungs this account has reached.
+ *
+ * Youssef, 3 Sept 2026: "they can earn tokens with it as well."
+ *
+ * Called from the /api/state builder, which every open tab polls, so it has to
+ * be cheap and it has to be safe to run constantly. It is both: the ladder is
+ * counted off clips the payload already loads, and the grant itself refuses a
+ * key it has honoured (billing.processedBonusGrants), so the worst a hundred
+ * polls a minute can do is a hundred no-ops. Settling here rather than in
+ * agent.tick() is deliberate -- the tokens land the moment the customer earns
+ * them rather than up to ten minutes later, which is the whole point of a
+ * reward.
+ *
+ * TWO RECORDS, ON PURPOSE. `billing.processedBonusGrants` is what makes the
+ * money idempotent and is the authority. `user.taskRewards` is what the SCREEN
+ * reads, so a card can say "earned" without the UI reaching into billing's
+ * internals. They are written in one synchronous block and the grant refuses
+ * regardless, so a lost display record cannot become a double payment.
+ *
+ * The ladder is derived and therefore RETROACTIVE: an account that posted ten
+ * clips before this shipped is paid for them on its next poll. At eight
+ * accounts that is a few hundred tokens in total and it is the honest launch --
+ * a ladder that opened with five rungs already ticked and nothing paid would
+ * read as having missed out. TASK_REWARDS_ENABLED=false turns the whole thing
+ * off without a deploy.
+ */
+function settleTaskRewards(user) {
+  if (!config.taskRewardsEnabled || !user) return;
+  // An operator's balance is unlimited, so a grant is a no-op that would still
+  // write a ledger row on every poll. Nothing to settle.
+  if (billing.isUnlimited(user)) return;
+  const ladder = onboarding.tasks(state, user.id, config);
+  let paid = false;
+  for (const task of ladder.list) {
+    if (!task.done || !(task.reward > 0) || task.paidAt) continue;
+    const result = billing.grantBonusTokens(user, task.reward, `Task reward (${task.id})`, `task:${task.id}`);
+    // A duplicate means billing has already paid this rung and only the
+    // display record is missing -- stamp it so the screen agrees and stop
+    // asking. Never re-granted either way.
+    user.taskRewards ||= {};
+    user.taskRewards[task.id] = { at: Date.now(), tokens: result.duplicate ? 0 : task.reward };
+    paid = true;
+  }
+  if (paid) save();
+}
+
 function landingPath(req) {
   const match = /(?:^|;\s*)dc_land=([^;]*)/.exec(String(req.headers.cookie || ''));
   if (!match) return '';
@@ -726,6 +773,11 @@ function appState(user = null) {
   // templates, its music, its connected platforms and its activity feed.
   if (!user?.id) return { engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted', user: null, auth: auth.publicConfig(), projects: [], clips: [], log: [] };
   const readiness = agent.engine.readiness(user);
+  /* Any task-ladder rung this account has newly reached is paid before the
+     payload is built, so the balance the screen shows and the ticks beside it
+     are the same moment's truth rather than one poll apart. A no-op unless
+     something actually completed. */
+  settleTaskRewards(user);
   const projectsForUser = ownedBy(state.projects, user.id);
   const projectIdsForUser = new Set(projectsForUser.map(project => project.id));
   const clipsForUser = ownedBy(state.clips, user.id).filter(clip => projectIdsForUser.has(clip.projectId));
@@ -757,6 +809,14 @@ function appState(user = null) {
       // balance is unlimited and for whom a number would be a lie.
       tokensLeft: billing.publicBilling(user)?.current?.totalAvailable ?? null,
     }),
+    /*
+     * The task ladder, and the rail card that draws it. Its first three rungs
+     * ARE the journey's three steps, read off the same call rather than
+     * recomputed -- v3.96.0 retired a checklist for telling one person two
+     * different things about where they were, and this must never become a
+     * second answer to that question.
+     */
+    tasks: onboarding.tasks(state, user.id, config),
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     backgrounds: backgrounds.listBackgrounds(user).map(entry => ({
       id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared),
