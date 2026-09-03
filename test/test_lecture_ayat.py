@@ -20,6 +20,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "worker"))
@@ -215,6 +216,82 @@ class RenderTests(unittest.TestCase):
         self.assertIn("وَسِيقَ", text, "every verse of the passage, as before")
 
 
+class PagingTests(unittest.TestCase):
+    """A verse is paged to the recitation, not to a ruler.
+
+    Youssef, 3 Sept 2026: "the quran clips DO NOT even sync well, like its
+    very off." The verse's pages shared its time out by WORD COUNT, so when a
+    reciter held a madd on the last word of a page the next page was already
+    up. Measured on the fixture below: the ruler flips 2.18s EARLY, while the
+    held word is still sounding; paged to the aligned words it flips 0.00s off.
+    """
+
+    # 12 Uthmani words -> 3 pages of AYAH_MAX_WORDS. Recited over 12s, but word
+    # 4 (the end of page 1) is held for 4s, as a reciter pauses on a waqf.
+    def _verse(self):
+        found = {"surah": 39, "ayah": 71, "surahName": "Az-Zumar",
+                 "arabic": " ".join(f"كلمة{i}" for i in range(12)),
+                 "translation": " ".join(f"w{i}" for i in range(12))}
+        t, times = 0.0, []
+        for i in range(12):
+            d = 4.0 if i == 3 else 8.0 / 11
+            times.append((t, t + d))
+            t += d
+        return found, times, t
+
+    def _page_ends(self, found, end, **extra):
+        events = worker.ayah_events(
+            found, ornament="۝٧١", start=0.0, end=end, latin_font="DejaVu Serif",
+            translation_size=40, show_translation=False, ayah_size=80, ayah_font="Amiri", **extra)
+        return [float(line.split(",")[2].split(":")[-1]) for line in events if ",Ayah,," in line]
+
+    def test_a_page_holds_while_its_last_word_is_still_sounding(self):
+        found, times, end = self._verse()
+        madd_ends = times[3][1]
+        ruler = self._page_ends(found, end)
+        timed = self._page_ends(found, end, word_times=times)
+        self.assertAlmostEqual(ruler[0], 4.0, places=2, msg="the ruler flips a third of the way in")
+        self.assertLess(ruler[0], madd_ends - 2.0, "which is over two seconds before the held word ends")
+        self.assertAlmostEqual(timed[0], madd_ends, places=2, msg="paged to the words, it flips when the word does")
+        self.assertAlmostEqual(timed[-1], end, places=1, msg="the last page still runs to the verse's end")
+
+    def test_without_word_times_the_ruler_is_unchanged(self):
+        found, _, end = self._verse()
+        self.assertEqual([round(x, 2) for x in self._page_ends(found, end)], [4.0, 8.0, 12.0])
+        self.assertEqual(self._page_ends(found, end), self._page_ends(found, end, word_times=[]))
+
+    def test_pages_never_run_backwards(self):
+        # Whisper can hand back a word whose end precedes the previous page's
+        # end. That page falls back to the ruler; the sequence stays monotonic.
+        found, times, end = self._verse()
+        broken = list(times)
+        broken[7] = (1.0, 1.2)   # the word that would end page 2 is timed inside page 1
+        ends = self._page_ends(found, end, word_times=broken)
+        self.assertEqual(ends, sorted(ends))
+        self.assertTrue(all(b > a for a, b in zip(ends, ends[1:])))
+        self.assertAlmostEqual(ends[-1], end, places=1)
+
+
+class WordCarryTests(unittest.TestCase):
+    """The aligned words travel with the verse, in clip-local time."""
+
+    def test_the_walk_carries_each_verse_s_aligned_words(self):
+        verses = worker.lecture_ayat(LECTURE, corpus())
+        self.assertTrue(all(len(hit["words"]) >= 3 for hit in verses))
+        for hit in verses:
+            self.assertAlmostEqual(hit["words"][0][0], hit["start"], places=3)
+            self.assertAlmostEqual(hit["words"][-1][1], hit["end"], places=3)
+
+    def test_attach_converts_the_words_to_clip_local_time(self):
+        clip = worker.Candidate(11.0, 18.0, DAMAGED, CLIP_SEGMENTS, 90, [], False)
+        worker.attach_lecture_ayat([clip], worker.lecture_ayat(LECTURE, corpus()))
+        words = clip.ayat[0]["words"]
+        self.assertTrue(words)
+        self.assertLess(words[0][0], 1.0, "starts near the top of the clip, not at 11s")
+        self.assertLessEqual(words[-1][1], clip.duration + 0.01)
+        self.assertEqual(words, sorted(words))
+
+
 class CutTests(unittest.TestCase):
     """A cut moves the verses with everything else, or it moves nothing."""
 
@@ -231,9 +308,20 @@ class CutTests(unittest.TestCase):
         moved = worker.retime_for_cuts(clip, [(10.0, 15.0), (20.0, 30.0)])
         numbers = [hit["ayah"]["ayah"] for hit in moved.ayat]
         self.assertEqual(numbers, [69, 71], "the verse inside the removed stretch is dropped")
+        self.assertEqual(moved.ayat[0].get("words"), [], "a map with no words stays that way")
         self.assertAlmostEqual(moved.ayat[0]["start"], 1.0, places=3, msg="before the cut, unmoved")
         self.assertAlmostEqual(moved.ayat[1]["start"], 7.0, places=3,
                                msg="after the cut, pulled left by the removed five seconds")
+
+    def test_the_aligned_words_move_with_the_verse_through_a_cut(self):
+        clip = worker.Candidate(
+            10.0, 30.0, "x", [{"start": 10.0, "end": 30.0, "text": "x"}], 90, [], False,
+            ayat=[{"start": 11.0, "end": 14.0, "ayah": AYAHS[2],
+                   "words": [(11.0, 12.0), (12.0, 13.0), (13.0, 14.0)]}],   # media 21-24, after a 5s cut
+        )
+        moved = worker.retime_for_cuts(clip, [(10.0, 15.0), (20.0, 30.0)])
+        self.assertEqual([(round(a, 3), round(b, 3)) for a, b in moved.ayat[0]["words"]],
+                         [(6.0, 7.0), (7.0, 8.0), (8.0, 9.0)], "each word pulled left by the removed five seconds")
 
     def test_a_clip_with_no_map_keeps_none_through_a_cut(self):
         clip = worker.Candidate(0.0, 10.0, "x", [{"start": 0.0, "end": 10.0, "text": "x"}],
@@ -243,3 +331,43 @@ class CutTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RerenderTests(unittest.TestCase):
+    """An unedited re-render walks its own stored segments.
+
+    process_rerender rebuilds the candidate from `transcriptSegments`, which
+    for an unedited clip still carry Whisper's word timings -- so the clips
+    already on the channel get the word-accurate spans and the aligned-word
+    paging the moment they are re-rendered. Driven up to the render and no
+    further: render_clip is replaced and the candidate it is handed is read.
+    """
+
+    def test_the_candidate_handed_to_the_render_carries_its_ayat(self):
+        handed = {}
+
+        def fake_render(job, candidate, index, source, track, output_dir):
+            handed["candidate"] = candidate
+            return {"id": "c1"}
+
+        quran_module._CORPUS = corpus()
+        worker.quran = quran_module
+        with tempfile.TemporaryDirectory() as tmp:
+            src = pathlib.Path(tmp) / "source.mp4"
+            src.write_bytes(b"not really a video")
+            job = {
+                "id": "job1", "resultPath": str(pathlib.Path(tmp) / "result.json"),
+                "outputDir": tmp, "sourceFile": str(src),
+                "settings": {"musicEnabled": False}, "template": {"id": "quran-recitation", "captionMode": "quran"},
+                "clip": {"startSec": 11.0, "endSec": 18.0, "transcript": DAMAGED, "title": "t"},
+                "transcriptSegments": LECTURE,
+            }
+            with mock.patch.object(worker, "render_clip", fake_render), \
+                 mock.patch.object(worker, "apply_source_window", lambda job, path: path), \
+                 mock.patch.object(worker, "emit", lambda *a, **k: None), \
+                 mock.patch.object(worker, "progress", lambda *a, **k: None):
+                worker.process_rerender(job, pathlib.Path(tmp) / "job.json")
+        candidate = handed["candidate"]
+        self.assertIsNotNone(candidate.ayat, "a lecture-less re-render still walks its own segments")
+        self.assertEqual([hit["ayah"]["ayah"] for hit in candidate.ayat], [71])
+        self.assertTrue(candidate.ayat[0]["words"], "with the aligned words for paging")

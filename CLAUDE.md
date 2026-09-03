@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1175 JS + 548 Python**
+- `npm test` and `npm run check` must pass. Currently **1175 JS + 572 Python**
   (0 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3760,13 +3760,14 @@ next step and it is not done" since.
   half of is a verse the map is already drawing, and letting the weaker guess
   draw over it is two ayat on screen at once; below half there is real
   uncovered speech and the old path gets its turn.
-- **A re-render takes exactly the path it always did.** `process_rerender`
-  rebuilds ONE segment from the stored transcript and there is no lecture to
-  walk, so `ayat` is None and nothing changes. **Empty and absent are
-  deliberately different statements**: `[]` means a lecture was walked and this
-  clip holds no scripture, `None` means nobody walked one. A test drives the
-  re-render path, per this file's standing rule that a caption feature must be
-  tested on both.
+- **A re-render walked nothing in this release, and that was corrected the
+  same day** (v3.102.0 below): the job carries the WHOLE lecture's segments,
+  so an unedited re-render walks them and gets the same context a first
+  render does. `write_ass`'s `ayat is None` path still exists and is still
+  tested -- it is what an edited clip's reflowed text or a stored candidate
+  from before this takes. **Empty and absent are deliberately different
+  statements**: `[]` means a lecture was walked and this clip holds no
+  scripture, `None` means nobody walked one.
 - **`retime_for_cuts` remaps the map, and that was a real find rather than a
   fix to something broken.** `dataclasses.replace` would have carried `ayat`
   through UNTOUCHED, so after a cut scripture would be drawn at the wrong
@@ -3786,10 +3787,11 @@ next step and it is not done" since.
 - All four probes were **proven RED** against the behaviour they pin: the
   quran path not reading the map, the covered-stretch skip removed, a cut not
   retiming the map, and attach forgetting the clip-local conversion.
-- **Worker change, so `deploy-worker.yml` deploys it on push**, and it affects
-  lectures processed from now on. Clips already rendered keep the captions they
-  have. **Not yet seen on a real recitation** -- the proof here is the matcher
-  and the ASS file, not a frame; the confirmation costs one Quran import.
+- **Worker change, so `deploy-worker.yml` deploys it on push.** As of
+  v3.102.0 it reaches clips already on the channel too, the moment they are
+  re-rendered. **Not yet seen on a real recitation** -- the proof here is the
+  matcher and the ASS file, not a frame; the confirmation costs one Quran
+  import.
 
 
 ## A chosen crop bias was refused whenever OpenCV was missing (v3.101.2, 3 Sept 2026)
@@ -3822,6 +3824,86 @@ a product fault wearing a test problem's clothes.
 - **What this does NOT prove**: that face detection finds a face. testsrc has
   none, `bias=auto` correctly declines, and nothing here replaces the real
   video and the look at a frame the open items still ask for.
+
+## The Quran pages follow the reciter, and every title is English (v3.102.0, 3 Sept 2026)
+
+Youssef, mid-session: "the quran clips DO NOT even sync well, like its very
+off, also AI titling needs SO MUCH IMPROVING AND ONLY WRITTEN IN ENGLISH ALL
+TITLES." Two faults, both real, both measured before anything was built.
+
+### Sync: a ruler was laid over the recitation
+
+- **A verse's pages shared its time out by WORD COUNT.** `ayah_events` split a
+  long ayah into pages of `AYAH_MAX_WORDS` and gave each `span * words/total`
+  -- a ruler. A reciter holds a madd on the last word of a page for four
+  seconds; the ruler does not know he paused, so the next page was already up
+  while the held word was still sounding. **Measured on a 12-word verse with
+  one 4s madd: the ruler flips page 1 -> 2 at 4.00s while the word sounds until
+  6.18s -- 2.18s EARLY. Paged to the words, 0.00s off.**
+- **The lecture walk already knew which transcript words aligned to each verse
+  and when Whisper heard them.** Each hit now carries them (`words`), attach
+  converts them to clip-local, `retime_for_cuts` moves them through a cut, and
+  `ayah_events(word_times=...)` ends each page where its LAST ALIGNED WORD
+  ends. Uthmani and transcript word counts differ (Whisper runs words together),
+  so the share is carried across by proportion of index and then SNAPPED to a
+  real word end. Monotonic by construction: a boundary that would run backwards
+  falls back to the ruler for that page only, and a test feeds it one.
+- **The outer span was the other half, and v3.101.0 had already fixed it for
+  first renders**: a verse used to start at its SEGMENT's start, and a Whisper
+  segment on recitation is a whole breath. The word-level map starts it where
+  its first aligned word starts.
+- **Re-renders get all of it now.** The first cut of this walked only the
+  clip's own window on re-render and found nothing for a clip opening on a
+  damaged verse -- the v3.101.0 failure, reproduced by the test. The job
+  carries the WHOLE lecture's segments (`transcriptSegments`, cut to the window
+  a line later), so an unedited re-render walks all of them and has the same
+  preceding-verse context a first render has. An EDITED clip walks its reflowed
+  text, because the editor's words win over Whisper's there. Driven up to the
+  render with `render_clip` replaced, reading the candidate it was handed.
+- **What this does NOT fix, said plainly**: Whisper's own timestamp error on
+  recitation. Elongated tajweed is closer to singing than to speech and the
+  `small` model's word times on it are imperfect; this change follows them
+  instead of ignoring them, which is strictly better and still bounded by
+  them. The rescale to `medium` (open item 5) is what tightens that. The
+  550ms fade-in is a design choice, not lag, and was left alone.
+
+### Titles: three sources, all of them could write Arabic
+
+- **The prompt never mentioned language**, so an Arabic clip got an Arabic
+  title. The fallback titler and the dedupe both read `clip.text`, which for an
+  Arabic clip IS Arabic. And Whisper's English translation had been sitting on
+  `segment["english"]` since the bilingual pass shipped, read by the caption
+  path and by nothing that names a clip.
+- **`clip_english(candidate)` is the one reader**: the clip's own words when it
+  is spoken in English, the joined translations when it is Arabic (letters
+  counted, not guessed), its own words when Arabic with no translation. It
+  feeds the PROMPT (the model reads English for an Arabic clip -- asking a 1.7B
+  model to translate AND title was two jobs), the fallback titler, the dedupe's
+  candidates, and `looks_copied` -- which used to compare the model's title
+  against the ARABIC text, so a sentence copied out of the translation sailed
+  through. Proven by test.
+- **The rule is stated in the prompt TWICE** -- in TITLES and in the
+  BEFORE-YOU-ANSWER restatement that sits last before the data, the only place
+  a rule reliably lands on this model -- **and enforced in code regardless.**
+  `is_english_title` refuses any Arabic-script letter; "Allah", "sabr" and
+  "dua" in Latin letters are English titles in this niche. A refused row falls
+  to the titler that reads the translation. `ship_title` is the last gate at
+  every place a title is chosen (the render, the plan, the dedupe), so a title
+  stored before this rule cannot reach a channel in Arabic either.
+- **The honest limit**: an Arabic clip with NO translation (an older
+  faster-whisper) ships the numbered English fallback, "Important reminder N".
+  Bland and English, rather than good and Arabic -- the instruction was every
+  title, not most. On the production path the translate pass fires whenever
+  Arabic was transcribed, so this is the rare case.
+- Every probe proven RED: paging ignoring the word times, the row check
+  removed, `clip_english` never reading the translation, the re-render walking
+  only its window, and the LANGUAGE rule dropped from the prompt. Seventeen
+  titling tests and seven sync tests, on executed output -- the prompt bytes
+  that go to Ollama, the ASS event times, the candidate handed to the render.
+- **Worker change, deploys on push.** Titles change for lectures processed
+  from now on; sync reaches existing Quran clips when they are re-rendered
+  (a template save re-renders every clip still waiting). Neither has been
+  seen on a real frame yet.
 
 ## Open items
 
