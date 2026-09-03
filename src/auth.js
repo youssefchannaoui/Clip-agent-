@@ -367,8 +367,38 @@ export async function verifyTurnstile(response, ip) {
   }
 }
 
+const BOOTED_AT = Date.now();
+
 export function verificationRequired() {
   return mailer.configured();
+}
+
+/**
+ * When this deployment first became able to ask for a confirmation.
+ *
+ * Stamped once, the first time a request arrives with mail configured. Without
+ * it, setting EMAIL_API_KEY does something nobody would intend: every account
+ * that ever signed up with an email and password is RETROACTIVELY blocked from
+ * importing, because none of them was ever asked to confirm. They signed up
+ * under different rules; changing an environment variable must not reach back
+ * and lock them out of work they have already paid tokens for.
+ */
+function verificationStartedAt() {
+  ensureAuthState();
+  if (!state.authSettings || typeof state.authSettings !== 'object') state.authSettings = {};
+  if (!verificationRequired()) return 0;
+  if (!Number(state.authSettings.verificationSince)) {
+    // BOOT time, not the time of this call. The stamp is written lazily, on
+    // whichever request first asks -- so using `now()` would grandfather any
+    // account created between the process starting and that first question.
+    // A tiny window in production and a real one in a test, and the rule is
+    // meant to be "everyone who existed before the switch was thrown", which
+    // is exactly what boot time means here.
+    state.authSettings.verificationSince = BOOTED_AT;
+    save();
+    log('Email confirmation is on. Accounts that existed before now are unaffected.', 'info');
+  }
+  return Number(state.authSettings.verificationSince);
 }
 
 export function isVerified(user) {
@@ -376,7 +406,11 @@ export function isVerified(user) {
   if (!verificationRequired()) return true;
   if (user.emailVerifiedAt) return true;
   // A provider that verified the address counts; a password does not.
-  return Object.keys(user.providers || {}).some(key => key === 'google' || key === 'apple');
+  if (Object.keys(user.providers || {}).some(key => key === 'google' || key === 'apple')) return true;
+  // Grandfathered: this account predates the day confirmation was switched on.
+  const since = verificationStartedAt();
+  const born = Number(user.createdAt || 0);
+  return Boolean(since && born && born < since);
 }
 
 /**

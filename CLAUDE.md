@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1174 JS + 548 Python**
+- `npm test` and `npm run check` must pass. Currently **COUNT JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3664,6 +3664,26 @@ the app and types a code while it is still thinking about its email address.
 - `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET` on Render arm it. Both are
   trimmed: a credential pasted into that field picks up a trailing newline
   routinely.
+
+### Switching email on must not lock out the people already here
+
+Found by asking what `EMAIL_API_KEY` actually DOES the moment it is set, rather
+than by testing the feature: `verificationRequired()` flips false -> true for
+the whole deployment, and `isVerified` then answers false for every account
+that ever signed up with an email and password. So setting one environment
+variable would have retroactively blocked every existing customer from
+importing -- including the operator's own account, unless it came in through
+Google. They signed up under different rules and have already paid tokens for
+work they would suddenly be refused.
+
+`state.authSettings.verificationSince` is stamped the first time a request
+arrives with mail configured, and an account created before it is treated as
+confirmed. **The stamp is BOOT time, not the time of the call**: it is written
+lazily, on whichever request happens to ask first, so `now()` would grandfather
+anything created between the process starting and that first question -- a tiny
+window in production and a real one in a test, which is what caught it. A
+Google or Apple account is still proof of the address whenever it arrived, and
+anyone signing up after the switch is still asked.
 
 **Driven end to end against the real Cloudflare siteverify**, using their
 always-passes test keys: a sign-up with no answer was refused, one with an
