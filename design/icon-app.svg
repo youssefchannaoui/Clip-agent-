@@ -11,7 +11,14 @@
     <!-- SOLID, with the play knocked out by evenodd. An outline this thin
          vanished among the filled silhouettes every other app uses. -->
     <path fill-rule="evenodd" fill="url(#gold)"
-          d="M13 52V28a19 19 0 0 1 38 0v24Z
-             M27.5 23 43 32.5 27.5 42Z"/>
+          d="M16 45V27a16 16 0 0 1 32 0v18Z
+             M28.5 23.5 41 32 28.5 40.5Z"/>
+    <!-- The wordmark is DEEN, not DEENCLIPPED: eleven characters across a 60px
+         tile is a grey smear, four are readable. The label under the icon says
+         the rest. Arial/Helvetica because a browser renders this SVG live and
+         must not fall back to something unpredictable. -->
+    <text x="32" y="56.5" text-anchor="middle" fill="#E7C88E"
+          font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+          font-size="11" font-weight="700" letter-spacing="1.6">DEEN</text>
   </g>
 </svg>
