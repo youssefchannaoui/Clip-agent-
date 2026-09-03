@@ -793,6 +793,20 @@ export async function publishNow(id) {
   } else if (['scheduled', 'publish_failed'].includes(clip.status)) {
     clip.scheduledAt = Date.now();
     if (!clip.targets?.length) setTargets(clip);
+    /*
+     * A BUTTON THAT DOES NOTHING HAS TO SAY WHY (invariant 9).
+     *
+     * setTargets returns an empty list WITHOUT throwing when the account's
+     * master automatic-publishing switch is off -- so Post now logged
+     * "Publishing started", published to nowhere, filed the clip as "ready to
+     * download and post" and reported success. From the screen: nothing
+     * happened, twice, with TikTok visibly connected.
+     */
+    if (!clip.targets?.length) {
+      throw new Error(publishingSettings(ownerOfRecord(clip)).enabled
+        ? 'This clip has no connected destination to post to. Connect a channel and switch it on first.'
+        : 'Automatic publishing is switched off for this account, so there is nowhere to post. Turn it on in Connections and try again.');
+    }
     for (const target of clip.targets || []) {
       if (target.status === 'failed') { target.status = 'retrying'; target.error = null; }
       if (target.status !== 'posted') target.nextTryAt = Date.now();

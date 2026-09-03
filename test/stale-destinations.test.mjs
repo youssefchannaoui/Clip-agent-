@@ -128,3 +128,57 @@ test('the schedule row stops claiming nothing is connected when something is', (
   assert.match(block, /Set when it posts/, 'and says something true instead');
   assert.match(block, /No account connected/, 'keeping the honest message for when it IS true');
 });
+
+/*
+ * TWO SWITCHES, and only reading the near one (v3.115.3).
+ *
+ * "im confused i click post now nothing happnes" -- with TikTok visibly
+ * connected and the sidebar reading "Posting". The Render log said it all:
+ *
+ *   Scheduled "If you are a servant…" for local export.
+ *   Publishing started for "A Reminder of Mercy…".
+ *   "A Reminder of Mercy…" is ready to download and post.
+ *
+ * `setTargets` returns an EMPTY list without throwing when the account's
+ * master automatic-publishing switch is off. So the clip scheduled to nowhere,
+ * Post now published to nowhere and reported success, and three separate
+ * surfaces read TikTok's OWN switch while the master one was off.
+ */
+test('Post now says why instead of silently doing nothing', async () => {
+  const clip = seed({ connected: true });
+  // Master switch off, TikTok's own switch on -- exactly the live state.
+  state.userSettings[userId].publishingSettings.enabled = false;
+  clip.status = 'scheduled';
+  clip.targets = [];
+  save();
+
+  await assert.rejects(() => agent.publishNow('c1'), error => {
+    assert.match(error.message, /Automatic publishing is switched off/i,
+      'it names the switch that is actually stopping it');
+    assert.match(error.message, /Connections/i, 'and where to turn it on');
+    return true;
+  });
+  assert.notEqual(state.clips[0].status, 'posted');
+});
+
+test('with publishing on but nothing connected it still refuses clearly', async () => {
+  const clip = seed({ connected: false });
+  clip.status = 'scheduled';
+  clip.targets = [];
+  save();
+  await assert.rejects(() => agent.publishNow('c1'), /no connected destination/i);
+});
+
+test('the three surfaces all read the master switch, not just the platform one', () => {
+  const source = fs.readFileSync(new URL('../src/public/studio-adapter.js', import.meta.url), 'utf8');
+  assert.match(source, /var autoPublishOn = \(DATA\.publishingSettings \|\| \{\}\)\.enabled !== false;/,
+    'one reading of the master switch');
+  // The sidebar stops saying "Posting" when nothing can post.
+  const at = source.indexOf('schedOutlets: providers.map');
+  const outlets = source.slice(at, at + 900);
+  assert.match(outlets, /p\.connected && p\.enabled && autoPublishOn/, 'the dot needs both switches');
+  assert.match(outlets, /Publishing off/, 'and says which one is off');
+  // The row names the blocker rather than blaming the connection.
+  const rowAt = source.indexOf('dests: destinations(c).length');
+  assert.match(source.slice(rowAt, rowAt + 1600), /Automatic publishing is off/);
+});

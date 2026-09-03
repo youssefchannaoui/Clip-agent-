@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1312 JS + 592 Python**
+- `npm test` and `npm run check` must pass. Currently **1315 JS + 592 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -7049,3 +7049,41 @@ connected", which is then true.
 clip with `targets: []` whose slot has arrived, connects TikTok afterwards, and
 drives the real `tick()`. Proven red by removing the re-derive -- the clip
 comes back `ready` with nowhere to go.
+
+### Two switches, and every surface read only the near one (v3.115.3)
+
+"im confused i click post now nothing happnes" — with TikTok visibly connected
+and the sidebar reading **Posting**. The Render log said all of it:
+
+    Scheduled "If you are a servant…" for local export.
+    Publishing started for "A Reminder of Mercy…".
+    "A Reminder of Mercy…" is ready to download and post.
+
+**`setTargets` returns an EMPTY list without throwing when the account's master
+automatic-publishing switch is off** (`if (!settings.enabled) { clip.targets =
+[]; return; }`). So the clip scheduled to nowhere, `publishClip` iterated
+nothing, `refreshPublishingStatus` filed it `ready`, and the route answered
+success. Pressing the button did exactly nothing, twice, and said so nowhere.
+
+There are TWO switches and they are not the same thing:
+
+| | |
+|---|---|
+| `publishingSettings[platform].enabled` | TikTok's OWN switch — what `providerInfo` reads |
+| `publishingSettings.enabled` | the account's MASTER automatic-publishing switch — what `setTargets` reads |
+
+Three surfaces read the near one and none read the master, which is how the
+sidebar said "Posting" beside a schedule row that could never post.
+
+- `autoPublishOn` is now read once in the adapter and consulted by
+  `anyOutletLive()`, by `schedOutlets` (which says **"Publishing off"** rather
+  than "Posting"), and by the schedule row (**"Automatic publishing is off"**,
+  naming the switch instead of blaming the connection).
+- **`publishNow` refuses with the reason** rather than reporting success having
+  posted nowhere — invariant 9 applied to a button that ran and did nothing.
+
+**One red-probe did not go red the first time and the run was reported as
+proof.** A slice-based edit raised `ValueError: substring not found`, the file
+was left untouched, and the suite passed against unmodified code — which
+proves nothing at all. Re-done by line number, with the removed lines printed
+and asserted before the run. Check that a red probe actually EDITED the file.

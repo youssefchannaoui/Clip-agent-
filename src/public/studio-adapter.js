@@ -2319,8 +2319,15 @@
     // "Does this account have anywhere to post RIGHT NOW" -- the same test the
     // schedule sidebar makes (schedOutlets calls it "Posting"), so a row and
     // the panel beside it cannot answer it differently.
+    // TWO SWITCHES, and reading only the near one is what put "TikTok -
+    // Posting" beside a clip that could never post. `p.enabled` is TikTok's
+    // OWN switch; `publishingSettings.enabled` is the account's master
+    // automatic-publishing switch, and setTargets gives a clip NO destinations
+    // at all when it is off (agent.js). A platform switched on underneath a
+    // master switch that is off publishes nothing.
+    var autoPublishOn = (DATA.publishingSettings || {}).enabled !== false;
     var anyOutletLive = function () {
-      return providers.some(function (p) { return p.connected && p.enabled; });
+      return autoPublishOn && providers.some(function (p) { return p.connected && p.enabled; });
     };
     var byKey = {};
     providers.forEach(function (p) { byKey[p.key] = p; });
@@ -2654,6 +2661,13 @@
                   name: 'Set when it posts', who: '', state: '',
                   icon: 'ph ph-arrow-clockwise',
                   style: 'display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dc-ink-dim, #8B8B93);',
+                } : !autoPublishOn ? {
+                  // Name the switch that is actually stopping it. Told "no
+                  // account connected" with TikTok plainly connected, there is
+                  // nothing a person can do but disbelieve the screen.
+                  name: 'Automatic publishing is off', who: '', state: '',
+                  icon: 'ph ph-warning-circle',
+                  style: 'display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dc-n-e6b770, #E6B770);',
                 } : {
                   name: 'No account connected', who: '', state: '',
                   icon: 'ph ph-warning-circle',
@@ -5265,10 +5279,14 @@
       // Every card on this screen said "No channel on" and the rail never
       // explained why. A schedule with nowhere to post is a list of intentions.
       schedOutlets: providers.map(function (p) {
-        var live = p.connected && p.enabled;
+        var live = p.connected && p.enabled && autoPublishOn;
         return {
           name: PLATFORM_NAMES[p.key],
-          note: !p.configured ? 'Not set up' : !p.connected ? 'Not connected' : !p.enabled ? 'Switched off' : 'Posting',
+          // "Posting" has to mean it. A platform connected and switched on
+          // under a master switch that is off sends nothing, and saying
+          // Posting there is the app contradicting its own schedule rows.
+          note: !p.configured ? 'Not set up' : !p.connected ? 'Not connected' : !p.enabled ? 'Switched off'
+            : !autoPublishOn ? 'Publishing off' : 'Posting',
           dotStyle: 'display: block; width: 7px; height: 7px; flex: none; border-radius: 50%; background: '
             + (live ? 'var(--dc-n-7fd1a6, #7FD1A6)' : p.connected ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-n-4a4a54, #4A4A54)') + ';',
           noteStyle: 'margin-left: auto; font-size: 11px; color: ' + (live ? 'var(--dc-ink-dim, #8B8B93)' : 'var(--dc-n-e0a188, #E0A188)') + ';',
