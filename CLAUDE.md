@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1156 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1160 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -2037,8 +2037,12 @@ turn it off."
   drawn over the top of scripture -- no watermark, no brand line, no hook, no
   caption box -- which has its own test in `pricing.test.mjs` and is why the
   first pass went red. Top-centre would have put the mark straight over the
-  ayah. It opens no free-plan hole, because that template is Pro-only: a Basic
-  account cannot select it, and a paid account may remove a watermark anyway.
+  ayah. **This paragraph used to end "it opens no free-plan hole, because that
+  template is Pro-only" -- that stopped being true on 3 Sept 2026** when the
+  template went free (see *The scripture template is free* below). A free
+  account can now publish a recitation clip with no mark burned into the
+  frame; the attribution moves to the caption's credit line rather than
+  disappearing.
 - `test/pricing.test.mjs` now pins the default across every built-in and
   skips that one by id, so the exemption is stated rather than looking like an
   oversight.
@@ -3536,6 +3540,44 @@ adapter's `firstRun` flag but not the PAINTER's own gate, so deleting
 `!ob.imported` from the painter broke nothing; and the showcase probe replaced
 a string that no longer existed, so it silently tested the unchanged file. Both
 are pinned properly now and both were re-proven red.
+## The scripture template is free (v3.99.0, 3 Sept 2026)
+
+Youssef: "quran recitation should allow basic plans as well so one quran one
+lecture." So Basic gets TWO styles -- Clean Line for a lecture, Quran
+Recitation for a recitation -- and the other three stay Pro.
+
+- **Flipping `pro` in the template file is one line. What it collides with is
+  not.** That template ships with an empty watermark at zero opacity, because
+  nothing is drawn over an ayah -- and `assertWatermarkAllowed` refuses exactly
+  that shape from a free account. So the moment Basic could SELECT it, saving
+  it would have been refused with "Removing the DeenClipped watermark is a Pro
+  feature": an account handed a template it could not use, and an error
+  blaming it for something it never did. Found by asking what else knows about
+  this template, not by the change itself.
+- **`templates.isScriptureTemplate(id)` reads the SHIPPED file** and answers
+  from the caption mode (`quran`), never from an id string typed twice and
+  never from the account's own copy. That last part is the hole it closes: an
+  override that switches an ordinary template into quran caption mode must not
+  mint an exemption for itself, or the watermark paywall is one setting away
+  from being off for everybody. It also refuses a path with a slash or a dot in
+  it -- the argument reaches a filename.
+- **The exemption is passed the template id at every call site**, including the
+  per-clip one, where it comes from the clip's own `templateId`.
+- **The trade is stated, not hidden.** A free account can now publish a
+  recitation clip with no mark burned into the frame. That is deliberate:
+  nothing is drawn over scripture, and that rule outranks the watermark. The
+  attribution moves rather than disappearing -- a free account's posts already
+  carry the credit line in their caption (`postCredit`, v3.79.0). The comment
+  in `pricing.test.mjs` that used to justify the exemption by the template
+  being Pro-only says this instead.
+- `test/free-quran-template.test.mjs` drives it over HTTP with a REAL free
+  account, because the gate lives inside the request handler and nothing a
+  unit test can reach crosses it. Proven red both ways: with `pro: true`
+  restored, and with the exemption removed while the template stayed free --
+  each fails one assertion, and they are different assertions.
+- The plan-gating law now asserts the free pair covers both KINDS -- one
+  template whose caption mode is `quran` and one whose is not -- so "one quran
+  one lecture" is checked rather than merely named.
 
 ## Open items
 

@@ -94,9 +94,17 @@ test('every built-in ships with the watermark on, top centre', () => {
   assert.ok(builtins.length >= 4);
   for (const file of builtins) {
     const t = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
-    // Scripture is the one exemption, and it has its own test below. It is
-    // Pro-only, so exempting it opens no free-plan hole: a Basic account
-    // cannot select it, and a paid account may remove a watermark anyway.
+    // Scripture is the one exemption, and it has its own test below.
+    //
+    // It became FREE on 3 Sept 2026 (Youssef: "quran recitation should allow
+    // basic plans as well so one quran one lecture"), so the old reasoning
+    // here -- "exempting it opens no free-plan hole because a Basic account
+    // cannot select it" -- no longer holds, and pretending otherwise is worse
+    // than stating the trade. A free account CAN now publish a recitation clip
+    // with no mark burned into the frame. That is deliberate: nothing is drawn
+    // over an ayah, and that rule outranks the watermark. The attribution
+    // moves rather than disappearing -- a free account's posts carry the
+    // credit line in the caption (postCredit, v3.79.0).
     if (t.id === 'quran-recitation') continue;
     assert.equal(t.watermark, 'DEENCLIPPED', `${file} ships without a watermark`);
     assert.equal(t.watermarkOpacity, 100, `${file} ships with an invisible watermark`);

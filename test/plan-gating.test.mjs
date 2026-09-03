@@ -12,15 +12,25 @@ const user = { id: 'user_plan_test' };
 
 // ── which templates belong to which plan ──────────────────────────────────
 //
-// Free gets the default style and the DeenClipped watermark; everything else
-// in the catalogue is Pro. The flag is shipped in the template file, so it can
-// only be changed by shipping a new one.
+// Free gets TWO styles -- one for a lecture and one for recitation -- and the
+// DeenClipped watermark; everything else in the catalogue is Pro. The flag is
+// shipped in the template file, so it can only be changed by shipping a new
+// one.
 
-test('the default template is the free one and the rest are Pro', () => {
+test('free gets one lecture style and one scripture style, and the rest are Pro', () => {
   const list = templates.listTemplates(user);
-  const free = list.filter(t => !t.pro).map(t => t.id);
-  assert.deepEqual(free, ['clean-line'], 'exactly one free style, and it is the default');
+  const free = list.filter(t => !t.pro).map(t => t.id).sort();
+  // Youssef, 3 Sept 2026: "quran recitation should allow basic plans as well
+  // so one quran one lecture." Both, and nothing else -- a third free style
+  // here means something was let out of the paywall by accident.
+  assert.deepEqual(free, ['clean-line', 'quran-recitation'],
+    'exactly two free styles: the default, and the scripture one');
   assert.ok(list.filter(t => t.pro).length >= 3, 'the rest are Pro');
+  // The free pair must cover both KINDS of content, or "one quran one lecture"
+  // is only true by name.
+  const modes = free.map(id => templates.templateById(id, user).captionMode);
+  assert.ok(modes.includes('quran'), 'one of them renders scripture');
+  assert.ok(modes.some(m => m !== 'quran'), 'and one of them renders a lecture');
 });
 
 test('an account edit cannot move a template onto the free plan', () => {

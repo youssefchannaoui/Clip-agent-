@@ -1992,7 +1992,7 @@ async function route(req, res, url) {
       // The PUT route has always checked this; POST did not, so saving a draft
       // with the watermark blanked through this door removed it on a free plan
       // -- one of exactly two things the product charges for.
-      assertWatermarkAllowed(draft);
+      assertWatermarkAllowed(draft, target.id);
       const saved = templates.saveTemplate(currentUser, target.id, draft);
       if (body.select !== false) templates.setSelectedTemplate(currentUser, target.id);
       log(`Saved template "${saved.template.name}" version ${saved.template.version}. New renders use it automatically.`, 'info', currentUser.id);
@@ -2007,8 +2007,23 @@ async function route(req, res, url) {
   // sits on the two style write paths, not in sanitiseTemplate, because the
   // sanitiser cannot know who is asking. Only an EXPLICIT empty watermark is
   // blocked -- absent fields and non-empty text pass untouched.
-  function assertWatermarkAllowed(style) {
+  function assertWatermarkAllowed(style, templateId) {
     if (!style || typeof style !== 'object') return;
+    /*
+     * The scripture template is the one exemption, and it has to be. Nothing
+     * is drawn over the top of an ayah -- no watermark, no brand line, no hook
+     * -- which is why it ships with an empty watermark at zero opacity. That
+     * cost nothing while the template was Pro-only; the moment Basic could
+     * select it (Youssef, 3 Sept 2026: "quran recitation should allow basic
+     * plans as well so one quran one lecture") this gate would have refused a
+     * free account the ability to SAVE the template it had just been given.
+     *
+     * It is read from the SHIPPED file, so an account cannot mint an exemption
+     * by switching an ordinary template into quran caption mode. A free
+     * account's Quran clips still carry the credit line in their caption
+     * (postCredit, v3.79.0) -- the attribution moves, it does not disappear.
+     */
+    if (templates.isScriptureTemplate(templateId)) return;
     // Emptying the text and zeroing the opacity are the same act -- a clip
     // with no visible watermark -- so the gate covers both doors.
     // visibleText rather than trim(). trim() removes whitespace and nothing
@@ -2039,7 +2054,7 @@ async function route(req, res, url) {
       // Editing a built-in forks it onto the user's own copy rather than
       // refusing, so Save always means save. `forked` travels back so the page
       // can say which template it actually saved.
-      assertWatermarkAllowed(body.template || body);
+      assertWatermarkAllowed(body.template || body, decodeURIComponent(templateMatch[1]));
       const saved = templates.saveTemplate(currentUser, decodeURIComponent(templateMatch[1]), body.template || body);
       const template = saved.template;
       // Re-rendering every unposted clip is explicit now. It used to fire on any
@@ -2572,7 +2587,10 @@ async function route(req, res, url) {
     const id = decodeURIComponent(clipMatch[1]); const body = await readBody(req);
     try {
       assertCanAccessClip(currentUser, id);
-      assertWatermarkAllowed(body.styleOverrides);
+      // A per-clip override on a scripture clip is exempt for the same reason
+      // the template is: the mark was never there to remove.
+      assertWatermarkAllowed(body.styleOverrides,
+        state.clips.find(item => item.id === id)?.templateId);
       agent.updateClip(id, body); let clip;
       if (body.status === 'approved') clip = agent.approveClip(id); else if (body.status === 'rejected') clip = agent.rejectClip(id); else if (body.status === 'waiting') clip = state.clips.find(item => item.id === id)?.status === 'rejected' ? agent.unrejectClip(id) : agent.pullBack(id); else clip = state.clips.find(item => item.id === id);
       return json(res, 200, { ok: true, clip: publicClip(clip) });

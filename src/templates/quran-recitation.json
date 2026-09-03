@@ -57,5 +57,5 @@
   "captionPopMs": 0,
   "captionFadeMs": 400,
   "vignette": 0.12,
-  "pro": true
+  "pro": false
 }

@@ -517,6 +517,22 @@ function withAccountEdits(template, user) {
   return merged;
 }
 
+/**
+ * Is this built-in the one that renders scripture?
+ *
+ * Read from the SHIPPED file, never from the account's copy: an override that
+ * switches an ordinary template into `quran` caption mode must not mint an
+ * exemption for itself. Derived from the caption mode rather than matched
+ * against an id, so the answer follows the template that actually does the
+ * thing.
+ */
+export function isScriptureTemplate(id) {
+  const name = String(id || '');
+  if (!name || name.includes('/') || name.includes('.')) return false;
+  const shipped = readTemplateFile(path.join(builtInDir, `${name}.json`), true);
+  return !!shipped && shipped.captionMode === 'quran';
+}
+
 export function saveTemplate(user, id, input = {}) {
   const existing = templateById(id, user);
   if (!existing) throw new Error('That template does not exist.');
