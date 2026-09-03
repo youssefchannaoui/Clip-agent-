@@ -2341,6 +2341,32 @@ AYAH_FADE_OUT_MS = 450
 # at 32. The shrink is linear, so a constant recovers it exactly: ~2.9x makes
 # the Arabic land about twice the visual height of the gloss, which is the
 # reference's proportion.
+# UNRESOLVED, 3 Sept 2026 -- Youssef, on a live clip: "just make sure quran
+# text is equal size to translation." On that frame the ayah renders SMALLER
+# than its English gloss, which is the opposite of what every model here says.
+#
+# Measured from the exact font files the image ships (UthmanicHafs.ttf win cell
+# 1.758 em, tallest un-vowelled letter 0.806 em; Outfit-Regular win cell 1.260,
+# cap/ascender 0.724), the ayah should draw about TWICE the gloss on the Quran
+# template -- and between 2.05x and 6.86x across the five shipped templates,
+# because the two sizes come from UNRELATED fields:
+#
+#     ayah_size        = captionFontSize x ayah_nominal_scale(face)
+#     translation_size = captionTranslationSize
+#
+# THAT is a bug in itself: the relationship between scripture and its gloss is
+# an accident of two independent numbers, so it differs on every template and
+# on every per-account override. Whatever the right ratio is, it should be
+# DERIVED from one of them rather than emerging from both.
+#
+# It is not changed here because this file's own rule forbids it: "Only a
+# rendered frame settles a caption question. Every one of the above passed unit
+# tests; two deploy cycles were spent on renders that should have been right."
+# The ffmpeg on the machine this was investigated from has no libass, so no
+# frame could be rendered. The next session with the container (or the box)
+# should render one ayah + gloss, measure the lit rows of each, and set the
+# ratio from that measurement -- not from the arithmetic above, which the
+# photograph already disproves.
 AYAH_SIZE_SCALE = 3.54
 
 # libass sizes a font by its Win cell (usWinAscent + usWinDescent, in em).

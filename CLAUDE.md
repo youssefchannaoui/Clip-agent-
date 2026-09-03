@@ -4058,6 +4058,43 @@ even at three they were bare names in wrapping pills.
   ONE Meta login, where a per-account disconnect would tear out that login and
   take the other platform with it (v3.56.0).
 
+## The ayah renders smaller than its own gloss, and why that is not yet fixed
+
+Youssef, 3 Sept 2026, with a live Short from the channel: "see exmaple of quran
+recistiation IS GREAT DONT GET ME WRONG. just make sure quran text is equal
+size to translation." On that frame the Arabic is visibly SMALLER than the
+English under it.
+
+**Every model in the code says the opposite**, which is the whole problem.
+Measured from the exact font files the image ships -- `UthmanicHafs.ttf` win
+cell 1.758 em with its tallest un-vowelled letter at 0.806 em, `Outfit-Regular`
+win cell 1.260 with cap/ascender 0.724 -- the ayah should draw about **twice**
+the gloss on the Quran template, which is what `AYAH_SIZE_SCALE`'s own comment
+claims it was tuned for. The photograph disproves it.
+
+**A real bug was found on the way, and it is worth fixing whatever the sizes
+turn out to be.** The two sizes come from UNRELATED template fields:
+
+    ayah_size        = captionFontSize x ayah_nominal_scale(face)
+    translation_size = captionTranslationSize
+
+So the relationship between scripture and its translation is an ACCIDENT of two
+independent numbers. Across the five shipped templates it lands at 2.05x
+(quran-recitation), 2.35x (mono-minimal), 2.50x (clean-line), 4.10x (headline)
+and 6.86x (bold-stack) -- and a per-account override can put it anywhere.
+Scripture is captioned on every template (invariant 7), so this is not confined
+to the Quran one. Whatever the right ratio is, it should be DERIVED from one
+size rather than emerging from both.
+
+**Nothing was changed, deliberately.** This file's rule is "Only a rendered
+frame settles a caption question. Every one of the above passed unit tests; two
+deploy cycles were spent on renders that should have been right." The ffmpeg on
+the Mac has **no libass** (`ffmpeg -filters | grep subtitles` returns nothing),
+so no frame could be rendered to settle it. The next session with the container
+or the box should render one ayah plus its gloss, measure the lit rows of each,
+and set the ratio from that -- not from the arithmetic, which is already known
+to disagree with reality.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
