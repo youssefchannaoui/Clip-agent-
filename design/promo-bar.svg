@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 220">
+  <defs>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1A1A1D"/><stop offset=".45" stop-color="#0D0D0F"/><stop offset="1" stop-color="#141416"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F3D9A6"/><stop offset="1" stop-color="#C9A063"/>
+    </linearGradient>
+    <linearGradient id="slash" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#D9B478" stop-opacity="0"/><stop offset=".5" stop-color="#D9B478" stop-opacity=".85"/><stop offset="1" stop-color="#8A6A2E" stop-opacity=".9"/>
+    </linearGradient>
+    <clipPath id="round"><rect width="1800" height="220" rx="105"/></clipPath>
+  </defs>
+  <g clip-path="url(#round)">
+    <rect width="1800" height="220" fill="url(#bar)"/>
+    <!-- the gold sweep at the trailing edge -->
+    <path d="M1800 -40 L1860 -40 L1720 260 L1660 260 Z" fill="url(#slash)" opacity=".5"/>
+    <!-- crescent + arch mark -->
+    <g transform="translate(96,60)">
+      <path d="M52 0a50 50 0 1 0 0 100 42 42 0 1 1 0-100Z" fill="#FFFFFF"/>
+      <path fill-rule="evenodd" fill="url(#gold)"
+            d="M46 86V44a25 25 0 0 1 50 0v42Z M63 34 84 47 63 60Z"/>
+    </g>
+    <!-- wordmark -->
+    <text x="266" y="106" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="58" font-weight="700" letter-spacing="-1">
+      <tspan fill="#FFFFFF">Deen</tspan><tspan fill="#D9B478">Clipped</tspan>
+    </text>
+    <text x="268" y="146" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="21" font-weight="500" letter-spacing="7.5" fill="#9A958E">AI CLIPPER</text>
+    <rect x="640" y="58" width="1.6" height="104" fill="#3A3A3E"/>
+    <!-- the promise -->
+    <text x="722" y="92" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="21" font-weight="600" letter-spacing="4.6" fill="#8E8A84">TURN LONG LECTURES INTO</text>
+    <text x="722" y="146" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="42" font-weight="700" letter-spacing="-.6">
+      <tspan fill="#FFFFFF">short clips </tspan><tspan fill="#D9B478">automatically.</tspan>
+    </text>
+    <!-- the address -->
+    <rect x="1246" y="52" width="466" height="116" rx="58" fill="none" stroke="#4A4A4E" stroke-width="2"/>
+    <text x="1292" y="123" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="34" font-weight="600" fill="#FFFFFF">deenclipped.online</text>
+    <circle cx="1654" cy="110" r="40" fill="url(#gold)"/>
+    <path d="M1641 123 L1667 97 M1648 97 h19 v19" stroke="#15120C" stroke-width="4.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
