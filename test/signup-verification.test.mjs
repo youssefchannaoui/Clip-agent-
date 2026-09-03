@@ -176,3 +176,50 @@ test('a new account is sent to the code screen, not into the app', () => {
   assert.ok(server.includes('!known &&'), 'only a new account');
   assert.ok(server.includes('!auth.isVerified(user)'), 'and only one that needs it');
 });
+
+/**
+ * Switching email on must not lock out the people already here.
+ *
+ * Setting EMAIL_API_KEY flips `verificationRequired()` from false to true for
+ * the whole deployment. Without a grandfather rule that does something nobody
+ * would intend: every account that ever signed up with an email and password
+ * is retroactively blocked from importing, because none of them was ever asked
+ * to confirm. They signed up under different rules, and they have already paid
+ * tokens for work they would suddenly be refused.
+ */
+test('an account that predates confirmation is not blocked by it', async () => {
+  const mailer = await import('../src/mailer.js');
+  const before = { id: 'user_old', email: 'old@deenclipped.test', providers: {}, createdAt: 1000 };
+  store.state.authUsers.push(before);
+
+  // With no mail configured everybody counts as verified, exactly as before.
+  assert.equal(auth.isVerified(before), true);
+
+  const key = config.emailApiKey;
+  const from = config.emailFrom;
+  config.emailApiKey = 'test-key';
+  config.emailFrom = 'DeenClipped <hello@deenclipped.test>';
+  delete store.state.authSettings?.verificationSince;
+  try {
+    assert.equal(mailer.configured(), true, 'the deployment can now send');
+    // The stamp lands on the first read, so this account is on the old side.
+    assert.equal(auth.isVerified(before), true, 'an existing account keeps working');
+    const since = Number(store.state.authSettings.verificationSince);
+    assert.ok(since > 0, 'the day confirmation started is recorded');
+
+    // Someone who signs up AFTER it is on must still confirm.
+    const after = { id: 'user_new', email: 'new@deenclipped.test', providers: {}, createdAt: since + 1000 };
+    store.state.authUsers.push(after);
+    assert.equal(auth.isVerified(after), false, 'a new account is asked');
+    const { code } = auth.createVerification(after);
+    assert.equal(auth.consumeVerificationCode(after.id, code).ok, true);
+    assert.equal(auth.isVerified(after), true, 'and is done once it answers');
+
+    // A Google account is proof of the address on arrival, whenever it arrived.
+    const google = { id: 'user_g', email: 'g@deenclipped.test', providers: { google: { sub: '1' } }, createdAt: since + 2000 };
+    assert.equal(auth.isVerified(google), true);
+  } finally {
+    config.emailApiKey = key;
+    config.emailFrom = from;
+  }
+});
