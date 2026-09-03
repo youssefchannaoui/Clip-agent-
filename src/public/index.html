@@ -281,6 +281,26 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
   background: no-repeat center / 10px 16px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 16'%3E%3Cg fill='%23A0A0A8'%3E%3Ccircle cx='2.5' cy='3' r='1.4'/%3E%3Ccircle cx='7.5' cy='3' r='1.4'/%3E%3Ccircle cx='2.5' cy='8' r='1.4'/%3E%3Ccircle cx='7.5' cy='8' r='1.4'/%3E%3Ccircle cx='2.5' cy='13' r='1.4'/%3E%3Ccircle cx='7.5' cy='13' r='1.4'/%3E%3C/g%3E%3C/svg%3E");
 }
 [data-slot]:hover > .dc-grip { opacity: .95; }
+/* The week cell's Remove. Bottom right, opposite the grip at top right, so
+   the two controls on one 60px cell never sit under the same thumb. It is
+   hidden until the cell is hovered or the control itself is focused -- a red
+   x on every filled slot turns the week into a wall of delete buttons -- but
+   `:focus-visible` keeps it reachable by keyboard, where there is no hover. */
+.dc-unsched {
+  position: absolute; bottom: 3px; right: 3px; z-index: 3;
+  display: grid; place-items: center; width: 18px; height: 18px;
+  border-radius: 6px; border: 1px solid var(--dc-line, #26262A);
+  background: var(--dc-bg-deepest, #0E0E11); color: var(--dc-ink-dim, #8B8B93);
+  font: 600 12px/1 Outfit, Inter, sans-serif; cursor: pointer;
+  opacity: 0; transition: opacity .15s ease, color .15s ease, border-color .15s ease;
+}
+[data-slot]:hover > .dc-unsched, .dc-unsched:focus-visible { opacity: 1; }
+.dc-unsched:hover { color: var(--dc-n-ff5566, #FF5566); border-color: rgba(255,85,102,.5); }
+.dc-unsched:focus-visible { outline: 2px solid rgba(240,214,166,.6); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .dc-unsched { transition: none; } }
+/* On a touch screen there is no hover to reveal it, and a control that can
+   only be reached by hovering is no control at all on a phone. */
+@media (hover: none) { .dc-unsched { opacity: .85; } }
 @media (prefers-reduced-motion: reduce) { .dc-grip { transition: none; } }
 @media (prefers-reduced-motion: reduce) { .dc-sched-ghost { box-shadow: none; } }
 .slh-empty { display: flex; align-items: center; gap: 11px; padding: 15px 16px; font-size: 11.5px; color: var(--dc-ink-faint, #6E6E76); }
@@ -6045,6 +6065,9 @@ function renderStudio(){
     },'Template applied — re-rendering this clip');
     StudioAdapter.onPostNow=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}/publish`,{method:'POST'}),'Publishing started');
     StudioAdapter.onSendBack=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({status:'waiting'})}),'Back in the review queue');
+    /* Off the schedule, still approved. The toast says where it went --
+       "Removed" alone would read as the clip having been destroyed. */
+    StudioAdapter.onUnschedule=id=>studioDo(()=>api(`/api/clips/${encodeURIComponent(id)}/unschedule`,{method:'POST',body:'{}'}),'Removed from the schedule \u2014 still approved');
     /* The day the button belongs to travels with the clip. The server puts it
        in the first free posting time on that day -- and says where it landed,
        because a full day rolls forward and silently doing so would leave the
@@ -8636,6 +8659,47 @@ function paintScheduleDrag(){
       g.title='Drag to move this post';
       cell.appendChild(g);
     }else if(!on&&has){has.remove()}
+
+    /* Remove, on the WEEK cells. Youssef, 3 Sept 2026: "also add that to the
+       weekly so you can remove the clips you want to."
+
+       Host-rendered beside the grip rather than added to the design export,
+       for a reason the export forces: a week cell IS a <button>, and a nested
+       button is invalid markup that swallows the outer click. This is a
+       role="button" span -- the same device .bgt-del and the vote controls
+       use -- and it stops the event so removing does not also select the slot.
+
+       The Day card already has its own Remove from the export, so this is
+       skipped there: two remove controls on one card is worse than none. */
+    const isDay=cell.hasAttribute('data-dc-sched-card');
+    const kill=cell.querySelector(':scope > .dc-unsched');
+    /* Removing needs only a CLIP, where dragging also needs a future slot to
+       move within. A clip on a time the account no longer posts at lands in
+       the week's "Other" row, which has no slot instant at all -- and that is
+       precisely the clip somebody wants to take off the schedule. Tying the x
+       to `on` left those two cells with no control of any kind. Anything that
+       genuinely cannot be removed (posted, mid-transfer) is refused by the
+       server, which says why. */
+    const removable=!!cell.dataset.slotClip;
+    if(removable&&!isDay&&!kill){
+      const x=document.createElement('span');
+      x.className='dc-unsched';
+      x.setAttribute('role','button');
+      x.setAttribute('tabindex','0');
+      x.title='Remove from the schedule';
+      x.textContent='\u00D7';
+      const go=ev=>{
+        ev.preventDefault(); ev.stopPropagation();
+        if(window.StudioAdapter&&StudioAdapter.onUnschedule)StudioAdapter.onUnschedule(cell.dataset.slotClip);
+      };
+      x.addEventListener('click',go);
+      /* A pointerdown on the cell starts a DRAG, and the drag's own handler
+         sits on the grid. Swallowing it here means pressing the x never picks
+         the clip up. */
+      x.addEventListener('pointerdown',ev=>ev.stopPropagation());
+      x.addEventListener('keydown',ev=>{ if(ev.key==='Enter'||ev.key===' ')go(ev) });
+      cell.appendChild(x);
+    }else if((!removable||isDay)&&kill){kill.remove()}
   });
 
   containers.forEach(grid=>{ if(grid&&grid.dataset.dragWired!=='1'){grid.dataset.dragWired='1';wireScheduleDrag(grid)} });
@@ -8684,7 +8748,7 @@ function wireScheduleDrag(grid){
          following the pointer hides what you are aiming at. */
       const r=from.getBoundingClientRect();
       const copy=from.cloneNode(true);
-      copy.querySelectorAll('.dc-grip').forEach(g=>g.remove());
+      copy.querySelectorAll('.dc-grip,.dc-unsched').forEach(g=>g.remove());
       copy.style.width=r.width+'px';
       copy.style.height=r.height+'px';
       copy.style.margin='0';

@@ -507,7 +507,11 @@
       iff('it.p.hasFailing', [h('div', { class: 'dcm-post-c' }, [each('it.p.checks', 'chk', [h('span', { st: 'chk.style' }, [phb('chk.icon'), ' ', tx('chk.label')])])])]),
       iff('it.p.failReason', [h('p', { class: 'dcm-post-f' }, [tx('it.p.failReason')])]),
       h('div', { class: 'dcm-post-a' }, [
-        h('button', { type: 'button', class: 'dcm-btn dcm-btn-sm dcm-btn-ghost', on: { click: 'it.p.sendBack' } }, 'Send back to review'),
+        // The same card and the same action as the desktop schedule, so the
+        // two surfaces cannot tell one person two stories about what this
+        // button does. Remove takes the clip off the schedule and leaves
+        // the approval standing.
+        h('button', { type: 'button', class: 'dcm-btn dcm-btn-sm dcm-btn-ghost', on: { click: 'it.p.removeFromSchedule' } }, 'Remove'),
         h('button', { type: 'button', class: cat('dcm-btn dcm-btn-sm ', b('it.postCls')), on: { click: 'it.p.postNow' } }, [tx('it.p.postLabel')]),
       ]),
     ]);

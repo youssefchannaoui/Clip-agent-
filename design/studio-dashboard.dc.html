@@ -1060,7 +1060,7 @@
                   </div>
                   <div style="display: flex; align-items: center; gap: 7px; flex: none;">
                     <button onClick="{{ post.postNow }}" style="{{ post.postStyle }}" style-hover="background: rgba(217,180,120,.14);"><i class="ph ph-paper-plane-tilt" style="font-size: 13px;"></i>{{ post.postLabel }}</button>
-                    <button onClick="{{ post.sendBack }}" title="Send back to review" style="display: grid; place-items: center; width: 29px; height: 28px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-arrow-u-up-left" style="font-size: 14px;"></i></button>
+                    <button onClick="{{ post.removeFromSchedule }}" title="{{ post.removeTitle }}" style="display: grid; place-items: center; width: 29px; height: 28px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-x" style="font-size: 14px;"></i></button>
                   </div>
                 </article>
               </sc-for>
@@ -1162,7 +1162,7 @@
                   </div>
                   <div style="display: flex; align-items: center; gap: 7px; flex: none;">
                     <button onClick="{{ post.postNow }}" style="{{ post.postStyle }}" style-hover="background: rgba(217,180,120,.14);"><i class="ph ph-paper-plane-tilt" style="font-size: 13px;"></i>{{ post.postLabel }}</button>
-                    <button onClick="{{ post.sendBack }}" title="Send back to review" style="display: grid; place-items: center; width: 29px; height: 28px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-arrow-u-up-left" style="font-size: 14px;"></i></button>
+                    <button onClick="{{ post.removeFromSchedule }}" title="{{ post.removeTitle }}" style="display: grid; place-items: center; width: 29px; height: 28px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-x" style="font-size: 14px;"></i></button>
                   </div>
                 </article>
               </sc-for>

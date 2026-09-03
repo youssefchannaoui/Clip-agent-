@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1281 JS + 592 Python**
+- `npm test` and `npm run check` must pass. Currently **1291 JS + 592 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4442,6 +4442,79 @@ work by template. It's incorrect."
 - **The chips are rewired on EVERY paint**, not guarded by `dataset.wired`:
   they are rebuilt by the innerHTML above them, so a wired flag would leave
   the new buttons dead. The switch above them survives and can carry one.
+
+## Remove takes a clip off the schedule; it does not un-review it (v3.114.0)
+
+Youssef, 3 Sept 2026, pointing at the Day view's one round button: "make this
+button a remove and it removes also add that to the weekly so you can remove
+the clips you want to."
+
+- **It used to be Send back to review**, which calls `pullBack` -- status
+  `waiting`, approval nulled, targets cleared. So tidying one day's schedule
+  cost a re-review of everything you tidied. The approval is a decision a
+  person made; taking a clip off Tuesday is not a retraction of it. The new
+  `agent.unschedule` keeps `approvedAt`/`approvedBy`, clears the slot and the
+  targets, and leaves the clip in the pool the schedule picker already reads
+  (`approved` + no `scheduledAt` + not posted = "Ready to schedule").
+- **`scheduleHold` is the load-bearing half.** `tick()` schedules EVERY
+  approved clip that has no slot, so without it the next sweep -- ten minutes
+  at most -- hands the clip a fresh time and Remove reads as a button that
+  does nothing. `scheduleApprovedClip` spends the hold, because reaching it at
+  all means somebody asked for this clip to be scheduled; tick() skips held
+  clips before it calls in. The test drives the real sweep rather than reading
+  the flag, and was proven red against the guard's removal.
+- `pullBack` is untouched and still un-approves. If Remove ever quietly
+  becomes an alias for it, curating a schedule starts costing a re-review per
+  clip again -- a test asserts the two do different things.
+- **Its own route** (`POST /api/clips/:id/unschedule`) rather than a PATCH
+  status, because the clip's status does not change: it stays approved and
+  simply loses its slot.
+- The toast says "Removed from the schedule -- still approved". "Removed"
+  alone reads as the clip having been destroyed.
+
+### The week cell is a `<button>`, so its Remove cannot be one
+
+- A nested button is invalid markup and swallows the outer click, so the
+  week's control is a host-rendered `role="button"` span injected beside the
+  drag grip -- the device `.bgt-del` and the scenery votes already use. It
+  costs no design re-import and a re-import cannot renumber it away.
+- **It stops `pointerdown` as well as `click`.** The drag starts on
+  pointerdown at the grid, so without that guard pressing the x picks the clip
+  up instead of removing it.
+- **The Day card is skipped**, because the export already gives it a Remove.
+  Two remove controls on one card is worse than none.
+- Grip top right, x bottom right: measured 129px apart in a 103x172 cell, no
+  overlap, both inside it. Hidden until hover, with `:focus-visible` for the
+  keyboard and `@media (hover: none)` for a phone, where a control that can
+  only be reached by hovering is no control at all.
+
+### Removing needs a CLIP; dragging also needs a SLOT
+
+The first cut tied the x to the grip's own condition (a clip AND a future
+slot instant) and that was wrong in a way only the week view shows. A clip on
+a time the account no longer posts at lands in the week's **"Other"** row,
+whose cells carry no `at` -- and that is precisely the clip somebody wants to
+take off the schedule. It had no control of any kind. The Other row now
+carries `clipId` (still no `at`: there is nothing to drop onto), and the two
+conditions are separate. Anything genuinely un-removable -- posted,
+mid-transfer -- is refused by the server, which says why.
+
+### Driven, not assumed
+
+Day card: label "Remove from the schedule", `ph-x`, one click -> `approved`,
+no slot, approval intact, card count 2 -> 1, and the clip appears as "1 clip
+approved, no slot yet". Week: both a windowed cell and an Other-row stray
+removed by their own x, the view staying on week (the x did not trigger the
+cell's own click). Drag re-checked afterwards and still moves a clip between
+slots, with the ghost carrying neither control and zero ghosts left behind.
+
+**A synthetic `pointerup` on `document` does NOT end a drag**, and the
+leftover ghost that produces looks exactly like a cleanup bug. Real drags use
+`setPointerCapture`, so every pointer event including the up is delivered to
+the source cell and bubbles to the grid. Dispatch on the cell.
+
+**The export edit was proven byte-stable first** (CSS identical, no hashed
+class name moved), the route this repo established for `data-dc-week`.
 
 ## Open items
 
