@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1190 JS + 572 Python**
+- `npm test` and `npm run check` must pass. Currently **1190 JS + 575 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4106,6 +4106,25 @@ for.
 the container:** re-render one clip through the app, download the render from
 `media.deenclipped.online`, take a frame with `ffmpeg -ss`, and measure the lit
 rows. It settled in one cycle what the arithmetic had had wrong for months.
+
+### And then it was still hard to read, because it was the STROKE
+
+Youssef, on the re-render at 5.80: "it should look cleaner i feel like its too
+thin or something its hard to see."
+
+Not size -- **stroke weight**. The Ayah and Translation styles shared one
+outline width, and the Quran template sets `captionOutlineWidth: 1`. On Outfit,
+a geometric sans with a solid stem, a 1px edge is enough. A mushaf face is not
+that: Uthmanic script runs to hairlines at the joins and through the tashkeel,
+so the same 1px left scripture with almost no separation from a bright, busy
+frame -- which is where these clips live. Making the two lines the same HEIGHT
+did nothing for this.
+
+`AYAH_OUTLINE_MIN = 3.0`, applied as a **floor and not a multiple**. A 3x
+multiple was written first and would have given Clean Line an 18px edge -- a
+black blob round every letter. Only the templates that leave scripture
+under-outlined move: quran-recitation 1 -> 3, and clean-line, bold-stack and
+mono-minimal are untouched at 5, 6 and 5.
 
 **The arithmetic in the AYAH_SIZE_SCALE comment block is DISPROVED** -- by two
 separate frames now -- and must not be trusted over a render.

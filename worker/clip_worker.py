@@ -2385,6 +2385,12 @@ AYAH_FADE_OUT_MS = 450
 # it has now been disproved by two separate frames.
 AYAH_SIZE_SCALE = 5.80
 
+# The least outline an ayah may have, whatever the template asks for the Latin
+# caption. See the note beside `ayah_outline` in write_ass: a mushaf face has
+# hairline strokes where a Latin sans has stems, so an edge that suits the
+# gloss can leave scripture hard to read over a bright frame.
+AYAH_OUTLINE_MIN = 3.0
+
 # libass sizes a font by its Win cell (usWinAscent + usWinDescent, in em).
 # The mushaf faces have very tall cells, so the same nominal size draws them
 # much smaller than a Latin face -- the reason ayahs were "tripled". The cell
@@ -3260,6 +3266,24 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     ayah_size = int(round(font_size * ayah_nominal_scale(ayah_font)))
     margin_v = int(template.get("captionMarginV", 220))
     outline_width = float(template.get("captionOutlineWidth", 5))
+    # THE AYAH NEEDS A HEAVIER OUTLINE THAN THE LATIN, at the same visual size.
+    # Youssef, 3 Sept 2026, on a re-render: "it should look cleaner i feel like
+    # its too thin or something its hard to see."
+    #
+    # The two styles shared one width, and the Quran template sets it to 1. On
+    # Outfit -- a geometric sans with a solid stem -- a 1px edge is enough. A
+    # mushaf face is not that: Uthmanic script runs to hairlines at the joins
+    # and in the tashkeel, so the same 1px leaves the scripture with almost no
+    # separation from a bright, busy frame, which is exactly where these clips
+    # live. Matching the SIZE of the two lines (AYAH_SIZE_SCALE) did nothing
+    # for this: it is stroke weight, not height.
+    #
+    # A FLOOR, not a multiple. A 3x multiple was written first and would have
+    # given Clean Line an 18px edge -- a black blob round every letter. The
+    # templates that already set a heavy outline are right for their own face
+    # and are left exactly as they are; only the ones that leave scripture
+    # under-outlined are raised.
+    ayah_outline = max(outline_width, AYAH_OUTLINE_MIN)
     shadow = float(template.get("captionShadow", 1))
     # Scripture is always centred, whatever the style says.
     #
@@ -3310,7 +3334,7 @@ WrapStyle: 2
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Caption,{font},{font_size},{primary},{highlight},{outline},{back},-1,0,0,0,100,{scale_y},{letter_spacing:g},0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
-Style: Ayah,{ayah_font},{ayah_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
+Style: Ayah,{ayah_font},{ayah_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{ayah_outline},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Translation,{font},{translation_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Watermark,{font},{watermark_size},{watermark_color},{watermark_color},{outline},&H00000000,1,0,0,0,100,100,2,0,1,1,0,{watermark_align},{watermark_margin_h},{watermark_margin_h},{watermark_margin_v},1
 
