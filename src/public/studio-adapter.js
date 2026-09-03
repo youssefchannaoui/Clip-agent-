@@ -2623,6 +2623,26 @@
                 global.StudioAdapter.onPostNow(c.id);
               },
               sendBack: function (e) { stop(e); global.StudioAdapter.onSendBack(c.id); },
+              /*
+               * Remove from the schedule, NOT back to the review queue.
+               *
+               * Youssef, 3 Sept 2026: "make this button a remove and it
+               * removes." It used to call sendBack, which un-approves the clip
+               * -- so clearing a day's schedule meant re-reviewing everything
+               * you cleared. The approval is a decision a person made; taking
+               * a clip off Tuesday is not a retraction of it. The clip lands
+               * in "Ready to schedule" and the picker can put it back.
+               *
+               * A clip that has already gone out has nothing to remove, and
+               * the server refuses it either way -- said here so the answer is
+               * immediate and names the reason.
+               */
+              removeTitle: c.postedAt ? 'Already posted' : 'Remove from the schedule',
+              removeFromSchedule: function (e) {
+                stop(e);
+                if (c.postedAt) { toast('This clip has already posted, so there is nothing to remove.'); return; }
+                global.StudioAdapter.onUnschedule(c.id);
+              },
             };
     }
 
@@ -2879,6 +2899,13 @@
           return {
             filled: Boolean(held),
             free: false,
+            // No `at`: this row is not one of the account's posting windows, so
+            // there is no instant to drop a clip ONTO and the cell is not a
+            // drag target. It still carries the clip id, because a stray is
+            // exactly the clip somebody wants to take off the schedule -- and
+            // without an id the host has nothing to remove.
+            at: '',
+            clipId: held ? String(held.id) : '',
             title: held ? timeOf(held.scheduledAt) + '  ' + String(held.title || 'Clip') : '',
             style: 'display: flex; flex-direction: column; justify-content: center; gap: 2px; flex: 1 1 0; min-width: 0;'
               + ' height: 46px; padding: 6px 8px; border-radius: 9px; text-align: left; font-family: inherit;'
@@ -8011,6 +8038,7 @@
     onPublishingToggle: function () {},
     onPostNow: function () {},
     onSendBack: function () {},
+    onUnschedule: function () {},
     onScheduleClip: function () {},
     onRestore: function () {},
     onMoreClips: function () {},

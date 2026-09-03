@@ -2805,6 +2805,17 @@ async function route(req, res, url) {
       return json(res, 200, { ok: true, clip: publicClip(clip) });
     } catch (error) { return json(res, 400, { error: error.message }); }
   }
+  // Take a clip off the schedule WITHOUT un-reviewing it. Its own route
+  // rather than a PATCH status, because the clip's status does not change --
+  // it stays approved and simply loses its slot.
+  const clipUnschedule = pathname.match(/^\/api\/clips\/([^/]+)\/unschedule$/);
+  if (clipUnschedule && method === 'POST') {
+    try {
+      const id = decodeURIComponent(clipUnschedule[1]);
+      assertCanAccessClip(currentUser, id);
+      return json(res, 200, { ok: true, clip: publicClip(agent.unschedule(id)) });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
   if (clipMatch && method === 'DELETE') {
     try { const id = decodeURIComponent(clipMatch[1]); assertCanAccessClip(currentUser, id); agent.deleteClip(id); return json(res, 200, { ok: true }); }
     catch (error) { return json(res, 400, { error: error.message }); }

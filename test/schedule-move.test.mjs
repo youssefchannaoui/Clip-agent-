@@ -191,8 +191,11 @@ test('the drag ghost is the card itself, and the cursor is a closed fist', () =>
   const host = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
   assert.ok(host.includes('const copy=from.cloneNode(true)'),
     'the ghost is a clone of the cell, not a rebuilt summary of it');
-  assert.ok(host.includes("copy.querySelectorAll('.dc-grip').forEach(g=>g.remove())"),
-    'a handle on something already in the air means nothing');
+  // Both in-cell controls come off the clone. v3.114.0 added a Remove x
+  // beside the grip, and an x on something already in the air is the same
+  // mistake as a handle on it.
+  assert.ok(host.includes("copy.querySelectorAll('.dc-grip,.dc-unsched').forEach(g=>g.remove())"),
+    'a handle — or a remove button — on something already in the air means nothing');
   assert.ok(/Math\.min\(1,\s*400\/r\.width\)/.test(host),
     'a Day card is as wide as the screen — a full-width slab would hide the target');
   assert.ok(host.includes("copy.style.transformOrigin='top left'"),

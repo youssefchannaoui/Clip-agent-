@@ -369,6 +369,45 @@ export function updateClip(id, fields = {}) {
   save(); return clip;
 }
 
+/**
+ * Take a clip OFF the schedule without un-reviewing it.
+ *
+ * Youssef, 3 Sept 2026: "make this button a remove and it removes ... so you
+ * can remove the clips you want to."
+ *
+ * Deliberately NOT pullBack. That un-approves the clip and sends it back to
+ * the review queue, so curating a day's schedule would mean re-reviewing
+ * everything you moved -- the approval is a decision a person made and
+ * removing a clip from Tuesday is not a retraction of it. The clip returns to
+ * "Ready to schedule", where the schedule picker can put it back.
+ *
+ * `scheduleHold` is what makes that stick. tick() schedules every approved
+ * clip with no slot, so without it the next sweep (ten minutes at most) would
+ * hand this clip a new time and the button would read as broken. Scheduling it
+ * again -- by the picker or by a drag -- clears the hold, because that is a
+ * fresh instruction.
+ */
+export function unschedule(id) {
+  const clip = clipById(id);
+  if (!clip) throw new Error('That clip no longer exists.');
+  if (clip.status === 'posted' || (clip.targets || []).some(target => target.status === 'posted')) {
+    throw new Error('This clip has already posted, so there is nothing left to remove from the schedule.');
+  }
+  if ((clip.targets || []).some(target => ['publishing', 'processing'].includes(target.status))) {
+    throw new Error('This clip is being sent to a platform right now and cannot be taken off the schedule safely.');
+  }
+  clip.status = 'approved';
+  clip.scheduledAt = null;
+  clip.readyAt = null;
+  clip.targets = [];
+  clip.scheduleError = null;
+  clip.scheduleErrorAt = null;
+  clip.scheduleHold = true;
+  save();
+  log(`"${clip.title || clip.id}" was taken off the schedule.`, 'info', ownerOf(clip));
+  return clip;
+}
+
 export function pullBack(id) {
   const clip = clipById(id);
   if (!clip) throw new Error('That clip no longer exists.');
@@ -405,6 +444,10 @@ function setTargets(clip) {
 const LEAD_MS = 15 * 60_000;
 export function scheduleApprovedClip(clip, { at = null, day = null } = {}) {
   if (clip.status !== 'approved') return clip;
+  // Reaching here at all means somebody asked for this clip to be scheduled --
+  // tick() skips held clips before it calls in. A fresh instruction spends the
+  // hold, so a removed clip put back by the picker behaves normally afterwards.
+  clip.scheduleHold = false;
   const taken = ownedBy(state.clips, ownerOf(clip)).map(item => item.scheduledAt).filter(Boolean);
   const exact = Number(at), whole = Number(day);
   // How many windows a day this account may fill. Everyone gets the configured
@@ -783,7 +826,10 @@ export async function tick() {
   try {
     applyAutomation();
     for (const clip of state.clips) {
-      if (clip.status === 'approved') {
+      // A clip taken off the schedule on purpose stays off. Without this the
+      // next sweep would hand it a new slot within ten minutes and Remove
+      // would read as a button that does nothing.
+      if (clip.status === 'approved' && !clip.scheduleHold) {
         try { scheduleApprovedClip(clip); }
         catch (error) {
           // The approval STANDS. This used to push the clip back to `waiting`
