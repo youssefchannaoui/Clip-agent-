@@ -133,11 +133,41 @@ What a compliant recording must show, from TikTok's own rules on the page:
 5. Post, and show the result. `SELF_ONLY` is the only level an unaudited app
    can use.
 
-**Sandbox caveat, unresolved:** the portal says an app that has never been
-approved "is required to use a sandbox environment on the Developer Portal to
-demonstrate the integration." The Sandbox tab is a separate environment from
-Production and was not investigated. Confirm how it issues credentials before
-recording, or the recording may have to be done twice.
+**Sandbox caveat — RESOLVED 3 Sept 2026** by opening the tab rather than
+reasoning about it. The requirement is real and is printed on the App review
+page verbatim: *"If your app has not been approved before, you are required to
+use a sandbox environment on the Developer Portal to demonstrate the
+integration."* So the recording must be made against the sandbox.
+
+The good news is that the sandbox was already built on 24 Aug and needs nothing:
+
+| | |
+|---|---|
+| Sandbox | `DeenClipped Dev`, id `7677507072518473748` |
+| Icon | already uploaded (the Production draft's is NOT) |
+| Target user | `deenclipped`, added 24 Aug 2026 18:38 |
+| Credentials | its OWN client key + secret, separate from Production |
+| Redirect URI | `https://deenclipped.online/auth/tiktok/callback` — the real one |
+
+That last row is what makes this workable: the sandbox points at the production
+callback, so the recording can be made on the real site, which is also what
+TikTok asks for ("showcase the website or app where the features will actually
+be integrated").
+
+**The cost, and it is the thing to decide before starting.** The sandbox issues
+a DIFFERENT client key and secret, so recording means putting the sandbox pair
+into Render for the length of the recording and then putting the production
+pair back. While the sandbox pair is live, **the existing TikTok connection
+stops working** — the stored refresh token was issued to the other client — so
+the account has to be reconnected during the recording (which the recording
+wants to show anyway) and reconnected again afterwards. Do not start this
+mid-schedule: check nothing is due to post first.
+
+**Production draft state, 3 Sept 2026:** empty except the app name. Everything
+entered on 24 Aug was lost exactly as this file predicted, because Save is
+refused while the demo video is missing. The values above are still the record
+to retype from. The icon is still at
+`~/Downloads/DeenClipped-TikTok-App-Icon.png` (verified present).
 
 ---
 
@@ -177,7 +207,12 @@ that combination is blocked in the UI before the save and again in
 
 ## Remaining steps, in order
 
-1. **Record the demo video** (above). Under 50MB, mp4 or mov.
+0. **Check nothing is scheduled to post to TikTok in the next hour.** Step 1
+   swaps the credentials out from under the live connection.
+1. **Record the demo video** (above), against the SANDBOX. Under 50MB, mp4 or
+   mov. Put the sandbox client key/secret into Render, reconnect TikTok in the
+   app, record the five beats, then put the production pair back and reconnect
+   again.
 2. **Upload it** to the new app's App review section. `Save` becomes possible
    only at this point — save immediately.
 3. **Put the new credentials into Render** — owner only, both together:

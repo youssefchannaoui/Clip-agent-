@@ -3851,6 +3851,15 @@ a product fault wearing a test problem's clothes.
 2. **TikTok app review** — record the demo and submit (`TIKTOK-SUBMISSION.md`).
    Until then an unreviewed app may only post to a TikTok account that is
    itself private; setting the account private is the way to post today.
+   **The sandbox question is answered (3 Sept 2026)** and the answer is in that
+   file: the recording MUST be made against the sandbox (the App review page
+   says so in as many words), the sandbox already exists with its icon and
+   target user, and it points at the real production callback — so the video
+   can be shot on the live site. The one cost is that the sandbox has its own
+   client key/secret, so recording means swapping the Render pair, reconnecting
+   TikTok, recording, and swapping back. Everything else on that submission is
+   verified live: both domain-verification files serve 200, /terms and /privacy
+   serve 200, and the icon is still on the Mac. **Only the recording is left.**
 3. ~~**Worker deploy on Hetzner.**~~ **DONE, and it deploys itself now.**
    Kept rather than deleted because this entry was stale for two days and a
    session acting on it would waste an hour arming a workflow that is already
