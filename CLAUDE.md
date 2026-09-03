@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1175 JS + 572 Python**
+- `npm test` and `npm run check` must pass. Currently **COUNT**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3923,6 +3923,50 @@ TITLES." Two faults, both real, both measured before anything was built.
   from now on; sync reaches existing Quran clips when they are re-rendered
   (a template save re-renders every clip still waiting). Neither has been
   seen on a real frame yet.
+## The connections dialog was clunky in three separate ways (v3.102.0)
+
+Youssef, 3 Sept 2026, with a screenshot: "ALL connecting and disccount and so
+many issues with connecting tiktok its a mess ... it just messy cluncky
+conntions feel un statifying and dont know if im connecting or not, tiktok
+gives back 504 errors, when disconnecting nothing changes not instant."
+
+Three faults, none of which errors or logs. The dialog simply feels broken.
+
+- **The 504 was ours, not TikTok's.** `jsonRequest` defaults to a 120-SECOND
+  timeout, and `queryTikTokCreator` took it -- but that call runs inside a
+  request a BROWSER is waiting on (opening the publish options, testing a
+  connection). Render's proxy gives up long before two minutes and answers the
+  browser 504, so a slow TikTok could never surface its own error: the gateway
+  killed the request first and the customer saw a bare 504 that says nothing
+  about TikTok at all. Fifteen seconds now, on that call only -- the long
+  default is right for the UPLOAD path, where a big file genuinely takes
+  minutes and nobody is watching a spinner.
+- **Disconnect waited for a round trip before the row changed.** Same fault as
+  the Start-job chips earlier the same day: POST, then a full GET /api/state,
+  and only then a repaint. It is optimistic now. **Measured against a
+  deliberately 3-SECOND server: the row reaches its final state in 59ms.**
+- **THE FIRST CUT MUTATED THE WRONG SHAPE AND ONLY MEASURING CAUGHT IT.** The
+  row reads `DATA.social.providers[key]`, not `DATA.socialConnections`; nulling
+  the latter took the row as far as "Paused" while it went on naming an account
+  that had just been removed. The probe printed that intermediate text, which
+  is the only reason it was noticed -- reading the diff would not have shown
+  it. Clear `connected`, `accounts` AND the publishing entry, and for Meta
+  clear BOTH instagram and facebook or the other one keeps showing a dead
+  account.
+- **Connect said nothing while it worked.** It hands off to the platform's
+  OAuth page, and until that page paints there was nothing on screen: on a slow
+  hop, several seconds of a dialog that looks like it ignored the press. The
+  button now reads "Opening…", refuses a second press, and puts itself back
+  after six seconds if the hand-off never happened -- a button stuck on
+  "Opening…" for ever would be a worse lie than the silence.
+- **The headroom hint repeated the button beside it, under every platform.**
+  "STUDIO · 1 OF 3 CHANNELS CONNECTED" plus "Press Connect again to add
+  another." -- four platforms, eight lines of near-identical boilerplate
+  burying the actual controls, and the sentence said what the button two inches
+  away already says in two words ("Add another"). The COUNT stays, because "how
+  do I know I get three?" is a real question and this is the screen that
+  answers it (v3.72.1); the plan name goes, because the header pill already
+  carries it.
 
 ## Open items
 

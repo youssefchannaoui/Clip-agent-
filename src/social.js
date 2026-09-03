@@ -1281,8 +1281,23 @@ async function pollInstagram(target, userId) {
 }
 
 async function queryTikTokCreator(accessToken, userId, accountId = '') {
+  /*
+   * FIFTEEN seconds, not the 120 jsonRequest defaults to.
+   *
+   * This call runs inside a request a BROWSER is waiting on -- opening the
+   * publish options, and testing a connection. Render's proxy gives up long
+   * before two minutes and answers the browser 504, so a slow TikTok could
+   * never surface its own error: the gateway killed the request first and the
+   * customer saw a bare "504" that says nothing about TikTok at all.
+   * Youssef, 3 Sept 2026: "tiktok gives back 504 errors".
+   *
+   * The long default is right for the UPLOAD path, where a big file genuinely
+   * takes minutes and nobody is staring at a spinner. It is wrong for a
+   * question the screen is blocked on.
+   */
   const result = await jsonRequest(`${config.tiktokApiBase}/v2/post/publish/creator_info/query/`, {
     method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json; charset=UTF-8' }, body: '{}',
+    signal: AbortSignal.timeout(15_000),
   }, 'TikTok');
   const info = result?.data || {};
   // Cached on the account it describes: each TikTok has its own privacy

@@ -608,7 +608,6 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
   text-transform: uppercase; color: var(--dc-n-8a8a93, #8A8A93); margin-bottom: 2px; }
 /* The headroom line under a single connected channel: what the plan still
    allows, in the place where somebody would go looking for it. */
-#studioConnList .studio-conn-headroom { width: 100%; font-size: 12px; color: var(--dc-n-8a8a93, #8A8A93); }
 #studioConnList .studio-conn-account { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
   font-size: 12px; padding: 5px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,.12);
   color: var(--dc-n-c9c9d1, #C9C9D1); transition: background .15s ease, border-color .15s ease, color .15s ease; }
@@ -5356,9 +5355,19 @@ function renderStudio(){
          Connect button beside this already reads "Add another". */
       if(accounts.length<2){
         if(max<2||accounts.length===0)return '';
+        /* ONE line, not a block. This used to be a heading plus "Press Connect
+           again to add another." -- under EVERY platform, so a dialog with four
+           connected platforms carried eight lines of near-identical
+           boilerplate that buried the actual controls (Youssef, 3 Sept 2026:
+           "so many issues with connecting tiktok its a mess", with a
+           screenshot of exactly that). The sentence also said what the button
+           beside it already says in two words: it reads "Add another".
+           The COUNT stays, because "how do I know I get three?" is a real
+           question and this is the screen that answers it (v3.72.1); the plan
+           name goes, because it is in the header pill and repeating it four
+           times is not information. */
         return `<div class="studio-conn-accounts"><span class="studio-conn-accounts-h">
-          ${esc(tier)} &middot; ${accounts.length} of ${max} channels connected</span>
-          <span class="studio-conn-headroom">Press Connect again to add another.</span></div>`;
+          ${accounts.length} of ${max} channels connected</span></div>`;
       }
       /* Locked rather than absent. With several accounts connected and a plan
          that allows one, the picker simply not being drawn reads as the app
@@ -5425,6 +5434,17 @@ function renderStudio(){
         await StudioAdapter.onPublishingToggle(p.key,b.getAttribute('aria-checked')!=='true');
         paintConnections();});
       $$('[data-conn-connect]').forEach(b=>b.onclick=()=>{
+        /* "dont know if im connecting or not" (Youssef, 3 Sept 2026). Pressing
+           Connect hands off to the platform's OAuth page, and until that page
+           paints there is nothing on screen saying anything happened -- on a
+           slow hop that is several seconds of a dialog that looks ignored.
+           The button says what it is doing and stops taking a second press;
+           if the hand-off fails and we are still here a few seconds later, it
+           goes back rather than sitting on "Opening…" for ever. */
+        if(b.disabled)return;
+        const was=b.textContent;
+        b.disabled=true;b.textContent='Opening…';
+        setTimeout(()=>{if(b.isConnected&&b.textContent==='Opening…'){b.disabled=false;b.textContent=was}},6000);
         const p=rows[Number(b.dataset.connConnect)];StudioAdapter.ui.connProvider=p.key;
         StudioAdapter.bindings(DATA).reconnect({preventDefault(){}})});
       $$('[data-conn-disconnect]').forEach(b=>b.onclick=()=>{
@@ -5637,7 +5657,29 @@ function renderStudio(){
          takes down both, so say so rather than letting it surprise someone. */
       const warn=shared?'Disconnect Meta? This removes BOTH Instagram and Facebook publishing.':'Disconnect this account and disable future uploads?';
       if(!confirm(warn))return;
-      studioDo(()=>api(`/api/social/${encodeURIComponent(oauth)}/disconnect`,{method:'POST'}),'Account disconnected')};
+      /* INSTANT. The row used to sit there unchanged until a POST and a full
+         GET /api/state had both crossed the internet -- Youssef, 3 Sept 2026:
+         "when disconnecting nothing changes not instant". Nothing about
+         removing a connection needs the server's permission to be DRAWN, so
+         the row goes now and the write follows; studioDo's refresh reconciles,
+         and its catch puts the truth back if the server refuses. Same shape as
+         the clip-settings chips and the review deck's ledger. */
+      /* The row reads its connected state from social.providers, NOT from
+         socialConnections -- a first cut mutated the latter and the row went
+         only as far as "Paused", still naming an account that had just been
+         removed. Measured, which is the only reason it was caught. */
+      const gone=shared?['instagram','facebook']:[oauth==='meta'?'instagram':oauth];
+      if(shared)gone.push('facebook');
+      const provs=((DATA||{}).social||{}).providers||{};
+      [...new Set(gone)].forEach(k=>{
+        if(provs[k])provs[k]={...provs[k],connected:false,accounts:[],lastTestError:null};
+        if(DATA.publishingSettings&&DATA.publishingSettings[k]){
+          DATA.publishingSettings[k]={...DATA.publishingSettings[k],enabled:false,accountId:'',accountIds:[]};
+        }
+      });
+      paintConnections();
+      studioDo(()=>api(`/api/social/${encodeURIComponent(oauth)}/disconnect`,{method:'POST'}),'Account disconnected')
+        .then(()=>paintConnections())};
     /* Publishing settings post as a whole object; send the current one with the
        single field changed so unshown values (privacy, accountId) survive. */
     StudioAdapter.onPublishingToggle=(key,on)=>studioDo(()=>{
