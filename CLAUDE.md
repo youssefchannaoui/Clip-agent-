@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1245 JS + 582 Python**
+- `npm test` and `npm run check` must pass. Currently **1247 JS + 590 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -6426,3 +6426,77 @@ real claim click sending `{"id":"three"}` — refused here with "Your plan
 already has unlimited tokens" (this instance signs in as the operator), which
 is the guard above working and the failure surfacing in the notification dock.
 The success path is driven over HTTP with a real free account.
+
+## Every error in the Activity list was unreadable, and one was ours (v3.112.0, 3 Sept 2026)
+
+Youssef, looking at the Activity dropdown: "error message?!?!?" Four failures,
+two distinct faults, and only one of them was a message problem.
+
+### "Processing engine failed: @ 0x59cf21fd5c80] libass API ver"
+
+That is a fragment of ffmpeg's INFORMATIONAL banner — the lines it prints on
+every render, successful or not — cut mid-token. **Three faults stacked to
+produce it**, in `service.py`:
+
+1. `" ".join(stderr_lines[-10:])` takes the END of ffmpeg's output. ffmpeg
+   prints its complaint and then goes on chattering, so the last ten lines are
+   reliably the banner and reliably not the reason.
+2. `detail[-1000:]` keeps the last thousand CHARACTERS, so the front is sliced
+   off wherever it happens to land — hence a message opening mid-address.
+3. **A child killed by a SIGNAL prints nothing at all**, so the one case that
+   most needs explaining fell through to whatever ffmpeg had last said. On this
+   box that case means MEMORY: 3.7G total, the Ollama container capped at 2G,
+   ffmpeg beside it, and five llama-server OOM kills already in `dmesg`.
+
+`failure_detail(code, reported, stderr_lines)` answers in four tiers: the
+worker's own reported reason wins outright; a negative code is a signal and is
+NAMED, with SIGKILL alone carrying the out-of-memory explanation (claiming it
+for SIGTERM would send someone chasing the wrong thing); then the last line
+that looks like a complaint; then anything that is not banner noise.
+
+- **The noise filter matches the whole `[Parsed_filter @ 0x...]` family**, not
+  a list of the particular sentences it prints. Chasing those one at a time is
+  how "Added subtitle file: caption.ass" got through the first cut.
+- **Noise UNLESS it also complains.** ffmpeg reports real errors wearing the
+  same prefix as its banner, so filtering on the prefix alone would throw the
+  diagnosis away with the chatter. `FFMPEG_SIGNAL` rescues those lines.
+- **There is deliberately NO raw fallback.** Falling back to the unfiltered
+  tail is what produced the libass fragment; a sentence that admits it knows
+  nothing beats one that looks like it says something. With nothing usable it
+  names the exit code and points at the worker's log.
+- `test/test_failure_detail.py` drives the real function with the real banner
+  lines, verbatim from a render. Proven RED by restoring the old tail-slice.
+
+**Worker change, so `deploy-worker.yml` deploys it on push.** It changes what
+FUTURE failures say; the four rows already on screen keep their stored text.
+
+### The three TikTok failures were DeenClipped refusing, not TikTok
+
+"TikTok requires a clean copy without an app watermark. Choose a TikTok-safe
+template and re-render this clip first." Two things wrong with that, and the
+second is a product fault rather than a wording one.
+
+- **There is no such thing as a TikTok-safe template.** The advice named a
+  control that exists on no screen, so it could not be followed by anyone.
+- **The automatic clean copy is only rendered on the LOCAL engine.** The remote
+  path returns before it, so it only ever refused — and since v3.72.8 every
+  shipped template carries the watermark by default. Production runs the remote
+  worker. **So every TikTok post has been refused by this app, before TikTok
+  was ever contacted.** Nothing was sent and no tokens were spent, which is the
+  one good thing about it.
+- The message says what is true and what actually works today, and it is
+  PLAN-AWARE: a paid account is told to switch the mark off on the named
+  template and re-render; a free account is told the mark cannot be removed, so
+  TikTok is not reachable yet, and that the other three platforms are
+  unaffected. It reads `billing.planFeatures(owner).watermark` — the FEATURES
+  table, the sanctioned route — never a bare `isPaid`.
+- `EXPLAIN_PUBLISH` gained a `/watermark/i` entry, placed AFTER the
+  unaudited-app entry so that one still wins its own 403. Verified by CALLING
+  `explainFailure` rather than by asserting the table contains a regex — a
+  wrong winner was the entire bug the publish/import split existed to fix.
+
+**Not built: the remote clean-copy render.** It needs a re-render round trip
+through the worker (`runRemoteAux` / `state.rerenderJobs`) producing a
+watermark-free derivative for the TikTok leg only. Until then a free account
+cannot post to TikTok at all, because the watermark is locked on for them — a
+real gap, stated rather than hidden behind a message that blames TikTok.

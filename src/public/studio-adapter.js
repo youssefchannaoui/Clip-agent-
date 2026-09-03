@@ -1020,6 +1020,21 @@
       ],
     },
     {
+      // Ours, not TikTok's: the app refuses before TikTok ever sees the video.
+      // Every template ships with the DeenClipped mark since v3.72.8, and the
+      // automatic watermark-free copy is only rendered on the LOCAL engine --
+      // so on a remote worker (production) every TikTok post was refused here.
+      match: /watermark/i,
+      title: 'TikTok will not take a video with an app watermark on it',
+      cause: 'TikTok\u2019s posting rules refuse video carrying another app\u2019s mark, and DeenClipped burns its watermark into every clip by default. This refusal comes from DeenClipped, before TikTok is contacted \u2014 nothing was sent and nothing was wasted.',
+      fixes: [
+        'On a paid plan: open Templates, switch the watermark off on the style these clips use, then re-render and retry.',
+        'On the free plan the mark cannot be removed, so TikTok is not reachable yet.',
+        'YouTube, Instagram and Facebook take the clip exactly as it is \u2014 they have no such rule.',
+        'A clip already posted elsewhere stays posted; only the TikTok leg is affected.',
+      ],
+    },
+    {
       match: /spam_risk|too_many_(?:posts|pending)|rate.?limit|reached the (?:daily|hourly) limit/i,
       title: 'The platform is rate-limiting this account',
       cause: 'The destination accepted the app but says this account has posted too much too quickly. It is a temporary cap, not a rejection of the clip.',

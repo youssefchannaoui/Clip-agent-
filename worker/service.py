@@ -349,6 +349,73 @@ def clean_error(exc: BaseException) -> str:
     return text[-1500:] or "Processing failed."
 
 
+# ffmpeg prints these on EVERY render, successful or not. They were the last
+# thing in the pipe when a job died, so the customer was shown
+# "Processing engine failed: @ 0x59cf21fd5c80] libass API ver" -- a fragment of
+# an informational banner, mid-token, with the actual cause thrown away.
+FFMPEG_NOISE = re.compile(
+    # The whole [Parsed_filter @ 0x...] family, rather than a list of the
+    # particular sentences it prints -- chasing those one at a time is how
+    # "Added subtitle file: caption.ass" got through the first cut of this.
+    r"\[Parsed_[a-z0-9_]+ @ 0x|"
+    r"libass API version|libass source|shaper:|Using font provider|fontselect|"
+    r"Glyph 0x|Adding font|Loaded font|^\s*(?:Stream|Metadata|encoder|Duration|Input|Output|"
+    r"built with|configuration:|lib[a-z]+ +[0-9]|Press \[q\]|frame=|size=|video:)",
+    re.IGNORECASE,
+)
+# What a real failure looks like in that stream.
+FFMPEG_SIGNAL = re.compile(r"Traceback|Error|error:|failed|No such file|Permission denied|"
+                           r"Killed|MemoryError|Cannot allocate|Invalid|Unable to", re.IGNORECASE)
+
+
+def failure_detail(code: int, reported: str, stderr_lines: list[str]) -> str:
+    """Say something a person can act on when a job dies.
+
+    Three things were wrong with taking `" ".join(stderr_lines[-10:])[-1000:]`:
+    the last lines of ffmpeg's output are its INFO banner rather than its
+    complaint, slicing the last 1000 characters cuts the front off mid-token,
+    and a child killed by a signal reported nothing at all -- which is exactly
+    the case that most needs explaining, because on this box it means memory.
+    """
+    if reported:
+        return reported.strip()[:1000]
+
+    # A negative code from Popen.wait() is a SIGNAL, not an exit status. This
+    # is the branch that matters: the box has 3.7G, an Ollama container capped
+    # at 2G and ffmpeg alongside it, and the kernel has killed processes here
+    # before. Nothing is printed when that happens, so without this the
+    # customer sees whatever ffmpeg last said, which is never the reason.
+    if code is not None and code < 0:
+        signal_number = -code
+        name = signal.Signals(signal_number).name if signal_number in set(s.value for s in signal.Signals) else f"signal {signal_number}"
+        if signal_number == signal.SIGKILL:
+            return ("the processing engine was killed by the system (SIGKILL). On this worker that almost "
+                    "always means it ran out of memory. Check free memory on the box and whether another "
+                    "job or the AI container was running at the same time.")
+        return f"the processing engine was stopped by {name}."
+
+    lines = [line.strip() for line in stderr_lines if line.strip()]
+    # Noise UNLESS it also complains: ffmpeg reports real errors wearing the
+    # same [Parsed_filter @ 0x...] prefix as its banner, so filtering on the
+    # prefix alone would throw the diagnosis away with the chatter.
+    useful = [line for line in lines
+              if not FFMPEG_NOISE.search(line) or FFMPEG_SIGNAL.search(line)]
+    # The last line that actually looks like a complaint, then anything at all
+    # that is not banner noise. There is deliberately NO raw fallback: falling
+    # back to the unfiltered tail is what produced the libass banner fragment
+    # in the first place, and a sentence that says nothing beats one that looks
+    # like it says something.
+    for pool in ([line for line in useful if FFMPEG_SIGNAL.search(line)], useful):
+        if pool:
+            # The LAST few, joined -- a Python traceback's meaning is in its
+            # final line, and ffmpeg's complaint is the last thing it prints
+            # before it gives up.
+            return " ".join(pool[-4:])[:1000]
+
+    return (f"the processing engine exited with code {code} and printed nothing that explains why. "
+            "The full output is in the worker's log on the box.")
+
+
 class JobStore:
     def __init__(self) -> None:
         JOBS_DIR.mkdir(parents=True, exist_ok=True)
@@ -841,10 +908,7 @@ class Processor:
                 "The lecture may be far longer than the selected range, or the worker is overloaded."
             )
         if code != 0 or not result_path.exists():
-            detail = reported_error or " ".join(stderr_lines[-10:]).strip()
-            if not detail:
-                detail = f"the processing engine exited with code {code} and produced no output."
-            raise RuntimeError("Processing engine failed: " + detail[-1000:])
+            raise RuntimeError("Processing engine failed: " + failure_detail(code, reported_error, stderr_lines))
         return json.loads(result_path.read_text(encoding="utf-8"))
 
     def upload_clip(self, job_id: str, clip: dict[str, Any]) -> dict[str, Any]:

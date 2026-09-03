@@ -1981,9 +1981,31 @@ export async function socialPublishFile(clipId, provider) {
   if (clip.clipUrl) {
     if (provider === 'instagram') return null;
     if (provider === 'tiktok') {
-      const template = clip.templateSnapshot || templateById(clip.templateId, ownerOfRecord(clip));
+      /*
+       * THE CLEAN COPY IS NEVER RENDERED ON THIS PATH, and that is the whole
+       * of "publish failed" on TikTok in production.
+       *
+       * Below, the LOCAL path renders a watermark-free derivative
+       * automatically when a template carries a mark. A remote render returns
+       * early here, so it only ever refused -- and since v3.72.8 every
+       * template ships WITH a watermark, so in production every TikTok post
+       * was refused by this app before TikTok ever saw it.
+       *
+       * The advice was unfollowable too: it told the customer to "choose a
+       * TikTok-safe template", which is not a thing that exists on any screen.
+       * Until the remote clean render is built (it needs a re-render round
+       * trip through the worker), the message says what is actually true and
+       * what actually works today.
+       */
+      const owner = ownerOfRecord(clip);
+      const template = clip.templateSnapshot || templateById(clip.templateId, owner);
       if (String(template?.watermark || '').trim() || template?.brandLineEnabled) {
-        throw new Error('TikTok requires a clean copy without an app watermark. Choose a TikTok-safe template and re-render this clip first.');
+        const canRemove = Boolean(owner && billing.planFeatures(owner).watermark);
+        throw new Error(canRemove
+          ? 'TikTok does not accept a video carrying another app\'s watermark. Turn the watermark off on '
+            + `the "${template?.name || 'clip'}" template, then re-render this clip and retry.`
+          : 'TikTok does not accept a video carrying another app\'s watermark, and removing the DeenClipped '
+            + 'mark is a paid feature. YouTube, Instagram and Facebook are unaffected.');
       }
     }
     return cacheRemotePublishClip(clip);
