@@ -89,10 +89,20 @@ export const config = {
    * these ship non-zero -- but the amounts below are a PROPOSAL and the env
    * still wins, so they can be tuned without a deploy.
    *
-   * The whole ladder is 150 tokens, once per account, ever. Pro monthly is
-   * A$29 for 650 tokens, so a customer who works through all of it earns about
-   * 23% of one month -- spread over the thirty separate posting days the last
-   * rung needs, which is months of real use.
+   * REDUCED on Youssef's instruction the same day ("Reduce token reward"), from
+   * 10/15/25/40/60. The old ladder was 150 tokens -- three times what a
+   * REFERRAL pays for bringing a paying customer, which is the wrong ordering:
+   * nothing a customer does alone should be worth more than delivering
+   * somebody else's subscription.
+   *
+   * So the whole ladder is 45 now, deliberately under `referralBonusPaid` (50).
+   * Pro monthly is A$29 for 650 tokens, so working all of it earns about 6.9%
+   * of one month, spread over the thirty separate posting days the last rung
+   * needs -- months of real use.
+   *
+   * The unit is 5, and that is not arbitrary: a lecture costs about a token a
+   * minute, so 5 tokens is one five-minute run -- the exact size the product's
+   * own first-run copy calls "plenty for a first run".
    *
    * It cannot be farmed. Every rung is keyed and granted once (billing's
    * processedBonusGrants refuses a repeat), importing a lecture COSTS more
@@ -105,11 +115,11 @@ export const config = {
    * something of the customer's actually shipped.
    */
   taskRewardsEnabled: boolean(process.env.TASK_REWARDS_ENABLED, true),
-  taskRewardPublish: Math.max(0, number(process.env.TASK_REWARD_PUBLISH, 10)),
-  taskRewardThree: Math.max(0, number(process.env.TASK_REWARD_THREE, 15)),
-  taskRewardTen: Math.max(0, number(process.env.TASK_REWARD_TEN, 25)),
-  taskRewardWeek: Math.max(0, number(process.env.TASK_REWARD_WEEK, 40)),
-  taskRewardMonth: Math.max(0, number(process.env.TASK_REWARD_MONTH, 60)),
+  taskRewardPublish: Math.max(0, number(process.env.TASK_REWARD_PUBLISH, 5)),
+  taskRewardThree: Math.max(0, number(process.env.TASK_REWARD_THREE, 5)),
+  taskRewardTen: Math.max(0, number(process.env.TASK_REWARD_TEN, 10)),
+  taskRewardWeek: Math.max(0, number(process.env.TASK_REWARD_WEEK, 10)),
+  taskRewardMonth: Math.max(0, number(process.env.TASK_REWARD_MONTH, 15)),
 
   /*
    * The invite discount.

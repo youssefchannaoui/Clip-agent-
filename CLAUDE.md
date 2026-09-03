@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1234 JS + 581 Python**
+- `npm test` and `npm run check` must pass. Currently **1235 JS + 581 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -6137,10 +6137,24 @@ ten, seven different days, thirty different days.
 
 ### The money
 
-`config.taskReward*`, five amounts, **150 tokens for the whole ladder, once per
-account, ever**. Pro monthly is A$29 for 650 tokens, so a customer who works
-all of it earns about 23% of one month spread over the thirty separate posting
-days the last rung needs. `TASK_REWARDS_ENABLED=false` turns it off without a
+`config.taskReward*`, five amounts, **45 tokens for the whole ladder, once per
+account, ever** (5 / 5 / 10 / 10 / 15). Pro monthly is A$29 for 650 tokens, so
+working all of it earns about 6.9% of one month, spread over the thirty
+separate posting days the last rung needs.
+
+**It shipped at 150 and Youssef reduced it the same day** ("Reduce token
+reward"). 150 was three times what a REFERRAL pays for bringing a paying
+customer, which is the wrong ordering: nothing a customer does alone should be
+worth more than delivering somebody else's subscription. The ladder is now
+deliberately under `referralBonusPaid` (50), and `test/task-ladder.test.mjs`
+pins that RELATIONSHIP rather than the numbers, so either can be tuned and the
+ordering holds. The unit is 5, which is one five-minute run at about a token a
+minute -- the size the product's own first-run copy calls "plenty for a first
+run".
+
+**A rung already paid is never re-paid and never clawed back.** The grant is
+keyed in `billing.processedBonusGrants`, so an account paid at the old rate
+keeps what it was given and simply never earns that rung again. `TASK_REWARDS_ENABLED=false` turns it off without a
 deploy and every amount has its own env var.
 
 - **The first two rungs pay NOTHING, deliberately.** Importing already spends

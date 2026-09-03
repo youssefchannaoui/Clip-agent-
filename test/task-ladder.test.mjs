@@ -235,6 +235,18 @@ test('every reward reads config, so it can be tuned or turned off', () => {
   assert.equal(raised.list.find(t => t.id === 'month').reward, 999);
 });
 
+test('the whole ladder is worth less than one referral', () => {
+  // Youssef, 3 Sept 2026: "Reduce token reward." The ladder shipped at 150,
+  // three times what a referral pays for bringing a PAYING customer -- the
+  // wrong ordering, because nothing a customer does alone should be worth more
+  // than delivering somebody else's subscription. This pins the relationship
+  // rather than the numbers, so either can be tuned and the ordering holds.
+  const ladderTotal = ['taskRewardPublish', 'taskRewardThree', 'taskRewardTen',
+    'taskRewardWeek', 'taskRewardMonth'].reduce((sum, k) => sum + config[k], 0);
+  assert.ok(ladderTotal < config.referralBonusPaid,
+    `the ladder pays ${ladderTotal} against a referral's ${config.referralBonusPaid}`);
+});
+
 test('the first two rungs pay nothing, deliberately', () => {
   const rows = onboarding.tasks(state, me.id, config).list;
   assert.equal(rows.find(t => t.id === 'create').reward, 0,
