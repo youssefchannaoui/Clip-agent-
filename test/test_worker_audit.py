@@ -368,3 +368,39 @@ class ServiceGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AyahOutlineTests(unittest.TestCase):
+    """The ayah's outline has a floor of its own.
+
+    Youssef, 3 Sept 2026, on a re-render: "it should look cleaner i feel like
+    its too thin or something its hard to see."
+
+    The Ayah and Translation styles shared one outline width, and the Quran
+    template sets it to 1. On Outfit -- a geometric sans with a solid stem --
+    a 1px edge is enough. A mushaf face runs to hairlines at the joins and in
+    the tashkeel, so the same 1px left scripture with almost no separation
+    from a bright frame. This is stroke weight, not height: the size fix
+    (AYAH_SIZE_SCALE) did nothing for it.
+    """
+
+    def test_floor_lifts_an_under_outlined_template(self):
+        self.assertEqual(max(1.0, cw.AYAH_OUTLINE_MIN), 3.0)
+
+    def test_a_heavy_outline_is_left_alone(self):
+        # A 3x MULTIPLE was written first and would have given Clean Line an
+        # 18px edge -- a black blob round every letter. Templates that already
+        # set a heavy outline are right for their own face.
+        for caption in (5.0, 6.0, 9.0):
+            self.assertEqual(max(caption, cw.AYAH_OUTLINE_MIN), caption)
+
+    def test_the_ayah_style_uses_its_own_width(self):
+        src = Path(cw.__file__).read_text()
+        ayah = [l for l in src.splitlines() if l.startswith("Style: Ayah,")]
+        self.assertEqual(len(ayah), 1)
+        self.assertIn("{ayah_outline}", ayah[0])
+        self.assertNotIn("{outline_width}", ayah[0])
+        # The Latin caption keeps the template's own value.
+        trans = [l for l in src.splitlines() if l.startswith("Style: Translation,")]
+        self.assertEqual(len(trans), 1)
+        self.assertIn("{translation_size}", trans[0])

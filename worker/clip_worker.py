@@ -2341,7 +2341,55 @@ AYAH_FADE_OUT_MS = 450
 # at 32. The shrink is linear, so a constant recovers it exactly: ~2.9x makes
 # the Arabic land about twice the visual height of the gloss, which is the
 # reference's proportion.
-AYAH_SIZE_SCALE = 3.54
+# UNRESOLVED, 3 Sept 2026 -- Youssef, on a live clip: "just make sure quran
+# text is equal size to translation." On that frame the ayah renders SMALLER
+# than its English gloss, which is the opposite of what every model here says.
+#
+# Measured from the exact font files the image ships (UthmanicHafs.ttf win cell
+# 1.758 em, tallest un-vowelled letter 0.806 em; Outfit-Regular win cell 1.260,
+# cap/ascender 0.724), the ayah should draw about TWICE the gloss on the Quran
+# template -- and between 2.05x and 6.86x across the five shipped templates,
+# because the two sizes come from UNRELATED fields:
+#
+#     ayah_size        = captionFontSize x ayah_nominal_scale(face)
+#     translation_size = captionTranslationSize
+#
+# THAT is a bug in itself: the relationship between scripture and its gloss is
+# an accident of two independent numbers, so it differs on every template and
+# on every per-account override. Whatever the right ratio is, it should be
+# DERIVED from one of them rather than emerging from both.
+#
+# 5.80, and this one is MEASURED rather than reasoned about.
+#
+# The history is worth keeping because it is the whole lesson. 3.54 was tuned
+# from a claim that the ayah drew "about twice the visual height of the gloss".
+# The arithmetic above agrees: from the shipped font metrics the ayah should be
+# roughly 2x. A live frame showed it SMALLER than its own English gloss, so the
+# model was wrong and had been for a long time. 4.40 was then a guess (1.24x)
+# from eyeballing that frame.
+#
+# Then a clip was actually re-rendered at 4.40 and the frame measured -- decode
+# to gray8, threshold the pure-white caption ink at 254, group the lit rows:
+#
+#     Arabic letterforms   y 694-709   16px
+#     English cap height   y 778-798   21px
+#
+# 16/21 = 0.76, so the ayah was still three quarters the size of its gloss at
+# 4.40. 4.40 x (21/16) = 5.78, rounded to 5.80 for the equal sizing Youssef
+# asked for: "just make sure quran text is equal size to translation."
+#
+# TO RE-MEASURE after any change: render one ayah with its gloss, crop the
+# caption band, decode to gray8, and compare the lit-row height of the Arabic
+# letter bodies with the Latin cap height. Multiply this constant by
+# (latin rows / arabic rows). Do NOT trust the arithmetic in the block above --
+# it has now been disproved by two separate frames.
+AYAH_SIZE_SCALE = 5.80
+
+# The least outline an ayah may have, whatever the template asks for the Latin
+# caption. See the note beside `ayah_outline` in write_ass: a mushaf face has
+# hairline strokes where a Latin sans has stems, so an edge that suits the
+# gloss can leave scripture hard to read over a bright frame.
+AYAH_OUTLINE_MIN = 3.0
 
 # libass sizes a font by its Win cell (usWinAscent + usWinDescent, in em).
 # The mushaf faces have very tall cells, so the same nominal size draws them
@@ -3218,6 +3266,24 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     ayah_size = int(round(font_size * ayah_nominal_scale(ayah_font)))
     margin_v = int(template.get("captionMarginV", 220))
     outline_width = float(template.get("captionOutlineWidth", 5))
+    # THE AYAH NEEDS A HEAVIER OUTLINE THAN THE LATIN, at the same visual size.
+    # Youssef, 3 Sept 2026, on a re-render: "it should look cleaner i feel like
+    # its too thin or something its hard to see."
+    #
+    # The two styles shared one width, and the Quran template sets it to 1. On
+    # Outfit -- a geometric sans with a solid stem -- a 1px edge is enough. A
+    # mushaf face is not that: Uthmanic script runs to hairlines at the joins
+    # and in the tashkeel, so the same 1px leaves the scripture with almost no
+    # separation from a bright, busy frame, which is exactly where these clips
+    # live. Matching the SIZE of the two lines (AYAH_SIZE_SCALE) did nothing
+    # for this: it is stroke weight, not height.
+    #
+    # A FLOOR, not a multiple. A 3x multiple was written first and would have
+    # given Clean Line an 18px edge -- a black blob round every letter. The
+    # templates that already set a heavy outline are right for their own face
+    # and are left exactly as they are; only the ones that leave scripture
+    # under-outlined are raised.
+    ayah_outline = max(outline_width, AYAH_OUTLINE_MIN)
     shadow = float(template.get("captionShadow", 1))
     # Scripture is always centred, whatever the style says.
     #
@@ -3268,7 +3334,7 @@ WrapStyle: 2
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Caption,{font},{font_size},{primary},{highlight},{outline},{back},-1,0,0,0,100,{scale_y},{letter_spacing:g},0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
-Style: Ayah,{ayah_font},{ayah_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
+Style: Ayah,{ayah_font},{ayah_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{ayah_outline},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Translation,{font},{translation_size},{primary},{highlight},{outline},{back},0,0,0,0,100,100,0,0,{border_style},{outline_width},{shadow},{alignment},{margin_h},{margin_h},{margin_v},1
 Style: Watermark,{font},{watermark_size},{watermark_color},{watermark_color},{outline},&H00000000,1,0,0,0,100,100,2,0,1,1,0,{watermark_align},{watermark_margin_h},{watermark_margin_h},{watermark_margin_v},1
 

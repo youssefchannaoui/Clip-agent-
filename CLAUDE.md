@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1189 JS + 572 Python**
+- `npm test` and `npm run check` must pass. Currently **1204 JS + 575 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -389,6 +389,15 @@ Habits the tests now enforce, and why:
 ## Deploys
 
 - Branch `deenclipped-v2-2` auto-deploys the web service to Render on push.
+- **Every push takes the site down for about 35-40 seconds, and that is not a
+  fault.** The service mounts a 10GB disk at `/app/data`, so Render cannot run
+  the old and new instances side by side -- it stops one before starting the
+  other. Measured 3 Sept 2026: "Deploying..." 03:18:11, listening 03:18:47,
+  live 03:18:55, with a plain 502 in between. A 502 within a minute of a push
+  is the swap, not a crash; check `list_deploys` and the app log before
+  treating it as one. It also means a DOCS-ONLY push costs the same outage as
+  a code one, and that a credential change on Render costs it too -- so do not
+  push during a posting window.
 - **Rendered media is served from `media.deenclipped.online`** (custom domain
   on the R2 bucket `deenclipped-media-us`, bound 27 Aug 2026). The r2.dev
   public URL is a rate-limited dev endpoint -- it returned five straight GET
@@ -3914,6 +3923,215 @@ TITLES." Two faults, both real, both measured before anything was built.
   from now on; sync reaches existing Quran clips when they are re-rendered
   (a template save re-renders every clip still waiting). Neither has been
   seen on a real frame yet.
+## The connections dialog was clunky in three separate ways (v3.102.0)
+
+Youssef, 3 Sept 2026, with a screenshot: "ALL connecting and disccount and so
+many issues with connecting tiktok its a mess ... it just messy cluncky
+conntions feel un statifying and dont know if im connecting or not, tiktok
+gives back 504 errors, when disconnecting nothing changes not instant."
+
+Three faults, none of which errors or logs. The dialog simply feels broken.
+
+- **The 504 was ours, not TikTok's.** `jsonRequest` defaults to a 120-SECOND
+  timeout, and `queryTikTokCreator` took it -- but that call runs inside a
+  request a BROWSER is waiting on (opening the publish options, testing a
+  connection). Render's proxy gives up long before two minutes and answers the
+  browser 504, so a slow TikTok could never surface its own error: the gateway
+  killed the request first and the customer saw a bare 504 that says nothing
+  about TikTok at all. Fifteen seconds now, on that call only -- the long
+  default is right for the UPLOAD path, where a big file genuinely takes
+  minutes and nobody is watching a spinner.
+- **Disconnect waited for a round trip before the row changed.** Same fault as
+  the Start-job chips earlier the same day: POST, then a full GET /api/state,
+  and only then a repaint. It is optimistic now. **Measured against a
+  deliberately 3-SECOND server: the row reaches its final state in 59ms.**
+- **THE FIRST CUT MUTATED THE WRONG SHAPE AND ONLY MEASURING CAUGHT IT.** The
+  row reads `DATA.social.providers[key]`, not `DATA.socialConnections`; nulling
+  the latter took the row as far as "Paused" while it went on naming an account
+  that had just been removed. The probe printed that intermediate text, which
+  is the only reason it was noticed -- reading the diff would not have shown
+  it. Clear `connected`, `accounts` AND the publishing entry, and for Meta
+  clear BOTH instagram and facebook or the other one keeps showing a dead
+  account.
+- **Connect said nothing while it worked.** It hands off to the platform's
+  OAuth page, and until that page paints there was nothing on screen: on a slow
+  hop, several seconds of a dialog that looks like it ignored the press. The
+  button now reads "Opening…", refuses a second press, and puts itself back
+  after six seconds if the hand-off never happened -- a button stuck on
+  "Opening…" for ever would be a worse lie than the silence.
+- **The headroom hint repeated the button beside it, under every platform.**
+  "STUDIO · 1 OF 3 CHANNELS CONNECTED" plus "Press Connect again to add
+  another." -- four platforms, eight lines of near-identical boilerplate
+  burying the actual controls, and the sentence said what the button two inches
+  away already says in two words ("Add another"). The COUNT stays, because "how
+  do I know I get three?" is a real question and this is the screen that
+  answers it (v3.72.1); the plan name goes, because the header pill already
+  carries it.
+
+## TikTok's posting options moved into a sheet of their own (v3.103.0)
+
+Youssef, 3 Sept 2026: "add settings next to tiktok and move all the settings on
+that button when clicked opens a new page in the middle fix the new look of the
+whole thing as well, make it look a lot better easy to congiure less confusing
+but looks great."
+
+- **The panel is unchanged; only where it is drawn.** Its per-account privacy,
+  the interaction toggles, the commercial disclosure and the Music Usage
+  Confirmation line are what TikTok's review checks, so this moves the mount
+  point and touches nothing inside. It used to sit permanently under the
+  platform list, which made the dialog long AND read as though one platform's
+  posting options governed the four connections above them.
+- **`HAS_SETTINGS` is an explicit list, not a button on every row.** TikTok is
+  the only platform with a real panel behind it today; a Settings button on the
+  others would be a control that opens nothing (invariant 9).
+- **The sheet lives INSIDE the connections card**, so it is dismissed with the
+  dialog and cannot outlive it, and it carries a scrim -- without one the rows
+  behind stay clickable and a stray press changes a connection while its
+  options are open. Back arrow, ×, and the scrim all close it; all three were
+  clicked rather than assumed.
+- **The row is three grid rows now**: identity, channel count, actions. A first
+  cut gave the count and the actions the same `grid-area` and they were drawn
+  ON TOP of each other -- "1 OF 3 CHANNELS CONNECTED" superimposed over "Add
+  another Settings Disconnect". Found by looking at it, which is the rule this
+  file has repeated since August.
+- **THE INLINE-SCRIPT-SCOPE TRAP, FOR THE FOURTH TIME.** `paintTikTokOptions`
+  and the sheet live in a different scope from `paintConnections`, so the close
+  button threw "paintConnections is not defined" and the sheet would not shut
+  -- silently, because a click handler's exception goes to the console and
+  nowhere a user looks. It is `window.paintConnections` now, like
+  `fireClipNotifs`, `paintAccount` and `openBug` before it. Anything reached
+  across scopes in index.html goes through `window`, every time.
+
+## Every connected channel is a row now (v3.104.0, 3 Sept 2026)
+
+Youssef, comparing us with OpusClip: "ours is good but not great and no layout
+to see 3 connected channels with each @".
+
+- **The channel list appeared only once a SECOND account existed.** So a
+  platform with one connected channel showed a COUNT and no channel -- the app
+  knew the account's name and did not print it. Every connected channel is a
+  row now, at one as at three.
+- **Each row carries the account's own face, name and handle**, plus its tick
+  (post here) and its own disconnect. The face is the platform's avatar where
+  there is one and the name's initial where there is not.
+- **The @handle is shown ONLY where the platform actually gives us one.**
+  TikTok's `creator_info` carries `creator_username`; YouTube and Meta hand us a
+  display name and nothing else. An @ invented from a display name is a handle
+  that may not exist, so it is omitted rather than guessed -- the name stands
+  alone.
+- **The container is a flex COLUMN.** Left to the row's own grid the labels
+  flowed inline and wrapped two-per-line, which reads as a tag cloud rather
+  than a list of accounts; and without `width: 100%` on the row they
+  shrink-wrapped to their text and sat centred. Measured after: three rows,
+  410px each, no page overflow.
+- Two tests written earlier the same day asserted strings this moved
+  ("channels connected", and the exact one-line `.studio-conn-accounts` rule).
+  Both were updated to follow the code rather than deleted -- the behaviour
+  they protect is unchanged.
+
+## Every connected channel gets a row of its own (v3.103.1, 3 Sept 2026)
+
+Youssef, comparing us with OpusClip: "opus layout is better like ours is good
+but not great and no layout to see 3 connected channels with each @".
+
+He was right, and the gap was structural rather than cosmetic. The dialog was
+one row per PLATFORM, and the channel list rendered only once a SECOND account
+existed -- so a platform with one channel showed a count and no channel, and
+even at three they were bare names in wrapping pills.
+
+- **The list is drawn whenever there is anything to list.** Nothing to show is
+  now the only reason to show nothing.
+- **A row carries a face, a name and a handle**: the account's avatar (initials
+  when the platform gives none), its display name, and its @handle.
+- **The @ comes from the platform, never from the display name.** TikTok's
+  `creator_info` hands us a real `creator_username`; YouTube and Meta give a
+  display name and nothing else. Inventing "@DeenClipped" from a display name
+  would be putting a handle on screen that may not exist, so where there is no
+  username the name stands alone.
+- **They stack full width.** As chips they wrapped two-across and left a ragged
+  third on its own line -- fine when a channel was a name, wrong once each row
+  carries three pieces of information. The rule is id-scoped (`#studioConnList
+  .studio-conn-account`) because the older chip rule was, and specificity
+  decides; a plain class rule was written first and lost silently.
+- The tick (post here) and the per-channel × are unchanged, and the × is still
+  drawn only for YouTube and TikTok -- Facebook and Instagram are Pages inside
+  ONE Meta login, where a per-account disconnect would tear out that login and
+  take the other platform with it (v3.56.0).
+
+## The ayah renders smaller than its own gloss, and why that is not yet fixed
+
+Youssef, 3 Sept 2026, with a live Short from the channel: "see exmaple of quran
+recistiation IS GREAT DONT GET ME WRONG. just make sure quran text is equal
+size to translation." On that frame the Arabic is visibly SMALLER than the
+English under it.
+
+**Every model in the code says the opposite**, which is the whole problem.
+Measured from the exact font files the image ships -- `UthmanicHafs.ttf` win
+cell 1.758 em with its tallest un-vowelled letter at 0.806 em, `Outfit-Regular`
+win cell 1.260 with cap/ascender 0.724 -- the ayah should draw about **twice**
+the gloss on the Quran template, which is what `AYAH_SIZE_SCALE`'s own comment
+claims it was tuned for. The photograph disproves it.
+
+**A real bug was found on the way, and it is worth fixing whatever the sizes
+turn out to be.** The two sizes come from UNRELATED template fields:
+
+    ayah_size        = captionFontSize x ayah_nominal_scale(face)
+    translation_size = captionTranslationSize
+
+So the relationship between scripture and its translation is an ACCIDENT of two
+independent numbers. Across the five shipped templates it lands at 2.05x
+(quran-recitation), 2.35x (mono-minimal), 2.50x (clean-line), 4.10x (headline)
+and 6.86x (bold-stack) -- and a per-account override can put it anywhere.
+Scripture is captioned on every template (invariant 7), so this is not confined
+to the Quran one. Whatever the right ratio is, it should be DERIVED from one
+size rather than emerging from both.
+
+**`AYAH_SIZE_SCALE` is 3.54 -> 4.40 -> 5.80, and the last step is MEASURED.**
+
+3.54 was a guess corrected by eyeballing the Short (4.40). Then a real clip was
+re-rendered on the box at 4.40 and the frame measured -- and that is the number
+that counts. No libass was needed for it: the render itself came off the
+worker, and the frame was pulled from the clip's own R2 URL and decoded with
+plain ffmpeg.
+
+    crop the caption band, decode to gray8, threshold the pure-white ink at 254
+    Arabic letterforms   y 694-709   16px
+    English cap height   y 778-798   21px
+
+16/21 = 0.76 -- still three quarters the size of its gloss at 4.40.
+4.40 x 21/16 = 5.78, rounded to **5.80** for the equal sizing that was asked
+for.
+
+**This is the route for any future caption-size question, and it does not need
+the container:** re-render one clip through the app, download the render from
+`media.deenclipped.online`, take a frame with `ffmpeg -ss`, and measure the lit
+rows. It settled in one cycle what the arithmetic had had wrong for months.
+
+### And then it was still hard to read, because it was the STROKE
+
+Youssef, on the re-render at 5.80: "it should look cleaner i feel like its too
+thin or something its hard to see."
+
+Not size -- **stroke weight**. The Ayah and Translation styles shared one
+outline width, and the Quran template sets `captionOutlineWidth: 1`. On Outfit,
+a geometric sans with a solid stem, a 1px edge is enough. A mushaf face is not
+that: Uthmanic script runs to hairlines at the joins and through the tashkeel,
+so the same 1px left scripture with almost no separation from a bright, busy
+frame -- which is where these clips live. Making the two lines the same HEIGHT
+did nothing for this.
+
+`AYAH_OUTLINE_MIN = 3.0`, applied as a **floor and not a multiple**. A 3x
+multiple was written first and would have given Clean Line an 18px edge -- a
+black blob round every letter. Only the templates that leave scripture
+under-outlined move: quran-recitation 1 -> 3, and clean-line, bold-stack and
+mono-minimal are untouched at 5, 6 and 5.
+
+**The arithmetic in the AYAH_SIZE_SCALE comment block is DISPROVED** -- by two
+separate frames now -- and must not be trusted over a render.
+
+The overflow risk of a 24% bigger line was checked rather than assumed: the
+ayah Dialogue already carries `{\q0}` (clip_worker.py:2579), so a longer line
+wraps instead of running off both edges -- invariant 8 holds.
 
 ## Open items
 
