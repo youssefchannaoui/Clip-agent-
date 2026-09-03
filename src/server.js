@@ -1950,6 +1950,10 @@ async function route(req, res, url) {
       // Cleared either way, so turning it off later stays off.
       if (next.tiktok.enableWhenReady && String(next.tiktok.privacy || '') && !body.tiktok?.enabled) {
         next.tiktok.enabled = true;
+        // The completion of the connect, so it finishes the job the connect
+        // started: a platform switched on under a master switch that is off
+        // posts nothing, and the master defaults to false. See enableOnConnect.
+        if (!next.enabled) next.enabled = true;
       }
       if (String(next.tiktok.privacy || '')) next.tiktok.enableWhenReady = false;
       social.validatePublishingSettings(next, currentUser);

@@ -274,6 +274,25 @@ export function oauthStartUrl(provider, userId) {
  * API. So it is marked instead, and the settings route switches it on the
  * moment an audience is saved.
  */
+/**
+ * Connecting a channel is asking to publish to it.
+ *
+ * There are TWO switches: each platform's own, and the account's master
+ * automatic-publishing switch -- and the master DEFAULTS TO FALSE. This
+ * function only ever set the platform one, so out of the box a customer could
+ * connect TikTok, see "successfully linked", pick an audience, watch the dot
+ * go green, and never have a single clip post: setTargets gives a clip no
+ * destinations at all while the master is off, so clips scheduled "for local
+ * export" and Post now published to nowhere.
+ *
+ * Youssef, 3 Sept 2026: "as soon as I have my thing connected ... it should
+ * work normally ... I shouldn't be doing extra steps."
+ *
+ * So enabling a destination enables publishing. This runs on the CONNECT path
+ * only, where there is no form and no competing choice being expressed -- a
+ * save that deliberately sends `enabled: false` is still honoured, and the
+ * switch is still there to turn off. Nothing posts unapproved either way.
+ */
 function enableOnConnect(userId, keys) {
   const current = publishingSettings(userId);
   const next = { ...current };
@@ -291,10 +310,23 @@ function enableOnConnect(userId, keys) {
     setting.enabled = true;
     setting.enableWhenReady = false;
     next[key] = setting;
+    // A destination that is on under a master switch that is off publishes
+    // nothing. Turning one on means turning the other on.
+    if (!next.enabled) next.enabled = true;
     changed = true;
   }
   if (changed) setPublishingSettings(userId, next);
 }
+
+/**
+ * The connect-time enable, reachable by test.
+ *
+ * Exported rather than the test reading the source, because "which switches
+ * does connecting turn on" is a behaviour and the whole bug was that the
+ * answer was one switch when it needed to be two. The real OAuth path cannot
+ * be driven without a live TikTok.
+ */
+export const enableOnConnectForTests = enableOnConnect;
 
 async function connectYouTube(code, userId) {
   const token = await jsonRequest(config.googleTokenUrl, {

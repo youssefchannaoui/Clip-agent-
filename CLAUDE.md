@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1315 JS + 592 Python**
+- `npm test` and `npm run check` must pass. Currently **1318 JS + 592 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -7087,3 +7087,39 @@ proof.** A slice-based edit raised `ValueError: substring not found`, the file
 was left untouched, and the suite passed against unmodified code — which
 proves nothing at all. Re-done by line number, with the removed lines printed
 and asserted before the run. Check that a red probe actually EDITED the file.
+
+### Connecting a channel now switches publishing on (v3.115.4)
+
+Youssef: "as soon as I have my thing connected ... it should work normally ...
+I shouldn't be doing extra steps."
+
+**The master switch defaults to FALSE** (`settingDefaults().publishingSettings.
+enabled`) and `enableOnConnect` only ever set the platform's own switch. So
+OUT OF THE BOX a customer could connect TikTok, see "successfully linked", pick
+an audience, watch the dot go green — and never have one clip post. That is
+every new account this product has ever had, not one misconfigured one.
+
+Enabling a destination now enables publishing, in the two places a connect
+finishes: `enableOnConnect` (YouTube, Meta, and TikTok once it is allowed to
+switch on) and the settings route's `enableWhenReady` branch, which is where
+TikTok's audience first arrives. Both are the app COMPLETING a connect, not a
+form the customer submitted — a save that deliberately sends `enabled: false`
+is still honoured, the switch is still there to turn off, and nothing posts
+without an approval either way.
+
+`enableOnConnectForTests` exports it, because "which switches does connecting
+turn on" is a behaviour and the real OAuth path cannot be driven without a
+live TikTok.
+
+### Basic really is 40 tokens, and production really is SEVEN days
+
+Asked to check. `plans().free` is `tokens: config.tokensFree` (40) over a
+window of `config.stripeTrialDays` (3 in the code), and the allowance drops to
+ZERO when the window closes rather than to something smaller -- otherwise
+cancelling and re-subscribing mints a fresh free wallet every lap.
+
+**Production is not running the code default.** The live banner reads "Your 7
+free days are up", and that sentence is built from `config.stripeTrialDays`, so
+`STRIPE_TRIAL_DAYS=7` is set on Render. The app is self-consistent -- the
+number it advertises is the number it enforces -- but it is 7, not the 3 the
+repo defaults to. A deliberate override to leave or change, not a bug.

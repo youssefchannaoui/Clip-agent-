@@ -182,3 +182,57 @@ test('the three surfaces all read the master switch, not just the platform one',
   const rowAt = source.indexOf('dests: destinations(c).length');
   assert.match(source.slice(rowAt, rowAt + 1600), /Automatic publishing is off/);
 });
+
+/*
+ * Connecting a channel is asking to publish to it (v3.115.4).
+ *
+ * Youssef: "as soon as I have my thing connected ... it should work normally
+ * ... I shouldn't be doing extra steps."
+ *
+ * The master automatic-publishing switch DEFAULTS TO FALSE, and enableOnConnect
+ * only ever set the platform's own switch. So out of the box a customer could
+ * connect TikTok, see "successfully linked", pick an audience, watch the dot go
+ * green — and never have one clip post. That is every new account, not just his.
+ */
+test('connecting a channel switches publishing on, not just the channel', async () => {
+  const { publishingSettings, setPublishingSettings } = await import('../src/store.js');
+  const social = await import('../src/social.js');
+  seed({ connected: true });
+
+  // The out-of-the-box state: nothing on at all.
+  setPublishingSettings(userId, { enabled: false, youtube: { enabled: false } });
+  assert.equal(publishingSettings(userId).enabled, false, 'the master starts off — this is the default');
+
+  social.enableOnConnectForTests(userId, ['youtube']);
+
+  const after = publishingSettings(userId);
+  assert.equal(after.youtube.enabled, true, 'the channel is on');
+  assert.equal(after.enabled, true,
+    'AND publishing is on — a channel under a master switch that is off posts nothing');
+});
+
+test('TikTok waits for its audience, then turns both on together', async () => {
+  const { publishingSettings, setPublishingSettings } = await import('../src/store.js');
+  const social = await import('../src/social.js');
+  seed({ connected: true });
+  setPublishingSettings(userId, { enabled: false, tiktok: { enabled: false, privacy: '' } });
+
+  // TikTok's guidelines forbid a preselected audience, so connecting may not
+  // switch it on — it is marked and waits.
+  social.enableOnConnectForTests(userId, ['tiktok']);
+  const waiting = publishingSettings(userId);
+  assert.equal(waiting.tiktok.enabled, false, 'not enabled without an audience');
+  assert.equal(waiting.tiktok.enableWhenReady, true, 'but marked for the moment one is chosen');
+  assert.equal(waiting.enabled, false, 'and nothing is claimed on the master switch yet');
+});
+
+test('the settings route finishes the job when the audience arrives', () => {
+  // The other half lives in the route, because that is where an audience is
+  // first saved. Both must set the master or the flow stops half-done.
+  const source = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  const at = source.indexOf('if (next.tiktok.enableWhenReady && String(next.tiktok.privacy');
+  const block = source.slice(at, at + 700);
+  assert.match(block, /next\.tiktok\.enabled = true;/);
+  assert.match(block, /if \(!next\.enabled\) next\.enabled = true;/,
+    'the master switch goes on with it');
+});
