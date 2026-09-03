@@ -389,6 +389,15 @@ Habits the tests now enforce, and why:
 ## Deploys
 
 - Branch `deenclipped-v2-2` auto-deploys the web service to Render on push.
+- **Every push takes the site down for about 35-40 seconds, and that is not a
+  fault.** The service mounts a 10GB disk at `/app/data`, so Render cannot run
+  the old and new instances side by side -- it stops one before starting the
+  other. Measured 3 Sept 2026: "Deploying..." 03:18:11, listening 03:18:47,
+  live 03:18:55, with a plain 502 in between. A 502 within a minute of a push
+  is the swap, not a crash; check `list_deploys` and the app log before
+  treating it as one. It also means a DOCS-ONLY push costs the same outage as
+  a code one, and that a credential change on Render costs it too -- so do not
+  push during a posting window.
 - **Rendered media is served from `media.deenclipped.online`** (custom domain
   on the R2 bucket `deenclipped-media-us`, bound 27 Aug 2026). The r2.dev
   public URL is a rate-limited dev endpoint -- it returned five straight GET
