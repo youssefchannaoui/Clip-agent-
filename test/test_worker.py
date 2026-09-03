@@ -128,6 +128,7 @@ class SpeakerTrackingTests(unittest.TestCase):
 
     VIDEO: pathlib.Path
     _dir: tempfile.TemporaryDirectory | None = None
+    _why_not: str = ""
 
     @classmethod
     def setUpClass(cls):
@@ -135,20 +136,38 @@ class SpeakerTrackingTests(unittest.TestCase):
         # to. testsrc has no faces at all, which is the point: `bias=auto` must
         # decline with a readable reason rather than raise, and that is one of
         # the things being asserted.
+        #
+        # The native mpeg4 encoder, deliberately -- libx264 is an external
+        # library that not every ffmpeg build carries, and the first cut of
+        # this asked for it, which on the CI runner made the whole class skip
+        # while the stderr that would have said so was thrown away.
         cls._dir = tempfile.TemporaryDirectory()
         cls.VIDEO = pathlib.Path(cls._dir.name) / "track_test.mp4"
         try:
             subprocess.run(
                 ["ffmpeg", "-v", "error", "-f", "lavfi",
                  "-i", "testsrc=size=1920x1080:rate=6:duration=6",
-                 "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                 "-c:v", "mpeg4", "-q:v", "5", "-pix_fmt", "yuv420p",
                  "-y", str(cls.VIDEO)],
                 check=True, capture_output=True, timeout=60,
             )
-        except (OSError, subprocess.SubprocessError):
+        except OSError as error:
+            cls._why_not = f"ffmpeg is not available to build the test video ({error})"
+        except subprocess.SubprocessError as error:
+            detail = getattr(error, "stderr", b"") or b""
+            detail = detail.decode("utf-8", "replace").strip() if isinstance(detail, bytes) else str(detail)
+            cls._why_not = f"ffmpeg could not build the test video: {detail or error}"
+        if cls._why_not:
             cls._dir.cleanup()
             cls._dir = None
-            raise unittest.SkipTest("ffmpeg is not available to build the test video")
+
+    def setUp(self):
+        # Per TEST, never in setUpClass. A SkipTest raised there counts as ONE
+        # skip and the seven tests disappear from the total -- which the
+        # handover guard rightly reports as tests having VANISHED. Seven skips
+        # with a reason is the honest shape, and the reason names the cause.
+        if self._why_not:
+            self.skipTest(self._why_not)
 
     @classmethod
     def tearDownClass(cls):
