@@ -717,10 +717,29 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
 
 /* The panel behind it. Reuses the connections dialog's card, backdrop and
    Escape handling rather than inventing a second modal language. */
+/* ALIGNMENT, measured rather than eyeballed.
+ *
+ * Youssef, 3 Sept 2026: "not everything is aligned, like, the ticks and stuff
+ * like that ... every time you're always doing layout work, everything must be
+ * centered, aligned, correctly done, and matching the dashboard."
+ *
+ * Measured at 1440x950 before this, and every fault was systematic rather than
+ * one bad row: the tick sat 3.6px BELOW its title's centre on all seven rows,
+ * the reward chip 4.6px below, and the row's own 8px padding pushed the whole
+ * left column to x=487 against a dialog header starting at x=479.
+ *
+ * The fix is geometric, not a nudge. The title line box and the tick are both
+ * exactly ROW_LINE tall and both start at the top of the grid row, so their
+ * centres coincide by construction rather than by a magic margin that would
+ * drift the moment the font size changed. The chip is the same height for the
+ * same reason. The negative margin lets the hover background keep its inset
+ * while the content sits on the header's own left edge. */
 #dcTasks .dctk-row {
-  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto;
-  align-items: start; gap: 12px; padding: 13px 8px;
-  width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  --dctk-line: 22px;
+  display: grid; grid-template-columns: var(--dctk-line) minmax(0, 1fr) auto;
+  align-items: start; gap: 12px;
+  padding: 12px 8px; margin: 0 -8px; width: calc(100% + 16px);
+  text-align: left; font: inherit; color: inherit; cursor: pointer;
   border: 0; border-top: 1px solid #1E1E22; border-radius: 10px; background: transparent;
 }
 #dcTasks .dctk-row:hover { background: #17171A; }
@@ -728,29 +747,51 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
    the two screens are visibly answering the same question. */
 #dcTasks .dctk-row.is-now { background: rgba(217,180,120,.06); }
 #dcTasks .dctk-row.is-now strong { color: #F0D6A6; }
+/* The badge INHERITS the title's 22px leading, so with padding its line box
+   came out 24px -- which made the one row carrying it 2px taller than its
+   siblings and pushed its title 1px off the tick. Its own height, capped under
+   the title's line, so it can never grow the row it sits in. */
 #dcTasks .dctk-row strong em {
-  margin-left: 7px; padding: 1px 6px; border-radius: 999px; font-style: normal;
+  display: inline-flex; align-items: center; height: 15px;
+  margin-left: 7px; padding: 0 6px; border-radius: 999px; font-style: normal;
   background: rgba(217,180,120,.16); color: #D9B478;
-  font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  font-size: 9px; font-weight: 800; line-height: 1; letter-spacing: .06em; text-transform: uppercase;
 }
 #dcTasks .dctk-row:first-of-type { border-top: 0; }
 #dcTasks .dctk-tick {
-  width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  width: var(--dctk-line); height: var(--dctk-line); border-radius: 50%;
+  display: grid; place-items: center; box-sizing: border-box;
   border: 1px solid #26262A; color: #6E6E76; font-size: 13px; font-weight: 800;
-  line-height: 1; margin-top: 1px;
+  line-height: 1;
 }
 #dcTasks .dctk-row.is-done .dctk-tick {
   border-color: rgba(217,180,120,.5); background: rgba(217,180,120,.13); color: #D9B478;
 }
-#dcTasks .dctk-row strong { display: block; font-size: 13px; color: #E9E9ED; }
+/* The title's line box IS the tick's height, so the two centre on each other
+   with no margin to keep in step. */
+#dcTasks .dctk-row strong {
+  display: flex; align-items: center; min-height: var(--dctk-line);
+  font-size: 13px; line-height: var(--dctk-line); color: #E9E9ED;
+}
 #dcTasks .dctk-row.is-done strong { color: #BCBCC3; }
-#dcTasks .dctk-row span { display: block; margin-top: 3px; font-size: 11px; color: #8B8B93; line-height: 1.45; }
+/* A WHOLE-pixel line height, not 1.45. At 11px that ratio is 15.95px, and the
+   fractions accumulated down the list until a row that wrapped to two lines
+   sat on a half pixel -- which is where the last 1px of tick misalignment came
+   from. Integral leading keeps every row on the pixel grid. */
+#dcTasks .dctk-row .dctk-note { display: block; margin-top: 2px; font-size: 11px; color: #8B8B93; line-height: 16px; }
 #dcTasks .dctk-bar {
   margin-top: 7px; height: 3px; border-radius: 999px; background: #1E1E22; overflow: hidden;
 }
 #dcTasks .dctk-bar i { display: block; height: 100%; border-radius: 999px; background: #D9B478; }
+/* Same height as the title line, so it centres on it; and a min-width with
+   tabular figures so every chip is the same width whatever number is in it.
+   Measured before: "+10 tokens" was 88px beside "15 tokens" at 78.8px, so the
+   chips' left edges were ragged even though their right edges lined up. */
 #dcTasks .dctk-prize {
-  flex: 0 0 auto; padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+  flex: 0 0 auto; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center;
+  height: var(--dctk-line); min-width: 82px; padding: 0 10px;
+  border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums;
   border: 1px solid #26262A; color: #8B8B93; font-size: 10px; font-weight: 700;
 }
 #dcTasks .dctk-row.is-done .dctk-prize {

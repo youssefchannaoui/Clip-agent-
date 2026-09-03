@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1229 JS + 581 Python**
+- `npm test` and `npm run check` must pass. Currently **1234 JS + 581 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -216,6 +216,36 @@ These were each a real bug and each has a test named after it.
   because code moved into a function, while real behaviour changes passed.
 - **A green suite is not verification for anything visual.** Every layout bug
   here shipped green.
+- **ALIGNMENT IS MEASURED, NEVER EYEBALLED** (Youssef, 3 Sept 2026: "not
+  everything is aligned, like, the ticks and stuff like that ... every time
+  you're always doing layout work and etcetera, everything must be centered,
+  aligned, correctly done, and matching the dashboard"). Before calling any
+  layout work done, read the rectangles and print the numbers:
+    * every icon/tick/chip's vertical centre against the centre of the TEXT it
+      belongs to, not against its row -- a row with three lines in it centres
+      nothing usefully;
+    * the left edge of each column across every row, as a SET: more than one
+      value is a ragged column;
+    * the right edge of every trailing chip, and its WIDTH -- equal right edges
+      with unequal widths still leaves ragged left edges;
+    * the content's left edge against the panel or dialog HEADER above it;
+    * row heights, which should differ only where the content genuinely does.
+  Do it at 1440, at a narrow desktop width, and on the phone, in both themes.
+- **Centre by geometry, never by a margin.** A `margin-top: 1px` nudge measures
+  right on the day and drifts the moment a font size, a line-height or a
+  padding moves. Give the icon and the text line the SAME height from one
+  shared token and let them start at the same y: then their centres coincide by
+  construction. The task panel's `--dctk-line` is the worked example, and
+  `test/task-ladder.test.mjs` fails if a nudge reappears.
+- **Whole-pixel leading.** `line-height: 1.45` at 11px is 15.95px, and those
+  fractions accumulate down a list until a row lands on a half pixel -- which
+  is where the task panel's last 1px of misalignment came from. Give list text
+  an integral line height.
+- **A badge inside a heading inherits the heading's leading.** The "Now" chip
+  had 22px of inherited line-height plus its own padding, so its line box came
+  out 24px and made the one row carrying it 2px taller than its siblings. Any
+  inline badge needs its own `line-height` and a height under the line it sits
+  in.
 - **Chrome will not run CSS animations in a hidden automation tab either.**
   An agent screenshot brings the tab forward, which is when the animations
   start -- so every capture lands a few frames into the entry animation and
@@ -6219,3 +6249,39 @@ thing to work with one another."
   again: the tour assertion matched `const firstRun = ...` and went on passing
   after `||firstRun` was deleted from the guard. It pins the guard's condition
   now, and was re-proven red.
+
+### The task panel, aligned by measurement (v3.110.2)
+
+Youssef: "not everything is aligned, like, the ticks and stuff like that."
+He was right, and every fault was SYSTEMATIC rather than one bad row --
+measured at 1440x950 before touching anything:
+
+| what | before | after |
+|---|---|---|
+| tick vs its title's centre | 3.6px low, all 7 rows | 0px, all 7 |
+| reward chip vs title's centre | 4.6px low | 0px |
+| chip widths | 88px and 78.8px | 82px, every one |
+| left column vs the dialog header | x=487 vs x=479 | 479, both |
+| rows with a progress bar | 76.9 / 74.9 / 74.9 / 74.9 | 75 each |
+
+Fixed by geometry, not by nudges: `--dctk-line` (22px) is the tick's height,
+the title's line-height AND the chip's height, so all three start at the top of
+the grid row and their centres coincide by construction. The row keeps its 8px
+padding for the hover background and takes it back with `margin: 0 -8px` so the
+content sits on the header's edge.
+
+Two smaller causes, both worth remembering:
+
+- **Fractional leading accumulates.** The note was `line-height: 1.45` at 11px
+  = 15.95px, and the fractions built up down the list until a wrapped row sat
+  on a half pixel. That was the last 1px of tick offset. Integral leading now.
+- **A badge inherits its heading's leading.** The "Now" chip took the title's
+  22px line-height plus its own padding, so its line box was 24px -- 2px taller
+  on that one row, and 1px off the tick. It carries its own `line-height: 1`
+  and a height under the title's line.
+
+Re-measured after: **0px on every row at 1440, 1100 and 390 wide, in night and
+in daylight**, every column a single value, no overflow. The rail card measured
+clean throughout (ring against copy 0, the percentage dead centre in the ring).
+`test/task-ladder.test.mjs` pins the METHOD rather than the numbers -- CI has
+no browser -- and both probes were proven red.

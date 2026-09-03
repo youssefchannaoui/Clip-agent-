@@ -7669,8 +7669,11 @@ function paintTasksPanel(){
     const count=task.progress?' \u00b7 '+task.progress.at+' of '+task.progress.of:'';
     /* A reward is drawn only where there is one. Two rungs pay nothing on
        purpose, and "+0 tokens" beside them would read as a fault. */
+    /* No "+" on a paid chip: it made that chip 9px wider than the others, so
+       their left edges were ragged against a progress bar that ends on one
+       line. A paid rung already reads as paid from the chip's own colour. */
     const prize=task.reward>0
-      ? '<span class="dctk-prize">'+(task.paidAt?'+':'')+task.reward+' tokens</span>'
+      ? '<span class="dctk-prize">'+task.reward+' tokens</span>'
       : '<span></span>';
     /* The row the HERO is standing on, not merely the first unfinished one --
        the server sends which, so opening the ladder from the rail lands on the
@@ -7679,7 +7682,7 @@ function paintTasksPanel(){
     return '<button type="button" class="dctk-row'+(task.done?' is-done':'')+(now?' is-now':'')
       +'" data-task="'+esc(task.id)+'" data-go="'+esc(task.action||'')+'">'
       +'<span class="dctk-tick">'+(task.done?'\u2713':'')+'</span>'
-      +'<div><strong>'+esc(task.title)+(now?'<em>Now</em>':'')+'</strong><span>'+esc(task.note)+esc(count)+'</span>'+bar+'</div>'
+      +'<div><strong>'+esc(task.title)+(now?'<em>Now</em>':'')+'</strong><span class="dctk-note">'+esc(task.note)+esc(count)+'</span>'+bar+'</div>'
       +prize+'</button>';
   }).join('');
 }

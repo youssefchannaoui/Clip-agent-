@@ -378,3 +378,81 @@ test('the tour is offered once on the screen that offers it twice', () => {
   assert.ok(!/classList\.contains\('dc-firstrun'\)/.test(body),
     'the body class is set later in the same paint; the flag is not');
 });
+
+/* ------------------------------------------------------------------ *
+ * 8. Alignment, pinned as a METHOD rather than as a number.
+ *
+ *    Youssef, 3 Sept 2026: "not everything is aligned, like, the ticks
+ *    and stuff like that ... every time you're always doing layout work
+ *    and etcetera, everything must be centered, aligned, correctly done,
+ *    and matching the dashboard."
+ *
+ *    Measured at 1440x950 before the fix: the tick sat 3.6px below its
+ *    title's centre on ALL SEVEN rows, the reward chip 4.6px below, the
+ *    chips were 88px and 78.8px wide so their left edges were ragged,
+ *    and the row's own padding put the left column at x=487 against a
+ *    dialog header starting at 479. After: 0px on every row, every
+ *    column a single value, every chip 82px — at 1440, 1100 and 390,
+ *    in night and in daylight.
+ *
+ *    CI has no browser, so these assert the geometry that PRODUCES that
+ *    result: one shared line height driving the tick, the title and the
+ *    chip, so they centre on each other by construction. A magic margin
+ *    would measure right today and drift the moment a font size moved.
+ * ------------------------------------------------------------------ */
+test('one line token drives the tick, the title and the reward chip', () => {
+  const sheet = read('src/public/studio-tokens.css');
+  const block = sheet.slice(sheet.indexOf('#dcTasks .dctk-row {'), sheet.indexOf('#dcTasks .dctk-bar'));
+  assert.match(block, /--dctk-line:\s*\d+px/, 'the row declares the shared line height');
+  for (const [what, selector] of [
+    ['the tick', '#dcTasks .dctk-tick'],
+    ['the title', '#dcTasks .dctk-row strong'],
+    ['the reward chip', '#dcTasks .dctk-prize'],
+  ]) {
+    const rule = sheet.slice(sheet.indexOf(selector + ' {'), sheet.indexOf('}', sheet.indexOf(selector + ' {')));
+    assert.match(rule, /var\(--dctk-line\)/, `${what} must be sized from the shared line, not by hand`);
+  }
+});
+
+test('nothing is nudged into place with a margin', () => {
+  const sheet = read('src/public/studio-tokens.css');
+  const from = sheet.indexOf('#dcTasks .dctk-row {');
+  const to = sheet.indexOf('#dcTasks .dctk-prize');
+  const block = sheet.slice(from, sheet.indexOf('}', to));
+  // margin-top on any of these is the fudge this section replaced: it measures
+  // right on the day and drifts the moment a font size changes.
+  assert.ok(!/\.dctk-tick[^}]*margin-top/.test(block), 'the tick is centred by geometry, never by a margin');
+  assert.ok(!/\.dctk-prize[^}]*margin-top/.test(block), 'and so is the chip');
+});
+
+test('a chip is the same width whatever number is in it', () => {
+  const sheet = read('src/public/studio-tokens.css');
+  const rule = sheet.slice(sheet.indexOf('#dcTasks .dctk-prize {'), sheet.indexOf('}', sheet.indexOf('#dcTasks .dctk-prize {')));
+  assert.match(rule, /min-width:\s*\d+px/, 'a min-width, or 10 and 100 tokens give different left edges');
+  assert.match(rule, /tabular-nums/, 'and tabular figures, so the digits do not shuffle the width');
+  // The "+" that used to mark a paid chip made it 9px wider than the rest.
+  const page = read('src/public/index.html');
+  const at = page.indexOf('const prize=task.reward>0');
+  assert.ok(!/task\.paidAt\?'\+':''/.test(page.slice(at, at + 200)),
+    'a paid chip must not be wider than an unpaid one; its colour already says it is paid');
+});
+
+test('the rows sit on the dialog header’s own left edge', () => {
+  const sheet = read('src/public/studio-tokens.css');
+  const rule = sheet.slice(sheet.indexOf('#dcTasks .dctk-row {'), sheet.indexOf('}', sheet.indexOf('#dcTasks .dctk-row {')));
+  // The hover background is inset by padding; the negative margin puts the
+  // CONTENT back on the header's edge. Without it the whole left column sat
+  // 8px right of "Your tasks".
+  assert.match(rule, /padding:\s*\d+px\s+8px/, 'the hover background keeps its inset');
+  assert.match(rule, /margin:\s*0\s+-8px/, 'and the content returns to the header edge');
+});
+
+test('the Now badge cannot grow the row it sits in', () => {
+  const sheet = read('src/public/studio-tokens.css');
+  const rule = sheet.slice(sheet.indexOf('#dcTasks .dctk-row strong em {'),
+    sheet.indexOf('}', sheet.indexOf('#dcTasks .dctk-row strong em {')));
+  // It inherits the title's line-height, so with padding its line box came out
+  // 24px against a 22px line -- 2px taller on that row and 1px off the tick.
+  assert.match(rule, /line-height:\s*1\b/, 'its own leading, not the title’s');
+  assert.match(rule, /height:\s*\d+px/, 'and a height under the title’s line');
+});
