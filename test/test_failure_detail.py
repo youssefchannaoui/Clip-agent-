@@ -20,12 +20,22 @@ produced it:
 These drive the real function with the real banner lines.
 """
 import importlib.util
+import os
 import pathlib
 import sys
+import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "worker"))
+
+# service.py builds its JobStore AT IMPORT, and JobStore mkdirs its data
+# directory -- which defaults to /var/lib/deenclipped. That succeeds for root
+# (this container) and is PermissionError on the CI runner, so importing it
+# without this passed here and turned the branch red there. DATA_DIR is read
+# once at module scope, so the variable has to be set BEFORE exec_module.
+os.environ.setdefault("WORKER_DATA_DIR", tempfile.mkdtemp(prefix="dc-failure-detail-"))
+
 _spec = importlib.util.spec_from_file_location("dc_service", ROOT / "worker" / "service.py")
 service = importlib.util.module_from_spec(_spec)
 try:
