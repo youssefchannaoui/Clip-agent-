@@ -4086,20 +4086,29 @@ Scripture is captioned on every template (invariant 7), so this is not confined
 to the Quran one. Whatever the right ratio is, it should be DERIVED from one
 size rather than emerging from both.
 
-**`AYAH_SIZE_SCALE` is 3.54 -> 4.40, and it is a GUESS**, made at Youssef's
-instruction ("just guess a value and ill check the next render") because the
-ffmpeg on the Mac has **no libass** (`ffmpeg -filters | grep subtitles` returns
-nothing) and no frame could be rendered to settle it.
+**`AYAH_SIZE_SCALE` is 3.54 -> 4.40 -> 5.80, and the last step is MEASURED.**
 
-The 1.24x comes from the PHOTOGRAPH, not the arithmetic: on that Short the
-Arabic reads a little smaller than the English, not half its size, so the
-correction needed is small. Had the model been right -- ayah already twice the
-gloss -- he would have asked for it to come down.
+3.54 was a guess corrected by eyeballing the Short (4.40). Then a real clip was
+re-rendered on the box at 4.40 and the frame measured -- and that is the number
+that counts. No libass was needed for it: the render itself came off the
+worker, and the frame was pulled from the clip's own R2 URL and decoded with
+plain ffmpeg.
 
-**Correcting it takes one render and no re-derivation:** render an ayah with
-its gloss, decode the frame to gray8, measure the lit rows of each line, and
-multiply the constant by (gloss rows / ayah rows). Do not trust the arithmetic
-over the frame; it is already known to disagree with reality.
+    crop the caption band, decode to gray8, threshold the pure-white ink at 254
+    Arabic letterforms   y 694-709   16px
+    English cap height   y 778-798   21px
+
+16/21 = 0.76 -- still three quarters the size of its gloss at 4.40.
+4.40 x 21/16 = 5.78, rounded to **5.80** for the equal sizing that was asked
+for.
+
+**This is the route for any future caption-size question, and it does not need
+the container:** re-render one clip through the app, download the render from
+`media.deenclipped.online`, take a frame with `ffmpeg -ss`, and measure the lit
+rows. It settled in one cycle what the arithmetic had had wrong for months.
+
+**The arithmetic in the AYAH_SIZE_SCALE comment block is DISPROVED** -- by two
+separate frames now -- and must not be trusted over a render.
 
 The overflow risk of a 24% bigger line was checked rather than assumed: the
 ayah Dialogue already carries `{\q0}` (clip_worker.py:2579), so a longer line

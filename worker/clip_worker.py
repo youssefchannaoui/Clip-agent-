@@ -2359,20 +2359,31 @@ AYAH_FADE_OUT_MS = 450
 # on every per-account override. Whatever the right ratio is, it should be
 # DERIVED from one of them rather than emerging from both.
 #
-# 3.54 -> 4.40 is a GUESS, made at Youssef's instruction ("just guess a value
-# and ill check the next render") because no frame could be rendered here to
-# settle it. It is 1.24x, and the reasoning is the photograph rather than the
-# arithmetic: on that Short the Arabic reads a little smaller than the English,
-# not half its size, so the correction needed is small. Had the model been
-# right -- ayah already 2x the gloss -- he would have asked for it to come
-# DOWN, not up.
+# 5.80, and this one is MEASURED rather than reasoned about.
 #
-# HOW TO CORRECT IT, in one render, without re-deriving any of the above:
-# render one ayah with its gloss, decode the frame to gray8, and measure the
-# lit rows of each line. Multiply this constant by (gloss rows / ayah rows).
-# That is the whole procedure; the arithmetic in this comment block is known
-# to disagree with reality and should not be trusted over the frame.
-AYAH_SIZE_SCALE = 4.40
+# The history is worth keeping because it is the whole lesson. 3.54 was tuned
+# from a claim that the ayah drew "about twice the visual height of the gloss".
+# The arithmetic above agrees: from the shipped font metrics the ayah should be
+# roughly 2x. A live frame showed it SMALLER than its own English gloss, so the
+# model was wrong and had been for a long time. 4.40 was then a guess (1.24x)
+# from eyeballing that frame.
+#
+# Then a clip was actually re-rendered at 4.40 and the frame measured -- decode
+# to gray8, threshold the pure-white caption ink at 254, group the lit rows:
+#
+#     Arabic letterforms   y 694-709   16px
+#     English cap height   y 778-798   21px
+#
+# 16/21 = 0.76, so the ayah was still three quarters the size of its gloss at
+# 4.40. 4.40 x (21/16) = 5.78, rounded to 5.80 for the equal sizing Youssef
+# asked for: "just make sure quran text is equal size to translation."
+#
+# TO RE-MEASURE after any change: render one ayah with its gloss, crop the
+# caption band, decode to gray8, and compare the lit-row height of the Arabic
+# letter bodies with the Latin cap height. Multiply this constant by
+# (latin rows / arabic rows). Do NOT trust the arithmetic in the block above --
+# it has now been disproved by two separate frames.
+AYAH_SIZE_SCALE = 5.80
 
 # libass sizes a font by its Win cell (usWinAscent + usWinDescent, in em).
 # The mushaf faces have very tall cells, so the same nominal size draws them
