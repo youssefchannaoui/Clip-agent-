@@ -1,122 +1,137 @@
-# TikTok demo recording — shot by shot
+# TikTok demo video — shooting script
 
-What to record, in order, to pass TikTok's app review. Every numbered shot maps
-to something the reviewer is told to look for; a recording that skips one gets
-rejected without a reason you can act on.
+Written 3 Sept 2026. Aim: 3–4 minutes, under 50MB, mp4 or mov.
 
-**Hard constraints:** under 50MB, `.mp4` or `.mov`. The old recording was
-286MB / 10m24s and unusable. Aim for **3–4 minutes**. No music, no titles, no
-edits that cut between steps — reviewers want one continuous, unedited take.
+The last recording failed for one reason above all others: **it never showed
+TikTok connected.** At 10:00 of 10:24 the Channels page still read "Not
+connected", and the final seconds showed `0 connected`. No consent screen, no
+account, no post. A reviewer watching that has been shown nothing.
 
-**Before you press record**
-
-- Sign out of DeenClipped, then sign back in during the recording. A reviewer
-  must see the connection made, not one that already existed.
-- Have the TikTok account you will post to **set to private**. An unaudited app
-  may only post to a private account; posting to a public one returns the 403
-  you already hit.
-- Close every other tab. The address bar must read `deenclipped.online`
-  throughout — it has to match the Website URL on the app.
-- Screen only. No webcam, no voiceover needed (captions below are optional).
-
-**Unresolved before you record:** the portal says an app never approved "is
-required to use a sandbox environment to demonstrate the integration". Check
-the Sandbox tab first. If it demands sandbox credentials, recording against
-production may have to be redone.
+Everything below exists to prove one specific thing to a reviewer. If a beat
+feels redundant, it is not — it is the evidence for a scope.
 
 ---
 
-## Shot 1 — the domain (0:00–0:15)
+## Before you press record
 
-Open a browser. Type `deenclipped.online` in the address bar and press enter.
-Let the home page load and sit on it for three seconds.
-
-*Why:* the domain must visibly match the Website URL registered on the app.
-Do not start from a bookmark or an already-open tab — they need to see it typed.
-
-## Shot 2 — sign in (0:15–0:35)
-
-Sign in to your account. Land on the studio.
-
-## Shot 3 — the consent screen (0:35–1:15) — **the one that proves `user.info.basic`**
-
-1. Open **Channels** (the connections dialog).
-2. Show TikTok reading **Not connected**. Pause two seconds on it.
-3. Click **Connect TikTok**.
-4. **Let TikTok's own consent screen fill the frame.** Do not rush it. The
-   permissions list must be readable.
-5. Approve it.
-6. Back in Channels, pause on the connected row: your **display name and
-   avatar** are now shown.
-
-*Why:* this is the entire justification for `user.info.basic`. The previous
-recording failed here — it still showed "Not connected" at 10:00 of 10:24.
-
-## Shot 4 — your own content (1:15–1:45)
-
-1. Go to **Lecture library**.
-2. Point at a lecture **you uploaded or own**, and say so in an on-screen note
-   if you are narrating.
-3. Open the **Review queue** and pick a clip cut from that lecture.
-4. Play three or four seconds of it so the reviewer sees a real clip.
-
-*Why:* "Only the creator's own content is posted" is in your review note. Show
-it being true. Do not use a clip from someone else's lecture in this recording.
-
-## Shot 5 — the publish dialog (1:45–2:45) — **the compliance shot**
-
-Open the posting options for TikTok and hold still long enough to read:
-
-- **Who can see your posts** — the audience list. It must show the levels
-  returned by `creator_info/query/`, with **nothing preselected**.
-- **Comment / Duet / Stitch** toggles, in the state the account allows. If your
-  account disables one, show it greyed out with its tooltip.
-- The **commercial content disclosure** unchecked, and the **Music Usage
-  Confirmation** line beneath it.
-- Your TikTok **nickname** on the panel.
-
-Then choose **Only me (SELF_ONLY)** deliberately, on camera.
-
-*Why:* TikTok's content-sharing guidelines require the creator to choose a
-privacy level with nothing preselected, to see interaction settings fetched
-fresh, and to see the music declaration. This shot is where the review is won
-or lost.
-
-## Shot 6 — post it (2:45–3:30)
-
-1. Press post.
-2. Stay on screen while it uploads — do not cut.
-3. Show the success state in DeenClipped.
-4. **Open the TikTok app or web, and show the post existing on the account**,
-   marked private.
-
-*Why:* they need proof the API call completed, not just that your UI said so.
+- [ ] Pause the other Claude session. Its pushes take the site down for ~40s.
+      A 502 mid-take means shooting again.
+- [ ] Back up the production `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET`.
+      This is the only step with no undo.
+- [ ] Put the **sandbox** pair into Render, save, wait for the deploy.
+- [ ] Use **Safari**, not Chrome — Chrome is holding the filled submission form.
+- [ ] Sign in to TikTok as **`deenclipped`** in that browser first. It is the
+      registered sandbox target user; no other account can authorise.
+- [ ] In the app, **disconnect TikTok**. You are going to connect it on camera.
+- [ ] Have one approved clip ready in the review queue.
+- [ ] Close every other tab. One window, nothing personal on screen.
+- [ ] Record the browser window, not the whole desktop.
 
 ---
 
-## What must NOT appear
+## The shot list
 
-- Any clip from a lecture you do not own.
-- A public or friends-only privacy level. `SELF_ONLY` only, until audited.
-- Auto-posting. Say plainly — on screen or in the notes — that **every clip is
-  approved by hand**; nothing publishes on its own.
-- Cuts between steps. One take.
+### 1 — The domain (0:00–0:10)
+
+Start with the address bar visible showing **`deenclipped.online`**, then sign
+in.
+
+*Proves: the app is the website named as the Website URL. A reviewer checks
+this first and rejects immediately if the domain does not match.*
+
+### 2 — Connect TikTok, on camera (0:10–0:50)
+
+Settings → **Connections** → TikTok → **Connect**.
+
+Let the **TikTok consent screen** fill the frame. Do not rush it. Let the
+reviewer read the scopes it lists. Approve it.
+
+Come back to Connections and **rest on the connected row for a full 5 seconds**
+— the display name and avatar must be legible.
+
+*Proves: `user.info.basic`. This is the single beat the old recording was
+missing. The consent screen and the resulting profile ARE the evidence.*
+
+### 3 — The clip is the creator's own (0:50–1:30)
+
+Open **Lecture library**, show the lecture you imported, and say plainly — out
+loud or in a caption — that this is your own lecture. Open the review queue and
+play a few seconds of the clip made from it.
+
+*Proves: "only the creator's own content is posted." Reviewers reject apps that
+look like they repost other people's videos. Do not skip this.*
+
+### 4 — The publish dialog, slowly (1:30–2:45) — THE MOST IMPORTANT BEAT
+
+Approve/post the clip so the TikTok options panel opens. Then move the cursor
+over each item and pause on it:
+
+- The **account** it will post to
+- **Privacy level** — open the dropdown so the options are visible. Only
+  `SELF_ONLY` will be there. **Say so:** "the app only offers the levels
+  TikTok's creator_info endpoint returns for this account."
+- **Allow comments / Allow Duet / Allow Stitch** — show their state
+- The **commercial content disclosure**, off by default. Turn it ON, so
+  "Your brand" and "Branded content" appear, then turn it back OFF.
+- **"By posting, you agree to TikTok's Music Usage Confirmation."** Hover it.
+  Every DeenClipped clip mixes in a nasheed, so this line matters more here
+  than for most apps.
+
+*Proves: `video.publish`, and compliance with the content-sharing guidelines —
+options fetched fresh from `creator_info/query/`, privacy chosen and never
+defaulted, disclosure not asserted on the creator's behalf, music confirmation
+shown.*
+
+### 5 — Post it, and show it landed (2:45–3:30)
+
+Press post. Stay on screen while it uploads. Show the success state in the app,
+then **open TikTok and show the video on the `deenclipped` account.**
+
+*Proves: the integration actually works end to end. A recording that stops at
+"uploading" proves nothing.*
 
 ---
 
-## The review note to paste alongside it
+## Say this out loud somewhere in the video
 
-Reuse the wording already agreed in `TIKTOK-SUBMISSION.md`, which explains that
-`video.upload` ships bundled with the Content Posting API and that your OAuth
-request asks only for `user.info.basic` and `video.publish`. That question gets
-asked every time it is not answered up front.
+> "The privacy list shows only Private because this app has not been approved
+> yet. We render exactly the options the creator_info endpoint returns and
+> reject anything not in that list."
+
+Without it, a reviewer may read a private-only post as the app ignoring their
+privacy rules — when it is in fact the app obeying them.
 
 ---
 
-## After it passes
+## What must NOT be in the frame
 
-`TIKTOK-SUBMISSION.md` step 6: **delete the old app `7668669224428029959`.**
-Updating Render stopped this app using the leaked secret; the secret stays valid
-against the old app until the old app is gone. The rotation is not closed until
-then — and do it only once a fresh connect proves the new credentials work,
-because the old app is the only way back if they do not.
+- Any other person's TikTok content
+- A 502 page
+- Your production API keys, Render's variable values, the Stripe dashboard
+- Any other creator's account
+- Dead air longer than ~5 seconds
+
+---
+
+## The five reasons apps like this get rejected, and where each is handled
+
+| Rejection reason | Beat |
+|---|---|
+| Scope shown but never demonstrated | 2 and 4 |
+| Domain does not match the Website URL | 1 |
+| Cannot tell whose content is posted | 3 |
+| Privacy defaulted rather than chosen | 4 |
+| Flow does not complete | 5 |
+
+---
+
+## After the shoot
+
+1. Check the file is under 50MB. If not, send it to me — ffmpeg will bring it
+   down without a re-shoot.
+2. Do NOT reload the Chrome tab holding the submission form.
+3. Send me the file. I upload it, Save (the first moment Save works), submit.
+4. Put the production `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` back, and
+   reconnect TikTok. Confirm `Connected TikTok account "..."` appears in the
+   activity log — do NOT trust "Test connection", which passes on a cached
+   token for 24 hours even with a wrong secret.
