@@ -6160,16 +6160,7 @@
          * reachable -- a step that names a prerequisite and cannot take you to
          * it is worse than the list it replaced.
          */
-        var go = {
-          // Home is where the paste field is; the host focuses it after the
-          // paint (paintOnboarding), because the field is drawn by the
-          // template and does not exist yet at this point.
-          paste: function (e) { stop(e); setUI({ screen: 'home', focusPaste: Date.now() }); },
-          nasheed: function (e) { stop(e); setUI({ screen: 'music' }); },
-          review: function (e) { stop(e); setUI({ screen: 'queue', queueTab: 'decide' }); },
-          connect: function (e) { stop(e); global.StudioAdapter.onOpenConnections(); },
-          schedule: function (e) { stop(e); setUI({ screen: 'schedule' }); },
-        }[ob.action] || function () {};
+        var go = function (e) { global.StudioAdapter.goToStep(ob.action, e); };
         // A step that has been passed is still a place to go back to -- the
         // retired checklist's rows were all buttons, and losing that would
         // have made the replacement strictly less useful than the thing it
@@ -8049,5 +8040,33 @@
     // Both decisions are persisted now, so the refreshed state is the truth and
     // nothing needs to be held over it.
     settled: function () { UI.pending = {}; },
+    /*
+     * The five places an onboarding step can send you, by name.
+     *
+     * A METHOD on the adapter rather than an entry in bindings(), because both
+     * callers reach it from outside a render: the Home strip's own button and
+     * the task ladder's rows (Youssef, 3 Sept 2026: "connect the side bar
+     * perctnage thing to first user interface hero thing to work with one
+     * another"). Two lists of destinations that have to agree is how a row
+     * ends up going somewhere the strip beside it does not -- the first cut of
+     * this sat inside bindings(), so StudioAdapter.goToStep was undefined and
+     * clicking a task row silently did nothing.
+     */
+    goToStep: function (action, e) {
+      var where = {
+        // Home is where the paste field is; the host focuses it after the
+        // paint (paintOnboarding), because the field is drawn by the template
+        // and does not exist yet at this point.
+        paste: function () { setUI({ screen: 'home', focusPaste: Date.now() }); },
+        nasheed: function () { setUI({ screen: 'music' }); },
+        review: function () { setUI({ screen: 'queue', queueTab: 'decide' }); },
+        connect: function () { global.StudioAdapter.onOpenConnections(); },
+        schedule: function () { setUI({ screen: 'schedule' }); },
+      }[String(action || '')];
+      if (!where) return false;
+      if (e && e.preventDefault) e.preventDefault();
+      where();
+      return true;
+    },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

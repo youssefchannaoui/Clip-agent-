@@ -590,6 +590,10 @@ body.dc-light .dctk-note{color:#62626B}
 body.dc-light .dctk-go{color:#86868F}
 body.dc-light .dctk-earn{background:rgba(162, 118, 44, 0.161);color:#A2762C}
 body.dc-light #dcTasks .dctk-row{border-top:1px solid #E2E2E6}
+body.dc-light #dcTasks .dctk-row:hover{background:#FFFFFF}
+body.dc-light #dcTasks .dctk-row.is-now{background:rgba(162, 118, 44, 0.069)}
+body.dc-light #dcTasks .dctk-row.is-now strong{color:#7E5B18}
+body.dc-light #dcTasks .dctk-row strong em{background:rgba(162, 118, 44, 0.184);color:#A2762C}
 body.dc-light #dcTasks .dctk-tick{border:1px solid #D4D4DA;color:#86868F}
 body.dc-light #dcTasks .dctk-row.is-done .dctk-tick{border-color:rgba(162, 118, 44, 0.575);background:rgba(162, 118, 44, 0.149);color:#A2762C}
 body.dc-light #dcTasks .dctk-row strong{color:#1D1D22}

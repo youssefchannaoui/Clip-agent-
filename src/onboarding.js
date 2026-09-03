@@ -245,15 +245,46 @@ export function tasks(state, userId, rewards = {}) {
 
   const done = list.filter(t => t.done).length;
   const next = list.find(t => !t.done) || null;
+  const setup = list.slice(0, 3);
+  const setupDone = setup.every(t => t.done);
+  const setupCount = setup.filter(t => t.done).length;
+
+  /*
+   * THE RAIL RING AND THE HOME HERO SHOW THE SAME FRACTION.
+   *
+   * Youssef, 3 Sept 2026: "connect the side bar perctnage thing to first user
+   * interface hero thing to work with one another." They read one source
+   * already, but they COUNTED different things -- the rail said 14% (one rung
+   * of seven) beside a hero saying "Step 1 of 3", and nothing on screen said
+   * those were the same fact.
+   *
+   * So while the hero is up, the ring counts the hero's own three steps and
+   * the card speaks the hero's own step label. The moment setup finishes the
+   * hero disappears by itself (journey show:false) and the ring re-anchors to
+   * the whole ladder, with the card's title changing in the same paint so the
+   * new denominator is never unexplained.
+   */
+  const ringPercent = setupDone
+    ? (list.length ? Math.round((done / list.length) * 100) : 0)
+    : Math.round((setupCount / setup.length) * 100);
+
   return {
     list,
     done,
     total: list.length,
     // Whole percent, floored — 99% on a finished ladder would read as broken.
     percent: list.length ? Math.round((done / list.length) * 100) : 0,
+    ringPercent,
     // What the rail card says. "Complete setup" only while the setup half is
     // genuinely unfinished, so an established account is not told to set up.
-    setupDone: list.slice(0, 3).every(t => t.done),
+    setupDone,
+    setup: { done: setupCount, total: setup.length },
+    // The hero's own words, so the two surfaces cannot phrase it differently.
+    // Empty once setup is done, because the hero is gone by then.
+    stepLabel: setupDone ? '' : j.progress,
+    // Which rung the hero is standing on, so the panel marks the same one the
+    // strip highlights rather than merely the first unfinished row.
+    nowId: setupDone ? (next ? next.id : '') : j.at,
     next,
     earned: list.reduce((sum, t) => sum + (t.paidAt ? t.reward : 0), 0),
     unclaimed: list.reduce((sum, t) => sum + (t.done && !t.paidAt ? t.reward : 0), 0),

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1225 JS + 581 Python**
+- `npm test` and `npm run check` must pass. Currently **1229 JS + 581 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -6147,3 +6147,45 @@ Driven in a browser at 1440x950 (night and daylight) and 390x844: card, panel,
 seven rows with their counts and prizes, the collapsed rail showing the ring
 alone, the card surviving three consecutive `paintStudio()` calls as the same
 node, and zero page errors.
+
+### One tour button, and the ring counts what the hero counts (v3.110.0)
+
+Youssef, looking at the shipped ladder: "take the tour there are 2 buttons for
+it? also connect the side bar perctnage thing to first user interface hero
+thing to work with one another."
+
+- **Two tour buttons, and it was mine.** v3.99.0 gave the first-run right-hand
+  column a "New here?" card whose whole purpose is offering the tour, and never
+  removed the quiet grey link beside Start job that already offered it -- two
+  controls for one thing on the one screen where a beginner is least able to
+  tell them apart. `paintTourEntry` stands down while the first-run card is up;
+  the link stays for everyone else, because with no card it is their only way
+  in. Measured on both accounts: **one control each**, from two and one.
+- **It reads the BINDING, not `body.dc-firstrun`.** paintTourEntry runs before
+  paintFirstRun in paintStudio's list, so on the paint where an account stops
+  being a beginner the class is still on the body -- the first cut left that
+  account with NO tour entry for a whole render. Found by driving it.
+- **The ring and the hero counted different things.** The rail said 14% (one
+  rung of seven) beside a hero saying "Step 1 of 3", with nothing on screen
+  relating them. `ringPercent` now counts the hero's own three steps while the
+  hero is up, and re-anchors to the whole ladder the moment setup finishes --
+  in the same paint the card's title changes from "Complete setup" to "Your
+  tasks", so the new denominator is never unexplained. The card's second line
+  is the hero's OWN `progress` string, sent by the server, so the two cannot
+  phrase it differently. Measured: ring 33%, rail "Step 2 of 3", hero
+  "Step 2 of 3".
+- **The panel marks the step the hero is standing on** (`nowId`), not merely
+  the first unfinished row, so opening the ladder from the rail lands on the
+  same answer Home is giving.
+- **Every rung is a button that goes where the hero's button goes.**
+  `StudioAdapter.goToStep(action)` is the ONE destination map and the hero's
+  own button now calls it too. **It has to be a METHOD on StudioAdapter**: the
+  first cut put it inside `bindings()`, so `StudioAdapter.goToStep` was
+  undefined and clicking a task row silently did nothing. Driven: a row takes
+  the screen from home to queue and closes the panel.
+- The rail note is the step label ALONE. "Step 1 of 3 · Import your first
+  lecture" truncated in a 228px rail; the next task moved to the tooltip.
+- **One red-probe did not go red first**, and that is the rule earning its keep
+  again: the tour assertion matched `const firstRun = ...` and went on passing
+  after `||firstRun` was deleted from the guard. It pins the guard's condition
+  now, and was re-proven red.

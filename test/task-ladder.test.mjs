@@ -307,3 +307,74 @@ test('the ladder is computed once, server-side, and only read by the screens', (
       `${name} restates a rung's rule; the copy belongs to onboarding.js alone`);
   }
 });
+
+/* ------------------------------------------------------------------ *
+ * 7. The rail card and the Home hero answer as one.
+ *
+ *    Youssef, 3 Sept 2026: "take the tour there are 2 buttons for it?
+ *    also connect the side bar perctnage thing to first user interface
+ *    hero thing to work with one another." Both were real: the hero's
+ *    "New here?" card and a quiet link beside Start job both offered
+ *    the tour on the same screen, and the rail said 14% beside a hero
+ *    saying "Step 1 of 3" with nothing on screen relating the two.
+ * ------------------------------------------------------------------ */
+test('the ring counts the hero’s own three steps while the hero is up', () => {
+  seed({ clips: 2 });                       // clips back, nothing approved
+  let rows = ladder();
+  assert.equal(rows.setupDone, false);
+  assert.equal(rows.setup.done, 1, 'one of the hero’s three steps');
+  assert.equal(rows.ringPercent, 33, 'and the ring says so, not 14% of seven rungs');
+  assert.equal(rows.stepLabel, onboarding.journey(state, me.id).progress,
+    'the rail quotes the hero’s own words rather than phrasing it again');
+
+  // Once setup is finished the hero disappears by itself, so the ring
+  // re-anchors to the whole ladder in the same paint the title changes.
+  seed({ clips: 4, posted: 4, days: 4 });
+  rows = ladder();
+  assert.equal(rows.setupDone, true);
+  assert.equal(rows.stepLabel, '', 'no hero left to quote');
+  assert.equal(rows.ringPercent, rows.percent, 'the ring is the whole ladder now');
+});
+
+test('the panel marks the step the hero is standing on', () => {
+  seed({ clips: 2 });
+  assert.equal(ladder().nowId, onboarding.journey(state, me.id).at,
+    'opening the ladder must land on the same answer Home is giving');
+  seed({ clips: 4, posted: 4, days: 4 });
+  assert.equal(ladder().nowId, ladder().next.id, 'past setup, the next rung is the live one');
+});
+
+test('every rung carries a destination, and there is ONE map of them', () => {
+  const rows = ladder().list;
+  assert.ok(rows.every(t => t.action), 'a task row that goes nowhere is a dead control');
+  const adapter = read('src/public/studio-adapter.js');
+  assert.match(adapter, /^ {4}goToStep: function \(action, e\)/m,
+    'goToStep must be a METHOD on StudioAdapter: inside bindings() it is not reachable '
+    + 'from the task panel, and clicking a row silently did nothing');
+  assert.match(adapter, /global\.StudioAdapter\.goToStep\(ob\.action, e\)/,
+    'and the hero’s own button goes through the same map');
+  // Two lists of destinations that have to agree is how a row ends up going
+  // somewhere the strip beside it does not.
+  const page = read('src/public/index.html');
+  const at = page.indexOf("const row=event.target.closest('#dcTasks .dctk-row');");
+  assert.match(page.slice(at, at + 400), /StudioAdapter\.goToStep/);
+});
+
+test('the tour is offered once on the screen that offers it twice', () => {
+  const page = read('src/public/index.html');
+  const at = page.indexOf('function paintTourEntry(vals){');
+  const body = page.slice(at, page.indexOf('row.appendChild(tourLinkEl);'));
+  // The GUARD, not merely the declaration. The first cut of this matched
+  // `const firstRun = ...` and went on passing after `||firstRun` was deleted
+  // from the condition -- the source-string weakness this repo keeps paying
+  // for, caught this time by proving it red.
+  const guard = /if\(!row\|\|[^)]*\)\{/.exec(body);
+  assert.ok(guard, 'the early-return guard is where the decision is made');
+  assert.match(guard[0], /firstRun/,
+    'the quiet link stands down while the first-run card is offering the tour');
+  // And it must read the BINDING, not the body class: paintTourEntry runs
+  // before paintFirstRun, so on the paint where an account stops being a
+  // beginner the class is still set and the link stayed away for a render.
+  assert.ok(!/classList\.contains\('dc-firstrun'\)/.test(body),
+    'the body class is set later in the same paint; the flag is not');
+});

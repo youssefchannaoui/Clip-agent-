@@ -719,8 +719,19 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
    Escape handling rather than inventing a second modal language. */
 #dcTasks .dctk-row {
   display: grid; grid-template-columns: 22px minmax(0, 1fr) auto;
-  align-items: start; gap: 12px; padding: 13px 2px;
-  border-top: 1px solid #1E1E22;
+  align-items: start; gap: 12px; padding: 13px 8px;
+  width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  border: 0; border-top: 1px solid #1E1E22; border-radius: 10px; background: transparent;
+}
+#dcTasks .dctk-row:hover { background: #17171A; }
+/* The step the HOME hero is standing on, marked with the hero's own gold so
+   the two screens are visibly answering the same question. */
+#dcTasks .dctk-row.is-now { background: rgba(217,180,120,.06); }
+#dcTasks .dctk-row.is-now strong { color: #F0D6A6; }
+#dcTasks .dctk-row strong em {
+  margin-left: 7px; padding: 1px 6px; border-radius: 999px; font-style: normal;
+  background: rgba(217,180,120,.16); color: #D9B478;
+  font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
 }
 #dcTasks .dctk-row:first-of-type { border-top: 0; }
 #dcTasks .dctk-tick {

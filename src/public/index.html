@@ -4779,7 +4779,20 @@ function studioWanted(){return window.STUDIO_SHELL===true}
     function paintTourEntry(vals){
       const start=document.querySelector('#studio [data-tour="start"]');
       const row=start&&start.parentElement;
-      if(!row||StudioAdapter.ui.screen!=='home'||vals.tourOn){
+      /* Youssef, 3 Sept 2026: "take the tour there are 2 buttons for it?"
+         There were. The first-run column REPLACES the right-hand panel with a
+         "New here?" card whose whole purpose is offering the tour (v3.99.0),
+         and this quiet link beside Start job went on being drawn beside it --
+         two controls for one thing on the one screen where a beginner is
+         least able to tell them apart. The link stays for everyone else: with
+         no first-run card, it is the only way in. */
+      /* The BINDING, not the body class: paintTourEntry runs before
+         paintFirstRun in paintStudio's list, so on the paint where an account
+         stops being a beginner the class is still on the body and the link
+         stayed away for a whole render. This flag is right at the top of the
+         paint. */
+      const firstRun=Boolean(vals.onboarding&&vals.onboarding.firstRun);
+      if(!row||StudioAdapter.ui.screen!=='home'||vals.tourOn||firstRun){
         if(tourLinkEl){tourLinkEl.remove();tourLinkEl=null}
         return;
       }
@@ -7613,10 +7626,17 @@ function paintTaskCard(){
      established account working through the later rungs is not setting
      anything up, and telling it so would be wrong rather than merely odd. */
   const title=rows.setupDone?'Your tasks':'Complete setup';
-  const note=esc(next.title||'');
+  /* The hero's OWN step label while the hero is up, so the ring and the strip
+     on Home are visibly one thing rather than two numbers counting different
+     denominators -- 14% beside "Step 1 of 3" was the complaint. The server
+     sends both the label and the matching percentage, so the two surfaces
+     cannot phrase or count it differently. */
+  const note=esc(rows.stepLabel||(rows.done+' of '+rows.total+' done'));
   const earn=Number(rows.unclaimed||0);
-  const html='<button type="button" id="dcTaskCard" title="'+esc(title)+' \u2014 '+rows.done+' of '+rows.total+' done">'
-    +'<span class="dctk-ring" style="--p:'+Math.max(0,Math.min(100,Number(rows.percent)||0))+'"><b>'+(Number(rows.percent)||0)+'%</b></span>'
+  const ring=Math.max(0,Math.min(100,Number(rows.ringPercent!=null?rows.ringPercent:rows.percent)||0));
+  const html='<button type="button" id="dcTaskCard" title="'+esc(title)+' \u2014 '+rows.done+' of '+rows.total+' done'
+    +(next.title?' \u00b7 next: '+esc(next.title):'')+'">'
+    +'<span class="dctk-ring" style="--p:'+ring+'"><b>'+ring+'%</b></span>'
     +'<span class="dctk-copy"><span class="dctk-head"><span class="dctk-title">'+esc(title)+'</span>'
     +(earn>0?'<span class="dctk-earn">+'+earn+'</span>':'')+'</span>'
     +'<span class="dctk-note">'+note+'</span></span>'
@@ -7652,10 +7672,15 @@ function paintTasksPanel(){
     const prize=task.reward>0
       ? '<span class="dctk-prize">'+(task.paidAt?'+':'')+task.reward+' tokens</span>'
       : '<span></span>';
-    return '<div class="dctk-row'+(task.done?' is-done':'')+'" data-task="'+esc(task.id)+'">'
+    /* The row the HERO is standing on, not merely the first unfinished one --
+       the server sends which, so opening the ladder from the rail lands on the
+       same answer Home is giving. */
+    const now=!task.done&&task.id===rows.nowId;
+    return '<button type="button" class="dctk-row'+(task.done?' is-done':'')+(now?' is-now':'')
+      +'" data-task="'+esc(task.id)+'" data-go="'+esc(task.action||'')+'">'
       +'<span class="dctk-tick">'+(task.done?'\u2713':'')+'</span>'
-      +'<div><strong>'+esc(task.title)+'</strong><span>'+esc(task.note)+esc(count)+'</span>'+bar+'</div>'
-      +prize+'</div>';
+      +'<div><strong>'+esc(task.title)+(now?'<em>Now</em>':'')+'</strong><span>'+esc(task.note)+esc(count)+'</span>'+bar+'</div>'
+      +prize+'</button>';
   }).join('');
 }
 
@@ -7672,8 +7697,19 @@ function closeTasks(){
 window.openTasks=openTasks;
 
 document.addEventListener('click',event=>{
-  if(event.target.closest&&event.target.closest('#dcTaskCard')){ openTasks(); return; }
-  if(event.target.closest&&event.target.closest('[data-tasks-close]'))closeTasks();
+  if(!event.target.closest)return;
+  if(event.target.closest('#dcTaskCard')){ openTasks(); return; }
+  if(event.target.closest('[data-tasks-close]')){ closeTasks(); return; }
+  /* A task row goes where the step's own button goes -- through the adapter's
+     one destination map, never a second list of screens that could drift from
+     the hero's. A row with nothing to go to (there is none today) closes the
+     panel rather than doing nothing, which would be a dead control. */
+  const row=event.target.closest('#dcTasks .dctk-row');
+  if(row){
+    closeTasks();
+    const where=row.getAttribute('data-go')||'';
+    if(where&&StudioAdapter.goToStep)StudioAdapter.goToStep(where,event);
+  }
 });
 document.addEventListener('keydown',event=>{
   if(event.key==='Escape')closeTasks();
