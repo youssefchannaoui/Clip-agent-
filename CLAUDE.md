@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1291 JS + 592 Python**
+- `npm test` and `npm run check` must pass. Currently **1294 JS + 592 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -6826,3 +6826,51 @@ test and three assertions passed on their own fixture — assert on the
 BASENAME. And `remoteMusicTracks` throws without `PUBLIC_BASE_URL` even for an
 empty track list, so a music-waived remote re-render fails for the wrong
 reason on a deployment that has not set it.
+
+## Connecting TikTok failed with a bare API error (v3.114.2, 3 Sept 2026)
+
+Youssef, mid-way through recording the app-review demo: "when i connect to
+tiktok i then ask for perimission when i come back to my dashboard it says a an
+error api but the api is the sandbox."
+
+Two faults, and the second is why the first was so hard to see.
+
+### The OAuth credentials were never trimmed
+
+**This repo has now paid for that lesson three times.** Stripe's keys were
+trimmed at v3.27.0 and Turnstile's at v3.100.0, both with comments saying a
+credential pasted into Render's variable field picks up a trailing newline
+routinely -- and both times the OAuth credentials sitting a few lines away were
+missed. `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, the three Meta values and
+the four Google/Apple sign-in values all read `process.env.X || ''` raw.
+
+A key with a newline on it fails the token exchange as a TikTok API error
+**indistinguishable from having copied the wrong secret** -- and it bites
+hardest immediately after a deliberate credential swap, which is exactly the
+moment you would believe the error. All ten are trimmed now.
+
+**The error he was actually shown, from the screenshot: "TikTok error: Client
+key or secret is incorrect."** That is TikTok's own `invalid_client`, so the
+pair the app sent was rejected outright. Whitespace is one way to produce it;
+a half-updated pair, a key and secret from different apps, and a Render deploy
+that had not finished are the others, and NONE of them can be told apart from
+the message. That is the point -- the trim removes the one cause the code
+could have removed on its own.
+
+### A failed connection left nothing to read
+
+The callback redirects to `/app?social=error&message=…`, the page toasts that
+message and then wipes the URL with `replaceState`. So the platform's own
+reason flashed past once and was gone: no activity entry, nothing to scroll
+back to, and the only surviving copy in a `console.error` on the server that a
+customer cannot open. That is why the report could only be "an error api".
+
+It is logged in `completeOAuth`, deliberately, because that is the LAST place
+the `userId` is known -- `verifyState` has run by then, and `log` with a null
+user is filtered out of every bell by `logFor`. The error is re-thrown
+untouched, so the redirect and its toast are unchanged.
+
+**Both probes proven red**: against the untrimmed declarations, and against the
+catch that re-throws without logging. The credential test reads each
+DECLARATION rather than grepping the file for `.trim()`, because the
+neighbouring Stripe block is full of them and would have passed regardless.

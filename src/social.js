@@ -471,10 +471,29 @@ export async function completeOAuth(provider, callbackUrl) {
   const { userId } = verifyState(url.searchParams.get('state'), provider);
   const code = url.searchParams.get('code');
   if (!code) throw new SocialError('The authorization provider did not return a code.');
-  if (provider === 'youtube') await connectYouTube(code, userId);
-  else if (provider === 'meta') await connectMeta(code, userId);
-  else if (provider === 'tiktok') await connectTikTok(code, userId);
-  else throw new SocialError('Unknown OAuth provider.');
+  /*
+   * A FAILED connection has to leave a trace, and it did not.
+   *
+   * The callback redirects to /app?social=error&message=..., the page shows
+   * that message as a toast and then wipes the URL with replaceState -- so the
+   * platform's own reason flashes past once and is gone, with nothing in the
+   * activity feed and nothing to scroll back to. The only surviving copy was a
+   * console.error in the server log, which a customer cannot open.
+   *
+   * Logged HERE rather than in the route, because this is the last place the
+   * userId is known: verifyState has run, and `log` with a null user is
+   * filtered out of every bell by logFor. The error is re-thrown untouched, so
+   * the redirect and its message are unchanged.
+   */
+  try {
+    if (provider === 'youtube') await connectYouTube(code, userId);
+    else if (provider === 'meta') await connectMeta(code, userId);
+    else if (provider === 'tiktok') await connectTikTok(code, userId);
+    else throw new SocialError('Unknown OAuth provider.');
+  } catch (error) {
+    log(`Could not connect ${provider}: ${error.message}`, 'error', userId);
+    throw error;
+  }
   return { userId };
 }
 

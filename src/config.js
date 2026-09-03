@@ -303,18 +303,18 @@ export const config = {
     .split(',').map(entry => entry.trim().toLowerCase()).filter(Boolean),
   adminName: process.env.ADMIN_NAME || 'DeenClipped Admin',
 
-  googleSigninClientId: process.env.GOOGLE_SIGNIN_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '',
-  googleSigninClientSecret: process.env.GOOGLE_SIGNIN_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '',
+  googleSigninClientId: String(process.env.GOOGLE_SIGNIN_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').trim(),
+  googleSigninClientSecret: String(process.env.GOOGLE_SIGNIN_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim(),
   googleSigninRedirectUri: process.env.GOOGLE_SIGNIN_REDIRECT_URI || '',
 
-  appleSigninClientId: process.env.APPLE_SIGNIN_CLIENT_ID || '',
+  appleSigninClientId: String(process.env.APPLE_SIGNIN_CLIENT_ID || '').trim(),
   appleSigninTeamId: process.env.APPLE_SIGNIN_TEAM_ID || '',
   appleSigninKeyId: process.env.APPLE_SIGNIN_KEY_ID || '',
   appleSigninPrivateKey: (process.env.APPLE_SIGNIN_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
   appleSigninRedirectUri: process.env.APPLE_SIGNIN_REDIRECT_URI || '',
 
-  googleClientId: process.env.GOOGLE_CLIENT_ID || '',
-  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  googleClientId: String(process.env.GOOGLE_CLIENT_ID || '').trim(),
+  googleClientSecret: String(process.env.GOOGLE_CLIENT_SECRET || '').trim(),
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || '',
   googleAuthBase: (process.env.GOOGLE_AUTH_BASE || 'https://accounts.google.com').replace(/\/+$/, ''),
   googleTokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
@@ -329,16 +329,23 @@ export const config = {
   vizardMaxClips: Math.max(1, Math.min(100, Math.round(number(process.env.VIZARD_MAX_CLIPS, 8)))),
   vizardClipModel: ['clip_v1', 'clip_v2'].includes(process.env.VIZARD_CLIP_MODEL) ? process.env.VIZARD_CLIP_MODEL : 'clip_v1',
 
-  metaAppId: process.env.META_APP_ID || '',
-  metaAppSecret: process.env.META_APP_SECRET || '',
-  metaLoginConfigId: process.env.META_LOGIN_CONFIG_ID || '',
+  metaAppId: String(process.env.META_APP_ID || '').trim(),
+  metaAppSecret: String(process.env.META_APP_SECRET || '').trim(),
+  metaLoginConfigId: String(process.env.META_LOGIN_CONFIG_ID || '').trim(),
   metaRedirectUri: process.env.META_REDIRECT_URI || '',
   metaGraphVersion: process.env.META_GRAPH_VERSION || 'v23.0',
   metaGraphBase: (process.env.META_GRAPH_BASE || 'https://graph.facebook.com').replace(/\/+$/, ''),
   metaDialogBase: (process.env.META_DIALOG_BASE || 'https://www.facebook.com').replace(/\/+$/, ''),
 
-  tiktokClientKey: process.env.TIKTOK_CLIENT_KEY || '',
-  tiktokClientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
+  // Trimmed, like Stripe's and Turnstile's above, and for the same reason --
+  // this repo has now paid for that lesson three times. A credential pasted
+  // into Render's variable field picks up a trailing newline routinely, and
+  // NOTHING about the resulting failure says so: the token exchange comes back
+  // as a TikTok API error indistinguishable from having copied the wrong
+  // secret entirely, right after a swap, which is exactly when you would
+  // believe it. Whitespace around a credential is never meaningful.
+  tiktokClientKey: String(process.env.TIKTOK_CLIENT_KEY || '').trim(),
+  tiktokClientSecret: String(process.env.TIKTOK_CLIENT_SECRET || '').trim(),
 
   stripeEnabled: boolean(process.env.STRIPE_ENABLED, Boolean(process.env.STRIPE_SECRET_KEY)),
   // Trimmed, both of them. A secret pasted into Render's variable field picks
