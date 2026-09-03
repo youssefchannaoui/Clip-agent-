@@ -151,52 +151,187 @@ test('progress is shown for the counted rungs and capped at the target', () => {
 });
 
 /* ------------------------------------------------------------------ *
- * 3. The money. Driven over HTTP, because that is where it happens.
+ * 3. The money. CLAIMED now, never granted quietly.
+ *
+ *    Youssef, 3 Sept 2026: "it should be able to claim the tokens, and
+ *    it should say claimed." The first version paid out on the next
+ *    state poll, so tokens appeared with nothing to press and nothing
+ *    saying they had arrived -- and it wrote to disk on the hottest
+ *    path in the app.
  * ------------------------------------------------------------------ */
-test('reaching a rung pays it, once, ever', async () => {
+const claim = id => fetch(`${base}/api/tasks/claim`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+  body: JSON.stringify({ id }),
+});
+
+test('reaching a rung pays NOTHING until it is claimed', async () => {
   seed({ clips: 3, posted: 3, days: 1 });
   const before = balance();
-  const payload = await readState();
-  const after = balance();
-  const expected = config.taskRewardPublish + config.taskRewardThree;
-  assert.equal(after - before, expected, `first publish + three clips should pay ${expected}`);
-  assert.ok(payload.tasks, '/api/state carries the ladder');
+  await readState();
+  await readState();
+  assert.equal(balance(), before, 'polling the app must never move the balance on its own');
+  const rows = ladder();
+  const three = rows.list.find(t => t.id === 'three');
+  assert.equal(three.done, true);
+  assert.equal(three.claimable, true, 'it is offered');
+  assert.equal(three.claimed, false, 'and not yet taken');
+  assert.ok(rows.claimable > 0, 'so the rail chip has something real to count');
+});
 
-  // Poll again. A ladder settled on every poll must be a no-op on every poll
-  // after the first, or an open tab prints money.
-  await readState();
-  await readState();
-  assert.equal(balance(), after, 'three more polls granted nothing');
+test('claiming pays once, and says claimed after', async () => {
+  const before = balance();
+  const res = await claim('three');
+  const body = await res.json();
+  assert.equal(res.status, 200, body.error || '');
+  assert.equal(balance() - before, config.taskRewardThree);
+  const after = body.tasks.list.find(t => t.id === 'three');
+  assert.equal(after.claimed, true);
+  assert.equal(after.claimable, false, 'and it is not offered again');
+
+  // A second press, a replayed request, a double tap: the grant is keyed.
+  const again = await claim('three');
+  assert.equal(again.status, 400, 'the second claim is refused');
+  assert.equal(balance() - before, config.taskRewardThree, 'and pays nothing');
+});
+
+test('a rung that is not finished cannot be claimed', async () => {
+  // The button is not the check. This is a request the screen would never
+  // send, and the server has to refuse it on its own.
+  const before = balance();
+  const res = await claim('month');
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /not finished/i);
+  assert.equal(balance(), before);
+});
+
+test('an unknown task id is refused', async () => {
+  assert.equal((await claim('../../etc/passwd')).status, 400);
+  assert.equal((await claim('')).status, 400);
 });
 
 test('the grant is refused even if the display record is lost', async () => {
   // user.taskRewards is what the SCREEN reads; billing's own ledger is the
-  // authority. Wiping the display record must not re-pay the rung.
+  // authority. Wiping the display record must not let the rung be re-claimed.
   const held = balance();
   delete me.taskRewards;
-  await readState();
-  assert.equal(balance(), held, 'billing refused the repeat');
+  const res = await claim('three');
+  assert.equal(res.status, 200, 'accepted, because the screen thought it was open');
+  assert.equal(balance(), held, 'but billing refused the repeat, so nothing was paid');
   assert.ok(me.taskRewards?.three, 'and the display record was restored');
 });
 
-test('a rung reached later is paid later', async () => {
-  const before = balance();
-  seed({ clips: 10, posted: 10, days: 7 });
-  await readState();
-  const expected = config.taskRewardTen + config.taskRewardWeek;
-  assert.equal(balance() - before, expected, `ten clips + a week should pay ${expected}`);
+test('an operator is offered nothing, because an operator cannot be paid', async () => {
+  const billing = await import('../src/billing.js');
+  assert.equal(billing.isUnlimited({ id: 'op-1', role: 'owner' }), true);
+  // Its rungs are still SHOWN -- the operator has to be able to see what
+  // customers get -- but nothing is claimable and the rail chip counts zero.
+  // Counting them put a permanent "+30" on the operator's own rail for tokens
+  // nobody could ever collect.
+  const rows = onboarding.tasks(state, me.id, config, { unlimited: true });
+  assert.ok(rows.list.every(t => !t.claimable), 'no claim button for an unlimited balance');
+  assert.equal(rows.claimable, 0, 'and nothing promised on the rail');
+  assert.ok(rows.list.some(t => t.reward > 0), 'the amounts are still visible');
 });
 
-test('the ladder reports what it has earned and what is waiting', async () => {
+test('the ladder reports what is earned and what is still to claim', async () => {
   seed({ clips: 30, posted: 30, days: 30 });
-  const payload = await readState();
-  const rows = payload.tasks;
-  assert.equal(rows.done, rows.total, 'every rung is done');
-  assert.equal(rows.percent, 100);
-  assert.equal(rows.unclaimed, 0, 'nothing is owed once the poll has settled');
-  const total = config.taskRewardPublish + config.taskRewardThree + config.taskRewardTen
-    + config.taskRewardWeek + config.taskRewardMonth;
-  assert.equal(rows.earned, total, `the whole ladder is ${total} tokens`);
+  const rows = (await readState()).tasks;
+  const posting = rows.groups.filter(g => g.id !== 'comeback');
+  assert.ok(posting.every(g => g.done === g.total), 'every posting rung is done');
+  assert.ok(rows.claimable > 0, 'the rest is offered rather than already paid');
+  assert.equal(rows.earned, config.taskRewardThree, 'only what was actually claimed counts as earned');
+});
+
+/* ------------------------------------------------------------------ *
+ * 3b. Groups, tabs and the comeback rewards.
+ *
+ *     Youssef: "so we have all the tasks on one go. Right? I don't like
+ *     that ... then you have like the second one comes up ... and then
+ *     comeback rewards. So coming back to the website gets you tokens."
+ * ------------------------------------------------------------------ */
+test('the ladder is three groups, in the order they were named', () => {
+  assert.deepEqual(onboarding.TASK_GROUPS.map(g => g.id), ['start', 'habit', 'comeback']);
+  assert.deepEqual(onboarding.TASK_GROUPS.map(g => g.needs), [null, 'start', 'start']);
+  // Gating the comeback rewards behind thirty posting days would put them out
+  // of reach for months, which is not a comeback reward.
+  assert.equal(onboarding.TASK_GROUPS[2].needs, 'start');
+});
+
+test('a group is locked until the one it needs is finished', () => {
+  seed({ clips: 2 });                                   // clips back, nothing posted
+  let groups = Object.fromEntries(ladder().groups.map(g => [g.id, g.locked]));
+  assert.deepEqual(groups, { start: false, habit: true, comeback: true },
+    'a brand new account sees one group open and the rest coming');
+  seed({ clips: 2, posted: 1 });                        // first clip out
+  groups = Object.fromEntries(ladder().groups.map(g => [g.id, g.locked]));
+  assert.deepEqual(groups, { start: false, habit: false, comeback: false }, 'both open together');
+});
+
+test('a locked group still names what opens it', () => {
+  seed({ clips: 2 });
+  const habit = ladder().groups.find(g => g.id === 'habit');
+  assert.equal(habit.locked, true);
+  assert.equal(habit.needsTitle, 'Getting started', 'a padlock must never be unexplained');
+});
+
+test('the panel opens where the tokens are, else where the work is', () => {
+  const opensOn = () => {
+    const rows = ladder();
+    return { on: rows.groups.find(g => g.id === rows.openGroup), rows };
+  };
+  seed({ clips: 2 });                       // clips back, nothing posted, nothing claimable
+  let { on, rows } = opensOn();
+  assert.equal(rows.claimable, 0);
+  assert.equal(on.locked, false);
+  assert.ok(on.done < on.total, 'with nothing to claim it opens where the work is');
+
+  seed({ clips: 3, posted: 3, days: 1 });   // two rungs now claimable
+  ({ on, rows } = opensOn());
+  assert.ok(rows.claimable > 0);
+  assert.ok(on.claimable > 0, 'tokens waiting pull the panel to their tab');
+});
+
+test('coming back is counted in days the app was opened', () => {
+  seed({ clips: 2, posted: 1 });
+  const day = 24 * 60 * 60 * 1000;
+  me.visitDays = [];
+  const visits = () => Object.fromEntries(ladder().groups.find(g => g.id === 'comeback')
+    .tasks.map(t => [t.id, t.done]));
+  assert.deepEqual(visits(), { visit3: false, visit7: false, visit30: false });
+
+  // Three separate days, however many times each.
+  for (let i = 0; i < 3; i += 1) {
+    onboarding.noteVisit(state, me.id, Date.UTC(2026, 0, 1) + i * day);
+    onboarding.noteVisit(state, me.id, Date.UTC(2026, 0, 1) + i * day + 3600e3);
+  }
+  assert.equal(me.visitDays.length, 3, 'the same day twice is one day');
+  assert.deepEqual(visits(), { visit3: true, visit7: false, visit30: false });
+
+  // A GAP does not reset it: a comeback reward that punishes a week away is
+  // not a comeback reward. Distinct days, never a consecutive streak.
+  for (let i = 40; i < 44; i += 1) onboarding.noteVisit(state, me.id, Date.UTC(2026, 0, 1) + i * day);
+  assert.deepEqual(visits(), { visit3: true, visit7: true, visit30: false });
+});
+
+test('the visit record is days and nothing else, and it is capped', () => {
+  me.visitDays = [];
+  const day = 24 * 60 * 60 * 1000;
+  for (let i = 0; i < onboarding.VISIT_DAYS_KEPT + 25; i += 1) {
+    onboarding.noteVisit(state, me.id, Date.UTC(2020, 0, 1) + i * day);
+  }
+  assert.equal(me.visitDays.length, onboarding.VISIT_DAYS_KEPT, 'it cannot grow without bound');
+  // No times, no addresses, no user agents -- the narrowest record that can
+  // answer "did they come back".
+  assert.ok(me.visitDays.every(d => /^\d{4}-\d{2}-\d{2}$/.test(d)));
+});
+
+test('opening the app notes the day, and only once', async () => {
+  me.visitDays = [];
+  await readState();
+  assert.equal(me.visitDays.length, 1, 'a poll records the day');
+  await readState();
+  await readState();
+  assert.equal(me.visitDays.length, 1, 'and every later poll that day is a no-op');
 });
 
 /* ------------------------------------------------------------------ *
@@ -242,7 +377,8 @@ test('the whole ladder is worth less than one referral', () => {
   // than delivering somebody else's subscription. This pins the relationship
   // rather than the numbers, so either can be tuned and the ordering holds.
   const ladderTotal = ['taskRewardPublish', 'taskRewardThree', 'taskRewardTen',
-    'taskRewardWeek', 'taskRewardMonth'].reduce((sum, k) => sum + config[k], 0);
+    'taskRewardWeek', 'taskRewardMonth', 'taskRewardVisit3', 'taskRewardVisit7',
+    'taskRewardVisit30'].reduce((sum, k) => sum + config[k], 0);
   assert.ok(ladderTotal < config.referralBonusPaid,
     `the ladder pays ${ladderTotal} against a referral's ${config.referralBonusPaid}`);
 });
@@ -282,13 +418,20 @@ test('the card mounts by being EMPTY, never by a generated class name', () => {
     'a hashed class here would break on the next design re-import');
 });
 
-test('the rail reserves the collapse row, or the card lands underneath it', () => {
-  // Measured at 1440x950: the footer slot is y 873..934 and the collapse
-  // control is absolutely positioned at y 906..938, so a card dropped straight
-  // in overlaps it — the collision that removed the plan badge in v3.73.1.
-  const sheet = read('src/public/studio-tokens.css');
-  assert.match(sheet, /#dcRail > div:has\(> #dcTaskCard\)\s*\{[^}]*margin-bottom/,
-    'the slot must reserve the collapse row while it holds the card');
+test('the card sits ABOVE DeenAI, Help and Owner', () => {
+  // Youssef: "move perctnage taks thing up and deen ai help and owner down."
+  // The rail's empty footer card is below the nav, so the card sat under the
+  // tail. It is moved into the nav, immediately before the first tail item --
+  // whose `margin-top: auto` goes on holding the tail at the foot, so nothing
+  // about those three moves.
+  const page = read('src/public/index.html');
+  const at = page.indexOf('function seatTaskCard(slot){');
+  assert.ok(at > -1, 'the card is seated rather than left in the footer');
+  const body = page.slice(at, page.indexOf('function paintTaskCard'));
+  assert.match(body, /querySelector\('\.dc-nav-tail'\)/, 'found by the tail class the rail already uses');
+  assert.match(body, /insertBefore\(slot, ?tail\)/, 'and inserted before it');
+  assert.match(body, /if\(slot\.nextElementSibling===tail/,
+    'and only when it is not already there, or every paint would reinsert it');
 });
 
 test('the collapsed rail is read from the adapter, not from a class or a width', () => {

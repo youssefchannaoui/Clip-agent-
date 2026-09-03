@@ -117,9 +117,14 @@ export const config = {
   taskRewardsEnabled: boolean(process.env.TASK_REWARDS_ENABLED, true),
   taskRewardPublish: Math.max(0, number(process.env.TASK_REWARD_PUBLISH, 5)),
   taskRewardThree: Math.max(0, number(process.env.TASK_REWARD_THREE, 5)),
-  taskRewardTen: Math.max(0, number(process.env.TASK_REWARD_TEN, 10)),
-  taskRewardWeek: Math.max(0, number(process.env.TASK_REWARD_WEEK, 10)),
-  taskRewardMonth: Math.max(0, number(process.env.TASK_REWARD_MONTH, 15)),
+  taskRewardTen: Math.max(0, number(process.env.TASK_REWARD_TEN, 5)),
+  taskRewardWeek: Math.max(0, number(process.env.TASK_REWARD_WEEK, 5)),
+  taskRewardMonth: Math.max(0, number(process.env.TASK_REWARD_MONTH, 10)),
+  // Coming back. Rebalanced rather than added on top: the eight paying rungs
+  // still total 45, so widening the ladder did not quietly raise its price.
+  taskRewardVisit3: Math.max(0, number(process.env.TASK_REWARD_VISIT3, 5)),
+  taskRewardVisit7: Math.max(0, number(process.env.TASK_REWARD_VISIT7, 5)),
+  taskRewardVisit30: Math.max(0, number(process.env.TASK_REWARD_VISIT30, 5)),
 
   /*
    * The invite discount.

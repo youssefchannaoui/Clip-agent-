@@ -166,132 +166,228 @@ export function journey(state, userId, ctx = {}) {
 }
 
 /**
- * The task ladder — what to do next, and what it earns.
+ * The task ladder — what to do next, what it earns, and when you may claim it.
  *
- * Youssef, 3 Sept 2026, on a rail card showing "Complete setup 20%": "this is
- * a great idea for new users also you can add that new user one so then 5
- * steps then add tasks like upload your first 3 clips finish 1 week finish 1
- * month and etc and they can earn tokens with it as well."
+ * Youssef, 3 Sept 2026, on the first version: "so we have all the tasks on one
+ * go. Right? I don't like that ... there's gonna be multiple tasks ... the
+ * beginning will be like the first user one ... then you have like the second
+ * one comes up, and then maybe like on the top you have like tabs that you can
+ * go through, to make it more organized ... also, it should be able to claim
+ * the tokens, and it should say claimed ... and then comeback rewards. So
+ * coming back to the website gets you tokens as well."
  *
- * THE FIRST THREE RUNGS ARE THE JOURNEY'S OWN THREE STEPS, read straight off
- * `journey()`. Not "the same idea implemented again" — the same call. That is
- * the whole reason this is safe to build: v3.96.0 retired a five-step checklist
- * for sitting beside the Create -> Review -> Publish strip and telling one
- * person two different things about where they were, and a ladder that
- * recomputed "have they imported yet" would walk straight back into it.
+ * THREE THINGS SHAPE THIS FILE.
  *
- * Everything past those three continues from the same records — clip.postedAt
- * and nothing else — so this stays derived and retroactive like the rest of
- * this module. Nothing is stamped except the fact that a reward was PAID,
- * which is an event and belongs in the ledger rather than in a derivation.
+ * 1. **The first group IS the journey's three steps**, read off the same
+ *    `journey()` call rather than derived again. v3.96.0 retired a checklist
+ *    for telling one person two different things about where they were, and a
+ *    ladder that recomputed "have they imported yet" walks back into it.
+ *
+ * 2. **Everything else is derived from records that already exist** —
+ *    `clip.postedAt` for the posting rungs — with ONE exception, below.
+ *
+ * 3. **A reward is CLAIMED, never granted quietly.** The first cut paid out on
+ *    the next state poll, so tokens appeared with nothing to press and nothing
+ *    saying they had arrived. Reaching a rung now makes it claimable; the
+ *    customer presses Claim; the row says Claimed.
  */
-export const TASKS = [
-  // The three the journey already owns. `from` names the step whose state
-  // decides this rung, so there is one answer rather than two.
-  { id: 'create', from: 'create', title: 'Import your first lecture', note: 'Paste a link and pick the minutes worth clipping.', action: 'paste' },
-  { id: 'review', from: 'review', title: 'Approve your first clip', note: 'Nothing posts until you keep it.', action: 'review' },
-  { id: 'publish', from: 'publish', title: 'Post your first clip', note: 'Connect a channel and give it a slot.', action: 'schedule', reward: 'taskRewardPublish' },
-  // And the ones that continue past where the journey stops.
-  { id: 'three', title: 'Post three clips', note: 'One lecture usually produces more than three.', action: 'review', reward: 'taskRewardThree', need: 3, of: 'posted' },
-  { id: 'ten', title: 'Post ten clips', note: 'Enough for a channel to look alive.', action: 'schedule', reward: 'taskRewardTen', need: 10, of: 'posted' },
-  { id: 'week', title: 'Your first week', note: 'Post on seven different days.', action: 'schedule', reward: 'taskRewardWeek', need: 7, of: 'days' },
-  { id: 'month', title: 'Your first month', note: 'Post on thirty different days.', action: 'schedule', reward: 'taskRewardMonth', need: 30, of: 'days' },
-];
 
 /*
- * Distinct DAYS with a post, never a consecutive-day streak.
+ * The one thing here that is STAMPED rather than derived, and why.
  *
- * A streak breaks on one missed day, and this product posts on a schedule the
- * customer set — so a streak would punish somebody for choosing four windows a
- * day over eight, or for a platform being down. Distinct days only ever go up,
- * which is the habit actually worth rewarding. Counted in UTC, the same basis
- * the rest of the app's day buckets use.
+ * "Coming back to the website gets you tokens" cannot be read off any record
+ * this product already keeps: web metrics are anonymous, salted per day and
+ * public-page only, deliberately (v3.28.0), and nothing else notes that an
+ * account opened the app. So the day itself has to be written down. It is the
+ * narrowest possible record -- a list of ISO dates, no times, no addresses, no
+ * user agents -- and it is capped, so it cannot grow without bound.
+ *
+ * DISTINCT DAYS, not a consecutive streak, for the same reason the posting
+ * rungs count distinct days: a streak breaks on one missed day and punishes
+ * somebody for a week away, which is the opposite of a comeback reward. The
+ * count only ever goes up.
  */
-const postedDays = clips => new Set(clips
-  .map(c => Number(c.postedAt))
+export const VISIT_DAYS_KEPT = 400;
+
+export function noteVisit(state, userId, at = Date.now()) {
+  const user = (state.authUsers || []).find(u => String(u.id || '') === String(userId || ''));
+  if (!user) return false;
+  const day = new Date(at).toISOString().slice(0, 10);
+  const days = Array.isArray(user.visitDays) ? user.visitDays : [];
+  // The common case by far: already seen today, nothing to write. Checked
+  // against the LAST entry first so a poll costs one comparison rather than a
+  // scan of four hundred.
+  if (days.length && days[days.length - 1] === day) return false;
+  if (days.includes(day)) return false;
+  days.push(day);
+  user.visitDays = days.slice(-VISIT_DAYS_KEPT);
+  return true;
+}
+
+export const visitDayCount = user => (Array.isArray(user?.visitDays) ? user.visitDays.length : 0);
+
+/**
+ * The groups, in the order Youssef named them.
+ *
+ * A group is LOCKED until the one it `needs` is finished, which is the "then
+ * the second one comes up" half of the ask. Both later groups need only the
+ * FIRST: gating the comeback rewards behind thirty posting days would put them
+ * out of reach for months, which is not a comeback reward.
+ */
+export const TASK_GROUPS = [
+  {
+    id: 'start', title: 'Getting started', needs: null,
+    note: 'Your first clip, all the way out.',
+    tasks: [
+      { id: 'create', from: 'create', title: 'Import your first lecture', note: 'Paste a link and pick the minutes worth clipping.', action: 'paste' },
+      { id: 'review', from: 'review', title: 'Approve your first clip', note: 'Nothing posts until you keep it.', action: 'review' },
+      { id: 'publish', from: 'publish', title: 'Post your first clip', note: 'Connect a channel and give it a slot.', action: 'schedule', reward: 'taskRewardPublish' },
+    ],
+  },
+  {
+    id: 'habit', title: 'Building up', needs: 'start',
+    note: 'Enough clips out for a channel to look alive.',
+    tasks: [
+      { id: 'three', title: 'Post three clips', note: 'One lecture usually produces more than three.', action: 'review', reward: 'taskRewardThree', need: 3, of: 'posted' },
+      { id: 'ten', title: 'Post ten clips', note: 'Enough for a channel to look alive.', action: 'schedule', reward: 'taskRewardTen', need: 10, of: 'posted' },
+      { id: 'week', title: 'Your first week', note: 'Post on seven different days.', action: 'schedule', reward: 'taskRewardWeek', need: 7, of: 'postDays' },
+      { id: 'month', title: 'Your first month', note: 'Post on thirty different days.', action: 'schedule', reward: 'taskRewardMonth', need: 30, of: 'postDays' },
+    ],
+  },
+  {
+    id: 'comeback', title: 'Coming back', needs: 'start',
+    note: 'Tokens for showing up. Counted in days you opened DeenClipped, so a week away costs you nothing.',
+    tasks: [
+      { id: 'visit3', title: 'Three days back', note: 'Open DeenClipped on three different days.', action: 'paste', reward: 'taskRewardVisit3', need: 3, of: 'visits' },
+      { id: 'visit7', title: 'A week of coming back', note: 'Seven different days.', action: 'paste', reward: 'taskRewardVisit7', need: 7, of: 'visits' },
+      { id: 'visit30', title: 'A month of coming back', note: 'Thirty different days.', action: 'paste', reward: 'taskRewardVisit30', need: 30, of: 'visits' },
+    ],
+  },
+];
+
+/** Flat, in group order — the ladder as one list where that is what is wanted. */
+export const TASKS = TASK_GROUPS.flatMap(group => group.tasks);
+
+/*
+ * Distinct DAYS with a post, never a consecutive streak. A streak breaks on one
+ * missed day, and this product posts on a schedule the customer set -- so a
+ * streak would punish somebody for choosing four windows a day over eight, or
+ * for a platform being down. Counted in UTC, the basis the rest of the app's
+ * day buckets use.
+ */
+const daysIn = times => new Set(times
+  .map(Number)
   .filter(n => Number.isFinite(n) && n > 0)
   .map(at => new Date(at).toISOString().slice(0, 10))).size;
 
 /**
- * One account's ladder. `rewards` is passed in rather than imported so this
- * module keeps its no-config, pure-data shape and the tests can drive the
- * economics without touching the environment.
+ * One account's ladder.
+ *
+ * `rewards` is passed in rather than imported so this module keeps its
+ * no-config, pure-data shape and the tests can drive the economics without
+ * touching the environment. `unlimited` suppresses the money entirely: an
+ * operator's balance cannot be topped up, so offering them a Claim button
+ * would be a control that cannot do anything (invariant 9), and counting their
+ * unclaimed tokens put a permanent "+30" on the rail for a reward nobody could
+ * ever collect.
  */
-export function tasks(state, userId, rewards = {}) {
+export function tasks(state, userId, rewards = {}, opts = {}) {
   const clips = ownedBy(state.clips || [], userId);
   const posted = clips.filter(c => Number(c.postedAt) > 0);
+  const user = (state.authUsers || []).find(u => String(u.id || '') === String(userId || ''));
   const j = journey(state, userId);
   const stepState = Object.fromEntries(j.steps.map(s => [s.key, s.state]));
   const paid = paidRewards(state, userId);
-  const counts = { posted: posted.length, days: postedDays(posted) };
+  const unlimited = Boolean(opts.unlimited);
+  const counts = {
+    posted: posted.length,
+    postDays: daysIn(posted.map(c => c.postedAt)),
+    visits: visitDayCount(user),
+  };
 
-  const list = TASKS.map(task => {
+  const shape = task => {
     const at = task.of ? counts[task.of] : 0;
     const done = task.from ? stepState[task.from] === 'done' : at >= task.need;
     const reward = Math.max(0, Number(rewards[task.reward] || 0));
+    const paidAt = paid[task.id] || null;
     return {
       id: task.id, title: task.title, note: task.note, action: task.action,
       done, reward,
       // Shown only where there is something to count towards. "0 of 30" on a
-      // brand new account is discouraging rather than informative, so a rung
-      // nobody has started reports its target and no progress bar.
+      // brand new account is discouraging rather than informative.
       progress: task.of ? { at: Math.min(at, task.need), of: task.need } : null,
-      // When the reward actually landed, not when the rung was reached. The
-      // rung's completion is derived and has no single moment; the payment is
-      // an event and does.
-      paidAt: paid[task.id] || null,
+      // When the reward was CLAIMED, not when the rung was reached. The rung is
+      // derived and has no single moment; the claim is an act and does.
+      paidAt,
+      claimed: Boolean(paidAt),
+      claimable: Boolean(done && reward > 0 && !paidAt && !unlimited),
     };
-  });
+  };
 
+  const doneIn = rows => rows.filter(t => t.done).length;
+  const built = [];
+  for (const group of TASK_GROUPS) {
+    const rows = group.tasks.map(shape);
+    const gate = group.needs ? built.find(g => g.id === group.needs) : null;
+    const locked = Boolean(gate && gate.done < gate.total);
+    built.push({
+      id: group.id, title: group.title, note: group.note,
+      tasks: rows, done: doneIn(rows), total: rows.length,
+      locked,
+      // What a locked tab says instead of its rows, so a padlock is never
+      // unexplained.
+      needsTitle: gate ? gate.title : '',
+      claimable: rows.filter(t => t.claimable).length,
+    });
+  }
+
+  const list = built.flatMap(g => g.tasks);
   const done = list.filter(t => t.done).length;
-  const next = list.find(t => !t.done) || null;
-  const setup = list.slice(0, 3);
-  const setupDone = setup.every(t => t.done);
-  const setupCount = setup.filter(t => t.done).length;
+  const setup = built[0];
+  const setupDone = setup.done >= setup.total;
+  // The next thing to do, skipping anything inside a group that has not opened.
+  const open = built.filter(g => !g.locked);
+  const next = open.flatMap(g => g.tasks).find(t => !t.done) || null;
 
   /*
    * THE RAIL RING AND THE HOME HERO SHOW THE SAME FRACTION.
    *
-   * Youssef, 3 Sept 2026: "connect the side bar perctnage thing to first user
-   * interface hero thing to work with one another." They read one source
-   * already, but they COUNTED different things -- the rail said 14% (one rung
-   * of seven) beside a hero saying "Step 1 of 3", and nothing on screen said
-   * those were the same fact.
-   *
-   * So while the hero is up, the ring counts the hero's own three steps and
-   * the card speaks the hero's own step label. The moment setup finishes the
-   * hero disappears by itself (journey show:false) and the ring re-anchors to
-   * the whole ladder, with the card's title changing in the same paint so the
-   * new denominator is never unexplained.
+   * Youssef: "connect the side bar perctnage thing to first user interface hero
+   * thing to work with one another." While the hero is up, the ring counts the
+   * hero's own three steps; the moment setup finishes the hero disappears by
+   * itself and the ring re-anchors to the whole ladder, in the same paint the
+   * card's title changes, so the new denominator is never unexplained.
    */
   const ringPercent = setupDone
     ? (list.length ? Math.round((done / list.length) * 100) : 0)
-    : Math.round((setupCount / setup.length) * 100);
+    : Math.round((setup.done / setup.total) * 100);
 
   return {
+    groups: built,
     list,
     done,
     total: list.length,
-    // Whole percent, floored — 99% on a finished ladder would read as broken.
     percent: list.length ? Math.round((done / list.length) * 100) : 0,
     ringPercent,
-    // What the rail card says. "Complete setup" only while the setup half is
-    // genuinely unfinished, so an established account is not told to set up.
     setupDone,
-    setup: { done: setupCount, total: setup.length },
+    setup: { done: setup.done, total: setup.total },
     // The hero's own words, so the two surfaces cannot phrase it differently.
-    // Empty once setup is done, because the hero is gone by then.
     stepLabel: setupDone ? '' : j.progress,
-    // Which rung the hero is standing on, so the panel marks the same one the
-    // strip highlights rather than merely the first unfinished row.
     nowId: setupDone ? (next ? next.id : '') : j.at,
     next,
-    earned: list.reduce((sum, t) => sum + (t.paidAt ? t.reward : 0), 0),
-    unclaimed: list.reduce((sum, t) => sum + (t.done && !t.paidAt ? t.reward : 0), 0),
+    // Which tab to open on: where the tokens are, else where the work is.
+    openGroup: (built.find(g => g.claimable > 0)
+      || built.find(g => !g.locked && g.done < g.total)
+      || built.find(g => !g.locked) || built[0]).id,
+    earned: list.reduce((sum, t) => sum + (t.claimed ? t.reward : 0), 0),
+    // Waiting to be COLLECTED, which is now a real number with a button behind
+    // it rather than a promise nothing acts on.
+    claimable: list.reduce((sum, t) => sum + (t.claimable ? t.reward : 0), 0),
+    unlimited,
   };
 }
 
-/** What this account has already been paid for, by task id. */
+/** What this account has already claimed, by task id. */
 export function paidRewards(state, userId) {
   const user = (state.authUsers || []).find(u => String(u.id || '') === String(userId || ''));
   const rows = user?.taskRewards;
@@ -302,6 +398,11 @@ export function paidRewards(state, userId) {
     if (Number.isFinite(at) && at > 0) out[id] = at;
   }
   return out;
+}
+
+/** One task by id, or null. Used by the claim route to check the rung is real. */
+export function taskById(id) {
+  return TASKS.find(t => t.id === String(id || '')) || null;
 }
 
 function bucket(state, userId) {

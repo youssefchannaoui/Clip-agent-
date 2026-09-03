@@ -325,50 +325,41 @@ function grantReferralMinutes(user, minutes, reason, subjectId = '') {
 }
 
 /**
- * Pay out any task-ladder rungs this account has reached.
+ * The task ladder's reward, claimed rather than granted quietly.
  *
- * Youssef, 3 Sept 2026: "they can earn tokens with it as well."
+ * Youssef, 3 Sept 2026: "it should be able to claim the tokens, and it should
+ * say claimed."
  *
- * Called from the /api/state builder, which every open tab polls, so it has to
- * be cheap and it has to be safe to run constantly. It is both: the ladder is
- * counted off clips the payload already loads, and the grant itself refuses a
- * key it has honoured (billing.processedBonusGrants), so the worst a hundred
- * polls a minute can do is a hundred no-ops. Settling here rather than in
- * agent.tick() is deliberate -- the tokens land the moment the customer earns
- * them rather than up to ten minutes later, which is the whole point of a
- * reward.
+ * The first version paid out on the next state poll, so tokens simply appeared
+ * -- nothing to press, nothing saying they had arrived, and a write on the
+ * hottest path in the app. Reaching a rung now only makes it CLAIMABLE.
  *
- * TWO RECORDS, ON PURPOSE. `billing.processedBonusGrants` is what makes the
- * money idempotent and is the authority. `user.taskRewards` is what the SCREEN
- * reads, so a card can say "earned" without the UI reaching into billing's
- * internals. They are written in one synchronous block and the grant refuses
- * regardless, so a lost display record cannot become a double payment.
- *
- * The ladder is derived and therefore RETROACTIVE: an account that posted ten
- * clips before this shipped is paid for them on its next poll. At eight
- * accounts that is a few hundred tokens in total and it is the honest launch --
- * a ladder that opened with five rungs already ticked and nothing paid would
- * read as having missed out. TASK_REWARDS_ENABLED=false turns the whole thing
- * off without a deploy.
+ * Everything that made the automatic version safe still holds and is what
+ * makes this safe too: the rung is recomputed server-side from the account's
+ * own records (a claim for a rung this account has not reached is refused, so
+ * the button is not the check), and the grant is keyed in
+ * `billing.processedBonusGrants`, which refuses a key it has honoured -- so a
+ * double-tap, a replayed request or a lost display record cannot pay twice.
  */
-function settleTaskRewards(user) {
-  if (!config.taskRewardsEnabled || !user) return;
-  // An operator's balance is unlimited, so a grant is a no-op that would still
-  // write a ledger row on every poll. Nothing to settle.
-  if (billing.isUnlimited(user)) return;
-  const ladder = onboarding.tasks(state, user.id, config);
-  let paid = false;
-  for (const task of ladder.list) {
-    if (!task.done || !(task.reward > 0) || task.paidAt) continue;
-    const result = billing.grantBonusTokens(user, task.reward, `Task reward (${task.id})`, `task:${task.id}`);
-    // A duplicate means billing has already paid this rung and only the
-    // display record is missing -- stamp it so the screen agrees and stop
-    // asking. Never re-granted either way.
-    user.taskRewards ||= {};
-    user.taskRewards[task.id] = { at: Date.now(), tokens: result.duplicate ? 0 : task.reward };
-    paid = true;
-  }
-  if (paid) save();
+function claimTaskReward(user, id) {
+  if (!config.taskRewardsEnabled) return { error: 'Task rewards are switched off.' };
+  if (!user) return { error: 'Sign in first.' };
+  // An operator's balance is unlimited, so a grant is a no-op. Offering the
+  // claim at all would be a control that cannot do anything.
+  if (billing.isUnlimited(user)) return { error: 'Your plan already has unlimited tokens.' };
+  const ladder = onboarding.tasks(state, user.id, config, { unlimited: false });
+  const task = ladder.list.find(row => row.id === String(id || ''));
+  if (!task) return { error: 'No such task.' };
+  if (!task.done) return { error: 'That one is not finished yet.' };
+  if (task.claimed) return { error: 'Already claimed.' };
+  if (!(task.reward > 0)) return { error: 'That task has no reward.' };
+  const result = billing.grantBonusTokens(user, task.reward, `Task reward (${task.id})`, `task:${task.id}`);
+  user.taskRewards ||= {};
+  // A duplicate means billing has already paid this rung and only the display
+  // record was missing -- stamp it so the screen agrees, and never re-grant.
+  user.taskRewards[task.id] = { at: Date.now(), tokens: result.duplicate ? 0 : task.reward };
+  save();
+  return { granted: result.granted || 0, tokens: task.reward };
 }
 
 function landingPath(req) {
@@ -773,11 +764,11 @@ function appState(user = null) {
   // templates, its music, its connected platforms and its activity feed.
   if (!user?.id) return { engine: config.processingMode === 'remote' ? 'remote-worker' : 'self-hosted', user: null, auth: auth.publicConfig(), projects: [], clips: [], log: [] };
   const readiness = agent.engine.readiness(user);
-  /* Any task-ladder rung this account has newly reached is paid before the
-     payload is built, so the balance the screen shows and the ticks beside it
-     are the same moment's truth rather than one poll apart. A no-op unless
-     something actually completed. */
-  settleTaskRewards(user);
+  /* The comeback rewards' one stamped fact: that this account opened the app
+     today. Nothing else in this product records it -- web metrics are
+     anonymous and public-page only, deliberately -- so it cannot be derived.
+     A no-op on every poll after the first of the day. */
+  if (onboarding.noteVisit(state, user.id)) save();
   const projectsForUser = ownedBy(state.projects, user.id);
   const projectIdsForUser = new Set(projectsForUser.map(project => project.id));
   const clipsForUser = ownedBy(state.clips, user.id).filter(clip => projectIdsForUser.has(clip.projectId));
@@ -816,7 +807,7 @@ function appState(user = null) {
      * different things about where they were, and this must never become a
      * second answer to that question.
      */
-    tasks: onboarding.tasks(state, user.id, config),
+    tasks: onboarding.tasks(state, user.id, config, { unlimited: billing.isUnlimited(user) }),
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     backgrounds: backgrounds.listBackgrounds(user).map(entry => ({
       id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared),
@@ -1651,6 +1642,24 @@ async function route(req, res, url) {
     if (!['firstClip', 'handoff'].includes(what)) return json(res, 400, { error: 'Unknown moment.' });
     if (onboarding.markSeen(state, currentUser.id, what)) save();
     return json(res, 200, { ok: true, onboarding: onboarding.journey(state, currentUser.id) });
+  }
+  /*
+   * Claim one task-ladder reward.
+   *
+   * The rung is recomputed here from the account's own records, so the button
+   * is not the check -- a request naming a rung this account has not reached is
+   * refused whatever the screen was showing. The grant itself is keyed, so a
+   * double-tap cannot pay twice.
+   */
+  if (method === 'POST' && pathname === '/api/tasks/claim') {
+    if (!currentUser?.id) return json(res, 401, { error: 'Sign in first.' });
+    const body = await readBody(req);
+    const result = claimTaskReward(currentUser, body.id);
+    if (result.error) return json(res, 400, { error: result.error });
+    return json(res, 200, {
+      ok: true, granted: result.granted, tokens: result.tokens,
+      tasks: onboarding.tasks(state, currentUser.id, config, { unlimited: billing.isUnlimited(currentUser) }),
+    });
   }
   if (method === 'DELETE' && pathname === '/api/account') {
     try {

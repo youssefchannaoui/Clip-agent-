@@ -589,6 +589,15 @@ body.dc-light .dctk-title{color:#1D1D22}
 body.dc-light .dctk-note{color:#62626B}
 body.dc-light .dctk-go{color:#86868F}
 body.dc-light .dctk-earn{background:rgba(162, 118, 44, 0.161);color:#A2762C}
+body.dc-light #dcTasks .dctk-tabs{border:1px solid #E2E2E6;background:#ECECEE}
+body.dc-light #dcTasks .dctk-tab{color:#62626B}
+body.dc-light #dcTasks .dctk-tab:hover{background:#FFFFFF;color:#33333A}
+body.dc-light #dcTasks .dctk-tab.is-on{background:#FFFFFF;color:#141418;box-shadow:inset 0 0 0 1px rgba(162, 118, 44, 0.322)}
+body.dc-light #dcTasks .dctk-tab.is-locked{color:#86868F}
+body.dc-light #dcTasks .dctk-tab-n{color:#86868F}
+body.dc-light #dcTasks .dctk-tab.is-on .dctk-tab-n{color:#A2762C}
+body.dc-light #dcTasks .dctk-tab-dot{background:#A2762C}
+body.dc-light #dcTasks .dctk-gnote{color:#62626B}
 body.dc-light #dcTasks .dctk-row{border-top:1px solid #E2E2E6}
 body.dc-light #dcTasks .dctk-row:hover{background:#FFFFFF}
 body.dc-light #dcTasks .dctk-row.is-now{background:rgba(162, 118, 44, 0.069)}
@@ -602,7 +611,9 @@ body.dc-light #dcTasks .dctk-row .dctk-note{color:#62626B}
 body.dc-light #dcTasks .dctk-bar{background:#E2E2E6}
 body.dc-light #dcTasks .dctk-bar i{background:#A2762C}
 body.dc-light #dcTasks .dctk-prize{border:1px solid #D4D4DA;color:#62626B}
-body.dc-light #dcTasks .dctk-row.is-done .dctk-prize{border-color:rgba(162, 118, 44, 0.460);background:rgba(162, 118, 44, 0.138);color:#A2762C}
+body.dc-light #dcTasks .dctk-prize.is-claimed{border-color:rgba(162, 118, 44, 0.345);background:rgba(162, 118, 44, 0.115);color:#A2762C}
+body.dc-light #dcTasks .dctk-claim{border:1px solid rgba(162, 118, 44, 0.632);background:rgba(162, 118, 44, 0.161);color:#7E5B18}
+body.dc-light #dcTasks .dctk-claim:hover{background:rgba(162, 118, 44, 0.276);border-color:rgba(162, 118, 44, 0.900)}
 body.dc-light #dcRailNav a[style*="#D9B478"]::before{background:linear-gradient(#A2762C,#7E5B18)}
 body.dc-light #dcRailBrand{background-image:linear-gradient(115deg,transparent 42%,rgba(162, 118, 44, 0.115) 50%,transparent 58%)}
 body.dc-light [data-dc-sched-card]:hover{box-shadow:0 14px 32px rgba(58, 44, 20, 0.180)}

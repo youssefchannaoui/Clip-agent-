@@ -1206,7 +1206,7 @@
     m.tasksOn = Boolean(ladder && ladder.total && ladder.done < ladder.total);
     m.tasksNote = ladder
       ? ladder.done + ' of ' + ladder.total + ' done'
-        + (ladder.unclaimed > 0 ? ' \u00b7 ' + ladder.unclaimed + ' tokens waiting' : '')
+        + (ladder.claimable > 0 ? ' \u00b7 ' + ladder.claimable + ' to claim' : '')
       : '';
     m.openTasks = closeThen(function () { if (global.openTasks) global.openTasks(); });
     m.startTour = closeThen(vals.startTour);

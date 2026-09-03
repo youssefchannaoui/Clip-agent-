@@ -663,6 +663,11 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
    whole thing up clear of it. Scoped with :has() so it applies only while the
    card is actually in there -- an empty slot is hidden and must not push the
    rail around. */
+/* The slot lives INSIDE the nav now (seatTaskCard), above the DeenAI / Help /
+   Owner tail, so it no longer collides with the collapse control at the rail's
+   foot and no longer needs to reserve its height. It keeps a little air under
+   it so it does not sit flush against the tail's hairline. */
+#dcRailNav div:has(> #dcTaskCard) { margin-bottom: 14px; }
 #dcRail > div:has(> #dcTaskCard) { margin-bottom: 46px; }
 
 #dcTaskCard {
@@ -734,6 +739,41 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
  * drift the moment the font size changed. The chip is the same height for the
  * same reason. The negative margin lets the hover background keep its inset
  * while the content sits on the header's own left edge. */
+/* The tabs. Youssef: "so we have all the tasks on one go. Right? I don't like
+   that ... maybe like on the top you have like tabs that you can go through."
+   A locked tab is still SHOWN -- seeing what is coming is the point of
+   splitting the ladder up -- and its panel says what opens it. */
+#dcTasks .dctk-tabs {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px;
+  padding: 4px; margin-bottom: 14px;
+  border: 1px solid #1E1E22; border-radius: 12px; background: #0E0E11;
+}
+#dcTasks .dctk-tab {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 6px; border: 0; border-radius: 9px; background: transparent;
+  color: #8B8B93; font: inherit; cursor: pointer; min-width: 0;
+}
+#dcTasks .dctk-tab:hover { background: #17171A; color: #BCBCC3; }
+#dcTasks .dctk-tab.is-on { background: #17171A; color: #F2F2F4; box-shadow: inset 0 0 0 1px rgba(217,180,120,.28); }
+#dcTasks .dctk-tab.is-locked { color: #6E6E76; }
+#dcTasks .dctk-tab-t {
+  font-size: 11.5px; font-weight: 700; line-height: 16px;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#dcTasks .dctk-tab-n { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; line-height: 12px; color: #6E6E76; }
+#dcTasks .dctk-tab.is-on .dctk-tab-n { color: #D9B478; }
+/* Tokens waiting inside a tab you are not looking at. */
+#dcTasks .dctk-tab-dot {
+  position: absolute; top: 6px; right: 6px; width: 6px; height: 6px;
+  border-radius: 50%; background: #D9B478;
+}
+#dcTasks .dctk-gnote {
+  margin: 0 0 6px; padding: 0 2px; font-size: 11.5px; line-height: 1.5; color: #8B8B93;
+}
+/* A row in a locked group is there to be READ, not pressed. */
+#dcTasks .dctk-row.is-shut { cursor: default; opacity: .5; }
+#dcTasks .dctk-row.is-shut:hover { background: transparent; }
+
 #dcTasks .dctk-row {
   --dctk-line: 22px;
   display: grid; grid-template-columns: var(--dctk-line) minmax(0, 1fr) auto;
@@ -794,6 +834,24 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
   border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums;
   border: 1px solid #26262A; color: #8B8B93; font-size: 10px; font-weight: 700;
 }
-#dcTasks .dctk-row.is-done .dctk-prize {
-  border-color: rgba(217,180,120,.4); background: rgba(217,180,120,.12); color: #D9B478;
+/* Claimed reads as settled, not as an offer: the quiet gold of something
+   already collected, with no button under it. */
+#dcTasks .dctk-prize.is-claimed {
+  border-color: rgba(217,180,120,.3); background: rgba(217,180,120,.10); color: #D9B478;
 }
+/* An empty slot still holds the column open, so a rung with no reward does not
+   let its row's text run wider than the rows above and below it. */
+#dcTasks .dctk-prize.is-none { border-color: transparent; background: transparent; }
+/* The one control in the row. Same height as the chip it replaces, so a row
+   with a claim in it is exactly as tall as one without. */
+#dcTasks .dctk-claim {
+  flex: 0 0 auto; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center;
+  height: var(--dctk-line); min-width: 82px; padding: 0 10px;
+  border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums;
+  border: 1px solid rgba(217,180,120,.55); background: rgba(217,180,120,.14);
+  color: #F0D6A6; font-size: 10px; font-weight: 800; letter-spacing: .02em;
+  font-family: inherit; cursor: pointer;
+}
+#dcTasks .dctk-claim:hover { background: rgba(217,180,120,.24); border-color: rgba(217,180,120,.8); }
+#dcTasks .dctk-claim:disabled { opacity: .6; cursor: default; }

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1235 JS + 581 Python**
+- `npm test` and `npm run check` must pass. Currently **1245 JS + 581 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -6299,3 +6299,99 @@ in daylight**, every column a single value, no overflow. The rail card measured
 clean throughout (ring against copy 0, the percentage dead centre in the ring).
 `test/task-ladder.test.mjs` pins the METHOD rather than the numbers -- CI has
 no browser -- and both probes were proven red.
+
+## The ladder became three groups, and rewards are CLAIMED (v3.111.0, 3 Sept 2026)
+
+Youssef, on the first version: "so we have all the tasks on one go. Right? I
+don't like that ... the beginning will be like the first user one ... then you
+have like the second one comes up ... maybe like on the top you have like tabs
+that you can go through, to make it more organized ... also, it should be able
+to claim the tokens, and it should say claimed ... and then comeback rewards.
+So coming back to the website gets you tokens as well ... move perctnage taks
+thing up and deen ai help and owner down."
+
+### Three groups, one at a time
+
+`TASK_GROUPS`: **Getting started** (the journey's own three steps, still read
+off the same `journey()` call), **Building up** (three clips, ten clips, seven
+posting days, thirty), **Coming back**. A group is locked until the one it
+`needs` is finished; both later groups need only the FIRST, because gating the
+comeback rewards behind thirty posting days would put them months out of reach.
+A locked tab is still SHOWN — seeing what is coming is the point of splitting
+the ladder up — and its panel says what opens it rather than leaving a padlock
+unexplained.
+
+The panel opens on the tab where tokens are waiting, else where the work is,
+and then leaves the customer's choice alone: re-picking on every state poll
+would move the panel under them.
+
+### Claimed, not granted
+
+The first version paid out on the next `/api/state` poll, so tokens simply
+appeared — nothing to press, nothing saying they had arrived, and a disk write
+on the hottest path in the app. Reaching a rung now makes it CLAIMABLE;
+`POST /api/tasks/claim` pays it; the row then reads **Claimed**.
+
+- **The button is not the check.** The route recomputes the rung from the
+  account's own records, so a request naming a rung this account has not
+  reached is refused whatever the screen was showing. Proven red by deleting
+  that one line.
+- The grant is still keyed in `billing.processedBonusGrants`, so a double-tap,
+  a replay or a lost display record cannot pay twice. A test wipes
+  `user.taskRewards` and asserts the re-claim is accepted and pays **nothing**.
+- **An operator is offered nothing**, because an operator cannot be paid:
+  `isUnlimited` makes the grant a no-op. Its rungs are still shown — the
+  operator has to see what customers get — but nothing is claimable and
+  `claimable` is 0. That was a live fault: the operator's own rail read
+  **"+30"** for tokens nobody could ever collect.
+- The rail chip counts what can be COLLECTED now, which is a real number with a
+  button behind it rather than a promise nothing acts on.
+
+### Coming back, and the one thing here that is stamped
+
+Everything else in this module is derived from records that already exist. "Did
+they come back" is not one of them: web metrics are anonymous, salted per day
+and public-page only, deliberately (v3.28.0), and nothing else notes that an
+account opened the app. So `user.visitDays` is written — the narrowest record
+that can answer it: ISO dates, no times, no addresses, no user agents, capped
+at `VISIT_DAYS_KEPT` (400). `noteVisit` compares the LAST entry first, so a
+poll costs one comparison rather than a scan.
+
+**Distinct days, never a consecutive streak**, for the same reason the posting
+rungs count distinct days: a streak breaks on one missed day, and a comeback
+reward that punishes a week away is not a comeback reward. A test proves a
+forty-day gap does not reset it.
+
+### The economics did not move
+
+Eight paying rungs now instead of five, still **45 tokens** total
+(5/5/5/5/10 + 5/5/5) — widening the ladder must not quietly raise its price.
+Still under `referralBonusPaid` (50), and the test pins that RELATIONSHIP
+rather than the numbers.
+
+### The rail card moved above DeenAI / Help / Owner
+
+Those three are the nav's tail, held at the foot of its last group by
+`margin-top: auto` on the first of them. `seatTaskCard` moves the slot into the
+nav immediately BEFORE that element, so the card lands just under Set up and
+the auto margin goes on holding the tail down — nothing about those three
+moves. Moved rather than re-created, so the node and its listeners survive, and
+only when it is not already in place or every paint would reinsert it. It no
+longer needs the collapse-row reservation, because it is no longer at the
+rail's foot.
+
+### Alignment, measured again because the column changed
+
+A Claim BUTTON now sits in the column the reward chip used to own. Measured at
+1440x950 after: tick 0px and reward 0px off their titles on every row, one
+value for every column, chips and claim buttons all 82px, the tab row and the
+rows both flush with the dialog header (0px). The claim button takes the same
+`--dctk-line` height as the chip, so a row with a claim in it is exactly as
+tall as one without.
+
+Driven in a browser: three tabs with counts and a gold dot where tokens wait,
+four rows shown instead of ten, a tab switch showing a different set, and a
+real claim click sending `{"id":"three"}` — refused here with "Your plan
+already has unlimited tokens" (this instance signs in as the operator), which
+is the guard above working and the failure surfacing in the notification dock.
+The success path is driven over HTTP with a real free account.

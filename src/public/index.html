@@ -7613,6 +7613,26 @@ function railFooterSlot(){
   return null;
 }
 
+/* Youssef, 3 Sept 2026: "move perctnage taks thing up and deen ai help and
+   owner down."
+   The rail's empty footer card is BELOW the nav, so the card sat under DeenAI,
+   Help and Owner. Those three are the nav's tail, held at the bottom of its
+   last group by `margin-top: auto` on the first of them -- so putting the slot
+   immediately BEFORE that element lifts the card to just under Set up, and the
+   auto margin goes on holding the tail at the foot. Nothing about the tail
+   moves; the card simply arrives above it.
+   Moved rather than re-created, so the node, its listeners and any running
+   animation survive -- and only when it is not already in place, or every
+   paint would reinsert it. */
+function seatTaskCard(slot){
+  const nav=document.getElementById('dcRailNav');
+  if(!nav||!slot)return;
+  const tail=nav.querySelector('.dc-nav-tail');
+  if(!tail||!tail.parentNode)return;
+  if(slot.nextElementSibling===tail&&slot.parentNode===tail.parentNode)return;
+  tail.parentNode.insertBefore(slot,tail);
+}
+
 function paintTaskCard(){
   const rows=taskLadder();
   const slot=railFooterSlot();
@@ -7632,7 +7652,7 @@ function paintTaskCard(){
      sends both the label and the matching percentage, so the two surfaces
      cannot phrase or count it differently. */
   const note=esc(rows.stepLabel||(rows.done+' of '+rows.total+' done'));
-  const earn=Number(rows.unclaimed||0);
+  const earn=Number(rows.claimable||0);
   const ring=Math.max(0,Math.min(100,Number(rows.ringPercent!=null?rows.ringPercent:rows.percent)||0));
   const html='<button type="button" id="dcTaskCard" title="'+esc(title)+' \u2014 '+rows.done+' of '+rows.total+' done'
     +(next.title?' \u00b7 next: '+esc(next.title):'')+'">'
@@ -7652,7 +7672,12 @@ function paintTaskCard(){
   const card=document.getElementById('dcTaskCard');
   const open=StudioAdapter.ui.railOpen&&(window.innerWidth||1280)>820;
   if(card)card.classList.toggle('is-tight',!open);
+  seatTaskCard(slot);
 }
+
+/* Which group's tab is open. Host state, not adapter UI: the panel is
+   host-owned end to end, and nothing else in the app needs to know. */
+let dcTaskTab='';
 
 function paintTasksPanel(){
   const root=document.getElementById('dcTasks');
@@ -7660,31 +7685,85 @@ function paintTasksPanel(){
   const rows=taskLadder();
   const body=document.getElementById('dcTasksBody');
   const sub=document.getElementById('dcTasksSub');
-  if(!rows||!body)return;
-  if(sub)sub.textContent=rows.done+' of '+rows.total+' done'+(rows.earned>0?' \u00b7 '+rows.earned+' tokens earned':'');
-  body.innerHTML=rows.list.map(task=>{
+  if(!rows||!rows.groups||!body)return;
+
+  /* Open on the tab that matters: where the tokens are waiting, else where the
+     work is. Only until the customer picks one -- after that their choice
+     stands, or the panel would jump under them on the next state poll. */
+  const groups=rows.groups;
+  let group=groups.find(g=>g.id===dcTaskTab);
+  if(!group||group.locked){ group=groups.find(g=>g.id===rows.openGroup)||groups[0]; dcTaskTab=group.id; }
+
+  if(sub){
+    const bits=[rows.done+' of '+rows.total+' done'];
+    if(rows.claimable>0)bits.push(rows.claimable+' tokens to claim');
+    else if(rows.earned>0)bits.push(rows.earned+' tokens earned');
+    sub.textContent=bits.join(' \u00b7 ');
+  }
+
+  /* The tabs. A locked one is still SHOWN -- seeing what is coming is the
+     point of splitting the ladder up -- but it says what opens it rather than
+     leaving a padlock unexplained. */
+  const tabs='<div class="dctk-tabs" role="tablist">'+groups.map(g=>{
+    const on=g.id===group.id;
+    return '<button type="button" role="tab" class="dctk-tab'+(on?' is-on':'')+(g.locked?' is-locked':'')
+      +'" data-tab="'+esc(g.id)+'" aria-selected="'+(on?'true':'false')+'">'
+      +'<span class="dctk-tab-t">'+esc(g.title)+'</span>'
+      +'<span class="dctk-tab-n">'+(g.locked?'Locked':g.done+'/'+g.total)+'</span>'
+      +(g.claimable>0?'<i class="dctk-tab-dot" aria-hidden="true"></i>':'')
+      +'</button>';
+  }).join('')+'</div>';
+
+  const head='<p class="dctk-gnote">'+esc(group.locked
+    ? 'Opens once you have finished '+(group.needsTitle||'the group before it')+'.'
+    : group.note)+'</p>';
+
+  const list=group.tasks.map(task=>{
     const bar=task.progress&&task.progress.of
       ? '<div class="dctk-bar"><i style="width:'+Math.round((task.progress.at/task.progress.of)*100)+'%"></i></div>'
       : '';
     const count=task.progress?' \u00b7 '+task.progress.at+' of '+task.progress.of:'';
-    /* A reward is drawn only where there is one. Two rungs pay nothing on
-       purpose, and "+0 tokens" beside them would read as a fault. */
-    /* No "+" on a paid chip: it made that chip 9px wider than the others, so
-       their left edges were ragged against a progress bar that ends on one
-       line. A paid rung already reads as paid from the chip's own colour. */
+    /* Three states for the reward, and only one of them is a button. A rung
+       with no reward draws nothing rather than "+0 tokens", which would read
+       as a fault. */
     const prize=task.reward>0
-      ? '<span class="dctk-prize">'+task.reward+' tokens</span>'
-      : '<span></span>';
-    /* The row the HERO is standing on, not merely the first unfinished one --
-       the server sends which, so opening the ladder from the rail lands on the
-       same answer Home is giving. */
+      ? (task.claimed
+          ? '<span class="dctk-prize is-claimed">Claimed</span>'
+          : task.claimable
+            ? '<button type="button" class="dctk-claim" data-claim="'+esc(task.id)+'">Claim '+task.reward+'</button>'
+            : '<span class="dctk-prize">'+task.reward+' tokens</span>')
+      : '<span class="dctk-prize is-none"></span>';
     const now=!task.done&&task.id===rows.nowId;
-    return '<button type="button" class="dctk-row'+(task.done?' is-done':'')+(now?' is-now':'')
-      +'" data-task="'+esc(task.id)+'" data-go="'+esc(task.action||'')+'">'
+    return '<div class="dctk-row'+(task.done?' is-done':'')+(now?' is-now':'')
+      +(group.locked?' is-shut':'')+'" data-task="'+esc(task.id)+'" data-go="'+esc(task.action||'')+'">'
       +'<span class="dctk-tick">'+(task.done?'\u2713':'')+'</span>'
-      +'<div><strong>'+esc(task.title)+(now?'<em>Now</em>':'')+'</strong><span class="dctk-note">'+esc(task.note)+esc(count)+'</span>'+bar+'</div>'
-      +prize+'</button>';
+      +'<div><strong>'+esc(task.title)+(now?'<em>Now</em>':'')+'</strong>'
+      +'<span class="dctk-note">'+esc(task.note)+esc(count)+'</span>'+bar+'</div>'
+      +prize+'</div>';
   }).join('');
+
+  const html=tabs+head+'<div class="dctk-list">'+list+'</div>';
+  if(body.innerHTML!==html)body.innerHTML=html;
+}
+
+/* Claim one reward. The server recomputes the rung and refuses anything this
+   account has not actually reached, so this is a request rather than a
+   decision -- and the balance in the header comes back with it. */
+async function claimTask(id,button){
+  if(!id||!button||button.disabled)return;
+  button.disabled=true;
+  const was=button.textContent;
+  button.textContent='Claiming\u2026';
+  try{
+    const out=await api('/api/tasks/claim',{method:'POST',body:JSON.stringify({id})});
+    if(DATA&&out&&out.tasks)DATA.tasks=out.tasks;
+    toast('Claimed '+out.tokens+' tokens','good');
+    await refresh();
+    paintTasksPanel();
+  }catch(e){
+    button.disabled=false;button.textContent=was;
+    toast(e.message,'bad');
+  }
 }
 
 function openTasks(){
@@ -7703,12 +7782,16 @@ document.addEventListener('click',event=>{
   if(!event.target.closest)return;
   if(event.target.closest('#dcTaskCard')){ openTasks(); return; }
   if(event.target.closest('[data-tasks-close]')){ closeTasks(); return; }
+  const claim=event.target.closest('#dcTasks [data-claim]');
+  if(claim){ event.preventDefault(); claimTask(claim.getAttribute('data-claim'),claim); return; }
+  const tab=event.target.closest('#dcTasks .dctk-tab');
+  if(tab){ dcTaskTab=tab.getAttribute('data-tab')||''; paintTasksPanel(); return; }
   /* A task row goes where the step's own button goes -- through the adapter's
      one destination map, never a second list of screens that could drift from
-     the hero's. A row with nothing to go to (there is none today) closes the
-     panel rather than doing nothing, which would be a dead control. */
+     the hero's. A row inside a locked group goes nowhere: it is there to be
+     read, not pressed. */
   const row=event.target.closest('#dcTasks .dctk-row');
-  if(row){
+  if(row&&!row.classList.contains('is-shut')){
     closeTasks();
     const where=row.getAttribute('data-go')||'';
     if(where&&StudioAdapter.goToStep)StudioAdapter.goToStep(where,event);
