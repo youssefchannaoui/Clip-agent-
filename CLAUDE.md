@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1204 JS + 581 Python**
+- `npm test` and `npm run check` must pass. Currently **COUNT**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4163,6 +4163,49 @@ animation in and animation out as well."
   Missing any one of them drops the field silently: it reads back `undefined`
   and the switch looks broken while every number beside it saves fine. That is
   how it presented on the first attempt.
+
+## The brand switches belong to the account, and the schedule shows logos (v3.107.0)
+
+Youssef, 3 Sept 2026, two things in one sitting.
+
+**"the watermark and promotion should not need to save with template it just
+works with all templates once on it turns on for all."** Both are decisions
+about what this app puts on top of a video, and neither belongs to a caption
+style -- switching the watermark on for Clean Line and then rendering a Quran
+clip without it is not a choice anybody meant to make. `applyToAllTemplates`
+writes the field to every template the account has, and one helper serves both
+switches so they cannot drift apart. **The paywall is untouched**: the server
+checks `assertWatermarkAllowed` on every save, so a free account is refused on
+the first one and the loop stops there.
+
+**"for the logos here dont be writing just put logos that are posting."** A
+schedule row going to two places read as "YouTube · DeenClipped — waiting
+TikTok · DeenClipped — waiting" -- two sentences to say what two marks say.
+The logo now carries it, at 16px.
+
+**A PROBLEM STILL GETS ITS WORD**, and that is the whole care in this change.
+Colour alone would be carrying the state, and this app has already shipped the
+bug where a clip live on YouTube with a refused TikTok "looked entirely fine on
+the row" (v3.28.0). `waiting`, `posting now` and `posted` are silent; anything
+that needs a person keeps its text, and the full sentence stays on the span's
+`title` for every row.
+
+## The sync on an OLD clip cannot be fixed by re-rendering it
+
+Youssef: "see how sync isnt there like reciter is talking but captiuons out of
+sync." Checked rather than assumed, and the answer is in the stored data: this
+clip's `transcript` is a **plain string**. There are no per-word timings on it
+at all.
+
+v3.102.0 made the ayah pages follow the reciter's own word times, but those
+come from Whisper at TRANSCRIPTION time. A re-render does not re-transcribe --
+it captions the stored transcript -- so a lecture transcribed before that
+release has nothing for the pager to follow and falls back to sharing the span
+out by word count, which drifts against a reciter who holds a madd.
+
+**So the sync fix reaches new imports only.** Re-rendering an old Quran clip
+will always drift, however many times it is run. Testing the sync work needs a
+fresh import of a recitation, not a re-render of an existing one.
 
 ## Open items
 

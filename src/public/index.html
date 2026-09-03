@@ -6968,6 +6968,29 @@ StudioAdapter.onProbeSource=async url=>{try{
          is not enforced here — the server refuses on save, which is the only
          place it can be trusted. This only explains why the switch is disabled
          so a free user meets a reason instead of a dead control. */
+    /* EVERY TEMPLATE, not just the one on screen. Youssef, 3 Sept 2026: "the
+       watermark and promotion should not need to save with template it just
+       works with all templates once on it turns on for all."
+
+       Both of these are brand decisions about what this app puts on top of a
+       video, and neither belongs to a caption style -- switching the watermark
+       on for Clean Line and then rendering a Quran clip without it is not a
+       choice anybody meant to make. So the switch writes the field to every
+       template the account has, and the row stops depending on which one
+       happens to be selected.
+
+       The paywall is untouched: the server checks assertWatermarkAllowed on
+       each save, so a free account is still refused on the first one and the
+       loop stops there. */
+    async function applyToAllTemplates(patch){
+      const list=(DATA&&DATA.templates)||[];
+      for(const tpl of list){
+        await api('/api/templates',{method:'POST',
+          body:JSON.stringify({id:tpl.id, template:Object.assign({},tpl,patch), select:false, rerender:false})});
+      }
+      await refresh();
+    }
+
       const paintWatermark=()=>{
         try{
           const anchorBtn=document.getElementById('dcSaveAsStyle');
@@ -7044,9 +7067,7 @@ StudioAdapter.onProbeSource=async url=>{try{
               saved.promoBarEnabled=want;
               paintWatermark();
               try{
-                await api('/api/templates',{method:'POST',body:JSON.stringify({
-                  id:saved.id, template:{...saved, promoBarEnabled:want}, select:false, rerender:false})});
-                await refresh();
+                await applyToAllTemplates({promoBarEnabled:want});
               }catch(e){ toast(e.message,'bad'); saved.promoBarEnabled=!want; paintWatermark(); }
               paintWatermark();
             });
@@ -7065,9 +7086,7 @@ StudioAdapter.onProbeSource=async url=>{try{
                    And the body is the SAVED template plus the patch — basing
                    it on the draft wrote every unsaved draft field onto the
                    saved one and renamed "Clean Line" to "New Template". */
-                await api('/api/templates',{method:'POST',
-                  body:JSON.stringify({template:Object.assign({},saved,patch)})});
-                await refresh();
+                await applyToAllTemplates(patch);
                 // Repaint from the NEW state. The observer only fires when the
                 // panel is missing, so without this the label kept describing
                 // the value before the change — it read "Off" beside a

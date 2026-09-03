@@ -1043,7 +1043,7 @@
                   <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1;">
                     <div style="display: flex; align-items: center; gap: 9px; flex-wrap: wrap;">
                       <strong style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">{{ post.time }}</strong>
-                      <sc-for list="{{ post.dests }}" as="dst" hint-placeholder-count="2"><span style="{{ dst.style }}"><i class="{{ dst.icon }}" style="font-size: 13px;"></i>{{ dst.name }}<span data-dc-dest-account>{{ dst.who }}</span>{{ dst.state }}</span></sc-for>
+                      <sc-for list="{{ post.dests }}" as="dst" hint-placeholder-count="2"><span style="{{ dst.style }}" title="{{ dst.title }}"><i class="{{ dst.icon }}" style="font-size: 16px;"></i>{{ dst.name }}<span data-dc-dest-account>{{ dst.who }}</span>{{ dst.state }}</span></sc-for>
                       <span style="{{ post.statusStyle }}">{{ post.statusLabel }}</span>
                     </div>
                     <p style="margin: 0; font-size: 12px; color: #E9E9ED; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ post.caption }}</p>
@@ -1145,7 +1145,7 @@
                   <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1;">
                     <div style="display: flex; align-items: center; gap: 9px; flex-wrap: wrap;">
                       <strong style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">{{ post.time }}</strong>
-                      <sc-for list="{{ post.dests }}" as="dst" hint-placeholder-count="2"><span style="{{ dst.style }}"><i class="{{ dst.icon }}" style="font-size: 13px;"></i>{{ dst.name }}<span data-dc-dest-account>{{ dst.who }}</span>{{ dst.state }}</span></sc-for>
+                      <sc-for list="{{ post.dests }}" as="dst" hint-placeholder-count="2"><span style="{{ dst.style }}" title="{{ dst.title }}"><i class="{{ dst.icon }}" style="font-size: 16px;"></i>{{ dst.name }}<span data-dc-dest-account>{{ dst.who }}</span>{{ dst.state }}</span></sc-for>
                       <span style="{{ post.statusStyle }}">{{ post.statusLabel }}</span>
                     </div>
                     <p style="margin: 0; font-size: 12px; color: #E9E9ED; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ post.caption }}</p>

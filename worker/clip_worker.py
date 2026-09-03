@@ -2359,7 +2359,10 @@ AYAH_FADE_OUT_MS = 450
 # on every per-account override. Whatever the right ratio is, it should be
 # DERIVED from one of them rather than emerging from both.
 #
-# 8.26, measured against the reference Youssef asked to match exactly.
+# 6.10. 8.26 came from matching the reference's ratio arithmetically and was
+# simply too big on a real frame -- "also captions both are way too large".
+# The ratio was right and the absolute size was not, which is the difference
+# between measuring a screenshot and watching a clip.
 #
 # The proportions come off his screenshot of that TikTok (2.2M likes), scaled
 # from its 607-wide player up to a 1080-wide render:
@@ -2392,7 +2395,7 @@ AYAH_FADE_OUT_MS = 450
 # letter bodies with the Latin cap height. Multiply this constant by
 # (latin rows / arabic rows). Do NOT trust the arithmetic in the block above --
 # it has now been disproved by two separate frames.
-AYAH_SIZE_SCALE = 8.26
+AYAH_SIZE_SCALE = 6.10
 
 # The least outline an ayah may have, whatever the template asks for the Latin
 # caption. A mushaf face has hairline strokes where a Latin sans has stems, so
