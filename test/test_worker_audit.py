@@ -404,3 +404,62 @@ class AyahOutlineTests(unittest.TestCase):
         trans = [l for l in src.splitlines() if l.startswith("Style: Translation,")]
         self.assertEqual(len(trans), 1)
         self.assertIn("{translation_size}", trans[0])
+
+
+class PromoBarTests(unittest.TestCase):
+    """The brand call-out that slides in, holds and leaves.
+
+    Youssef, 3 Sept 2026, with the artwork: "it comes in the video after 3
+    seconds then for 3 seconds it stays on the video then goes, add animation
+    in and animation out as well."
+    """
+
+    def _present(self):
+        return mock.patch.object(type(cw.PROMO_BAR_FILE), "exists", lambda self: True)
+
+    def test_off_by_default(self):
+        # It burns a brand bar into a customer's clip. That is their decision,
+        # not a default -- unlike the watermark, which is the free plan's price.
+        self.assertIsNone(cw.promo_bar_plan({}, 40.0))
+        self.assertIsNone(cw.promo_bar_plan({"promoBarEnabled": False}, 40.0))
+
+    def test_a_missing_asset_never_fails_a_render(self):
+        # With the switch on and no artwork installed, the overlay is simply
+        # not built. Raising here would lose every clip for an account that had
+        # turned it on.
+        with mock.patch.object(type(cw.PROMO_BAR_FILE), "exists", lambda self: False):
+            self.assertIsNone(cw.promo_bar_plan({"promoBarEnabled": True}, 40.0))
+
+    def test_three_seconds_in_for_three_seconds(self):
+        with self._present():
+            plan = cw.promo_bar_plan(
+                {"promoBarEnabled": True, "promoBarStartSec": 3, "promoBarSeconds": 3}, 40.0)
+        self.assertEqual((plan["start"], plan["end"]), (3.0, 6.0))
+
+    def test_a_short_clip_brings_the_bar_forward_rather_than_dropping_it(self):
+        with self._present():
+            plan = cw.promo_bar_plan(
+                {"promoBarEnabled": True, "promoBarStartSec": 30, "promoBarSeconds": 3}, 8.0)
+        self.assertEqual((plan["start"], plan["end"]), (5.0, 8.0))
+
+    def test_the_graph_animates_at_both_ends(self):
+        with self._present():
+            plan = cw.promo_bar_plan(
+                {"promoBarEnabled": True, "promoBarStartSec": 3, "promoBarSeconds": 3}, 40.0)
+        g = cw.promo_bar_graph(plan, 2, 1080, 1920)
+        self.assertIn("fade=in:st=3.000", g)
+        self.assertIn("fade=out:st=5.550", g)          # ease before the end, not after it
+        self.assertIn("enable='between(t,3.000,6.000)'", g)
+        # It SLIDES as well as fades: the y expression has to move with t.
+        self.assertIn("overlay=x=(W-w)/2:y='", g)
+        self.assertIn(f"{cw.PROMO_BAR_MOVE}*(1-min(1", g)
+        # rgba, or the transparent artwork composites as a black slab.
+        self.assertIn("format=rgba", g)
+
+    def test_the_bar_is_composited_after_the_draft_rescale(self):
+        # A bar sized for a final would be unreadable if it were scaled down
+        # with the frame to draft size.
+        src = Path(cw.__file__).read_text()
+        rescale = src.index("flags=fast_bilinear[vout]")
+        overlay = src.index("promo_bar_graph(promo, promo_index")
+        self.assertLess(rescale, overlay)

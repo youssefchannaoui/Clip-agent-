@@ -4565,6 +4565,66 @@ def render_cut_plate(ffmpeg: str, source: Path, keeps: list[tuple[float, float]]
         raise RuntimeError("Cutting the clip produced no usable video.")
 
 
+# ── The promo bar ────────────────────────────────────────────────────────
+# A brand call-out that slides in over the clip, sits for a few seconds and
+# leaves again. Youssef, 3 Sept 2026, with the artwork: "it comes in the video
+# after 3 seconds then for 3 seconds it stays on the video then goes, add
+# animation in and animation out as well."
+#
+# The artwork is a wide transparent PNG shipped with the image. If the file is
+# absent the overlay is simply not built -- a missing asset must never fail a
+# render, and a customer who has the bar switched on would otherwise lose every
+# clip to it.
+PROMO_BAR_FILE = Path(__file__).resolve().parent / "assets" / "promo-bar.png"
+PROMO_BAR_WIDTH = 0.86      # of the frame width
+PROMO_BAR_BOTTOM = 0.14     # its resting distance from the bottom, of frame height
+PROMO_BAR_MOVE = 46         # pixels it travels on the way in and out
+PROMO_BAR_EASE = 0.45       # seconds of animation at each end
+
+
+def promo_bar_plan(template: dict, duration: float) -> dict | None:
+    """When and where the bar shows, or None if it should not."""
+    if not template.get("promoBarEnabled"):
+        return None
+    if not PROMO_BAR_FILE.exists():
+        return None
+    start = float(template.get("promoBarStartSec", 3) or 0)
+    hold = float(template.get("promoBarSeconds", 3) or 0)
+    if hold <= 0:
+        return None
+    # A bar that begins after the clip has ended shows nothing. Rather than
+    # drop it, bring it forward so a short clip still carries the brand -- but
+    # never past the start, and never longer than the clip itself.
+    if start >= duration:
+        start = max(0.0, duration - hold)
+    end = min(duration, start + hold)
+    if end - start <= 0.05:
+        return None
+    return {"start": start, "end": end}
+
+
+def promo_bar_graph(plan: dict, index: int, width: int, height: int,
+                    src: str = "vpre", out: str = "vout") -> str:
+    """The overlay chain: fade and slide in, hold, fade and slide out."""
+    bar_w = max(2, int(width * PROMO_BAR_WIDTH / 2) * 2)
+    rest_y = int(height * (1.0 - PROMO_BAR_BOTTOM))
+    st, en = plan["start"], plan["end"]
+    ease = min(PROMO_BAR_EASE, max(0.05, (en - st) / 2.0))
+    out_at = en - ease
+    # 0 -> 1 across the entry, and again across the exit. `min`/`max` keep both
+    # clamped so the bar is still between the two.
+    rise = f"min(1,max(0,(t-{st:.3f})/{ease:.3f}))"
+    fall = f"min(1,max(0,(t-{out_at:.3f})/{ease:.3f}))"
+    y = f"{rest_y}-h/2+{PROMO_BAR_MOVE}*(1-{rise})+{PROMO_BAR_MOVE}*{fall}"
+    return (
+        f"[{index}:v]format=rgba,scale={bar_w}:-1,"
+        f"fade=in:st={st:.3f}:d={ease:.3f}:alpha=1,"
+        f"fade=out:st={out_at:.3f}:d={ease:.3f}:alpha=1[promobar];"
+        f"[{src}][promobar]overlay=x=(W-w)/2:y='{y}':"
+        f"enable='between(t,{st:.3f},{en:.3f})'[{out}]"
+    )
+
+
 def render_clip(
     job: dict[str, Any], candidate: Candidate, index: int, source: Path,
     track: dict[str, Any] | None, output_dir: Path,
@@ -4699,6 +4759,25 @@ def render_clip(
     if draft:
         filter_complex = filter_complex.replace("[vout]", "[vfull]", 1)
         filter_complex += f";[vfull]scale={draft_width}:{draft_height}:flags=fast_bilinear[vout]"
+
+    # The promo bar goes on LAST, after the draft rescale, so it is composited
+    # at the size it will actually be seen at rather than being scaled down
+    # with the frame -- a bar that reads on a final would be unreadable on a
+    # quarter-size draft otherwise. Its input is appended after every other, so
+    # none of the existing indexes move.
+    promo = promo_bar_plan(template, candidate.duration)
+    promo_index = (1 + (0 if track is None else 1) + (0 if bg_visual is None else 1)
+                   + (0 if matte_file is None else 1))
+    if promo is not None:
+        out_w = draft_width if draft else t_width
+        out_h = draft_height if draft else t_height
+        # Rename the LAST [vout] -- on a draft that is the rescale's output, on
+        # a final it is the video graph's. Either way the bar hangs off
+        # whatever was about to be mapped.
+        cut = filter_complex.rfind("[vout]")
+        filter_complex = filter_complex[:cut] + "[vpre]" + filter_complex[cut + len("[vout]"):]
+        filter_complex += ";" + promo_bar_graph(promo, promo_index, out_w, out_h)
+
     export = [
         ffmpeg, "-y", *(PROGRESS_FLAGS if on_fraction is not None else []),
         "-ss", f"{candidate.start:.3f}", "-t", f"{candidate.duration:.3f}",
@@ -4706,6 +4785,7 @@ def render_clip(
         *([] if track is None else ["-stream_loop", "-1", "-i", str(track["path"])]),
         *([] if not bg_visual else ["-stream_loop", "-1", "-t", f"{candidate.duration + 2:.3f}", "-i", str(background["path"])]),
         *([] if matte_file is None else ["-i", str(matte_file)]),
+        *([] if promo is None else ["-i", str(PROMO_BAR_FILE)]),
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-threads", ffmpeg_threads,
