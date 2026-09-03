@@ -1,0 +1,191 @@
+/* ============================================================================
+   The notification dock — what just happened, over everything, bottom right.
+   ==========================================================================
+
+   Youssef, 3 Sept 2026: "make a notification system that popup over all
+   layouts to be clear and shows when all settings are like turned on or off or
+   things are posted ... showing that the thing they clicked is doing."
+
+   WHY THE OLD ONE FAILED, measured rather than reasoned about. `.toasts` in
+   index.html sat at z-index 80. Everything that matters in this app is above
+   it: the design export's own overlays run 88, 90, 92, 93, 94, 95 and 120 (the
+   job panel, the sheets, the detail view, the player, the tour, the boot
+   veil), the connections / account / bug dialogs are 200, the tour spotlight
+   202, the confirm 240, the billing layer 420, the charge layer 520 and the
+   guide layer 9999. So the one moment a confirmation matters MOST — you have
+   just ticked a switch inside a dialog — is the one moment it was painted
+   underneath, dimmed by that layer's own scrim to something you cannot read.
+   The dock is above all of it now.
+
+   Three other faults it had, each visible on a real screen:
+     * it went dark brown on paper (`--surface-2` is not a themed token), so
+       in Daylight the notifications were dark slabs on a white page;
+     * a setting turning ON and a clip being POSTED rendered identically — one
+       grey box, one sentence, no icon, no state;
+     * the dock was pointer-events:none end to end, so nothing could be
+       dismissed, undone or clicked.
+
+   The palette is declared THREE times on purpose: night, `body.dc-light` (the
+   desktop's paper) and `body.dcm-light` (the phone's, a separate preference in
+   a separate key). One sheet, so the dock cannot be paper on a night page. */
+
+#dcNotes {
+  /* Above the guide layer (9999) and the activity bar (99999), and above
+     anything a future overlay is likely to claim. */
+  position: fixed; z-index: 2147482000;
+  right: 18px; bottom: 18px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+  width: min(370px, calc(100vw - 36px));
+  /* The dock itself must never eat a click meant for the page beneath it;
+     each CARD takes its own pointer events back. */
+  pointer-events: none;
+
+  --dcn-card: #17171A;
+  --dcn-line: #2E2E34;
+  --dcn-ink: #F2F2F4;
+  --dcn-dim: #9A9AA2;
+  --dcn-gold: #D9B478;
+  --dcn-good: #53C78B;
+  --dcn-bad: #E3928C;
+  --dcn-shadow: 0 18px 44px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.34);
+  --dcn-ring: rgba(255,255,255,.05);
+}
+
+body.dc-light #dcNotes, body.dcm-light #dcNotes {
+  --dcn-card: #FFFFFF;
+  --dcn-line: #D8D2C4;
+  --dcn-ink: #1D1A15;
+  --dcn-dim: #6C6455;
+  --dcn-gold: #A2762C;
+  --dcn-good: #1F7A4F;
+  --dcn-bad: #A64738;
+  --dcn-shadow: 0 16px 40px rgba(60,48,28,.16), 0 2px 8px rgba(60,48,28,.10);
+  --dcn-ring: rgba(0,0,0,.03);
+}
+
+.dcn {
+  position: relative; pointer-events: auto;
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center; column-gap: 11px;
+  padding: 11px 13px 12px;
+  border: 1px solid var(--dcn-line); border-radius: 14px;
+  background: var(--dcn-card);
+  box-shadow: var(--dcn-shadow), 0 0 0 1px var(--dcn-ring) inset;
+  overflow: hidden; cursor: pointer;
+  /* backwards, never both: a forwards fill leaves the last keyframe beating
+     ordinary declarations for the element's life, which is how this repo has
+     killed a hover three times. */
+  animation: dcnIn .22s cubic-bezier(.2,.8,.2,1) backwards;
+}
+.dcn.is-going { animation: dcnOut .18s ease forwards; pointer-events: none; }
+
+@keyframes dcnIn  { from { opacity: 0; transform: translateX(16px) scale(.985) } }
+@keyframes dcnOut { to   { opacity: 0; transform: translateY(8px) scale(.98) } }
+
+.dcn-ic {
+  width: 34px; height: 34px; border-radius: 11px;
+  display: grid; place-items: center; flex: 0 0 34px;
+  color: var(--dcn-gold); background: color-mix(in srgb, var(--dcn-gold) 13%, transparent);
+}
+.dcn-ic svg { width: 17px; height: 17px; display: block }
+
+.dcn-copy { min-width: 0 }
+.dcn-copy strong {
+  display: block; font-size: 13px; font-weight: 700; line-height: 1.3;
+  color: var(--dcn-ink); letter-spacing: -.005em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dcn-copy span {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  margin-top: 2px; font-size: 11.5px; line-height: 1.4;
+  color: var(--dcn-dim); overflow: hidden;
+}
+
+/* The state chip. This is the whole point of the "settings turned on or off"
+   half of the ask: ON wears the colour, OFF is deliberately quiet — the two
+   must not be told apart by reading. */
+.dcn-state {
+  flex: 0 0 auto; align-self: center;
+  padding: 4px 9px; border-radius: 999px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
+  border: 1px solid var(--dcn-line); color: var(--dcn-dim);
+}
+.dcn-on  .dcn-state { color: var(--dcn-gold); border-color: color-mix(in srgb, var(--dcn-gold) 40%, transparent);
+                      background: color-mix(in srgb, var(--dcn-gold) 12%, transparent) }
+.dcn-good .dcn-state { color: var(--dcn-good); border-color: color-mix(in srgb, var(--dcn-good) 38%, transparent);
+                       background: color-mix(in srgb, var(--dcn-good) 11%, transparent) }
+
+.dcn-good .dcn-ic { color: var(--dcn-good); background: color-mix(in srgb, var(--dcn-good) 13%, transparent) }
+.dcn-bad  .dcn-ic { color: var(--dcn-bad);  background: color-mix(in srgb, var(--dcn-bad) 14%, transparent) }
+.dcn-bad  { border-color: color-mix(in srgb, var(--dcn-bad) 42%, var(--dcn-line)) }
+.dcn-off  .dcn-ic { color: var(--dcn-dim);  background: color-mix(in srgb, var(--dcn-dim) 12%, transparent) }
+.dcn-info .dcn-ic { color: var(--dcn-gold); background: color-mix(in srgb, var(--dcn-gold) 12%, transparent) }
+
+/* Work in flight. A spinner is information, not decoration — it is the only
+   signal the thing you clicked is still happening — so it survives the
+   reduced-motion block below, slowed rather than removed. */
+.dcn-work .dcn-ic svg { animation: dcnSpin 1.05s linear infinite }
+@keyframes dcnSpin { to { transform: rotate(360deg) } }
+
+.dcn-x {
+  position: absolute; right: 7px; top: 7px; width: 20px; height: 20px;
+  display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 50%; background: transparent;
+  color: var(--dcn-dim); font-size: 15px; line-height: 1; cursor: pointer;
+  opacity: 0; transition: opacity .14s ease, color .14s ease;
+}
+.dcn:hover .dcn-x, .dcn-x:focus-visible { opacity: 1 }
+.dcn-x:hover { color: var(--dcn-ink) }
+/* On a touch screen there is no hover to reveal it with, and a control that
+   can only be reached by hovering is no control at all on a phone. */
+@media (hover: none) { .dcn-x { opacity: .75 } }
+
+/* How long it has left. Paused while the pointer is on the card — a
+   notification that vanishes while you are reading it is the same fault this
+   dock exists to fix, wearing a different hat. */
+.dcn-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  transform-origin: left center; background: currentColor; opacity: .5;
+  color: var(--dcn-gold);
+}
+.dcn-good .dcn-bar { color: var(--dcn-good) }
+.dcn-bad  .dcn-bar { color: var(--dcn-bad) }
+.dcn-off  .dcn-bar { color: var(--dcn-dim) }
+.dcn:hover .dcn-bar { animation-play-state: paused }
+@keyframes dcnBar { from { transform: scaleX(1) } to { transform: scaleX(0) } }
+
+.dcn-more {
+  position: absolute; right: 9px; bottom: 8px;
+  font-size: 9.5px; font-weight: 800; color: var(--dcn-dim); letter-spacing: .04em;
+}
+
+.dcn-act {
+  grid-column: 2 / -1; justify-self: start; margin-top: 7px;
+  padding: 5px 11px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--dcn-gold) 45%, transparent);
+  background: transparent; color: var(--dcn-gold);
+  font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.dcn-act:hover { background: color-mix(in srgb, var(--dcn-gold) 12%, transparent) }
+
+/* The phone. The dock clears the floating tab bar, and spans the gutters —
+   a 370px card in a 390px viewport reads as a desktop control shrunk. */
+@media (max-width: 820px) {
+  body.dcm-on #dcNotes {
+    left: 14px; right: 14px; width: auto;
+    bottom: calc(var(--dcm-tab, 76px) + 10px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dcn { animation: dcnFade .18s ease backwards }
+  /* The exit still runs, shortened to a plain fade: tearing a card out
+     mid-animation blinks, which is worse than the motion somebody asked to
+     reduce. */
+  .dcn.is-going { animation: dcnFadeOut .14s ease forwards }
+  @keyframes dcnFade    { from { opacity: 0 } }
+  @keyframes dcnFadeOut { to   { opacity: 0 } }
+  .dcn-bar { animation: none !important; transform: scaleX(1) }
+  /* A frozen spinner reads as a hang. Slowed, never stopped. */
+  .dcn-work .dcn-ic svg { animation-duration: 2.4s }
+}

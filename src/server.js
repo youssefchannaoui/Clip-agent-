@@ -70,6 +70,13 @@ const STUDIO_ASSETS = {
   // hand-authored, so a design re-import cannot take the screen with it.
   '/studio-help.css': { file: studioAsset('studio-help.css'), type: 'text/css; charset=utf-8' },
   '/studio-motion.css': { file: studioAsset('studio-motion.css'), type: 'text/css; charset=utf-8' },
+  /*
+   * The notification dock. Hand-written for the same reason as the sheets
+   * above -- it hangs off ids and literal dcn- classes, so a design re-import
+   * cannot renumber it out from under the host.
+   */
+  '/studio-notify.css': { file: studioAsset('studio-notify.css'), type: 'text/css; charset=utf-8' },
+  '/studio-notify.js': { file: studioAsset('studio-notify.js'), type: JS_TYPE },
   '/studio-theme.generated.css': { file: studioAsset('studio-theme.generated.css'), type: 'text/css; charset=utf-8' },
   '/studio-light.generated.css': { file: studioAsset('studio-light.generated.css'), type: 'text/css; charset=utf-8' },
   // The editor's launch gate (see index.html). Two files and these two lines;

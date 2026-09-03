@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1175 JS + 572 Python**
+- `npm test` and `npm run check` must pass. Currently **1189 JS + 572 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -5633,3 +5633,119 @@ way to light the combo might be a ltitle off."
   inversion.** Inverted honestly it is as faint on paper as on black, but it
   is an affordance -- it says the square can be pressed -- and paper has less
   to hide behind. It is a named override rather than an algorithmic result.
+
+## Every outcome is announced, over the top of everything (v3.103.0, 3 Sept 2026)
+
+Youssef: "make a notification system that popup over all layouts to be clear and
+shows when all settings are like turned on or off or things are posted basiclly
+showing that the thing they clicked it dojng ... make it bottom right replace
+the bad one we have now."
+
+### Why the old one was bad, measured rather than reasoned about
+
+`.toasts` in index.html sat at **z-index 80**. Everything that matters in this
+app is above it: the design export's own overlays run **88, 90, 92, 93, 94, 95
+and 120** (job panel, sheets, detail, player, tour, boot veil), the
+connections / account / bug dialogs **200**, the tour spotlight **202**, the
+confirm **240**, the billing layer **420**, the charge layer **520**, the guide
+layer **9999**. So the one moment a confirmation matters most -- you have just
+ticked a switch INSIDE a dialog -- was the one moment it was painted
+underneath, dimmed by that layer's own scrim. Screenshotted with the tour up:
+the toast is a barely-legible grey slab in the corner.
+
+Three more faults, each visible on a real screen:
+
+- **It went dark brown on paper.** Computed background `rgb(62,48,20)`, because
+  `--surface-2` is not a themed token -- so in Daylight the notifications were
+  dark slabs on a white page.
+- **A setting turning ON and a clip being POSTED rendered identically**: one
+  grey box, one sentence, no icon, no state.
+- **The dock was `pointer-events:none` end to end**, so nothing could be
+  dismissed or acted on. (That also makes hit-testing lie: `elementFromPoint`
+  can never return a toast, so an early probe of mine reported "not topmost"
+  for the wrong reason. Measure a `pointer-events:none` layer by PIXELS.)
+
+### What replaces it
+
+`src/public/studio-notify.css` + `studio-notify.js`, hand-written and
+allowlisted in server.js like the other host-owned sheets -- they hang off ids
+and literal `dcn-` classes, so a design re-import cannot renumber them away.
+
+- **`#dcNotes` is z-index 2147482000**, above the guide layer and the activity
+  bar. `test/notify-dock.test.mjs` READS every z-index out of every studio
+  asset and fails if any of them outranks the dock, so a layer added next month
+  is compared automatically rather than against a list somebody typed.
+- **The dock is `pointer-events:none`; each CARD takes its own back**, so it
+  never eats a click meant for the page but can be dismissed, hovered or acted
+  on.
+- **Kinds**: on / off (a state chip -- On wears the colour, Off is deliberately
+  quiet), good, bad, work (a spinner that BECOMES its own outcome), info.
+- **Hovering pauses the countdown**, timer and hairline both. A notification
+  that vanishes while you are reading it is the fault this dock exists to fix,
+  wearing a different hat.
+- **The palette is declared three times on purpose**: night, `body.dc-light`
+  (desktop paper) and `body.dcm-light` -- the phone keeps its theme in a
+  SEPARATE preference under a separate key, so one selector would have left the
+  dock night on a paper phone.
+
+### The compatibility floor, and why it is the point
+
+`toast(message, type)` is called from **seventy-one places** in index.html and
+not one of them was rewritten. It hands off to the dock and **keeps the old
+dock underneath as a fallback** -- an outcome that goes unannounced because an
+asset 404'd is exactly the bug being replaced.
+
+**A trailing "on" / "off" is read as a switch**, which is how every switch in
+this app already phrases itself, so "Email notifications on" becomes a card
+titled *Email notifications* with an **On** chip and no call site changed.
+Guarded hard: never on a failure (`Could not turn it on` stays a plain error),
+never on a long sentence, and only when a label survives taking the word off.
+
+### Showing that the thing you clicked is doing
+
+`studioDo` is the one funnel roughly forty actions go through, so it is the one
+place that could answer that half of the ask. Past **400ms** it raises a
+spinner card that then becomes the outcome; under 400ms nothing extra appears,
+because a card that flashes up and away on an instant action is noise. An
+action with no `ok` line is one that is deliberately quiet (an optimistic clip
+setting, a caption drag): its spinner closes without a word on success, and
+still fails loudly.
+
+**The switch announcements are made INSIDE `fn`, never off studioDo's returned
+promise.** studioDo swallows its own failure and resolves either way, so a
+`.then()` would have reported a switch that had actually been refused. Proven
+live: driving the real publishing toggle on an instance with no YouTube
+credentials produced *"youtube developer credentials are not configured"* as a
+failure card, not a cheerful "YouTube / On".
+
+### Two bugs found by driving it, not by reading it
+
+1. **`trim()` was an infinite loop, and the FIFTH notification of a burst would
+   have frozen the browser.** `remove()` only spliced the card off the live
+   list inside its delayed callback, so `while (live.length > MAX)` removed a
+   card, saw the length unchanged, and span forever. A card is off the list the
+   moment it starts leaving now; only the DOM removal waits for the animation.
+   The regression test hangs against the old code, which is the right alarm.
+2. **A switch flicked twice kept showing the FIRST state.** The dedupe branch
+   counted a repeat without redrawing, so "YouTube / On" stayed on screen after
+   it had been switched off -- worse than two stacked cards, because it is
+   wrong. A repeat with a different answer redraws in place; only a genuinely
+   identical message is counted (`×3`).
+
+### Traps paid for again
+
+- **`pkill -f` with the pattern in the same command line kills the call's own
+  shell.** This file has warned about it since August and it still cost a run.
+- **An adapter object built in a `vm` realm fails strict `deepEqual`** -- copy
+  it out first. Third time.
+- **Playwright's default timeout plus a blocked CDN**: `page.goto` hangs for
+  minutes on the unreachable Phosphor CDN. Abort off-origin requests in the
+  probe rather than concluding the app is broken.
+- **Node buffers stdout to a file**, so a probe killed by a timeout loses
+  everything it "printed". Append each step to a file instead.
+
+Verified in a browser at 1440x950 and 390x844: all four kinds in both themes,
+the dock topmost by real hit-test over the tour AND over a dialog, four cards
+inside the viewport, the phone dock clearing the floating tab bar with no
+overflow, dismiss by click, hover pausing the countdown, and the dock surviving
+three consecutive `paintStudio()` calls as the same node.

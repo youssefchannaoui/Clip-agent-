@@ -38,12 +38,25 @@ test('a clip-settings choice is drawn before it is saved', () => {
 
 test('a refusal is not swallowed by the optimism', () => {
   // The whole risk of an optimistic write is leaving a lie on the screen. It
-  // goes through studioDo, whose catch toasts the error and re-renders from
-  // the truth — the same road the review deck's ledger takes.
+  // goes through studioDo, whose catch puts the error in front of the customer
+  // and re-renders from the truth — the same road the review deck's ledger
+  // takes.
+  //
+  // This used to match the catch clause's exact source text, and broke on
+  // v3.103.0 when studioDo learned to raise a spinner for slow work: the error
+  // now resolves that spinner where one is up, and toasts where one is not.
+  // Behaviour unchanged, wording different — the source-string weakness this
+  // repo keeps paying for. Asserted on what the catch DOES instead.
   const at = host.indexOf('const studioDo=async');
-  const body = host.slice(at, at + 300);
-  assert.ok(/catch\(e\)\{toast\(e\.message,'bad'\)/.test(body), 'the error reaches the screen');
-  assert.ok(body.includes('renderAll()'), 'and the screen is rebuilt from what is actually true');
+  const body = host.slice(at, host.indexOf('function paintJobBackground'));
+  const catchAt = body.indexOf('catch(e){');
+  assert.ok(catchAt > -1, 'studioDo catches its own failures');
+  const rescue = body.slice(catchAt);
+  assert.ok(/note\.fail\(/.test(rescue) || /toast\(e\.message,'bad'\)/.test(rescue),
+    'the error reaches the screen');
+  assert.ok(/note\.fail\([^)]*e\.message/.test(rescue) || /toast\(e\.message/.test(rescue),
+    'and it is the real message, not a generic one');
+  assert.ok(rescue.includes('renderAll()'), 'and the screen is rebuilt from what is actually true');
 });
 
 test('an isolated click paints without waiting for a frame', () => {

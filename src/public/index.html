@@ -55,6 +55,10 @@
 <!-- The dashboard's motion language: screen-change restarts, the rail trace,
      idle brand light, live-work shine, dialog fades, the arrival veil. -->
 <link rel="stylesheet" href="/studio-motion.css">
+<!-- The notification dock: bottom right, above every layer this app draws.
+     Replaces the old .toasts dock, which sat at z-index 80 and was therefore
+     painted UNDERNEATH every dialog, sheet, scrim and tour in the product. -->
+<link rel="stylesheet" href="/studio-notify.css">
 <!-- The light theme, generated from the dark export by
      scripts/build-light-theme.mjs. Every rule is scoped to
      body.dc-light, so loading it costs a dark session nothing. -->
@@ -2502,6 +2506,9 @@ select:focus{outline:none;border-color:var(--blue)}
 
 
 
+<!-- The notification dock. Its cards are drawn by studio-notify.js; #toasts
+     below is the fallback dock, used only if that file failed to load. -->
+<div id="dcNotes" aria-live="polite" aria-relevant="additions"></div>
 <div class="toasts" id="toasts"></div>
 
 <!-- Studio dashboard: generated template + hand-written runtime and adapter.
@@ -2511,6 +2518,7 @@ select:focus{outline:none;border-color:var(--blue)}
 <script src="/studio-adapter.js"></script>
 <script src="/editor-gate.js"></script>
 <script src="/studio-mobile.js"></script>
+<script src="/studio-notify.js"></script>
 
 <script>
 'use strict';
@@ -2563,7 +2571,15 @@ function visualEmpty(title,note,iconName='sparkles',action='') {return `<div cla
 
 const when=ms=>ms?new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(new Date(ms)):'—';
 const age=ms=>{if(!ms)return'';const d=Date.now()-ms;if(d<60000)return'now';if(d<3600000)return`${Math.floor(d/60000)}m ago`;if(d<86400000)return`${Math.floor(d/3600000)}h ago`;return`${Math.floor(d/86400000)}d ago`};
-function toast(message,type=''){const box=$('#toasts');if(!box)return;const text=String(message);
+/* The one funnel every outcome in this app goes through, called from
+   seventy-one places below. It hands off to the notification dock
+   (studio-notify.js), which draws it bottom right ABOVE every dialog, sheet
+   and scrim -- the old dock underneath this is kept, and only ever runs if
+   that file failed to load. An outcome that goes unannounced because an asset
+   404'd is exactly the fault this replaces. */
+function toast(message,type=''){
+if(window.DCNotify){try{window.DCNotify.legacy(message,type);return}catch(e){/* fall through to the dock below */}}
+const box=$('#toasts');if(!box)return;const text=String(message);
 /* One repeated message is one problem, not seven. A failing action retried a few
    times used to stack the same sentence down the whole screen, which reads as
    something going badly wrong rather than one thing being wrong once -- so an
@@ -4833,8 +4849,23 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         if(confirm(e.message+'\n\nOpen plans and top-ups now?'))StudioAdapter.ui.screen='tokens',renderAll();
       }
     };
-    const studioDo=async(fn,ok,onFail)=>{try{await fn();await refresh();StudioAdapter.settled();if(ok)toast(ok,'good')}
-      catch(e){toast(e.message,'bad');StudioAdapter.settled();if(onFail)onFail(e.message);renderAll();recoverFrom(e)}};
+    /* Youssef, 3 Sept 2026: "showing that the thing they clicked is doing."
+       This is the one funnel roughly forty actions go through, so it is the one
+       place that has to answer it. A request that resolves quickly says nothing
+       extra -- a card that flashes up and away is noise, and most of these are
+       instant. Past 400ms the dock raises a spinner card that then BECOMES the
+       outcome, so a slow save reads as work in progress rather than as a dead
+       button. An action with no `ok` line is one that is deliberately quiet
+       (an optimistic clip setting, a caption drag): its spinner closes without
+       a word on success, and still fails loudly. */
+    const studioDo=async(fn,ok,onFail)=>{
+      let note=null;
+      const slow=setTimeout(()=>{try{if(window.DCNotify)note=window.DCNotify.working('Working\u2026')}catch(e){}},400);
+      const stop=()=>clearTimeout(slow);
+      try{await fn();await refresh();StudioAdapter.settled();stop();
+        if(note){if(ok)note.done(ok);else note.close()}else if(ok)toast(ok,'good')}
+      catch(e){stop();if(note)note.fail('That did not work',e.message);else toast(e.message,'bad');
+        StudioAdapter.settled();if(onFail)onFail(e.message);renderAll();recoverFrom(e)}};
 
     function paintJobBackground(vals){
       alive(jobBgEl);
@@ -5640,11 +5671,20 @@ function renderStudio(){
       studioDo(()=>api(`/api/social/${encodeURIComponent(oauth)}/disconnect`,{method:'POST'}),'Account disconnected')};
     /* Publishing settings post as a whole object; send the current one with the
        single field changed so unshown values (privacy, accountId) survive. */
-    StudioAdapter.onPublishingToggle=(key,on)=>studioDo(()=>{
+    /* The state chip, not a sentence: "YouTube / On" cannot be misread, and
+       "Publishing updated" never said WHICH destination or which way it went.
+       Announced inside fn rather than off the returned promise -- studioDo
+       swallows its own failure and resolves either way, so a .then() here
+       would report a switch that had actually been refused. */
+    const DEST_NAME={youtube:'YouTube',instagram:'Instagram',tiktok:'TikTok',facebook:'Facebook'};
+    StudioAdapter.onPublishingToggle=(key,on)=>studioDo(async()=>{
       const cur=DATA?.publishingSettings||{};
       const next={...cur,[key]:{...(cur[key]||{}),enabled:on}};
       next.enabled=['youtube','instagram','facebook','tiktok'].some(p=>next[p]&&next[p].enabled);
-      return api('/api/publishing-settings',{method:'POST',body:JSON.stringify(next)})},'Publishing updated');
+      await api('/api/publishing-settings',{method:'POST',body:JSON.stringify(next)});
+      if(window.DCNotify)window.DCNotify.switched(DEST_NAME[key]||key,on,
+        on?'Approved clips will post here':'Clips will skip this destination');
+      else toast('Publishing updated','good');});
     /* Sends the whole settings object, like onPublishingToggle: the route
        rebuilds every provider from what it is given, so a patch carrying one
        key would switch the other three off. */
@@ -5739,6 +5779,9 @@ StudioAdapter.onToggleDesktopNotifs=async()=>{try{
   new Notification('DeenClipped',{body:closed
     ?'Notifications are on. You will hear when clips are ready, posted, or a lecture fails — even with DeenClipped closed.'
     :'Notifications are on while DeenClipped is open. You will hear when clips are ready, posted, or a lecture fails.'});
+  if(window.DCNotify)window.DCNotify.switched('Notifications on this device',true,closed
+    ?'Clips ready, posted and failed lectures \u2014 even with DeenClipped closed'
+    :'Clips ready, posted and failed lectures, while this tab is open');
   renderAll();
   if(window.paintAccount)window.paintAccount();
 }catch(e){toast(e.message,'bad')}};
@@ -5784,7 +5827,10 @@ StudioAdapter.onToggleTheme=()=>{
   try{ if(window.localStorage)localStorage.setItem('dcTheme',next); }catch(e){}
   dcApplyTheme(next);
   if(window.paintAccountTheme)window.paintAccountTheme();
-  toast(next==='light'?'Daylight':'Night');
+  if(window.DCNotify)window.DCNotify.say(next==='light'?'Daylight':'Night',
+    {kind:'info',icon:next==='light'?'sun':'moon',key:'theme',
+     detail:next==='light'?'The studio is lit':'The studio is dark'});
+  else toast(next==='light'?'Daylight':'Night');
 };
 /* Applied as soon as there is a body to apply it to. This script can run
    before the body exists, and a theme that only lands on the next render is a
@@ -5815,7 +5861,9 @@ StudioAdapter.onToggleEmailNotifs=async()=>{try{
      pending flag the moment the polled payload agrees with it. */
   window.__dcEmailPending=!on;
   window.__dcEmailOn=!on;
-  toast(!on?'Email notifications on':'Email notifications off');
+  if(window.DCNotify)window.DCNotify.switched('Email notifications',!on,
+    !on?'Clips ready, clips posted and failed lectures, by email':'No more product email to your inbox');
+  else toast(!on?'Email notifications on':'Email notifications off');
   if(window.paintEmailNotifRow)window.paintEmailNotifRow({emailNotifs:!on});
 }catch(e){toast(e.message,'bad')}};
 window.paintEmailNotifRow=function(data){
