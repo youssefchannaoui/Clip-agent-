@@ -81,3 +81,53 @@ test('creator_info cannot outlive the gateway', () => {
   assert.ok(/signal: options\.signal \|\| AbortSignal\.timeout\(120_000\)/.test(social),
     'the upload path keeps the long default');
 });
+
+/**
+ * The posting options moved into a sheet of their own.
+ *
+ * Youssef, 3 Sept 2026: "add settings next to tiktok and move all the settings
+ * on that button when clicked opens a new page in the middle fix the new look
+ * of the whole thing as well."
+ *
+ * The panel used to sit permanently below the platform rows, so the dialog was
+ * a list of four connections with ONE platform's posting options bolted
+ * underneath — long, and it read as though those options governed everything
+ * above them.
+ */
+test('Settings is only drawn where there are settings', () => {
+  // A Settings button on a platform with nothing behind it is a dead control.
+  assert.ok(host.includes('const HAS_SETTINGS={tiktok:true}'),
+    'the list is explicit, not a button on every row');
+  assert.ok(host.includes('HAS_SETTINGS[r.key]&&linked'),
+    'and it needs a connected account to configure');
+});
+
+test('the options open in a sheet, not inline under the list', () => {
+  assert.ok(host.includes("el.id='dcConnSheet'"), 'the sheet exists');
+  assert.ok(/sheet\.hidden=StudioAdapter\.ui\.connSettings!=='tiktok'/.test(host),
+    'and is shown only for the platform whose Settings was pressed');
+  assert.ok(host.includes('data-conn-sheet-body'), 'the panel is moved into it');
+  // The scrim matters: without one the rows behind stay clickable and a stray
+  // press changes a connection while its options are open.
+  assert.ok(host.includes('dccs-scrim'), 'the rows behind are covered');
+});
+
+test('the sheet can reach the painter across inline script scopes', () => {
+  // index.html has MULTIPLE inline script scopes and this is the FOURTH
+  // feature caught by it. The close button threw "paintConnections is not
+  // defined" and the sheet would not shut — silently, because a click
+  // handler's exception goes to the console and nowhere a user looks.
+  assert.ok(host.includes('window.paintConnections=paintConnections'),
+    'the painter is window-pinned');
+  assert.ok(host.includes('if(window.paintConnections)window.paintConnections()'),
+    'and the sheet reaches it through window, not through scope');
+});
+
+test('the row gives the count and the actions separate ground', () => {
+  // Both were given grid-area 'actions' in a first cut, so "1 OF 3 CHANNELS
+  // CONNECTED" was drawn on top of "Add another Settings Disconnect".
+  assert.ok(/grid-template-areas: 'mark who state switch' 'accounts accounts accounts accounts' 'actions actions actions actions'/.test(host),
+    'three rows, one purpose each');
+  assert.ok(host.includes('.studio-conn-accounts { grid-area: accounts; }'),
+    'the count sits in its own area, not on top of the buttons');
+});

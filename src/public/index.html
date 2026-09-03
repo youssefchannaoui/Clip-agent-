@@ -502,13 +502,63 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
    state and the switch each keep their own column instead of five things
    competing for one flex line. The actions sit on their own row as quiet text,
    because Connect and Disconnect are rare and were shouting. */
+/* THE ROW, rebuilt 3 Sept 2026. Youssef: "fix the new look of the whole thing
+   as well, make it look a lot better easy to configure less confusing but
+   looks great."
+
+   What made it confusing was density, not information: a 34px mark, a name, an
+   account, a state pill, a switch and three text buttons all on one line, then
+   a second line of actions crammed under them. The mark is bigger and the
+   switch is the only control on the top line -- the thing you press most.
+   Actions get their own row with air above them and a hairline, so they read
+   as actions rather than as more label. */
 .studio-conn-row {
-  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto;
-  grid-template-areas: 'mark who state switch' '. actions actions actions';
-  align-items: center; column-gap: 11px; row-gap: 7px;
-  padding: 12px 13px; border: 1px solid var(--dc-line-soft, #1E1E22); border-radius: 12px; background: var(--dc-bg-deepest, #0E0E11);
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  /* THREE rows, and the count gets its own. Both it and the actions were
+     given grid-area 'actions' in a first cut, so they were drawn on top of one
+     another -- "1 OF 3 CHANNELS CONNECTED" superimposed over "Add another
+     Settings Disconnect". Caught by looking at it. Order is identity, then how
+     many channels, then what you can do. */
+  grid-template-areas: 'mark who state switch' 'accounts accounts accounts accounts' 'actions actions actions actions';
+  align-items: center; column-gap: 12px; row-gap: 0;
+  padding: 14px 15px 4px; border: 1px solid var(--dc-line-soft, #1E1E22); border-radius: 14px; background: var(--dc-bg-deepest, #0E0E11);
   transition: border-color .16s ease, background .16s ease;
 }
+.studio-conn-row .studio-conn-actions {
+  margin-top: 12px; padding: 9px 0 8px; border-top: 1px solid var(--dc-line-soft, #1E1E22);
+  justify-content: flex-start; gap: 18px;
+}
+/* The settings button carries its glyph, so it reads as "configure" rather
+   than as a third word in a row of words. */
+.studio-conn-actions button i { margin-right: 5px; font-size: 13px; vertical-align: -1px; }
+.studio-conn-accounts { grid-area: accounts; }
+.studio-conn-accounts-h { display: block; padding-bottom: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--dc-ink-faint, #6E6E76); }
+
+/* ── The posting-options sheet ──────────────────────────────────────────
+   Opened from a row's Settings button and drawn OVER the connections card, so
+   the dialog stays one thing rather than growing a second screen underneath
+   the list. Scrim included: without one the rows behind stay clickable and a
+   stray press changes a connection while its options are open. */
+#dcConnSheet { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; }
+#dcConnSheet[hidden] { display: none; }
+.dccs-scrim { position: absolute; inset: 0; background: rgba(6,6,8,.72); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); border-radius: 15px; }
+.dccs-card {
+  position: relative; width: 100%; max-height: 100%; display: flex; flex-direction: column;
+  border: 1px solid var(--dc-line, #26262A); border-radius: 14px; background: var(--dc-bg, #121214);
+  box-shadow: 0 22px 60px rgba(0,0,0,.6); animation: dcPop .16s cubic-bezier(.2,.8,.2,1); overflow: hidden;
+}
+.dccs-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 11px; border-bottom: 1px solid var(--dc-line-soft, #1E1E22); }
+.dccs-head strong { flex: 1; min-width: 0; font-family: Outfit, Inter, sans-serif; font-size: 13.5px; font-weight: 600; }
+.dccs-back, .dccs-x { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border: 1px solid var(--dc-line, #26262A); border-radius: 8px; background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-soft, #A2A2AA); font-size: 15px; line-height: 1; cursor: pointer; }
+.dccs-back:hover, .dccs-x:hover { color: var(--dc-ink, #F2F2F4); border-color: var(--dc-line-hover, #34343A); }
+.dccs-body { padding: 4px 12px 12px; overflow: auto; }
+.dccs-body .dctk { border: 0; background: none; padding: 0; margin: 0; }
+/* The sheet's header already names it. The panel's own heading is kept in the
+   markup because the panel is also reachable outside the sheet in principle;
+   it is hidden here rather than deleted. The sentence under it stays -- "TikTok
+   asks that you choose these yourself" is the reason the screen exists. */
+.dccs-body .dctk > h4 { display: none; }
+@media (prefers-reduced-motion: reduce) { .dccs-card { animation: none; } }
 .studio-conn-row:hover { border-color: var(--dc-line, #26262A); background: var(--dc-bg-deep, #101013); }
 .studio-conn-mark { grid-area: mark; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); }
 .studio-conn-mark i { font-size: 17px; }
@@ -5174,8 +5224,49 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       /* Placed AFTER the row list rather than inside it: paintConnections
          rebuilds that list's innerHTML wholesale on every repaint, which would
          throw the panel away mid-edit. */
-      const host=connList&&connList.parentElement;
-      if(host&&tkEl.parentElement!==host)host.insertBefore(tkEl,connList.nextSibling);
+      /* IN A SHEET OF ITS OWN, not inline under the list. Youssef, 3 Sept
+         2026: "add settings next to tiktok and move all the settings on that
+         button when clicked opens a new page in the middle."
+
+         It used to sit permanently below the platform rows, so the dialog was
+         a list of four connections with one platform's posting options bolted
+         underneath -- long, and it read as though those options belonged to
+         everything above them. The panel itself is untouched: its per-account
+         privacy, the interaction toggles and the commercial disclosure are
+         what TikTok's review checks, and this moves WHERE it is drawn, not
+         what it does. */
+      const sheet=connSettingsSheet();
+      const body=sheet.querySelector('[data-conn-sheet-body]');
+      if(body&&tkEl.parentElement!==body){body.innerHTML='';body.appendChild(tkEl)}
+      sheet.querySelector('[data-conn-sheet-title]').textContent='TikTok posting options';
+      sheet.hidden=StudioAdapter.ui.connSettings!=='tiktok';
+    }
+
+    /* The sheet itself: one node, reused, living inside the connections card so
+       it is dismissed with it and cannot outlive the dialog that owns it. */
+    function connSettingsSheet(){
+      let el=document.getElementById('dcConnSheet');
+      if(!el){
+        el=document.createElement('div');
+        el.id='dcConnSheet';
+        el.hidden=true;
+        el.innerHTML=`<div class="dccs-scrim" data-conn-sheet-close></div>
+          <div class="dccs-card" role="dialog" aria-modal="true" aria-label="Posting options">
+            <div class="dccs-head">
+              <button type="button" class="dccs-back" data-conn-sheet-close aria-label="Back to connections"><i class="ph ph-arrow-left"></i></button>
+              <strong data-conn-sheet-title>Posting options</strong>
+              <button type="button" class="dccs-x" data-conn-sheet-close aria-label="Close">&times;</button>
+            </div>
+            <div class="dccs-body" data-conn-sheet-body></div>
+          </div>`;
+        el.addEventListener('click',e=>{
+          if(!e.target.closest('[data-conn-sheet-close]'))return;
+          StudioAdapter.ui.connSettings=null;if(window.paintConnections)window.paintConnections();
+        });
+        const card=document.querySelector('#studioConn .studio-conn-card');
+        (card||document.body).appendChild(el);
+      }
+      return el;
     }
 
     /* YouTube's posting options, built the same way and for the same reason:
@@ -5400,6 +5491,14 @@ function renderStudio(){
           </label>`}).join('')}
       </div>`;
     }
+    /* Which platforms have posting options worth a screen of their own. Only
+       TikTok today: its guidelines make the audience, the interaction settings
+       and the commercial disclosure a per-post decision the creator must make,
+       so there is a real panel behind this. A Settings button on a platform
+       with nothing behind it is a dead control (invariant 9), so this is a
+       list rather than a button on every row. */
+    const HAS_SETTINGS={tiktok:true};
+
     function paintConnections(){
       if(!DATA)return;
       const rows=StudioAdapter.bindings(DATA).connections;
@@ -5427,6 +5526,7 @@ function renderStudio(){
             data-conn-toggle="${i}" ${linked?'':'disabled'}><i></i></button>
           <span class="studio-conn-actions">
             <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}>${linked?((r.accounts||[]).length<Number(r.maxAccounts||1)?'Add another':'Reconnect'):'Connect'}</button>
+            ${HAS_SETTINGS[r.key]&&linked?`<button type="button" data-conn-settings="${esc(r.key)}"><i class="ph ph-sliders-horizontal"></i>Settings</button>`:''}
             <button type="button" class="danger" data-conn-disconnect="${i}" ${linked?'':'disabled'}>Disconnect</button>
           </span>${accountPicker(r,i)}</div>`}).join('');
       $$('[data-conn-toggle]').forEach(b=>b.onclick=async()=>{
@@ -5450,6 +5550,8 @@ function renderStudio(){
       $$('[data-conn-disconnect]').forEach(b=>b.onclick=()=>{
         const p=rows[Number(b.dataset.connDisconnect)];StudioAdapter.ui.connProvider=p.key;
         StudioAdapter.bindings(DATA).disconnect({preventDefault(){}})});
+      $$('[data-conn-settings]').forEach(b=>b.onclick=()=>{
+        StudioAdapter.ui.connSettings=b.dataset.connSettings;paintConnections();});
       $$('[data-conn-upgrade]').forEach(b=>b.onclick=()=>{
         closeConn();StudioAdapter.ui.screen='tokens';StudioAdapter.ui.tokensAnimAt=Date.now();renderAll();});
       $$('[data-conn-drop]').forEach(b=>b.onclick=async e=>{
@@ -5467,6 +5569,15 @@ function renderStudio(){
         paintConnections();});
       paintTikTokOptions();
     }
+    /* index.html has MULTIPLE inline script scopes, and this is the FOURTH
+       feature to be caught by it (fireClipNotifs, paintAccount, openBug, now
+       this). paintTikTokOptions and the settings sheet live in a different
+       scope from paintConnections, so the sheet's close button threw
+       "paintConnections is not defined" and the sheet simply would not shut --
+       silently, because a click handler's exception goes to the console and
+       nowhere a user looks. Anything reached across scopes goes through
+       window. */
+    window.paintConnections=paintConnections;
     StudioAdapter.onOpenConnections=()=>{paintConnections();connEls.root.classList.remove('hide')};
     /* /api/clip-settings validates all three fields together, so a partial patch
        has to be merged onto what the account already has or it 400s.

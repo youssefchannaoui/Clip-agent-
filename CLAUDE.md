@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1180 JS + 572 Python**
+- `npm test` and `npm run check` must pass. Currently **1184 JS + 572 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3967,6 +3967,40 @@ Three faults, none of which errors or logs. The dialog simply feels broken.
   do I know I get three?" is a real question and this is the screen that
   answers it (v3.72.1); the plan name goes, because the header pill already
   carries it.
+
+## TikTok's posting options moved into a sheet of their own (v3.103.0)
+
+Youssef, 3 Sept 2026: "add settings next to tiktok and move all the settings on
+that button when clicked opens a new page in the middle fix the new look of the
+whole thing as well, make it look a lot better easy to congiure less confusing
+but looks great."
+
+- **The panel is unchanged; only where it is drawn.** Its per-account privacy,
+  the interaction toggles, the commercial disclosure and the Music Usage
+  Confirmation line are what TikTok's review checks, so this moves the mount
+  point and touches nothing inside. It used to sit permanently under the
+  platform list, which made the dialog long AND read as though one platform's
+  posting options governed the four connections above them.
+- **`HAS_SETTINGS` is an explicit list, not a button on every row.** TikTok is
+  the only platform with a real panel behind it today; a Settings button on the
+  others would be a control that opens nothing (invariant 9).
+- **The sheet lives INSIDE the connections card**, so it is dismissed with the
+  dialog and cannot outlive it, and it carries a scrim -- without one the rows
+  behind stay clickable and a stray press changes a connection while its
+  options are open. Back arrow, ×, and the scrim all close it; all three were
+  clicked rather than assumed.
+- **The row is three grid rows now**: identity, channel count, actions. A first
+  cut gave the count and the actions the same `grid-area` and they were drawn
+  ON TOP of each other -- "1 OF 3 CHANNELS CONNECTED" superimposed over "Add
+  another Settings Disconnect". Found by looking at it, which is the rule this
+  file has repeated since August.
+- **THE INLINE-SCRIPT-SCOPE TRAP, FOR THE FOURTH TIME.** `paintTikTokOptions`
+  and the sheet live in a different scope from `paintConnections`, so the close
+  button threw "paintConnections is not defined" and the sheet would not shut
+  -- silently, because a click handler's exception goes to the console and
+  nowhere a user looks. It is `window.paintConnections` now, like
+  `fireClipNotifs`, `paintAccount` and `openBug` before it. Anything reached
+  across scopes in index.html goes through `window`, every time.
 
 ## Open items
 
