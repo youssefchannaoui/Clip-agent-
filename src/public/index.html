@@ -531,8 +531,35 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
 /* The settings button carries its glyph, so it reads as "configure" rather
    than as a third word in a row of words. */
 .studio-conn-actions button i { margin-right: 5px; font-size: 13px; vertical-align: -1px; }
-.studio-conn-accounts { grid-area: accounts; }
+/* A COLUMN. Left to the row's own grid the channel labels flowed inline and
+   wrapped two-per-line, which reads as a tag cloud rather than a list of
+   accounts. Each channel gets its own full-width row. */
+.studio-conn-accounts { grid-area: accounts; display: flex; flex-direction: column; align-items: stretch; width: 100%; min-width: 0; }
 .studio-conn-accounts-h { display: block; padding-bottom: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--dc-ink-faint, #6E6E76); }
+
+/* ── The connected channels ─────────────────────────────────────────────
+   One row per channel, with its own face and its own disconnect. The list
+   used to appear only once a SECOND account existed, so a platform with one
+   channel showed a count and no channel at all. */
+.studio-conn-account {
+  width: 100%; box-sizing: border-box;
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  align-items: center; gap: 10px; padding: 7px 9px; margin-top: 6px;
+  border: 1px solid var(--dc-line-soft, #1E1E22); border-radius: 10px;
+  background: var(--dc-bg, #121214); cursor: pointer;
+  transition: border-color .14s ease, background .14s ease;
+}
+.studio-conn-account:hover { border-color: var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); }
+.studio-conn-account.is-on { border-color: rgba(217,180,120,.32); }
+.studio-conn-face { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--dc-bg-raised, #17171A); border: 1px solid var(--dc-line, #26262A); }
+.studio-conn-face img { width: 100%; height: 100%; object-fit: cover; }
+.studio-conn-face-i { font-size: 11px; font-weight: 700; color: var(--dc-ink-dim, #8B8B93); }
+.studio-conn-acct-who { min-width: 0; }
+.studio-conn-acct-who b { display: block; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-conn-acct-who span { display: block; margin-top: 1px; font-size: 10.5px; color: var(--dc-ink-faint, #6E6E76); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-conn-account input { accent-color: var(--dc-gold, #D9B478); width: 15px; height: 15px; cursor: pointer; }
+.studio-conn-drop { width: 22px; height: 22px; flex: none; border: 0; border-radius: 6px; background: none; color: var(--dc-ink-faint, #6E6E76); font-size: 15px; line-height: 1; cursor: pointer; }
+.studio-conn-drop:hover { background: rgba(227,146,140,.12); color: var(--dc-n-e3928c, #E3928C); }
 
 /* ── The posting-options sheet ──────────────────────────────────────────
    Opened from a row's Settings button and drawn OVER the connections card, so
@@ -652,15 +679,21 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
 /* The multi-account picker. Its own row under the platform line so three Pages
    wrap onto their own line at 375px instead of squeezing the switch off the
    right edge. */
-#studioConnList .studio-conn-accounts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center;
-  gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.07); }
+/* A STACK, not a wrapping row of pills. These were chips when a channel was a
+   name and nothing else; now each row carries a face, a name and a handle, and
+   two of them side by side leave a ragged third on its own line. Youssef,
+   3 Sept 2026: "no layout to see 3 connected channels with each @".
+   Id-scoped because the older chip rule was too, and specificity decides. */
+#studioConnList .studio-conn-accounts { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: stretch;
+  gap: 0; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.07); }
 #studioConnList .studio-conn-accounts-h { width: 100%; font-size: 11px; letter-spacing: .04em;
   text-transform: uppercase; color: var(--dc-n-8a8a93, #8A8A93); margin-bottom: 2px; }
 /* The headroom line under a single connected channel: what the plan still
    allows, in the place where somebody would go looking for it. */
-#studioConnList .studio-conn-account { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-  font-size: 12px; padding: 5px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,.12);
-  color: var(--dc-n-c9c9d1, #C9C9D1); transition: background .15s ease, border-color .15s ease, color .15s ease; }
+#studioConnList .studio-conn-account { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  align-items: center; gap: 10px; cursor: pointer; font-size: 12px; padding: 7px 9px; margin-top: 6px;
+  border-radius: 10px; border: 1px solid var(--dc-line-soft, #1E1E22); background: var(--dc-bg, #121214);
+  color: var(--dc-ink-soft, #A2A2AA); transition: background .15s ease, border-color .15s ease, color .15s ease; }
 #studioConnList .studio-conn-account:hover { border-color: rgba(217,180,120,.5); }
 #studioConnList .studio-conn-account.is-on { border-color: var(--dc-gold, #D9B478); color: var(--dc-n-f2e4c9, #F2E4C9); background: rgba(217,180,120,.12); }
 #studioConnList .studio-conn-account input:disabled { cursor: not-allowed; }
@@ -5444,21 +5477,19 @@ function renderStudio(){
          about the other two they are paying for -- "how do I know I can
          connect three?" had no answer on the screen that answers it. The
          Connect button beside this already reads "Add another". */
-      if(accounts.length<2){
-        if(max<2||accounts.length===0)return '';
-        /* ONE line, not a block. This used to be a heading plus "Press Connect
-           again to add another." -- under EVERY platform, so a dialog with four
-           connected platforms carried eight lines of near-identical
-           boilerplate that buried the actual controls (Youssef, 3 Sept 2026:
-           "so many issues with connecting tiktok its a mess", with a
-           screenshot of exactly that). The sentence also said what the button
-           beside it already says in two words: it reads "Add another".
-           The COUNT stays, because "how do I know I get three?" is a real
-           question and this is the screen that answers it (v3.72.1); the plan
-           name goes, because it is in the header pill and repeating it four
-           times is not information. */
-        return `<div class="studio-conn-accounts"><span class="studio-conn-accounts-h">
-          ${accounts.length} of ${max} channels connected</span></div>`;
+      /* THE CONNECTED CHANNELS ARE ALWAYS LISTED, one row each. Youssef,
+         3 Sept 2026, comparing us with OpusClip: "ours is good but not great
+         and no layout to see 3 connected channels with each @".
+
+         The list used to appear only once a SECOND account existed, so a
+         platform with one channel showed a count and no channel -- and even at
+         three, the rows were bare names. Each row now carries the account's own
+         avatar and, where the platform actually gives us one, its @handle.
+         Where it does not, the display name stands alone: inventing an @ from a
+         display name would be making up a handle that may not exist. */
+      if(accounts.length===0)return '';
+      if(max<2&&accounts.length<2){
+        return `<div class="studio-conn-accounts">${accountRows(r,i,accounts,accounts.map(a=>a.id),1,false)}</div>`;
       }
       /* Locked rather than absent. With several accounts connected and a plan
          that allows one, the picker simply not being drawn reads as the app
@@ -5480,16 +5511,34 @@ function renderStudio(){
       const chosen=r.accountIds&&r.accountIds.length?r.accountIds:[];
       const atCap=chosen.length>=max;
       return `<div class="studio-conn-accounts">
-        <span class="studio-conn-accounts-h">Posting to ${chosen.length} of ${max} allowed &middot; ${esc(tier)}</span>
-        ${accounts.map(a=>{
-          const on=chosen.indexOf(a.id)>-1;
-          return `<label class="studio-conn-account${on?' is-on':''}">
-            <input type="checkbox" data-conn-account="${i}" value="${esc(a.id)}" ${on?'checked':''} ${!on&&atCap?'disabled':''}>
-            <span>${esc(a.name||a.id)}</span>
-            ${ownCredential?`<button type="button" class="studio-conn-drop" data-conn-drop="${i}" data-account="${esc(a.id)}"
-              title="Disconnect ${esc(a.name||a.id)}" aria-label="Disconnect ${esc(a.name||a.id)}">&times;</button>`:''}
-          </label>`}).join('')}
+        <span class="studio-conn-accounts-h">Posting to ${chosen.length} of ${max} allowed</span>
+        ${accountRows(r,i,accounts,chosen,max,true)}
       </div>`;
+    }
+
+    /* One row per connected channel: avatar, name, handle where the platform
+       gives us one, a tick for "post here", and its own disconnect. */
+    function accountRows(r,i,accounts,chosen,max,pickable){
+      const ownCredential=r.key==='youtube'||r.key==='tiktok';
+      const atCap=chosen.length>=max;
+      return accounts.map(a=>{
+        const on=chosen.indexOf(a.id)>-1;
+        const label=a.name||a.id;
+        /* TikTok is the one platform that hands us a real username. Everywhere
+           else we have a display name and nothing else, and an @ invented from
+           a display name is a handle that may not exist. */
+        const handle=(a.creatorInfo&&a.creatorInfo.creator_username)?'@'+a.creatorInfo.creator_username:'';
+        const initials=String(label).trim().slice(0,1).toUpperCase()||'?';
+        const face=a.avatar
+          ? `<img src="${esc(a.avatar)}" alt="" loading="lazy">`
+          : `<span class="studio-conn-face-i">${esc(initials)}</span>`;
+        return `<label class="studio-conn-account${on?' is-on':''}">
+          <span class="studio-conn-face">${face}</span>
+          <span class="studio-conn-acct-who"><b>${esc(label)}</b>${handle?`<span>${esc(handle)}</span>`:''}</span>
+          ${pickable?`<input type="checkbox" data-conn-account="${i}" value="${esc(a.id)}" ${on?'checked':''} ${!on&&atCap?'disabled':''}>`:''}
+          ${ownCredential?`<button type="button" class="studio-conn-drop" data-conn-drop="${i}" data-account="${esc(a.id)}"
+            title="Disconnect ${esc(label)}" aria-label="Disconnect ${esc(label)}">&times;</button>`:''}
+        </label>`}).join('');
     }
     /* Which platforms have posting options worth a screen of their own. Only
        TikTok today: its guidelines make the audience, the interaction settings

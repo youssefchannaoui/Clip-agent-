@@ -65,7 +65,11 @@ test('the headroom hint does not repeat the button beside it', () => {
     'the sentence duplicated the Add another button');
   assert.ok(!host.includes('studio-conn-headroom'),
     'and its style went with it rather than being left behind');
-  assert.ok(host.includes('channels connected'), 'the COUNT stays — it answers a real question');
+  // The count itself stays — "how do I know I get three?" is a real question
+  // and this is the screen that answers it. Its wording moved when the channels
+  // became rows: it now reads "Posting to N of MAX allowed" above them.
+  assert.ok(/Posting to \$\{chosen\.length\} of \$\{max\} allowed/.test(host),
+    'the count stays, above the channel rows');
 });
 
 test('creator_info cannot outlive the gateway', () => {
@@ -128,6 +132,44 @@ test('the row gives the count and the actions separate ground', () => {
   // CONNECTED" was drawn on top of "Add another Settings Disconnect".
   assert.ok(/grid-template-areas: 'mark who state switch' 'accounts accounts accounts accounts' 'actions actions actions actions'/.test(host),
     'three rows, one purpose each');
-  assert.ok(host.includes('.studio-conn-accounts { grid-area: accounts; }'),
-    'the count sits in its own area, not on top of the buttons');
+  assert.ok(/\.studio-conn-accounts \{ grid-area: accounts;/.test(host),
+    'the channels sit in their own area, not on top of the buttons');
+});
+
+/**
+ * Every connected channel gets a row, with its handle.
+ *
+ * Youssef, 3 Sept 2026, comparing us with OpusClip: "ours is good but not
+ * great and no layout to see 3 connected channels with each @".
+ *
+ * The list used to appear only once a SECOND account existed, so a platform
+ * with one channel showed a count and no channel — and even at three, the rows
+ * were bare names with no way to tell one account from another.
+ */
+test('a connected channel is always listed, even when there is one', () => {
+  const at = host.indexOf('function accountPicker');
+  const body = host.slice(at, at + 1600);
+  assert.ok(body.includes("if(accounts.length===0)return ''"),
+    'nothing to list only when there is nothing connected');
+  assert.ok(!/if\(accounts\.length<2\)\{\s*if\(max<2\|\|accounts\.length===0\)return ''/.test(body),
+    'a single channel must not be hidden behind a count');
+});
+
+test('each channel row carries its own face, handle and disconnect', () => {
+  const at = host.indexOf('function accountRows');
+  assert.ok(at > -1, 'the rows are built by their own function');
+  const body = host.slice(at, at + 1600);
+  assert.ok(body.includes('studio-conn-face'), 'an avatar, or its initial');
+  assert.ok(body.includes('creatorInfo.creator_username'), 'the real handle where the platform gives one');
+  assert.ok(body.includes('data-conn-drop'), 'and its own disconnect');
+  // Inventing an @ from a display name would be making up a handle that may
+  // not exist, so it is shown only where the platform actually supplies one.
+  assert.ok(body.includes("?'@'+a.creatorInfo.creator_username:''"),
+    'no handle is fabricated from a display name');
+});
+
+test('the channels stack rather than wrapping into a tag cloud', () => {
+  assert.ok(/\.studio-conn-accounts \{ grid-area: accounts; display: flex; flex-direction: column;/.test(host),
+    'a column, or the labels flow inline and wrap two-per-line');
+  assert.ok(/\.studio-conn-account \{\s*width: 100%;/.test(host), 'and each row fills the width');
 });

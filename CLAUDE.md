@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1184 JS + 572 Python**
+- `npm test` and `npm run check` must pass. Currently **1187 JS + 572 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4001,6 +4001,33 @@ but looks great."
   nowhere a user looks. It is `window.paintConnections` now, like
   `fireClipNotifs`, `paintAccount` and `openBug` before it. Anything reached
   across scopes in index.html goes through `window`, every time.
+
+## Every connected channel is a row now (v3.104.0, 3 Sept 2026)
+
+Youssef, comparing us with OpusClip: "ours is good but not great and no layout
+to see 3 connected channels with each @".
+
+- **The channel list appeared only once a SECOND account existed.** So a
+  platform with one connected channel showed a COUNT and no channel -- the app
+  knew the account's name and did not print it. Every connected channel is a
+  row now, at one as at three.
+- **Each row carries the account's own face, name and handle**, plus its tick
+  (post here) and its own disconnect. The face is the platform's avatar where
+  there is one and the name's initial where there is not.
+- **The @handle is shown ONLY where the platform actually gives us one.**
+  TikTok's `creator_info` carries `creator_username`; YouTube and Meta hand us a
+  display name and nothing else. An @ invented from a display name is a handle
+  that may not exist, so it is omitted rather than guessed -- the name stands
+  alone.
+- **The container is a flex COLUMN.** Left to the row's own grid the labels
+  flowed inline and wrapped two-per-line, which reads as a tag cloud rather
+  than a list of accounts; and without `width: 100%` on the row they
+  shrink-wrapped to their text and sat centred. Measured after: three rows,
+  410px each, no page overflow.
+- Two tests written earlier the same day asserted strings this moved
+  ("channels connected", and the exact one-line `.studio-conn-accounts` rule).
+  Both were updated to follow the code rather than deleted -- the behaviour
+  they protect is unchanged.
 
 ## Open items
 
