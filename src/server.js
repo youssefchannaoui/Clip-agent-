@@ -338,7 +338,10 @@ function clientIp(req) {
  */
 function assertVerified(user) {
   if (auth.isVerified(user)) return;
-  const error = new Error('Confirm your email address first — we sent you a link. Check your inbox, including spam.');
+  // Names the CODE, because that is what the mail now leads with and what the
+  // /verify screen asks for. Reaching this at all is the fallback path -- a
+  // new account is sent to that screen before it ever sees the app.
+  const error = new Error('Confirm your email address first — we sent you a six-digit code. Check your inbox, including spam.');
   error.statusCode = 403;
   error.needsVerification = true;
   throw error;
@@ -1038,6 +1041,14 @@ async function route(req, res, url) {
         return redirect(res, `/login?error=${encodeURIComponent('Too many new accounts from this connection today. Sign in to an existing account, or try again tomorrow.')}`);
       }
     }
+    // The robot box, on the door where a robot costs something: signing up
+    // mints an account with free tokens that cost real worker time, and the
+    // per-IP daily cap was the only thing in the way. Checked BEFORE the
+    // password is hashed -- hashing is deliberately expensive, and letting an
+    // unsolved challenge reach it hands out a cheap way to burn the CPU.
+    if (auth.turnstileEnabled() && !(await auth.verifyTurnstile(body['cf-turnstile-response'], ip))) {
+      return redirect(res, `/login?error=${encodeURIComponent('That did not confirm you are human. Try the box again.')}&returnTo=${encodeURIComponent(body.returnTo || '/app')}`);
+    }
     try {
       const user = await auth.emailLogin(body.email || '', body.password || '', body.name || '');
       throttle.succeed(keys);
@@ -1045,6 +1056,15 @@ async function route(req, res, url) {
       // Fire and forget: a provider outage must not stop someone signing in.
       if (!known) auth.sendVerification(user, config.publicBaseUrl || `https://${req.headers.host || ''}`).catch(() => {});
       const session = auth.createSession(user, { provider: 'email' });
+      // A NEW account goes to the code screen, not the app. The confirmation
+      // then happens where it makes sense -- while they are still thinking
+      // about their email address -- instead of surfacing later as "imports
+      // are blocked" in the middle of starting a lecture. An existing account
+      // signing in is untouched, and so is a deployment that cannot send mail
+      // (auth.isVerified is true for everyone there).
+      if (!known && !auth.isVerified(user)) {
+        return redirectWithCookies(res, `/verify?returnTo=${encodeURIComponent(body.returnTo || '/app')}`, auth.cookieHeaders(session));
+      }
       return redirectWithCookies(res, billing.postLoginRedirect(user, body.returnTo || '/app'), auth.cookieHeaders(session));
     } catch (error) {
       throttle.fail(keys);
@@ -1067,6 +1087,56 @@ async function route(req, res, url) {
       throttle.fail(keys);
       return redirect(res, `/login?error=${encodeURIComponent(error.message)}`);
     }
+  }
+  if (method === 'GET' && pathname === '/verify') {
+    // Nothing to confirm without an account to confirm, and nothing to ask
+    // someone who is already confirmed.
+    if (!currentUser) return redirect(res, '/login?returnTo=%2Fapp');
+    if (auth.isVerified(currentUser)) return redirect(res, '/app');
+    return html(res, 200, auth.verifyPage({
+      email: currentUser.email || '',
+      error: url.searchParams.get('error') || '',
+      info: url.searchParams.get('info') || '',
+      returnTo: url.searchParams.get('returnTo') || '/app',
+    }));
+  }
+  if (method === 'POST' && pathname === '/auth/verify-code') {
+    const body = await formBody(req);
+    const back = body.returnTo || '/app';
+    if (!currentUser) return redirect(res, '/login?returnTo=%2Fapp');
+    // Six digits is a million guesses. The record allows six attempts, and
+    // this allows a burst of them per address and IP -- the same throttle the
+    // sign-in door uses, so a script cannot spend somebody else's six for
+    // them in a second.
+    const keys = throttle.keysFor(clientIp(req), `verify:${currentUser.id}`);
+    const gate = throttle.check(keys);
+    if (!gate.allowed) return tooManyAttempts(res, gate.retryAfterSec, back);
+    const result = auth.consumeVerificationCode(currentUser.id, body.code || '');
+    if (result.ok) {
+      throttle.succeed(keys);
+      return redirect(res, billing.postLoginRedirect(result.user, back));
+    }
+    throttle.fail(keys);
+    const said = result.reason === 'expired'
+      ? 'That code has expired. Send another and try again.'
+      : result.reason === 'spent'
+        ? 'Too many wrong codes. Send another and try again.'
+        : 'That code is not right. Check the email and try again.';
+    return redirect(res, `/verify?error=${encodeURIComponent(said)}&returnTo=${encodeURIComponent(back)}`);
+  }
+  if (method === 'POST' && pathname === '/auth/verify-resend') {
+    const body = await formBody(req);
+    const back = body.returnTo || '/app';
+    if (!currentUser) return redirect(res, '/login?returnTo=%2Fapp');
+    // Resending mints a NEW code and retires the old one, which is also how a
+    // person recovers from spending their six attempts. Rate-limited, or the
+    // button is a way to have us mail somebody repeatedly.
+    const again = throttle.rateLimit(`verify-send:${currentUser.id}`, 5, 60 * 60_000);
+    if (!again.allowed) {
+      return redirect(res, `/verify?error=${encodeURIComponent('We have sent several already. Check your spam folder, or try again later.')}&returnTo=${encodeURIComponent(back)}`);
+    }
+    await auth.sendVerification(currentUser, config.publicBaseUrl || `https://${req.headers.host || ''}`).catch(() => {});
+    return redirect(res, `/verify?info=${encodeURIComponent('Sent. It can take a minute to arrive.')}&returnTo=${encodeURIComponent(back)}`);
   }
   if (method === 'GET' && pathname === '/auth/verify') {
     const confirmed = auth.consumeVerification(url.searchParams.get('token') || '');
@@ -2754,9 +2824,14 @@ const INLINE_SCRIPT_HASHES = (() => {
  * the script side is kept strict.
  */
 function securityHeaders(res, { pathname }) {
+  const challenge = auth.turnstileEnabled() && pathname === '/login';
   const csp = [
     "default-src 'self'",
-    `script-src 'self' ${INLINE_SCRIPT_HASHES.join(' ')}`.trim(),
+    // Turnstile's script and the iframe it opens, and ONLY on the page that
+    // carries the box. Widening script-src app-wide for a widget that appears
+    // on one form would spend the strictness that makes this policy worth
+    // having. Both lines are absent entirely when the keys are not set.
+    `script-src 'self' ${INLINE_SCRIPT_HASHES.join(' ')}${challenge ? ' https://challenges.cloudflare.com' : ''}`.trim(),
     // The icon font is served from unpkg: the generated stylesheet @imports
     // two Phosphor sheets from there, and those pull their font files from the
     // same host. Leaving it out blocked every icon in the product -- the nav,
@@ -2777,7 +2852,7 @@ function securityHeaders(res, { pathname }) {
     "manifest-src 'self'",
     // Nothing here is ever framed, and nothing may be framed into it.
     "frame-ancestors 'none'",
-    "frame-src https://js.stripe.com https://checkout.stripe.com",
+    `frame-src https://js.stripe.com https://checkout.stripe.com${challenge ? ' https://challenges.cloudflare.com' : ''}`,
     "base-uri 'self'",
     "form-action 'self' https://checkout.stripe.com",
     "object-src 'none'",

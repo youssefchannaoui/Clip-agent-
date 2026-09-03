@@ -325,6 +325,48 @@ const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
  * verified, exactly as before. A provider signing in through Google or Apple
  * is already proof of the address, so those accounts are verified on arrival.
  */
+/**
+ * Cloudflare Turnstile — the "are you a robot" box.
+ *
+ * Youssef, 3 Sept 2026: "when signing up to an account firstfly add cloudflare
+ * are you a robot box." Sign-up here mints an account with free tokens that
+ * cost real worker time, so the per-IP daily cap was the only thing standing
+ * between a script and a hundred of them.
+ *
+ * INERT without keys, deliberately: an unconfigured deployment signs people up
+ * exactly as it did, rather than rendering a box that cannot load and locking
+ * everybody out. That is also what keeps the test suite honest — it signs up
+ * dozens of accounts and none of them can solve a challenge.
+ */
+export function turnstileEnabled() {
+  return Boolean(config.turnstileSiteKey && config.turnstileSecret);
+}
+
+export async function verifyTurnstile(response, ip) {
+  if (!turnstileEnabled()) return true;
+  const answer = String(response || '');
+  if (!answer) return false;
+  const form = new URLSearchParams({ secret: config.turnstileSecret, response: answer });
+  // The address is optional and Cloudflare says so; sending a proxy's own IP
+  // would make every real person look like one visitor.
+  if (ip && !/^(127\.|::1)/.test(ip)) form.set('remoteip', ip);
+  try {
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+      signal: AbortSignal.timeout(6000),
+    });
+    const body = await res.json().catch(() => ({}));
+    return body.success === true;
+  } catch {
+    // FAIL CLOSED. A challenge that cannot be checked has not been passed, and
+    // an outage at Cloudflare is a bad hour; an open door is worse. The person
+    // is told to try again rather than being let through unverified.
+    return false;
+  }
+}
+
 export function verificationRequired() {
   return mailer.configured();
 }
@@ -337,18 +379,76 @@ export function isVerified(user) {
   return Object.keys(user.providers || {}).some(key => key === 'google' || key === 'apple');
 }
 
-/** A fresh single-use token. Stored as a hash, like sessions. */
+/**
+ * A six-digit code, drawn from the same source as every other secret here.
+ *
+ * `% 1000000` on a random 32-bit number is very slightly biased towards low
+ * codes. Nobody could exploit that against a six-attempt limit, but rejection
+ * sampling costs one loop and removes the argument entirely.
+ */
+function sixDigitCode() {
+  const limit = 4294967296 - (4294967296 % 1000000);
+  for (;;) {
+    const n = crypto.randomBytes(4).readUInt32BE(0);
+    if (n < limit) return String(n % 1000000).padStart(6, '0');
+  }
+}
+
+/**
+ * A fresh single-use token AND a six-digit code. Both are stored as hashes,
+ * like sessions, and both point at the same record — so confirming either way
+ * consumes the other, and a code cannot be replayed after the link was used.
+ *
+ * The code exists because the link did not fit the flow. Someone signs up,
+ * lands in the app, sets a lecture going, and only THEN meets "your email
+ * address is not confirmed yet, so imports are blocked" — a dialog about
+ * something they did five minutes ago, in the middle of something else.
+ * Youssef, 3 Sept 2026: "add verifcation so this doesnt pop up so we send them
+ * a 6 digit code to their email."
+ */
 export function createVerification(user) {
   ensureAuthState();
   if (!Array.isArray(state.authVerifications)) state.authVerifications = [];
   const raw = token(24);
+  const code = sixDigitCode();
   state.authVerifications = state.authVerifications
     .filter(item => item.userId !== user.id && Number(item.expiresAt || 0) > now());
   state.authVerifications.push({
-    userId: user.id, hash: sha256(raw), createdAt: now(), expiresAt: now() + VERIFY_TTL_MS,
+    userId: user.id, hash: sha256(raw), codeHash: sha256(code),
+    // A six-digit code is a million guesses, and an online guesser gets as many
+    // as this allows. Six, then the record is spent -- resending issues a new
+    // one, which is the door a real person uses anyway.
+    attempts: 0, createdAt: now(), expiresAt: now() + VERIFY_TTL_MS,
   });
   save();
-  return raw;
+  return { raw, code };
+}
+
+/**
+ * Confirm by code. Scoped to ONE user: the code is only six digits, so a
+ * global lookup would let a guesser hit every pending sign-up at once instead
+ * of one account's six attempts.
+ */
+export function consumeVerificationCode(userId, code) {
+  ensureAuthState();
+  const clean = String(code || '').replace(/\D/g, '');
+  const record = (state.authVerifications || [])
+    .find(item => item.userId === userId && Number(item.expiresAt || 0) > now());
+  if (!record) return { ok: false, reason: 'expired' };
+  if (Number(record.attempts || 0) >= 6) return { ok: false, reason: 'spent' };
+  if (clean.length !== 6 || !record.codeHash || sha256(clean) !== record.codeHash) {
+    record.attempts = Number(record.attempts || 0) + 1;
+    save();
+    return { ok: false, reason: record.attempts >= 6 ? 'spent' : 'wrong' };
+  }
+  state.authVerifications = (state.authVerifications || []).filter(item => item !== record);
+  const user = (state.authUsers || []).find(item => item.id === userId);
+  if (!user) { save(); return { ok: false, reason: 'expired' }; }
+  user.emailVerifiedAt = now();
+  user.updatedAt = now();
+  save();
+  log(`${user.email || user.id} confirmed their email address with a code.`, 'info', user.id);
+  return { ok: true, user };
 }
 
 /** Consume a token. Returns the user, or null. Single use by deletion. */
@@ -370,9 +470,11 @@ export function consumeVerification(raw) {
 /** Send (or re-send) the confirmation. Never throws at the caller. */
 export async function sendVerification(user, baseUrlValue) {
   if (!verificationRequired() || !user?.email || isVerified(user)) return false;
-  const raw = createVerification(user);
+  const { raw, code } = createVerification(user);
   const link = `${String(baseUrlValue || config.publicBaseUrl || '').replace(/\/+$/, '')}/auth/verify?token=${encodeURIComponent(raw)}`;
-  const message = mailer.verificationMessage(link);
+  // Both roads, one record. The code is what the sign-up flow asks for; the
+  // link still works, for the person who opens the mail on another device.
+  const message = mailer.verificationMessage(link, code);
   return mailer.send({ to: user.email, ...message });
 }
 
@@ -790,7 +892,58 @@ export function loginPage({ error = '', returnTo = '/', info = '' } = {}) {
   @media(max-width:820px){.dc-auth-nav-inner,.dc-auth-shell{width:min(calc(100% - 32px),680px)}.dc-auth-shell{min-height:auto;padding:28px 0 50px;grid-template-columns:1fr;gap:38px}.dc-auth-card{order:1;max-width:none;justify-self:stretch}.dc-auth-story{order:2}.dc-auth-story h1{font-size:44px;max-width:650px}.dc-product-stage{max-width:none;height:300px}}
   @media(max-width:540px){.dc-auth-nav{height:62px}.dc-auth-nav-inner{width:calc(100% - 28px)}.dc-brand-copy small{display:none}.dc-back-link{min-height:38px;padding:0 11px;font-size:12px}.dc-auth-shell{width:calc(100% - 28px);padding:18px 0 42px;gap:36px}.dc-auth-card{padding:23px;border-radius:18px}.dc-auth-card h2{font-size:27px}.dc-auth-story h1{font-size:38px}.dc-story-copy{font-size:14px}.dc-capabilities i{display:none}.dc-capabilities{gap:8px}.dc-product-stage{height:226px;margin-top:24px;border-radius:16px}.dc-product-stage>img{border-radius:15px}.dc-reel{width:62px}.dc-reel.one{left:-9px;bottom:-15px}.dc-reel.two{right:-8px;top:-13px}.dc-status.found{left:18px}.dc-status.ready{right:12px}.dc-status{padding:7px 9px}.dc-status-icon{width:24px;height:24px}.dc-status small{display:none}}
   @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition-duration:.01ms!important}}
-  .dc-skip{position:absolute;left:-9999px;top:0;z-index:99;padding:11px 16px;border-radius:0 0 12px 0;background:var(--gold2);color:#171109;font-size:13px;font-weight:800;text-decoration:none}.dc-skip:focus{left:0}</style></head><body><a class="dc-skip" href="#dc-signin">Skip to sign in</a><header class="dc-auth-nav"><div class="dc-auth-nav-inner"><a class="dc-brand" href="/" aria-label="DeenClipped home"><span class="dc-brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 3.5c-5.8 0-10.5 4.7-10.5 10.5v14.5h21V14c0-5.8-4.7-10.5-10.5-10.5Z"/></svg></span><span class="dc-brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a><a class="dc-back-link" href="/"><svg viewBox="0 0 24 24"><path d="m9 18-6-6 6-6M3 12h18"/></svg>Back to website</a></div></header><main class="dc-auth-shell"><section class="dc-auth-story"><span class="dc-eyebrow"><i></i>Review-first clipping for Islamic creators</span><h1>Turn long lectures into <span>review-ready short clips.</span></h1><p class="dc-story-copy">Find complete moments, render English, Arabic or Quran-aware captions, then approve what is ready for your connected channels.</p><div class="dc-capabilities"><span><b>1</b>Choose a range</span><i></i><span><b>2</b>Review real renders</span><i></i><span><b>3</b>Publish or schedule</span></div><div class="dc-product-stage" aria-label="DeenClipped creator workspace preview"><img src="/marketing-assets/hero-premium.webp" alt="DeenClipped lecture-to-clip workspace"><figure class="dc-reel one"><img src="/marketing-assets/reel-beneficial.webp" alt="Photographic vertical Islamic reminder clip"></figure><figure class="dc-reel two"><img src="/marketing-assets/reel-dua.webp" alt="Photographic vertical dua clip"></figure><div class="dc-status found"><span class="dc-status-icon">✦</span><span><strong>Strong moments found</strong><small>Full-quality clips ready to review</small></span></div><div class="dc-status ready"><span class="dc-status-icon">✓</span><span><strong>Human approval first</strong><small>Nothing posts without a decision</small></span></div></div></section><section class="dc-auth-card" id="dc-signin"><h2>Welcome back.</h2><p>Sign in to your creator workspace.</p>${error ? `<div class="dc-alert bad">${esc(error)}</div>` : ''}${info ? `<div class="dc-alert good">${esc(info)}</div>` : ''}<div class="dc-auth-oauth"><a class="dc-oauth-btn${googleDisabled ? ' is-disabled' : ''}" href="/auth/google/start?returnTo=${encodeURIComponent(safeReturn(returnTo))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.2a5.3 5.3 0 0 1-2.3 3.5v2.9h3.7c2.2-2 3.4-5 3.4-8.6Z"/><path fill="#34A853" d="M12 24c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.3 1.1-3.9 1.1-3 0-5.5-2-6.4-4.7H1.8v3A12 12 0 0 0 12 24Z"/><path fill="#FBBC05" d="M5.6 14.7a7.2 7.2 0 0 1 0-4.6v-3H1.8a12 12 0 0 0 0 10.6l3.8-3Z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.2.6 4.4 1.7l3.3-3.3A11.6 11.6 0 0 0 1.8 7.1l3.8 3c.9-2.8 3.4-4.7 6.4-4.7Z"/></svg>Continue with Google</a><a class="dc-oauth-btn apple${appleDisabled ? ' is-disabled' : ''}" href="/auth/apple/start?returnTo=${encodeURIComponent(safeReturn(returnTo))}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><path d="M16.4 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.8-.9-3-.8c-1.5 0-2.9.9-3.7 2.3-1.6 2.7-.4 6.7 1.1 8.9.8 1.1 1.7 2.3 2.9 2.2 1.2 0 1.6-.7 3-.7s1.8.7 3 .7 2-1.1 2.8-2.2c.9-1.2 1.2-2.4 1.2-2.5 0 0-2.4-.9-2.4-3.5ZM14.2 5.9c.6-.8 1-1.9.9-3-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-.9 2.9 1 0 2.1-.5 2.7-1.3Z"/></svg>Continue with Apple</a></div><div class="dc-auth-divider">or use email</div><form method="post" action="/auth/email" class="dc-auth-form dc-email-form"><input type="hidden" name="returnTo" value="${esc(returnTo)}"><label for="creator-email">Email address</label><input id="creator-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required><label for="creator-password">Password</label><input id="creator-password" name="password" type="password" autocomplete="current-password" placeholder="At least 8 characters" minlength="8" required><button class="dc-auth-primary" type="submit">Continue with email</button><span class="dc-email-hint">New to DeenClipped? Your account is created securely when you continue. <a href="/reset" style="color:var(--gold2);text-decoration:none;font-weight:700;">Forgot your password?</a></span></form>${providers.password ? `<details class="dc-admin-login"><summary>Admin password fallback</summary>${passwordBlock}</details>` : ''}<div class="dc-foot"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"/></svg><span>Your projects, clips and connected accounts stay private to your workspace.</span></div></section></main><script src="/auth-enhance.js" defer></script></body></html>`;
+  .dc-skip{position:absolute;left:-9999px;top:0;z-index:99;padding:11px 16px;border-radius:0 0 12px 0;background:var(--gold2);color:#171109;font-size:13px;font-weight:800;text-decoration:none}.dc-skip:focus{left:0}</style></head><body><a class="dc-skip" href="#dc-signin">Skip to sign in</a><header class="dc-auth-nav"><div class="dc-auth-nav-inner"><a class="dc-brand" href="/" aria-label="DeenClipped home"><span class="dc-brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 3.5c-5.8 0-10.5 4.7-10.5 10.5v14.5h21V14c0-5.8-4.7-10.5-10.5-10.5Z"/></svg></span><span class="dc-brand-copy"><strong>DeenClipped</strong><small>AI clip workspace</small></span></a><a class="dc-back-link" href="/"><svg viewBox="0 0 24 24"><path d="m9 18-6-6 6-6M3 12h18"/></svg>Back to website</a></div></header><main class="dc-auth-shell"><section class="dc-auth-story"><span class="dc-eyebrow"><i></i>Review-first clipping for Islamic creators</span><h1>Turn long lectures into <span>review-ready short clips.</span></h1><p class="dc-story-copy">Find complete moments, render English, Arabic or Quran-aware captions, then approve what is ready for your connected channels.</p><div class="dc-capabilities"><span><b>1</b>Choose a range</span><i></i><span><b>2</b>Review real renders</span><i></i><span><b>3</b>Publish or schedule</span></div><div class="dc-product-stage" aria-label="DeenClipped creator workspace preview"><img src="/marketing-assets/hero-premium.webp" alt="DeenClipped lecture-to-clip workspace"><figure class="dc-reel one"><img src="/marketing-assets/reel-beneficial.webp" alt="Photographic vertical Islamic reminder clip"></figure><figure class="dc-reel two"><img src="/marketing-assets/reel-dua.webp" alt="Photographic vertical dua clip"></figure><div class="dc-status found"><span class="dc-status-icon">✦</span><span><strong>Strong moments found</strong><small>Full-quality clips ready to review</small></span></div><div class="dc-status ready"><span class="dc-status-icon">✓</span><span><strong>Human approval first</strong><small>Nothing posts without a decision</small></span></div></div></section><section class="dc-auth-card" id="dc-signin"><h2>Welcome back.</h2><p>Sign in to your creator workspace.</p>${error ? `<div class="dc-alert bad">${esc(error)}</div>` : ''}${info ? `<div class="dc-alert good">${esc(info)}</div>` : ''}<div class="dc-auth-oauth"><a class="dc-oauth-btn${googleDisabled ? ' is-disabled' : ''}" href="/auth/google/start?returnTo=${encodeURIComponent(safeReturn(returnTo))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.2a5.3 5.3 0 0 1-2.3 3.5v2.9h3.7c2.2-2 3.4-5 3.4-8.6Z"/><path fill="#34A853" d="M12 24c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.3 1.1-3.9 1.1-3 0-5.5-2-6.4-4.7H1.8v3A12 12 0 0 0 12 24Z"/><path fill="#FBBC05" d="M5.6 14.7a7.2 7.2 0 0 1 0-4.6v-3H1.8a12 12 0 0 0 0 10.6l3.8-3Z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.2.6 4.4 1.7l3.3-3.3A11.6 11.6 0 0 0 1.8 7.1l3.8 3c.9-2.8 3.4-4.7 6.4-4.7Z"/></svg>Continue with Google</a><a class="dc-oauth-btn apple${appleDisabled ? ' is-disabled' : ''}" href="/auth/apple/start?returnTo=${encodeURIComponent(safeReturn(returnTo))}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none"><path d="M16.4 12.7c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.8-.9-3-.8c-1.5 0-2.9.9-3.7 2.3-1.6 2.7-.4 6.7 1.1 8.9.8 1.1 1.7 2.3 2.9 2.2 1.2 0 1.6-.7 3-.7s1.8.7 3 .7 2-1.1 2.8-2.2c.9-1.2 1.2-2.4 1.2-2.5 0 0-2.4-.9-2.4-3.5ZM14.2 5.9c.6-.8 1-1.9.9-3-.9 0-2 .6-2.7 1.4-.6.7-1.1 1.8-.9 2.9 1 0 2.1-.5 2.7-1.3Z"/></svg>Continue with Apple</a></div><div class="dc-auth-divider">or use email</div><form method="post" action="/auth/email" class="dc-auth-form dc-email-form"><input type="hidden" name="returnTo" value="${esc(returnTo)}"><label for="creator-email">Email address</label><input id="creator-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required><label for="creator-password">Password</label><input id="creator-password" name="password" type="password" autocomplete="current-password" placeholder="At least 8 characters" minlength="8" required>${turnstileEnabled() ? `<div class="cf-turnstile" data-sitekey="${esc(config.turnstileSiteKey)}" data-theme="dark" style="margin:4px 0 2px"></div>` : ''}<button class="dc-auth-primary" type="submit">Continue with email</button><span class="dc-email-hint">New to DeenClipped? Your account is created securely when you continue. <a href="/reset" style="color:var(--gold2);text-decoration:none;font-weight:700;">Forgot your password?</a></span></form>${providers.password ? `<details class="dc-admin-login"><summary>Admin password fallback</summary>${passwordBlock}</details>` : ''}<div class="dc-foot"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"/></svg><span>Your projects, clips and connected accounts stay private to your workspace.</span></div></section></main><script src="/auth-enhance.js" defer></script>${turnstileEnabled() ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>' : ''}</body></html>`;
+}
+
+/**
+ * The "type the code" screen, shown once, right after signing up.
+ *
+ * Its own small page for the same reason resetPage is: loginPage is one
+ * enormous literal carrying the whole marketing panel, and somebody who has
+ * just handed over an address does not need to be sold to again.
+ *
+ * It exists so the confirmation happens WHERE IT MAKES SENSE. Before this the
+ * account landed in the app unverified and met "your email address is not
+ * confirmed yet, so imports are blocked" later, in the middle of starting a
+ * lecture — a dialog about something they did five minutes earlier.
+ */
+export function verifyPage({ email = '', error = '', info = '', returnTo = '/app' } = {}) {
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confirm your address · DeenClipped</title><style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(48% 34% at 50% 0%,rgba(217,182,111,.10),transparent 70%),#070607;color:#f5f1e8;font-family:Outfit,Inter,ui-sans-serif,-apple-system,"Segoe UI",sans-serif}
+  .card{width:100%;max-width:430px;padding:32px;border:1px solid rgba(245,241,232,.17);border-radius:22px;background:linear-gradient(160deg,#131115,#0d0c0e 70%);box-shadow:0 40px 120px rgba(0,0,0,.55)}
+  h1{margin:0 0 9px;font-family:Fraunces,Georgia,serif;font-size:28px;font-weight:460;letter-spacing:-.02em}
+  p{margin:0 0 22px;color:#a8a196;font-size:14px;line-height:1.55}
+  b{color:#f5f1e8;font-weight:600}
+  .alert{margin:0 0 16px;padding:11px 13px;border-radius:12px;font-size:12.5px;line-height:1.45}
+  .bad{border:1px solid rgba(239,107,122,.4);background:rgba(239,107,122,.1);color:#ef6b7a}
+  .good{border:1px solid rgba(111,206,158,.4);background:rgba(111,206,158,.1);color:#6fce9e}
+  /* One field, six digits, and it must not be a spinner: a number input on a
+     phone shows a stepper and lets you paste "1e6" into it. */
+  input{width:100%;padding:15px;border:1px solid rgba(245,241,232,.17);border-radius:13px;background:rgba(245,241,232,.04);color:#f5f1e8;font:700 26px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.34em;text-align:center}
+  input:focus{outline:none;border-color:#d9b66f}
+  button{width:100%;min-height:48px;margin-top:14px;border:0;border-radius:13px;background:#d9b66f;color:#171109;font:700 15px/1 inherit;cursor:pointer}
+  .link{margin-top:18px;display:flex;justify-content:space-between;gap:12px;font-size:12.5px}
+  .link a,.link button.as-link{padding:0;min-height:0;width:auto;margin:0;background:none;border:0;color:#a8a196;font:inherit;font-size:12.5px;text-decoration:none;cursor:pointer}
+  .link a:hover,.link button.as-link:hover{color:#f1d18e}
+</style></head><body><main class="card">
+  <h1>Check your email</h1>
+  <p>We sent a six-digit code to <b>${esc(email || 'your address')}</b>. Enter it here and your workspace is ready.</p>
+  ${error ? `<div class="alert bad">${esc(error)}</div>` : ''}
+  ${info ? `<div class="alert good">${esc(info)}</div>` : ''}
+  <form method="post" action="/auth/verify-code">
+    <input type="hidden" name="returnTo" value="${esc(returnTo)}">
+    <label for="code" style="position:absolute;left:-9999px">Six-digit code</label>
+    <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" placeholder="000000" required autofocus>
+    <button type="submit">Confirm my address</button>
+  </form>
+  <div class="link">
+    <form method="post" action="/auth/verify-resend" style="margin:0"><input type="hidden" name="returnTo" value="${esc(returnTo)}"><button class="as-link" type="submit">Send another code</button></form>
+    <a href="/login">Use a different address</a>
+  </div>
+</main></body></html>`;
 }
 
 /**

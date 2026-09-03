@@ -54,7 +54,7 @@ test('the link confirms the address, once', async () => {
   const user = await auth.emailLogin('confirms@example.com', 'a-good-password', 'Confirms');
   assert.equal(auth.isVerified(user), false);
 
-  const raw = auth.createVerification(user);
+  const { raw } = auth.createVerification(user);
   assert.ok(raw && raw.length > 20, 'a real token, not a guessable id');
 
   const confirmed = auth.consumeVerification(raw);
@@ -72,8 +72,8 @@ test('a wrong or expired token confirms nothing', () => {
 
 test('issuing a new link invalidates the previous one', async () => {
   const user = await auth.emailLogin('reissued@example.com', 'a-good-password', 'Reissued');
-  const first = auth.createVerification(user);
-  const second = auth.createVerification(user);
+  const first = auth.createVerification(user).raw;
+  const second = auth.createVerification(user).raw;
   assert.notEqual(first, second);
   assert.equal(auth.consumeVerification(first), null, 'the superseded link is dead');
   assert.ok(auth.consumeVerification(second), 'the newest one works');
@@ -82,7 +82,7 @@ test('issuing a new link invalidates the previous one', async () => {
 test('one account\'s link cannot confirm another account', async () => {
   const a = await auth.emailLogin('person-a@example.com', 'a-good-password', 'A');
   const b = await auth.emailLogin('person-b@example.com', 'a-good-password', 'B');
-  const forA = auth.createVerification(a);
+  const forA = auth.createVerification(a).raw;
   const confirmed = auth.consumeVerification(forA);
   assert.equal(confirmed.id, a.id);
   assert.equal(auth.isVerified(b), false, 'B is untouched');
