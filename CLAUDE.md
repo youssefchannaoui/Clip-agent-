@@ -200,14 +200,16 @@ These were each a real bug and each has a test named after it.
 ## Verification standard
 
 - `npm test` and `npm run check` must pass. Currently **1175 JS + 548 Python**
-  (7 Python skipped). These numbers were once wrong by more than a factor of
+  (0 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
   output), so this line cannot quietly drift again; a shrinking count is
   reported as tests having VANISHED rather than as a number to update.
-- **The 7 skips are `SpeakerTrackingTests`**, which need a test video that is not
-  in the repo. So the framing code is unexercised in CI *and*, per the open items
-  below, has never been checked visually either. Treat it as untested.
+- **There are no skips any more (v3.101.2).** The seven were
+  `SpeakerTrackingTests`, waiting on a video file nothing ever created; they
+  build their own with ffmpeg now and run in CI. The crop ARITHMETIC is
+  exercised. What is still untested is face DETECTION on a real face, which
+  needs a real video and a look at the frame -- see the open items below.
 - **Test executed output, not source strings.** Several tests have failed only
   because code moved into a function, while real behaviour changes passed.
 - **A green suite is not verification for anything visual.** Every layout bug
@@ -3789,6 +3791,37 @@ next step and it is not done" since.
   have. **Not yet seen on a real recitation** -- the proof here is the matcher
   and the ASS file, not a frame; the confirmation costs one Quran import.
 
+
+## A chosen crop bias was refused whenever OpenCV was missing (v3.101.2, 3 Sept 2026)
+
+Found by going after the suite's seven permanent skips, and it turned out to be
+a product fault wearing a test problem's clothes.
+
+- **`smartFramingBias: left` needs no face detector.** The code says so in its
+  own comment -- "A fixed bias needs no detection at all" -- and the branch is
+  pure arithmetic on ffprobe's width and height. But `cv2_problem()` ran at the
+  TOP of both `track_speaker_keyframes` and `detect_main_face_crop`, so a box
+  whose OpenCV is missing or broken refused a bias the customer had explicitly
+  chosen, with the reason "OpenCV is not installed on this server". Reproduced
+  here, where cv2 genuinely is not installed: left, centre and right all came
+  back `available: False`. The guard sits BELOW the manual branch now; `auto`
+  still refuses honestly, and a portrait source now gets the truer reason
+  ("already narrower than the output") instead of blaming OpenCV.
+- **This is the v3.x OpenCV-5 incident by another door.** CLAUDE.md records
+  every job falling back to a centre crop when `CascadeClassifier` vanished.
+  That fallback also silently took `left` and `right` with it, though nothing
+  in those branches had broken.
+- **The seven skips were never about faces.** The class comment said they check
+  "the deterministic paths -- the ones that do not depend on real faces". They
+  waited on `/tmp/track_test.mp4`, which nothing created, so the crop maths --
+  ratio kept, inside the source, biases ordered left to right -- had never run
+  in CI. `setUpClass` builds a 6s testsrc with ffmpeg (1.3s for all seven) and
+  skips only where ffmpeg is genuinely absent, so a clean checkout still runs.
+  The handover guard reads the skip count, so `(0 Python skipped)` is enforced
+  rather than remembered.
+- **What this does NOT prove**: that face detection finds a face. testsrc has
+  none, `bias=auto` correctly declines, and nothing here replaces the real
+  video and the look at a frame the open items still ask for.
 
 ## Open items
 

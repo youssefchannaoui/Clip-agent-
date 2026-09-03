@@ -3911,8 +3911,6 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     frames, finds the dominant face/upper body, and uses the median horizontal
     position for the whole clip.
     """
-    if cv2_problem():
-        return None
     info = ffprobe_json(ffprobe, source)
     video_stream = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), {})
     src_w = int(video_stream.get("width") or 0)
@@ -3928,11 +3926,16 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     if crop_w >= src_w:
         return None
 
+    # Below the OpenCV guard for the same reason as track_speaker_keyframes:
+    # a chosen bias is arithmetic, and a broken detector must not take it away.
     if bias in {"left", "center", "right"}:
         center = {"left": crop_w * 0.5, "center": src_w * 0.5, "right": src_w - crop_w * 0.5}[bias]
         x = int(max(0, min(src_w - crop_w, round(center - crop_w / 2))))
         y = max(0, (src_h - crop_h) // 2)
         return {"x": x, "y": y, "w": crop_w, "h": crop_h, "method": f"bias-{bias}"}
+
+    if cv2_problem():
+        return None
 
     detector_names = [
         "haarcascade_frontalface_alt2.xml",
@@ -5371,10 +5374,6 @@ def track_speaker_keyframes(
     The raw per-sample choice is then run through an exponential smoother so
     the crop glides rather than snapping between faces on a single bad frame.
     """
-    problem = cv2_problem()
-    if problem:
-        return {"available": False, "reason": problem}
-
     try:
         info = ffprobe_json(ffprobe, source)
     except Exception:
@@ -5393,7 +5392,15 @@ def track_speaker_keyframes(
     if crop_w >= src_w:
         return {"available": False, "reason": "The whole width is already used."}
 
-    # A fixed bias needs no detection at all.
+    # A fixed bias needs no detection at all -- and that is why the OpenCV
+    # guard sits BELOW it rather than at the top of the function. It used to
+    # run first, so a box whose OpenCV is missing or broken refused a bias the
+    # customer had explicitly chosen, with the reason "OpenCV is not installed
+    # on this server" for a calculation that is pure arithmetic on ffprobe's
+    # dimensions. That is not hypothetical: CLAUDE.md records OpenCV 5 removing
+    # the Haar cascade API and every job falling back to a centre crop -- which
+    # silently took `smartFramingBias: left` down with it, though nothing in
+    # this branch needs a detector.
     if bias in {"left", "center", "right"}:
         centre = {"left": crop_w * 0.5, "center": src_w * 0.5, "right": src_w - crop_w * 0.5}[bias]
         x, y = crop_origin_from_center(centre, None, src_w, src_h, crop_w, crop_h, padding)
@@ -5402,6 +5409,10 @@ def track_speaker_keyframes(
             "w": crop_w, "h": crop_h,
             "keyframes": [{"t": 0.0, "x": x, "y": y, "w": crop_w, "h": crop_h}],
         }
+
+    problem = cv2_problem()
+    if problem:
+        return {"available": False, "reason": problem}
 
     detectors = [
         cv2.CascadeClassifier(cv2.data.haarcascades + name)

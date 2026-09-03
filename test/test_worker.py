@@ -1,6 +1,7 @@
 import importlib.util
 import pathlib
 import re
+import subprocess
 import tempfile
 import sys
 import types
@@ -109,13 +110,51 @@ class SpeakerTrackingTests(unittest.TestCase):
     got a 404 and reported "Not found". These check the tracker's
     deterministic paths — the ones that do not depend on real faces being
     present in test footage.
+
+    **These were the suite's seven permanent skips.** They waited for a file at
+    /tmp/track_test.mp4 that nothing ever created, so CLAUDE.md had to carry
+    "treat the framing code as untested" -- unexercised in CI AND never checked
+    on a frame. Nothing about them ever needed a real video: they assert the
+    crop ARITHMETIC (ratio kept, inside the source, biases ordered left to
+    right), and the class comment already said so. So the fixture is built here
+    with ffmpeg, which the CI runner carries and this repo already relies on
+    for the caption-frame checks.
+
+    They still skip where ffmpeg is genuinely absent, rather than failing --
+    the Python suite must keep running on a clean checkout anywhere, which is
+    what makes a phone session viable. A skip count that changes is caught by
+    `scripts/check-handover.mjs`, so it cannot drift quietly.
     """
 
-    VIDEO = pathlib.Path("/tmp/track_test.mp4")
+    VIDEO: pathlib.Path
+    _dir: tempfile.TemporaryDirectory | None = None
 
-    def setUp(self):
-        if not self.VIDEO.exists():
-            self.skipTest("test video not available in this environment")
+    @classmethod
+    def setUpClass(cls):
+        # 16:9, so it is genuinely wider than the 9:16 target every test crops
+        # to. testsrc has no faces at all, which is the point: `bias=auto` must
+        # decline with a readable reason rather than raise, and that is one of
+        # the things being asserted.
+        cls._dir = tempfile.TemporaryDirectory()
+        cls.VIDEO = pathlib.Path(cls._dir.name) / "track_test.mp4"
+        try:
+            subprocess.run(
+                ["ffmpeg", "-v", "error", "-f", "lavfi",
+                 "-i", "testsrc=size=1920x1080:rate=6:duration=6",
+                 "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                 "-y", str(cls.VIDEO)],
+                check=True, capture_output=True, timeout=60,
+            )
+        except (OSError, subprocess.SubprocessError):
+            cls._dir.cleanup()
+            cls._dir = None
+            raise unittest.SkipTest("ffmpeg is not available to build the test video")
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls._dir is not None:
+            cls._dir.cleanup()
+            cls._dir = None
 
     def test_manual_bias_produces_a_usable_plan(self):
         for bias in ["left", "center", "right"]:
