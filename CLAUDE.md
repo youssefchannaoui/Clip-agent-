@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1160 JS + 534 Python**
+- `npm test` and `npm run check` must pass. Currently **1163 JS + 534 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -3578,6 +3578,38 @@ Recitation for a recitation -- and the other three stay Pro.
 - The plan-gating law now asserts the free pair covers both KINDS -- one
   template whose caption mode is `quran` and one whose is not -- so "one quran
   one lecture" is checked rather than merely named.
+
+## A button waited for the network to look pressed (v3.99.2, 3 Sept 2026)
+
+Youssef, on the Start-job panel: "THIS PART is very slow and cluckly when i
+click one of the buttons theres a delay."
+
+Measured rather than guessed, and it was two faults stacked:
+
+- **The clip-length and clip-count chips wrote to the server before drawing.**
+  Timed on a click: the handler returned in 0.7ms, then `POST
+  /api/clip-settings` took 7ms and a full `GET /api/state` took 37 -- and only
+  THEN did the chip repaint. Locally. On production both legs cross the
+  internet. `onClipSettings` applies the change to the local copy and paints at
+  once now, then writes; `studioDo`'s own refresh reconciles when it lands.
+  **The refusal path was proven, not assumed** -- a stubbed 400 still toasts
+  and re-renders from the truth, which is the whole risk of an optimistic write
+  and the reason it goes through studioDo rather than around it.
+- **Even a lone click waited for a frame.** `setRefresh` coalesced every
+  repaint into a rAF with an 80ms timer behind it. That coalescing is not
+  wrong -- dragging a caption fires hundreds of events a second and a render
+  per event throws all but the last away (v3.53.4) -- but a single click is not
+  a burst, and it was paying a drag's price. An interaction with no recent
+  paint behind it now renders synchronously; inside a burst the gap is under a
+  frame and the old path takes over. The rAF **and** the 80ms backstop both
+  stay: rAF is suspended in a window Chrome thinks is occluded, and one
+  suspended frame once held the latch and swallowed every later repaint.
+- Measured after, same click: **first paint 45.7ms -> 0.3ms**, with the
+  reconciling paint at 64.9ms that nobody sees because the screen is already
+  right.
+- The whole studio render is ~11ms on an empty account and ~45ms with the job
+  panel open, and THAT was never the problem -- worth remembering before
+  optimising the renderer. The latency was all waiting.
 
 ## Open items
 

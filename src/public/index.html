@@ -5283,10 +5283,28 @@ function renderStudio(){
        over a hundred times a second. That is what "laggy" was. */
     let paintQueued=false;
     StudioAdapter.paintLocal=()=>{try{paintStudio()}catch(e){}};
+    let lastPaintAt=0;
     StudioAdapter.setRefresh(()=>{
+      /* AN ISOLATED INTERACTION PAINTS NOW. Measured on the Start-job panel,
+         3 Sept 2026: the click handler returned in 2.3ms, the repaint did not
+         START for 51ms, and then took 45 -- so a chip took about 100ms to
+         look pressed. Youssef: "THIS PART is very slow and cluckly when i
+         click one of the buttons theres a delay."
+
+         The coalescing below is not wrong -- it exists because dragging a
+         caption fires hundreds of events a second and a full render per event
+         throws all but the last away (v3.53.4). But a single click is not a
+         burst, and making it wait for a frame that Chrome may not schedule
+         for 80ms is paying a drag's price for a button press.
+
+         So: if nothing has painted recently, this is a discrete act and it
+         paints synchronously. Inside a burst the gap is under a frame, and
+         the old path takes over. */
+      const now=(window.performance&&performance.now())||Date.now();
+      if(!paintQueued&&now-lastPaintAt>70){lastPaintAt=now;paintStudio();return}
       if(paintQueued)return;
       paintQueued=true;
-      const run=()=>{if(!paintQueued)return;paintQueued=false;paintStudio()};
+      const run=()=>{if(!paintQueued)return;paintQueued=false;lastPaintAt=(window.performance&&performance.now())||Date.now();paintStudio()};
       requestAnimationFrame(run);
       /* Never rAF alone. Chrome suspends rAF for windows it considers
          occluded, and macOS gets that wrong -- a screenshot overlay is
@@ -5431,8 +5449,28 @@ function renderStudio(){
     }
     StudioAdapter.onOpenConnections=()=>{paintConnections();connEls.root.classList.remove('hide')};
     /* /api/clip-settings validates all three fields together, so a partial patch
-       has to be merged onto what the account already has or it 400s. */
-    StudioAdapter.onClipSettings=patch=>studioDo(()=>api('/api/clip-settings',{method:'POST',body:JSON.stringify({...(DATA?.clipSettings||{}),...patch})}));
+       has to be merged onto what the account already has or it 400s.
+
+       OPTIMISTIC, and that is the whole point. Measured on the Start-job panel
+       (3 Sept 2026): the click handler returned in 0.7ms, then POST
+       /api/clip-settings took 7ms and a full GET /api/state took 37 -- and
+       only THEN did the chip repaint. Locally. On production both legs cross
+       the internet, so a clip-length chip did not look pressed for a few
+       hundred milliseconds. Youssef: "THIS PART is very slow and cluckly when
+       i click one of the buttons theres a delay."
+
+       Nothing about this choice needs the server's permission to be DRAWN, so
+       it is applied locally and painted at once; the write still goes, and
+       studioDo's own refresh reconciles when it lands. A refusal is not
+       swallowed -- studioDo's catch toasts it and re-renders from the truth,
+       which is the same road every other optimistic action here takes (the
+       review deck's ledger, v3.31.0). */
+    StudioAdapter.onClipSettings=patch=>{
+      if(DATA)DATA.clipSettings={...(DATA.clipSettings||{}),...patch};
+      const body=JSON.stringify({...(DATA?.clipSettings||{}),...patch});
+      paintStudio();
+      return studioDo(()=>api('/api/clip-settings',{method:'POST',body}));
+    };
     StudioAdapter.onSelectTemplate=id=>studioDo(()=>api('/api/template',{method:'POST',body:JSON.stringify({id})}),'Template selected');
     /* A built-in cannot be written to, and this fires on every control change —
        so persisting here threw "Built-in templates are protected" at the user
