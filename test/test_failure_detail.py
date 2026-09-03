@@ -30,10 +30,16 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "worker"))
 
 # service.py builds its JobStore AT IMPORT, and JobStore mkdirs its data
-# directory -- which defaults to /var/lib/deenclipped. That succeeds for root
-# (this container) and is PermissionError on the CI runner, so importing it
-# without this passed here and turned the branch red there. DATA_DIR is read
-# once at module scope, so the variable has to be set BEFORE exec_module.
+# directory -- `/var/lib/deenclipped` by default. That succeeds for root with
+# the directory already present, and is PermissionError for the unprivileged
+# CI runner creating it fresh, so this file passed in a container and took the
+# whole Python suite down on the branch. Both halves are needed to reproduce
+# it: as root it passes, and once the directory exists mkdir succeeds for
+# anybody. DATA_DIR is read once at module scope, so the variable has to be
+# set BEFORE exec_module.
+#
+# Two sessions fixed this the same way within the hour; this is the merge of
+# the two, keeping one setdefault.
 os.environ.setdefault("WORKER_DATA_DIR", tempfile.mkdtemp(prefix="dc-failure-detail-"))
 
 _spec = importlib.util.spec_from_file_location("dc_service", ROOT / "worker" / "service.py")

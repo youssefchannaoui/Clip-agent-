@@ -4597,8 +4597,9 @@ def render_cut_plate(ffmpeg: str, source: Path, keeps: list[tuple[float, float]]
 PROMO_BAR_FILE = Path(__file__).resolve().parent / "assets" / "promo-bar.png"
 PROMO_BAR_WIDTH = 0.86      # of the frame width
 PROMO_BAR_BOTTOM = 0.14     # its resting distance from the bottom, of frame height
-PROMO_BAR_MOVE = 46         # pixels it travels on the way in and out
-PROMO_BAR_EASE = 0.45       # seconds of animation at each end
+PROMO_BAR_MOVE = 58         # pixels it travels on the way in and out
+PROMO_BAR_EASE = 0.55       # seconds of entrance
+PROMO_BAR_EASE_OUT = 0.40   # seconds of exit -- quicker than the entrance
 
 
 def promo_bar_plan(template: dict, duration: float) -> dict | None:
@@ -4628,17 +4629,33 @@ def promo_bar_graph(plan: dict, index: int, width: int, height: int,
     bar_w = max(2, int(width * PROMO_BAR_WIDTH / 2) * 2)
     rest_y = int(height * (1.0 - PROMO_BAR_BOTTOM))
     st, en = plan["start"], plan["end"]
-    ease = min(PROMO_BAR_EASE, max(0.05, (en - st) / 2.0))
-    out_at = en - ease
+    span = en - st
+    # Neither end may eat more than half the time on screen, or a short hold
+    # would be one continuous movement with no moment at rest.
+    ease_in = min(PROMO_BAR_EASE, max(0.05, span / 2.0))
+    ease_out = min(PROMO_BAR_EASE_OUT, max(0.05, span / 2.0))
+    out_at = en - ease_out
     # 0 -> 1 across the entry, and again across the exit. `min`/`max` keep both
     # clamped so the bar is still between the two.
-    rise = f"min(1,max(0,(t-{st:.3f})/{ease:.3f}))"
-    fall = f"min(1,max(0,(t-{out_at:.3f})/{ease:.3f}))"
-    y = f"{rest_y}-h/2+{PROMO_BAR_MOVE}*(1-{rise})+{PROMO_BAR_MOVE}*{fall}"
+    rise = f"min(1,max(0,(t-{st:.3f})/{ease_in:.3f}))"
+    fall = f"min(1,max(0,(t-{out_at:.3f})/{ease_out:.3f}))"
+    # EASED, not linear. The first version ramped the position straight from
+    # one end to the other, which is the motion of something being dragged
+    # rather than something arriving. The entrance is a cubic ease-OUT -- it
+    # covers most of the distance immediately and settles -- and the exit a
+    # cubic ease-IN, hanging for a moment before dropping away. The alpha
+    # fades stay linear and are deliberately SHORTER than the travel, so the
+    # bar is still visibly moving once it is fully opaque instead of arriving
+    # already finished.
+    rise_e = f"(1-pow(1-{rise},3))"
+    fall_e = f"pow({fall},3)"
+    y = f"{rest_y}-h/2+{PROMO_BAR_MOVE}*(1-{rise_e})+{PROMO_BAR_MOVE}*{fall_e}"
+    fade_in = ease_in * 0.7
+    fade_out = ease_out * 0.8
     return (
         f"[{index}:v]format=rgba,scale={bar_w}:-1,"
-        f"fade=in:st={st:.3f}:d={ease:.3f}:alpha=1,"
-        f"fade=out:st={out_at:.3f}:d={ease:.3f}:alpha=1[promobar];"
+        f"fade=in:st={st:.3f}:d={fade_in:.3f}:alpha=1,"
+        f"fade=out:st={en - fade_out:.3f}:d={fade_out:.3f}:alpha=1[promobar];"
         f"[{src}][promobar]overlay=x=(W-w)/2:y='{y}':"
         f"enable='between(t,{st:.3f},{en:.3f})'[{out}]"
     )

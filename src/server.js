@@ -809,12 +809,15 @@ function appState(user = null) {
      */
     tasks: onboarding.tasks(state, user.id, config, { unlimited: billing.isUnlimited(user) }),
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
-    backgrounds: backgrounds.listBackgrounds(user).map(entry => ({
-      id: entry.id, name: entry.name, durationSec: entry.durationSec, shared: Boolean(entry.shared),
-      posterUrl: `/api/backgrounds/${encodeURIComponent(entry.id)}/poster`,
-      own: entry.userId === user.id && !entry.shared,
-      deletable: entry.userId === user.id || (Boolean(entry.shared) && ['owner', 'admin'].includes(String(user.role || '').toLowerCase())),
-    })),
+    // The two ACCOUNT-wide brand switches. Sent separately from any
+    // template because the panel that draws them must not read the
+    // selected one: the scripture template is exempt from both, so with
+    // it selected the switches read 'off' for a setting that is on
+    // everywhere else -- a control that looks broken and is not.
+    brand: templates.brandSettings(user) || {},
+    // One shape, built in backgrounds.js beside the rules it depends on, so
+    // the votes a card draws and the votes a route writes cannot disagree.
+    backgrounds: backgrounds.listBackgrounds(user).map(entry => backgrounds.publicBackground(entry, user)),
     tracks: audio.listNasheeds(user),
     storage: agent.engine.storageBytes(user.id),
     projects: projectsForUser.map(project => ({
@@ -2021,6 +2024,7 @@ async function route(req, res, url) {
           musicTrackId: String(body.musicTrackId || ''),
           language: String(body.language || ''),
           backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds,
+          publishTo: Array.isArray(body.publishTo) ? body.publishTo : null,
           sourceKind: 'object_storage', originalFileName: body.fileName || '', displayUrl: `Uploaded file · ${body.fileName || 'video'}`,
           sourceMeta: { title: body.title || body.fileName || '', durationSec: Number(body.durationSec || 0) || null, thumbnail: '' },
           sourceRange: { startSec: Number(body.sourceStartSeconds || 0), endSec: Number(body.sourceEndSeconds) || null },
@@ -2040,7 +2044,7 @@ async function route(req, res, url) {
     const sourceMeta = Array.isArray(body.sourceMeta) ? body.sourceMeta : [];
     const results = [];
     for (const source of urls) {
-      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, musicTrackId: String(body.musicTrackId || ''), templateId: String(body.templateId || ''), backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds, language: String(body.language || '') }) }); }
+      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, musicTrackId: String(body.musicTrackId || ''), templateId: String(body.templateId || ''), backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds, language: String(body.language || ''), publishTo: Array.isArray(body.publishTo) ? body.publishTo : null }) }); }
       catch (error) { results.push({ url: source, error: error.message }); }
     }
     return json(res, 200, { results, sourceRange });
@@ -2060,6 +2064,8 @@ async function route(req, res, url) {
       const durationSec = Math.max(0, Math.round(Number(req.headers['x-source-duration-seconds'] || 0)));
       const projectId = await agent.submitVideo(upload.filePath, upload.title, currentUser.id, {
         backgroundMode: String(req.headers['x-background-mode'] || ''), backgroundId: String(req.headers['x-background-id'] || ''), introSeconds: Number(req.headers['x-intro-seconds'] || 0),
+        publishTo: String(req.headers['x-publish-to'] || '').split(',').map(v => v.trim()).filter(Boolean).length
+          ? String(req.headers['x-publish-to']).split(',').map(v => v.trim()).filter(Boolean) : null,
         language: String(req.headers['x-source-language'] || ''),
         sourceRange: { startSec: sourceStartSeconds, endSec: sourceEndSeconds },
         sourceMeta: { title: upload.title, durationSec: durationSec || null, thumbnail: '' },
@@ -2193,6 +2199,26 @@ async function route(req, res, url) {
     throw new Error(`"${template.name}" is a Pro template. The ${templates.templateById(config.defaultTemplateId, currentUser)?.name || 'default'} style is included on the free plan; any paid plan unlocks the rest.`);
   }
 
+  /*
+   * The two brand switches belong to the ACCOUNT, not to a caption style, so
+   * they have a route of their own and no template is saved. Youssef, 3 Sept
+   * 2026: "it just works with all templates once on it turns on for all ...
+   * you don't need to click save the template."
+   *
+   * The paywall is the SAME function the template route uses -- one gate, so
+   * removing the mark cannot become free by arriving through a second door.
+   * There is no templateId here because the setting is not about a template;
+   * '' never matches a scripture template, so the exemption cannot be claimed
+   * from this route.
+   */
+  if (method === 'POST' && pathname === '/api/brand') {
+    let body; try { body = await readBody(req); } catch { body = {}; }
+    try {
+      assertWatermarkAllowed(body, '');
+      const saved = templates.setBrandSettings(currentUser, body);
+      return json(res, 200, { ok: true, brand: saved, templates: templates.listTemplates(currentUser), selectedTemplate: templates.selectedTemplate(currentUser) });
+    } catch (error) { return json(res, 402, { error: error.message }); }
+  }
   const templateMatch = pathname.match(/^\/api\/templates\/([^/]+)$/);
   if (method === 'PUT' && templateMatch) {
     const body = await readBody(req);
@@ -2379,8 +2405,16 @@ async function route(req, res, url) {
     // arrives here as an objectKey, which never touches this process.
     try { body = await readBody(req, 12 * 1024 * 1024); }
     catch { return json(res, 413, { error: 'That file is too large to send through the API. Configure object storage, or use a shorter loop under 12MB.' }); }
-    // Only the operator can publish into every account's library.
-    const shared = body.shared === true && ['owner', 'admin'].includes(String(currentUser?.role || '').toLowerCase());
+    // Anybody may OFFER a video to the shared library; only the operator
+    // publishes one outright. Youssef, 3 Sept 2026: "it has to go through,
+    // um, like, a review process, make sure it's not anything disgusting or
+    // horrible." So a customer's submission is held as pendingShare and is
+    // visible to nobody but them and the operator until it is watched.
+    const wantsShared = body.shared === true;
+    const operatorNow = ['owner', 'admin'].includes(String(currentUser?.role || '').toLowerCase());
+    const shared = wantsShared && operatorNow;
+    const pendingShare = wantsShared && !operatorNow;
+    const by = String(currentUser?.name || '').trim() || String(currentUser?.email || '').split('@')[0];
     try {
       let entry;
       if (body.objectKey) {
@@ -2395,14 +2429,14 @@ async function route(req, res, url) {
         const response = await fetch(objectStorage.presign({ method: 'GET', key: objectKey, expiresSec: 600 }));
         if (!response.ok || !response.body) throw new Error(`The uploaded file could not be fetched from storage (HTTP ${response.status}).`);
         await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(temp));
-        entry = await backgrounds.registerBackgroundFile(currentUser, body.name, temp, body.mimeType, { shared });
+        entry = await backgrounds.registerBackgroundFile(currentUser, body.name, temp, body.mimeType, { shared, pendingShare, by });
         // The staging object has served its purpose.
         objectStorage.deleteObject(objectKey).catch(() => {});
       } else {
-        entry = await backgrounds.saveBackground(currentUser, body.name, body.data, body.mimeType, { shared });
+        entry = await backgrounds.saveBackground(currentUser, body.name, body.data, body.mimeType, { shared, pendingShare, by });
       }
-      log(`Added background video "${entry.name}"${shared ? ' to the shared stock library' : ''}.`, 'info', currentUser.id);
-      return json(res, 200, { ok: true, background: entry });
+      log(`Added background video "${entry.name}"${shared ? ' to the shared stock library' : pendingShare ? ' and offered it to the DeenClipped library for review' : ''}.`, 'info', currentUser.id);
+      return json(res, 200, { ok: true, background: backgrounds.publicBackground(entry, currentUser) });
     }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
@@ -2410,6 +2444,35 @@ async function route(req, res, url) {
   if (method === 'GET' && backgroundVideo) {
     const found = backgrounds.backgroundFilePath(currentUser, decodeURIComponent(backgroundVideo[1])); if (!found) return json(res, 404, { error: 'Background not found.' });
     return streamFile(req, res, found.file, { contentType: 'video/mp4' });
+  }
+  // A like or a dislike on a video in the shared library. Pressing the same
+  // button again clears the vote -- see voteBackground.
+  const backgroundVote = pathname.match(/^\/api\/backgrounds\/([^/]+)\/vote$/);
+  if (method === 'POST' && backgroundVote) {
+    let body; try { body = await readBody(req); } catch { body = {}; }
+    try {
+      const updated = backgrounds.voteBackground(currentUser, decodeURIComponent(backgroundVote[1]), body.vote);
+      return updated ? json(res, 200, { ok: true, background: updated })
+        : json(res, 404, { error: 'That video is not in the shared library.' });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  // The operator's queue, and their decision. Both refuse a non-operator in
+  // backgrounds.js rather than here, so the rule has one home.
+  if (method === 'GET' && pathname === '/api/backgrounds/pending') {
+    return json(res, 200, {
+      backgrounds: backgrounds.pendingBackgrounds(currentUser)
+        .map(entry => backgrounds.publicBackground(entry, currentUser)),
+    });
+  }
+  const backgroundReview = pathname.match(/^\/api\/backgrounds\/([^/]+)\/review$/);
+  if (method === 'POST' && backgroundReview) {
+    let body; try { body = await readBody(req); } catch { body = {}; }
+    try {
+      const decided = backgrounds.reviewBackground(currentUser, decodeURIComponent(backgroundReview[1]), body.approve === true, body.reason);
+      if (!decided) return json(res, 404, { error: 'Nothing is waiting on that video.' });
+      log(`${body.approve === true ? 'Approved' : 'Declined'} "${decided.name}" for the DeenClipped library.`, 'info', currentUser.id);
+      return json(res, 200, { ok: true, background: decided });
+    } catch (error) { return json(res, 403, { error: error.message }); }
   }
   const backgroundDelete = pathname.match(/^\/api\/backgrounds\/([^/]+)$/);
   if (method === 'DELETE' && backgroundDelete) {

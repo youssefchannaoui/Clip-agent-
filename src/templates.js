@@ -511,10 +511,63 @@ function builtInOverrides(user) {
   return stored && typeof stored === 'object' ? stored : {};
 }
 
+/**
+ * The two things that belong to the ACCOUNT, not to a caption style.
+ *
+ * Youssef, 3 Sept 2026: "the watermark and promotion should not need to save
+ * with template it just works with all templates once on it turns on for all
+ * ... it doesn't work by template. It's incorrect."
+ *
+ * He is right, and v3.107.0 only half-fixed it: that release wrote the field
+ * to every template in a loop, so the switch reached the templates that
+ * EXISTED when it was pressed. A template whose shipped defaults later
+ * changed, or a reader that resolved a template some other way, still saw the
+ * per-template value -- which is what "it doesn't work by template" is
+ * describing. The value now lives on the account and is applied HERE, in the
+ * one function every template read already passes through, so there is
+ * nothing to keep in step and nothing to save.
+ */
+export const BRAND_FIELDS = ['watermark', 'watermarkOpacity', 'promoBarEnabled', 'promoBarStartSec', 'promoBarSeconds'];
+
+export function brandSettings(user) {
+  const id = userIdOf(user);
+  if (!id) return null;
+  const stored = readUserSetting(state, id, 'brand');
+  return stored && typeof stored === 'object' ? stored : null;
+}
+
+export function setBrandSettings(user, patch = {}) {
+  const id = userIdOf(user);
+  if (!id) throw new Error('Changing this needs an account.');
+  const next = { ...(brandSettings(user) || {}) };
+  for (const key of BRAND_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(patch, key)) next[key] = patch[key];
+  }
+  writeUserSetting(state, id, 'brand', next);
+  save();
+  return next;
+}
+
+/** The account's brand values laid over a template's own. */
+function withBrand(template, user) {
+  const brand = brandSettings(user);
+  if (!brand) return template;
+  // Scripture is the one exemption and it is not the account's to waive:
+  // nothing is drawn over an ayah -- no watermark, no promo bar. That rule
+  // outranks a switch, and it is read from the SHIPPED file so an override
+  // cannot mint an exemption for itself.
+  if (isScriptureTemplate(template.id)) return template;
+  const merged = { ...template };
+  for (const key of BRAND_FIELDS) {
+    if (brand[key] !== undefined) merged[key] = brand[key];
+  }
+  return sanitiseTemplate(merged, { id: template.id, builtIn: template.builtIn, userId: template.userId || '' });
+}
+
 function withAccountEdits(template, user) {
   if (!template?.builtIn) return template;
   const patch = builtInOverrides(user)[template.id];
-  if (!patch || typeof patch !== 'object') return { ...template, editable: true };
+  if (!patch || typeof patch !== 'object') return withBrand({ ...template, editable: true }, user);
   const merged = sanitiseTemplate({ ...template, ...patch }, { id: template.id, builtIn: true, userId: '' });
   merged.editable = true;
   // Taken from the shipped template, never from the patch: an account's own
@@ -530,7 +583,14 @@ function withAccountEdits(template, user) {
   const shippedDrift = Math.max(0, (template.version || 1) - recordedShipped);
   merged.version = (Number(patch.version) || template.version || 1) + shippedDrift;
   if (Number(patch.updatedAt)) merged.updatedAt = Number(patch.updatedAt);
-  return merged;
+  // Brand LAST, so the account-wide switch beats a value the template picked
+  // up from an older per-template save.
+  const branded = withBrand(merged, user);
+  branded.editable = true;
+  branded.pro = Boolean(template.pro);
+  branded.version = merged.version;
+  if (merged.updatedAt) branded.updatedAt = merged.updatedAt;
+  return branded;
 }
 
 /**

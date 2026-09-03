@@ -778,9 +778,33 @@ export function enabledTargetsForClip(clip) {
   if (!settings.enabled || !config.socialPublishEnabled) return [];
   const owner = ownerOfRecord(clip);
   const targets = [];
+  /*
+   * A clip may narrow where it goes, never widen it.
+   *
+   * Youssef, 3 Sept 2026, on the last step of the job panel: "they can
+   * deselect or select depending on each video ... always keep it saved from
+   * last goal" -- the account's Connections settings are the starting point
+   * every time, and a job may turn one off for that lecture's clips.
+   *
+   * Intersected rather than substituted, deliberately: a destination the
+   * account has since disconnected, or one its plan no longer allows, must not
+   * come back because a job recorded it days ago. An absent list means the
+   * clip predates this and takes the settings whole.
+   */
+  const project = clip.projectId ? (state.projects || []).find(row => row.id === clip.projectId) : null;
+  const chosenList = Array.isArray(clip.publishTo) ? clip.publishTo
+    : Array.isArray(project?.publishTo) ? project.publishTo
+      : null;
+  // Read from the PROJECT rather than stamped onto every clip at creation:
+  // clips are minted in five different places (first render, re-cut, import,
+  // variants) and a field that has to be remembered in five places is a field
+  // that will be forgotten in one. A clip may still carry its own list, which
+  // wins.
+  const only = chosenList ? chosenList.map(String) : null;
   for (const provider of PROVIDERS) {
     const item = settings[provider];
     if (!item?.enabled) continue;
+    if (only && !only.includes(provider)) continue;
     // TikTok requires explicit consent for each post, and three TikToks is
     // three posts. A clip approved before per-account consent existed carries
     // only the clip-level stamp, which still counts -- refusing those would

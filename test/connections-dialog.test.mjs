@@ -218,25 +218,41 @@ test('the channels stack instead of wrapping into pills', () => {
 });
 
 /**
- * The watermark and the promo bar belong to the account, not to a caption style.
+ * The watermark and the promo bar belong to the ACCOUNT, not to a caption
+ * style, and not to a template save.
  *
  * Youssef, 3 Sept 2026: "the watermark and promotion should not need to save
- * with template it just works with all templates once on it turns on for all."
+ * with template it just works with all templates once on it turns on for all
+ * ... it doesn't work by template. It's incorrect."
  *
- * Switching the watermark on for Clean Line and then rendering a Quran clip
- * without it is not a choice anybody meant to make.
+ * This test used to assert the LOOP that answered him the first time --
+ * writing the field to every template one save at a time. That only reached
+ * the templates that existed at the moment the switch was pressed, and left
+ * the value stored per template, which is the half he was still describing.
+ * The value lives on the account now and templates.js lays it over every
+ * template read. The behaviour being protected is the same and stronger: one
+ * source, so the two switches cannot drift apart from each other or from the
+ * templates they apply to.
  */
-test('both brand switches write to every template', () => {
-  assert.ok(/async function applyToAllTemplates\(patch\)\{/.test(host),
+test('both brand switches write to the account, not to a template', () => {
+  assert.ok(/async function saveBrand\(patch\)\{/.test(host),
     'one helper, so the two switches cannot drift apart');
-  assert.ok(/for\(const tpl of list\)\{[\s\S]{0,220}Object\.assign\(\{\},tpl,patch\)/.test(host),
-    'it loops the account’s templates rather than patching the selected one');
-  // The paywall stays server-side: each save is checked, so a free account is
-  // refused on the first one and the loop stops there.
+  assert.ok(/api\('\/api\/brand',\{method:'POST'/.test(host),
+    'it writes the account setting');
+  assert.ok(!/applyToAllTemplates/.test(host),
+    'the per-template loop is gone, not merely joined by another route');
+  assert.ok(!/api\('\/api\/templates'[\s\S]{0,400}promoBar/.test(host),
+    'no template is saved to change a brand switch');
   const wm = host.indexOf("toggle.addEventListener('change'");
-  assert.ok(host.slice(wm, wm + 900).includes('applyToAllTemplates(patch)'), 'watermark uses it');
+  assert.ok(host.slice(wm, wm + 900).includes('saveBrand(patch)'), 'watermark uses it');
   const pb = host.indexOf("bar.addEventListener('change'");
-  assert.ok(host.slice(pb, pb + 700).includes('applyToAllTemplates({promoBarEnabled:want})'), 'promo bar uses it');
+  assert.ok(host.slice(pb, pb + 700).includes('saveBrand({promoBarEnabled:want})'), 'promo bar uses it');
+  // The duration chips are rebuilt by the innerHTML above them, so a
+  // `dataset.wired` guard would leave the NEW buttons dead. They are rewired
+  // on every paint, deliberately.
+  assert.ok(/box\.querySelectorAll\('\[data-pb-secs\]'\)/.test(host),
+    'the duration chips exist and are rewired each paint');
+  assert.ok(/saveBrand\(\{promoBarSeconds:n\}\)/.test(host), 'and they write the account setting too');
 });
 
 /**
