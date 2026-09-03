@@ -4086,14 +4086,24 @@ Scripture is captioned on every template (invariant 7), so this is not confined
 to the Quran one. Whatever the right ratio is, it should be DERIVED from one
 size rather than emerging from both.
 
-**Nothing was changed, deliberately.** This file's rule is "Only a rendered
-frame settles a caption question. Every one of the above passed unit tests; two
-deploy cycles were spent on renders that should have been right." The ffmpeg on
-the Mac has **no libass** (`ffmpeg -filters | grep subtitles` returns nothing),
-so no frame could be rendered to settle it. The next session with the container
-or the box should render one ayah plus its gloss, measure the lit rows of each,
-and set the ratio from that -- not from the arithmetic, which is already known
-to disagree with reality.
+**`AYAH_SIZE_SCALE` is 3.54 -> 4.40, and it is a GUESS**, made at Youssef's
+instruction ("just guess a value and ill check the next render") because the
+ffmpeg on the Mac has **no libass** (`ffmpeg -filters | grep subtitles` returns
+nothing) and no frame could be rendered to settle it.
+
+The 1.24x comes from the PHOTOGRAPH, not the arithmetic: on that Short the
+Arabic reads a little smaller than the English, not half its size, so the
+correction needed is small. Had the model been right -- ayah already twice the
+gloss -- he would have asked for it to come down.
+
+**Correcting it takes one render and no re-derivation:** render an ayah with
+its gloss, decode the frame to gray8, measure the lit rows of each line, and
+multiply the constant by (gloss rows / ayah rows). Do not trust the arithmetic
+over the frame; it is already known to disagree with reality.
+
+The overflow risk of a 24% bigger line was checked rather than assumed: the
+ayah Dialogue already carries `{\q0}` (clip_worker.py:2579), so a longer line
+wraps instead of running off both edges -- invariant 8 holds.
 
 ## Open items
 

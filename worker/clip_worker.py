@@ -2359,15 +2359,20 @@ AYAH_FADE_OUT_MS = 450
 # on every per-account override. Whatever the right ratio is, it should be
 # DERIVED from one of them rather than emerging from both.
 #
-# It is not changed here because this file's own rule forbids it: "Only a
-# rendered frame settles a caption question. Every one of the above passed unit
-# tests; two deploy cycles were spent on renders that should have been right."
-# The ffmpeg on the machine this was investigated from has no libass, so no
-# frame could be rendered. The next session with the container (or the box)
-# should render one ayah + gloss, measure the lit rows of each, and set the
-# ratio from that measurement -- not from the arithmetic above, which the
-# photograph already disproves.
-AYAH_SIZE_SCALE = 3.54
+# 3.54 -> 4.40 is a GUESS, made at Youssef's instruction ("just guess a value
+# and ill check the next render") because no frame could be rendered here to
+# settle it. It is 1.24x, and the reasoning is the photograph rather than the
+# arithmetic: on that Short the Arabic reads a little smaller than the English,
+# not half its size, so the correction needed is small. Had the model been
+# right -- ayah already 2x the gloss -- he would have asked for it to come
+# DOWN, not up.
+#
+# HOW TO CORRECT IT, in one render, without re-deriving any of the above:
+# render one ayah with its gloss, decode the frame to gray8, and measure the
+# lit rows of each line. Multiply this constant by (gloss rows / ayah rows).
+# That is the whole procedure; the arithmetic in this comment block is known
+# to disagree with reality and should not be trusted over the frame.
+AYAH_SIZE_SCALE = 4.40
 
 # libass sizes a font by its Win cell (usWinAscent + usWinDescent, in em).
 # The mushaf faces have very tall cells, so the same nominal size draws them
