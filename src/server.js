@@ -706,7 +706,11 @@ function streamFile(req, res, file, { downloadName = '', contentType = '', cache
 function latestRerender(clipId) {
   // The full render outranks a preview window in the status line -- the
   // preview's whole life is seconds, and it has its own chip in the editor.
-  const jobs = state.rerenderJobs.filter(job => job.clipId === clipId);
+  // A social variant is excluded outright: it renders a platform-specific COPY
+  // and never touches the clip, so reporting it here would put "re-rendering"
+  // on a clip whose own render is finished and offer an editor spinner for
+  // work the customer did not ask for and cannot see.
+  const jobs = state.rerenderJobs.filter(job => job.clipId === clipId && !job.socialVariant);
   return jobs.find(job => !job.preview && ['queued', 'processing'].includes(job.status)) || jobs[0] || null;
 }
 function publicClip(clip, { detail = false } = {}) {

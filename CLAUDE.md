@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1268 JS + 592 Python**
+- `npm test` and `npm run check` must pass. Currently **1281 JS + 592 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -6640,8 +6640,116 @@ second is a product fault rather than a wording one.
   `explainFailure` rather than by asserting the table contains a regex — a
   wrong winner was the entire bug the publish/import split existed to fix.
 
-**Not built: the remote clean-copy render.** It needs a re-render round trip
-through the worker (`runRemoteAux` / `state.rerenderJobs`) producing a
-watermark-free derivative for the TikTok leg only. Until then a free account
-cannot post to TikTok at all, because the watermark is locked on for them — a
-real gap, stated rather than hidden behind a message that blames TikTok.
+**The remote clean-copy render is BUILT (v3.114.0, below).** This paragraph
+said it was not for one release; the refusal it describes is gone, on both
+engines, and a free account CAN post to TikTok now.
+
+## TikTok gets its own copy, on the remote worker too (v3.114.0, 3 Sept 2026)
+
+Youssef: "build the remote clean copy render for tiktok."
+
+TikTok's Content Posting rules refuse a video carrying another app's
+promotional mark. The LOCAL engine has rendered a clean derivative for years;
+the REMOTE path returned before it and only ever refused — and production runs
+the remote worker, with every template carrying the DeenClipped mark by
+default since v3.72.8. **So every TikTok post this product has ever attempted
+was refused by this app before TikTok was contacted.**
+
+### It is a re-render, not a new kind of job
+
+`queueClipRerender(clipId, templateId, { socialVariant: 'tiktok' })`. The
+render pipeline, the queue, the worker payload, the retry bounds and the
+restart recovery are all the ones that already existed; what is new is a third
+outcome beside "replace the clip" and "make a library variant" — **land on
+`clip.socialVariants[kind]` and touch nothing else.**
+
+- **It costs no tokens.** A re-render never has, and this one is not something
+  the customer asked for: TikTok's rules are.
+- **It is excluded from the supersede sweeps in both directions**, because it
+  is not the clip's own render. Without that a queued copy and a queued
+  re-render would cancel each other.
+- **A clip already POSTED can still have one made.** The old guard refused
+  every change to a posted clip; a clip live on YouTube with a failed TikTok
+  leg is exactly the case this exists to serve, and the copy changes nothing
+  about the clip.
+- The output id is fixed (`<clip>-tiktok-safe`), so a re-render overwrites
+  rather than collecting a graveyard of copies in storage.
+
+### `cleanTemplateForTikTok` is ONE definition, and WHERE it runs is the point
+
+Both engines call it, so they cannot disagree about what TikTok is sent. It is
+applied **after `enforcePlan`, never before** — enforcePlan puts the free
+plan's mandatory watermark back on, so stripping first would have shipped the
+mark on the very copy that exists to remove it. A test pins the ORDER, not
+just the call, and was proven red against the swap.
+
+**The trade, stated rather than hidden:** a free account's TikTok video now
+carries no burned-in mark. That is the same shape as the scripture exemption —
+the platform's own rule outranks the paywall — and the attribution MOVES
+rather than disappearing: `postCredit` already puts the poster's own invite
+link in the caption, on TikTok as everywhere else. A test asserts that caption
+still carries it, and was proven red against `postCredit` returning nothing.
+
+### Waiting is not failing, and that distinction is load-bearing
+
+A remote render is a queued job on a shared worker; it runs for minutes. The
+publish attempt cannot block on it, so `socialPublishFile` throws
+`pendingRender` and `processTarget` answers it **before it counts an attempt**.
+`socialMaxAttempts` is 5 on a doubling backoff — about half an hour — so
+counting each check would burn the whole budget and file a perfectly good clip
+as failed while its copy was still in the queue. That budget exists for
+TikTok's own transients; a wait of ours is not one of them.
+
+**It is bounded by the render, not by a timer.** The moment that job reaches
+`failed`, socialPublishFile throws an ordinary error carrying the worker's own
+reason, which then spends attempts and fails normally. `runRemoteAux` already
+bounds every job (worker timeout, capped unavailable-retries), and a restart
+recovers `processing` back to `queued`.
+
+### `forRenderVersion` is what refuses to post a stale copy
+
+Stamped at QUEUE time, not at import: the copy renders the style current when
+it was queued, so reading the version at import would record a newer number
+and call a stale copy fresh. A clip re-rendered since its copy was made gets a
+new one; the old files and objects are deleted when the clip re-renders. **The
+version check is the authority — the deletion is only what stops the files
+accumulating.**
+
+### The copy is machinery, so it is not a second row anywhere
+
+The publish target already says "Clip → TikTok · Rendering a copy TikTok will
+accept". The render job is hidden from the live list (where it would have read
+**"Editing clip"** at somebody who edited nothing), from the Activity failures
+(**"Edit failed"** beside the publish failure that carries the real guidance),
+and from `latestRerender` (which would have spun the editor for work the
+customer cannot see). Measured in a browser: **one row on screen**, naming the
+destination.
+
+### The guidance moved with the behaviour
+
+`EXPLAIN_PUBLISH`'s watermark entry told people to switch the watermark off by
+hand. The app does that itself now, so advice for a solved problem is worse
+than none: the entry answers the RENDER failing instead. **The test that
+asserts nobody is still told to switch it off reads what `explainFailure`
+RETURNS, not the source** — a grep matched the comment explaining the removal,
+which is the fourth time this repo has been caught by a source-string test
+passing or failing on its own explanation.
+
+### What is proven, and what is not
+
+Nine of the eleven tests drive the real functions against a faked worker —
+queue, poll, land, publish — because the whole bug was a path that was never
+taken. All eight probes were proven RED against the behaviour they pin.
+
+**Not yet seen on a real TikTok.** The app-side proof is complete: the right
+job is queued, the payload carries a template with nothing of ours on the
+frame, the copy lands and is the file handed to TikTok. Whether TikTok then
+ACCEPTS it is still open item 2 — an unreviewed app may only post to a private
+account, and that is a submission, not code.
+
+**Two traps paid for again:** the temp directory in the first cut of the test
+was named `deenclipped-tiktok-safe-`, so every path matched the pattern under
+test and three assertions passed on their own fixture — assert on the
+BASENAME. And `remoteMusicTracks` throws without `PUBLIC_BASE_URL` even for an
+empty track list, so a music-waived remote re-render fails for the wrong
+reason on a deployment that has not set it.

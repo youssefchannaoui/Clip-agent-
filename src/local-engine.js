@@ -10,7 +10,7 @@ import * as mailer from './mailer.js';
 import * as ownerFeed from './owner-feed.js';
 import { state, save, log, clipSettings, musicSettings, ownerOfRecord, musicSatisfied, importNetworkSettings, emailNotifsOff } from './store.js';
 import * as push from './push.js';
-import { sanitiseTemplate, selectedTemplate, templateById, templateForClip } from './templates.js';
+import { sanitiseTemplate, selectedTemplate, templateById, templateForClip, visibleText } from './templates.js';
 import { withOwner, ownerOf } from './tenancy.js';
 import { workerMusicTracks } from './audio.js';
 import * as billing from './billing.js';
@@ -142,10 +142,36 @@ export function trustedRemoteMediaUrl(value) {
   return url.toString();
 }
 
-async function cacheRemotePublishClip(clip) {
-  const url = trustedRemoteMediaUrl(clip.clipUrl);
+/**
+ * What "clean" means for TikTok, defined ONCE.
+ *
+ * TikTok's Content Posting rules refuse a video carrying another app's
+ * promotional mark, so the clip that goes there is rendered without one. Both
+ * the local path (which spawns the render itself) and the remote path (which
+ * queues it through the worker) call this, because two definitions of clean
+ * is how one of them ends up shipping a mark the other strips.
+ *
+ * It is applied AFTER enforcePlan on purpose, so it overrides the free plan's
+ * mandatory watermark. That is the same shape as the scripture exemption: the
+ * platform's own rule outranks the paywall, and the attribution does not
+ * disappear -- a free account's caption already carries the credit line
+ * (`postCredit` in social.js), on TikTok as everywhere else.
+ */
+function cleanTemplateForTikTok(template) {
+  return { ...template, watermark: '', watermarkOpacity: 0, brandLineEnabled: false, promoBarEnabled: false };
+}
+
+/** Does this template put anything of ours on top of the frame? */
+function marksTheFrame(template) {
+  return Boolean(
+    visibleText(template?.watermark) || template?.brandLineEnabled || template?.promoBarEnabled,
+  );
+}
+
+async function cacheRemoteMedia(mediaUrl, cacheKey) {
+  const url = trustedRemoteMediaUrl(mediaUrl);
   fs.mkdirSync(publishCacheDir, { recursive: true });
-  const file = path.join(publishCacheDir, `${String(clip.id).replace(/[^A-Za-z0-9_-]/g, '_')}.mp4`);
+  const file = path.join(publishCacheDir, `${String(cacheKey).replace(/[^A-Za-z0-9_-]/g, '_')}.mp4`);
   if (fs.existsSync(file) && fs.statSync(file).size > 0) return file;
   const temporary = `${file}.part`;
   const controller = new AbortController();
@@ -193,6 +219,9 @@ async function cacheRemotePublishClip(clip) {
     fs.rmSync(temporary, { force: true });
   }
 }
+
+const cacheRemotePublishClip = (clip) => cacheRemoteMedia(clip.clipUrl, clip.id);
+
 /**
  * Render settings for one account.
  *
@@ -1548,12 +1577,35 @@ function importRerenderResultObject(jobRecord, result) {
     save();
     return;
   }
-  const newer = state.rerenderJobs.find(item => item.clipId === jobRecord.clipId && !item.asVariant && item.createdAt > jobRecord.createdAt && ['queued', 'processing', 'done'].includes(item.status));
-  if (!jobRecord.asVariant && newer) {
+  const newer = state.rerenderJobs.find(item => item.clipId === jobRecord.clipId && !item.asVariant && !item.socialVariant && item.createdAt > jobRecord.createdAt && ['queued', 'processing', 'done'].includes(item.status));
+  if (!jobRecord.asVariant && !jobRecord.socialVariant && newer) {
     jobRecord.status = 'superseded';
     jobRecord.stage = 'A newer template render replaced this result';
     jobRecord.completedAt = Date.now();
     save();
+    return;
+  }
+
+  if (jobRecord.socialVariant) {
+    // A social variant is an invisible DERIVATIVE: it neither replaces the
+    // clip nor joins the library. The clip that a customer reviews, edits and
+    // sees everywhere is untouched; only the file handed to one platform
+    // differs, and only because that platform's rules require it.
+    original.socialVariants = {
+      ...(original.socialVariants || {}),
+      [jobRecord.socialVariant]: {
+        clipFile: rendered.clipFile || '',
+        clipUrl: rendered.clipUrl || '',
+        clipObjectKey: rendered.clipObjectKey || '',
+        forRenderVersion: Number(jobRecord.forRenderVersion || original.renderVersion || 1),
+        createdAt: Date.now(),
+      },
+    };
+    original.updatedAt = Date.now();
+    jobRecord.status = 'done'; jobRecord.stage = `${PLATFORM_LABEL[jobRecord.socialVariant] || jobRecord.socialVariant}-safe copy ready`;
+    jobRecord.progress = 100; jobRecord.completedAt = Date.now(); jobRecord.error = null;
+    save();
+    log(`A ${PLATFORM_LABEL[jobRecord.socialVariant] || jobRecord.socialVariant}-safe copy of "${original.title}" is ready to post.`, 'info', ownerOfRecord(original));
     return;
   }
 
@@ -1600,6 +1652,17 @@ function importRerenderResultObject(jobRecord, result) {
         objectStorage.deleteObject(oldKey).catch(error => log(`Old render object was not deleted: ${error.message}`, 'warn', ownerOf(original)));
       }
     }
+    // The clip now holds different bytes, so every platform-specific copy of
+    // the OLD render is stale. `forRenderVersion` is what actually refuses to
+    // post one; dropping them here is what stops the files accumulating.
+    for (const variant of Object.values(original.socialVariants || {})) {
+      if (variant?.clipFile) removeDataFile(variant.clipFile);
+      if (variant?.clipObjectKey) {
+        objectStorage.deleteObject(variant.clipObjectKey)
+          .catch(error => log(`An old platform copy was not deleted: ${error.message}`, 'warn', ownerOf(original)));
+      }
+    }
+    original.socialVariants = {};
     jobRecord.resultClipId = original.id;
     log(`Re-rendered "${original.title}" with template "${rendered.templateName}" while preserving its queue status.`, 'info', ownerOfRecord(original));
   }
@@ -1766,16 +1829,20 @@ export function withImportNetwork(source) {
 // it was hardcoded to outrank everything, and production runs one worker slot:
 // one account keeping a re-render queued could hold a paying customer's lecture
 // behind it indefinitely. Level with a submitted lecture, ahead of nothing.
-export function queueClipRerender(clipId, templateId, { asVariant = false, priority = 1, quality = '', preview = null } = {}) {
+export function queueClipRerender(clipId, templateId, { asVariant = false, priority = 1, quality = '', preview = null, socialVariant = '' } = {}) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
-  if (clip.status === 'posted' && !asVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
+  // A social variant changes NOTHING about the clip -- it renders a separate
+  // derivative onto clip.socialVariants -- so a clip already live on YouTube
+  // may still need its TikTok copy rendered. Refusing here is what would
+  // strand the TikTok leg of a partly-posted clip.
+  if (clip.status === 'posted' && !asVariant && !socialVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
   // Unapproved clips keep the fast draft loop -- an editor tweak should not
   // cost a full 1080p render nobody has approved yet. Anything approved or
   // beyond renders final, and approve itself asks for final explicitly.
   // Only an editor preview window is ever a draft now; every real render is
   // the file that could be posted.
-  const renderQuality = preview ? 'draft' : (quality || 'final');
+  const renderQuality = preview && !socialVariant ? 'draft' : (quality || 'final');
   const project = projectById(clip.projectId);
   // Guarded because the lines below dereference it directly. A clip whose
   // lecture was deleted otherwise threw a raw TypeError at the user.
@@ -1807,7 +1874,11 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   // This clip's own tweaks win over the shared style. Without this, editing one
   // clip either changed every clip on the template or was silently discarded at
   // render time.
-  const template = enforcePlan(templateForClip(baseTemplate, clip.styleOverrides), ownerOf(clip));
+  const planned = enforcePlan(templateForClip(baseTemplate, clip.styleOverrides), ownerOf(clip));
+  // enforcePlan puts the free plan's mandatory watermark back on, so stripping
+  // has to happen after it, never before. See cleanTemplateForTikTok for why
+  // the platform's rule is allowed to outrank the paywall here.
+  const template = socialVariant === 'tiktok' ? cleanTemplateForTikTok(planned) : planned;
   // store.musicSatisfied already treats musicEnabled === false as satisfied,
   // and validateSubmission lets a job start that way -- but this refused every
   // re-render regardless, so a clip that was deliberately made without a
@@ -1824,7 +1895,8 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   fs.mkdirSync(dir, { recursive: true });
   const resultPath = path.join(dir, 'result.json');
   const outputDir = path.join(clipsDir, project.id, 'rerenders');
-  const outputClipId = preview ? `${clip.id}-preview`
+  const outputClipId = socialVariant ? `${clip.id}-${socialVariant}-safe`
+    : preview ? `${clip.id}-preview`
     : asVariant ? `${clip.id}-variant-${Date.now().toString(36)}` : `${clip.id}-render-${Date.now().toString(36)}`;
   // The stored source object is the already-trimmed window; a URL re-import is
   // the whole video. Without the window, a clip's startSec (relative to the
@@ -1884,7 +1956,16 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     // 2 = batch sweeps. The queue serves the person at the screen first.
     priority: Math.max(0, Math.min(2, Number(priority) || 0)),
     preview: Boolean(preview),
-    asVariant: Boolean(asVariant), status: 'queued', stage: preview ? 'Rendering a preview window' : 'Waiting to re-render', progress: 0, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
+    asVariant: Boolean(asVariant), socialVariant: socialVariant || '',
+    // Stamped at QUEUE time, not at import: this variant renders the style
+    // that is current NOW, so if the clip itself re-renders while this is in
+    // the worker the result is already stale. Reading the version at import
+    // would record the newer number and call a stale copy fresh.
+    forRenderVersion: Number(clip.renderVersion || 1),
+    status: 'queued',
+    stage: socialVariant ? `Rendering a ${PLATFORM_LABEL[socialVariant] || socialVariant}-safe copy`
+      : preview ? 'Rendering a preview window' : 'Waiting to re-render',
+    progress: 0, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
     createdAt: Date.now(), jobFile: file, resultPath,
   }, ownerOf(clip));
   // A newer request replaces any still-queued render for the same clip --
@@ -1892,7 +1973,9 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   // up behind each other. A job already processing is left to finish; the
   // import-time supersede check discards its result if this one lands after.
   for (const stale of state.rerenderJobs) {
-    if (stale.clipId === clip.id && !stale.asVariant && !asVariant && stale.status === 'queued'
+    if (stale.clipId === clip.id && !stale.asVariant && !asVariant
+        && (stale.socialVariant || '') === (socialVariant || '')
+        && stale.status === 'queued'
         && Boolean(stale.preview) === Boolean(preview)) {
       stale.status = 'superseded'; stale.stage = 'Replaced by a newer edit'; stale.completedAt = Date.now();
     }
@@ -1905,7 +1988,9 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   const done = state.rerenderJobs.filter(item => !['queued', 'processing'].includes(item.status)).slice(0, 60);
   state.rerenderJobs = [...live, ...done].sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
   save();
-  log(`Queued ${asVariant ? 'a re-post variant' : 'a re-render'} of "${clip.title}" using "${template.name}".`, 'info', ownerOf(clip));
+  log(socialVariant
+    ? `Rendering a ${PLATFORM_LABEL[socialVariant] || socialVariant}-safe copy of "${clip.title}" without the app watermark.`
+    : `Queued ${asVariant ? 'a re-post variant' : 'a re-render'} of "${clip.title}" using "${template.name}".`, 'info', ownerOf(clip));
   pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
   return record;
 }
@@ -1979,38 +2064,80 @@ function runWorkerJob(jobPath, resultPath, label = 'Render') {
  * derivative is rendered automatically while the user's normal branded clip
  * remains unchanged for every other destination.
  */
+/** Platform names as a person writes them, for anything a customer reads. */
+const PLATFORM_LABEL = { tiktok: 'TikTok' };
+
+/** The one place that decides whether a clip already carries our mark. */
+function templateOfClip(clip) {
+  const owner = ownerOfRecord(clip);
+  return clip.templateSnapshot || templateById(clip.templateId, owner) || selectedTemplate(owner);
+}
+
+/** Signals "ask again shortly" rather than "this failed". */
+function stillRendering(message) {
+  return Object.assign(new Error(message), { pendingRender: true });
+}
+
+/**
+ * The watermark-free copy TikTok requires, on a REMOTE worker.
+ *
+ * Returns the media URL of a fresh clean copy, '' when the clip needs none, or
+ * throws: `pendingRender` while the copy is being made, a plain error when it
+ * cannot be. Unlike the local path this cannot render inline -- a remote
+ * render is a queued job on a shared worker that runs for minutes -- so the
+ * publish attempt is asked to come back instead of being blocked.
+ */
+function tiktokSafeRemoteUrl(clip) {
+  const template = templateOfClip(clip);
+  if (!marksTheFrame(template)) return '';
+
+  const version = Number(clip.renderVersion || 1);
+  const ready = clip.socialVariants?.tiktok;
+  // Version, never mere existence: a clip re-rendered since this copy was made
+  // holds different bytes, and posting the old copy would put a stale caption
+  // on TikTok while every other platform got the new one.
+  if (ready?.clipUrl && Number(ready.forRenderVersion || 0) === version) return ready.clipUrl;
+
+  const jobs = state.rerenderJobs.filter(item => item.clipId === clip.id
+    && item.socialVariant === 'tiktok'
+    && Number(item.forRenderVersion || 0) === version);
+  const live = jobs.find(item => ['queued', 'processing'].includes(item.status));
+  if (live) throw stillRendering(`TikTok needs a copy without the app watermark, and it is ${live.status === 'queued' ? 'queued' : 'rendering'} now.`);
+
+  // A copy that FAILED must not be retried forever by the publish loop: the
+  // customer is told, once, what actually went wrong with the render.
+  const failed = jobs.find(item => item.status === 'failed');
+  if (failed) throw new Error(`The watermark-free copy TikTok requires could not be rendered: ${failed.error || 'the render failed.'}`);
+
+  // The CLIP's own template id, not the snapshot's. queueClipRerender has a
+  // resolution chain (saved template -> the clip's -> the project's snapshot ->
+  // the account's selection, said out loud) and passing the snapshot's id
+  // skips to a fallback whenever that id is no longer a saved template -- so
+  // the copy could be rendered in a style the clip has never worn. Passing the
+  // clip's own id means the copy resolves exactly as a re-render of this clip
+  // would, which is the whole point: the same look, minus our mark.
+  queueClipRerender(clip.id, clip.templateId || template.id, { socialVariant: 'tiktok', priority: 1 });
+  throw stillRendering('TikTok needs a copy without the app watermark. It is rendering now and this post will go out as soon as it is ready.');
+}
+
+/**
+ * Return the final file used for a social platform.
+ *
+ * TikTok's Content Posting rules prohibit app-added promotional watermarks, so
+ * a clean derivative is rendered automatically while the customer's own
+ * branded clip stays exactly as it is for every other destination. Both
+ * engines do this now; before v3.114.0 only the LOCAL one did, so on a remote
+ * worker -- which is production -- every TikTok post was refused by this app
+ * before TikTok was ever contacted.
+ */
 export async function socialPublishFile(clipId, provider) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
   if (clip.clipUrl) {
     if (provider === 'instagram') return null;
     if (provider === 'tiktok') {
-      /*
-       * THE CLEAN COPY IS NEVER RENDERED ON THIS PATH, and that is the whole
-       * of "publish failed" on TikTok in production.
-       *
-       * Below, the LOCAL path renders a watermark-free derivative
-       * automatically when a template carries a mark. A remote render returns
-       * early here, so it only ever refused -- and since v3.72.8 every
-       * template ships WITH a watermark, so in production every TikTok post
-       * was refused by this app before TikTok ever saw it.
-       *
-       * The advice was unfollowable too: it told the customer to "choose a
-       * TikTok-safe template", which is not a thing that exists on any screen.
-       * Until the remote clean render is built (it needs a re-render round
-       * trip through the worker), the message says what is actually true and
-       * what actually works today.
-       */
-      const owner = ownerOfRecord(clip);
-      const template = clip.templateSnapshot || templateById(clip.templateId, owner);
-      if (String(template?.watermark || '').trim() || template?.brandLineEnabled) {
-        const canRemove = Boolean(owner && billing.planFeatures(owner).watermark);
-        throw new Error(canRemove
-          ? 'TikTok does not accept a video carrying another app\'s watermark. Turn the watermark off on '
-            + `the "${template?.name || 'clip'}" template, then re-render this clip and retry.`
-          : 'TikTok does not accept a video carrying another app\'s watermark, and removing the DeenClipped '
-            + 'mark is a paid feature. YouTube, Instagram and Facebook are unaffected.');
-      }
+      const cleanUrl = tiktokSafeRemoteUrl(clip);
+      if (cleanUrl) return cacheRemoteMedia(cleanUrl, `${clip.id}-tiktok-safe`);
     }
     return cacheRemotePublishClip(clip);
   }
@@ -2019,11 +2146,11 @@ export async function socialPublishFile(clipId, provider) {
   if (provider !== 'tiktok') return regular;
 
   const clipOwner = ownerOfRecord(clip);
-  const template = structuredClone(clip.templateSnapshot || templateById(clip.templateId, clipOwner) || selectedTemplate(clipOwner));
-  const needsCleanVariant = Boolean(String(template?.watermark || '').trim() || template?.brandLineEnabled);
-  if (!needsCleanVariant) return regular;
-  const existing = clip.socialVariants?.tiktok?.clipFile;
-  if (existing && fs.existsSync(existing)) return existing;
+  const template = structuredClone(templateOfClip(clip));
+  if (!marksTheFrame(template)) return regular;
+  const existing = clip.socialVariants?.tiktok;
+  if (existing?.clipFile && Number(existing.forRenderVersion || 0) === Number(clip.renderVersion || 1)
+    && fs.existsSync(existing.clipFile)) return existing.clipFile;
   if (socialRendering.has(clipId)) return socialRendering.get(clipId);
 
   const promise = (async () => {
@@ -2037,11 +2164,9 @@ export async function socialPublishFile(clipId, provider) {
     const matching = tracks.find(track => track.name === clip.musicName);
     const selectedTracks = matching ? [matching] : tracks;
     const cleanTemplate = {
-      ...template,
+      ...cleanTemplateForTikTok(template),
       id: `${template.id || 'template'}-tiktok-safe`,
       name: `${template.name || 'Template'} · TikTok safe`,
-      watermark: '',
-      brandLineEnabled: false,
     };
     const renderId = id('social_tiktok');
     const dir = path.join(jobsDir, renderId);
@@ -2067,7 +2192,10 @@ export async function socialPublishFile(clipId, provider) {
     if (!rendered?.renderVerified || !musicSatisfied(rendered) || !rendered?.clipFile || !fs.existsSync(rendered.clipFile)) {
       throw new Error('The TikTok-safe copy did not pass video, audio and music verification.');
     }
-    clip.socialVariants = { ...(clip.socialVariants || {}), tiktok: { ...rendered, createdAt: Date.now() } };
+    clip.socialVariants = {
+      ...(clip.socialVariants || {}),
+      tiktok: { ...rendered, forRenderVersion: Number(clip.renderVersion || 1), createdAt: Date.now() },
+    };
     save();
     return rendered.clipFile;
   })().finally(() => socialRendering.delete(clipId));

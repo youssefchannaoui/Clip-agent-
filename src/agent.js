@@ -626,6 +626,28 @@ async function processTarget(clip, target) {
       log(`Published "${clip.title}" to ${whereText(target)}.`, 'info', ownerOf(clip));
     }
   } catch (error) {
+    // WAITING IS NOT FAILING, and it must not spend the retry budget.
+    //
+    // TikTok will not take a video carrying our watermark, so a clean copy is
+    // rendered first -- and on a remote worker that is a queued job behind
+    // whatever else the box is doing. `socialMaxAttempts` is 5 on a doubling
+    // backoff, so treating each check as an attempt would burn the whole
+    // budget inside half an hour and file a perfectly good clip as failed
+    // while its copy was still rendering. That budget exists for TikTok's own
+    // transients; a wait of ours is not one of them.
+    //
+    // It is bounded by the render itself: the moment that job fails,
+    // socialPublishFile throws an ordinary error naming the reason and falls
+    // through to the branch below.
+    if (error?.pendingRender) {
+      target.status = 'publishing';
+      target.stage = `Rendering a copy ${whereText(target)} will accept`;
+      target.error = null;
+      target.nextTryAt = Date.now() + config.socialPollIntervalMs;
+      target.updatedAt = Date.now();
+      refreshPublishingStatus(clip); save();
+      return;
+    }
     target.attempts = Number(target.attempts || 0) + 1;
     target.error = error.message; target.updatedAt = Date.now();
     // `retryable === true`, not `!== false`.

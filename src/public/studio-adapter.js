@@ -1020,18 +1020,19 @@
       ],
     },
     {
-      // Ours, not TikTok's: the app refuses before TikTok ever sees the video.
-      // Every template ships with the DeenClipped mark since v3.72.8, and the
-      // automatic watermark-free copy is only rendered on the LOCAL engine --
-      // so on a remote worker (production) every TikTok post was refused here.
-      match: /watermark/i,
-      title: 'TikTok will not take a video with an app watermark on it',
-      cause: 'TikTok\u2019s posting rules refuse video carrying another app\u2019s mark, and DeenClipped burns its watermark into every clip by default. This refusal comes from DeenClipped, before TikTok is contacted \u2014 nothing was sent and nothing was wasted.',
+      // Since v3.114.0 the clean copy TikTok requires is rendered
+      // AUTOMATICALLY on both engines, so reaching here means that render
+      // itself failed -- not that a watermark is in the way. The old entry
+      // told people to switch the watermark off by hand, which is now advice
+      // for a problem the app solves on its own.
+      match: /watermark-free copy|TikTok-safe/i,
+      title: 'The TikTok copy could not be rendered',
+      cause: 'TikTok\u2019s posting rules refuse video carrying another app\u2019s mark, so DeenClipped renders a separate copy without one and posts that. Nothing reached TikTok \u2014 this is the extra render failing, and the reason is on the line above.',
       fixes: [
-        'On a paid plan: open Templates, switch the watermark off on the style these clips use, then re-render and retry.',
-        'On the free plan the mark cannot be removed, so TikTok is not reachable yet.',
+        'Press Retry: the copy is rendered again from the original lecture.',
+        'If it keeps failing, check the lecture still has its source and a nasheed \u2014 the copy is a full re-render and needs both.',
+        'Your own clip is untouched and still carries your watermark everywhere else.',
         'YouTube, Instagram and Facebook take the clip exactly as it is \u2014 they have no such rule.',
-        'A clip already posted elsewhere stays posted; only the TikTok leg is affected.',
       ],
     },
     {
@@ -3818,6 +3819,13 @@
       }
     });
     (DATA.rerenderJobs || []).forEach(function (j) {
+      // A social variant is deliberately NOT a row here. It is the copy TikTok
+      // requires, rendered on the customer's behalf, and the publish target
+      // below already carries it -- "Clip -> TikTok - Rendering a copy TikTok
+      // will accept". Showing both puts two rows on screen for one piece of
+      // work, and this one would read "Editing clip" at somebody who edited
+      // nothing.
+      if (j.socialVariant) return;
       if (['queued', 'processing'].indexOf(j.status) > -1) {
         var c = clips.filter(function (x) { return x.id === j.clipId; })[0];
         jobsLive.push({ kind: 'render', id: j.id, queued: j.status === 'queued', boosted: j.priority === 0, title: 'Editing ' + ((c && c.title) || 'clip'), stage: j.stage || j.status, progress: Number(j.progress || 0), etaSec: flatEta(150, j.progress), at: j.startedAt || j.createdAt });
@@ -4021,6 +4029,10 @@
     });
     (DATA.rerenderJobs || []).forEach(function (j) {
       if (j.status !== 'failed') return;
+      // Same reason as the live row above: the publish target reports this
+      // one, with the destination named and its own guidance entry. Here it
+      // would read "Edit failed" about an edit nobody made.
+      if (j.socialVariant) return;
       var c = clips.filter(function (x) { return x.id === j.clipId; })[0];
       // Only the clip's current job: once a newer render succeeded, the old
       // failure is history, not a task -- it sat in the bell regardless.

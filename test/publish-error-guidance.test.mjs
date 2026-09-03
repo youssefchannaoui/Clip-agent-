@@ -106,44 +106,86 @@ test('every publish guide gives a cause and at least two steps', () => {
  * "TikTok requires a clean copy without an app watermark. Choose a TikTok-safe
  * template and re-render this clip first."
  *
- * Two things were wrong with it. The advice named a "TikTok-safe template",
- * which is not a thing on any screen in this product. And the refusal is
- * OURS, not TikTok's: socialPublishFile refuses before TikTok is contacted,
- * and the automatic watermark-free copy it points at is only rendered on the
- * LOCAL engine -- so on a remote worker, which is production, every TikTok
- * post was refused here. Every template has carried the mark by default since
- * v3.72.8, so that is all of them.
+ * The advice named a "TikTok-safe template", which is not a thing on any
+ * screen; and the refusal was OURS, not TikTok's -- the automatic
+ * watermark-free copy it pointed at was only rendered on the LOCAL engine, so
+ * on a remote worker (production) every TikTok post was refused before TikTok
+ * was ever contacted. Every template has carried the mark by default since
+ * v3.72.8, so that was all of them.
+ *
+ * v3.114.0 built the remote copy, so THE REFUSAL IS GONE. These tests moved
+ * with the behaviour rather than being deleted: what they pin now is that the
+ * app no longer refuses, that the guidance left over is about the RENDER
+ * failing, and that the entries around it still win their own cases.
  */
-test('the watermark refusal has an answer, and it does not displace the others', () => {
+test('the app no longer refuses a marked clip, on either engine', () => {
+  const src = fs.readFileSync(new URL('../src/local-engine.js', import.meta.url), 'utf8');
+
+  // The exact refusals that used to end the remote path. Neither may return.
+  assert.ok(!/Choose a TikTok-safe template/i.test(src),
+    'that template does not exist on any screen, so it could never be chosen');
+  assert.ok(!/removing the DeenClipped\s*\n?\s*.?\s*mark is a paid feature/i.test(src),
+    'the mark is stripped for TikTok automatically now, so nobody is told to buy their way past it');
+
+  // Both engines reach ONE definition of clean, which is what stops them
+  // disagreeing about what TikTok is sent.
+  assert.match(src, /function cleanTemplateForTikTok/, 'one definition of clean');
+  const uses = src.match(/cleanTemplateForTikTok\(/g) || [];
+  assert.ok(uses.length >= 3, `both engines and the definition use it (saw ${uses.length})`);
+
+  // And it is applied AFTER enforcePlan, or the free plan's mandatory
+  // watermark would be put straight back on the copy TikTok refuses.
+  const planned = src.indexOf('const planned = enforcePlan(');
+  const stripped = src.indexOf("socialVariant === 'tiktok' ? cleanTemplateForTikTok(planned)");
+  assert.ok(planned > -1 && stripped > planned,
+    'the strip has to happen after enforcePlan, never before');
+});
+
+test('waiting for the copy is not the same as failing', () => {
+  const engine = fs.readFileSync(new URL('../src/local-engine.js', import.meta.url), 'utf8');
+  const agent = fs.readFileSync(new URL('../src/agent.js', import.meta.url), 'utf8');
+
+  // The engine says "ask again", distinctly from "this failed".
+  assert.match(engine, /pendingRender: true/, 'a distinct signal for still-rendering');
+
+  // And the publisher acts on it BEFORE it counts an attempt. socialMaxAttempts
+  // is 5 on a doubling backoff -- about half an hour -- so counting a wait
+  // would file a good clip as failed while its copy was still in the queue.
+  const at = agent.indexOf('if (error?.pendingRender)');
+  const counts = agent.indexOf('target.attempts = Number(target.attempts || 0) + 1');
+  assert.ok(at > -1, 'the publisher knows the difference');
+  assert.ok(at < counts, 'and answers it before it spends an attempt');
+  assert.match(agent.slice(at, counts), /return;/, 'the wait returns rather than falling through');
+});
+
+test('the guidance that is left is about the render, not the watermark', () => {
   const title = full => (explain(publishRow(full)) || {}).title;
-  const watermark = 'TikTok does not accept a video carrying another app’s watermark. '
-    + 'Turn the watermark off on the "Clean Line" template, then re-render this clip and retry.';
-  assert.match(title(watermark), /watermark/i, 'the watermark case has its own answer');
-  // The older wording is still in flight on rows already on disk.
-  assert.match(title('TikTok requires a clean copy without an app watermark.'), /watermark/i);
-  // And every entry that was already there still wins its own case. A wrong
+  // What a customer can actually see now: the copy itself failing to render.
+  const failed = 'The watermark-free copy TikTok requires could not be rendered: the render failed.';
+  assert.match(title(failed), /could not be rendered/i, 'the render failure has its own answer');
+
+  // Every entry that was already there still wins its own case. A wrong
   // WINNER was the entire bug the last time this table was touched (v3.30.0).
   assert.match(title('TikTok returned 403: TikTok has not finished reviewing this app'), /not reviewed/i);
   assert.match(title('spam_risk: too many pending posts'), /rate-limiting/i);
   assert.match(title('no access token for that account'), /expired/i);
 });
 
-test('the refusal itself names something a person can actually do', () => {
-  const src = fs.readFileSync(new URL('../src/local-engine.js', import.meta.url), 'utf8');
-  // The refusal the customer is shown, not the module's other uses of the
-  // phrase: the local clean-render path legitimately names itself that in a
-  // log line and an internal template name, and nobody reads those.
-  const at = src.indexOf("if (String(template?.watermark");
-  assert.ok(at > -1, 'the refusal is still there');
-  // A fixed window, not up to the next `}`: the message interpolates the
-  // template's name, so the first brace is inside the string itself.
-  const refusal = src.slice(at, at + 1200);
-  assert.match(refusal, /watermark/i);
-  assert.ok(!/TikTok-safe template/i.test(refusal),
-    'that template does not exist on any screen, so it cannot be chosen');
-  // Paid accounts can switch the mark off; free accounts cannot, and the
-  // message has to say which of those the reader is.
-  assert.match(refusal, /planFeatures\(owner\)\.watermark/,
-    'the advice depends on whether this account may remove the mark at all');
-  assert.match(refusal, /paid feature/, 'and says so plainly when it may not');
+test('nothing still tells a customer to switch the watermark off for TikTok', () => {
+  // Read the ADVICE, not the source. A grep over the file matches the comment
+  // that explains why the advice was removed -- the fourth time this repo has
+  // been caught by a source-string test passing (or failing) on its own
+  // explanation. So this drives explainFailure and reads what it returns.
+  const said = row => {
+    const answer = explain(publishRow(row)) || {};
+    return [answer.title, answer.cause, ...(answer.fixes || [])].join(' ');
+  };
+  for (const row of [
+    'The watermark-free copy TikTok requires could not be rendered: the render failed.',
+    'TikTok requires a clean copy without an app watermark.',
+    'TikTok returned 403: unaudited_client_can_only_post_to_private_accounts',
+  ]) {
+    assert.ok(!/switch the watermark off|turn the watermark off|TikTok-safe template/i.test(said(row)),
+      `the app strips the mark itself now, so nothing should ask for it: ${row}`);
+  }
 });
