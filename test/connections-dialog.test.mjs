@@ -265,7 +265,10 @@ test('both brand switches write to the account, not to a template', () => {
 test('a healthy destination is its logo; a broken one keeps its word', () => {
   const adapter = fs.readFileSync(path.join(root, 'src/public/studio-adapter.js'), 'utf8');
   const at = adapter.indexOf('function destinations');
-  const body = adapter.slice(at, at + 1800);
+  // To the end of the function rather than a fixed character window: v3.116.0
+  // added the multi-channel lookup at the top and pushed the `quiet` line past
+  // an 1800-character slice, failing this against code that had not changed.
+  const body = adapter.slice(at, adapter.indexOf('\n  }', at));
   assert.ok(/var quiet = t\.status === 'scheduled' \|\| t\.status === 'publishing' \|\| t\.status === 'posted'/.test(body),
     'waiting, posting and posted are the quiet states');
   assert.ok(/state: quiet \? '' :/.test(body), 'anything else still prints its word');

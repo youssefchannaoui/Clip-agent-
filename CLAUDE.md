@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1332 JS + 592 Python**
+- `npm test` and `npm run check` must pass. Currently **1339 JS + 592 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4623,6 +4623,61 @@ fixture without a plan sees a single channel and every lane assertion fails
 against correct code. The operator counts as Studio (`atLeast`, not
 `paysForAtLeast`), so `role: 'owner'` on the seeded user is the cheapest way
 to say it.
+
+## "Everything's posting together, and I don't know" (v3.116.0, 3 Sept 2026)
+
+Youssef, minutes after the multi-channel schedule shipped: "for the scheduling
+and everything, it's very confusing. Like, everything's posting together, and
+I don't know. It's just confusing."
+
+His sentence names the fault exactly, and it was mine from two releases back.
+
+- **A card did not say WHICH channel.** v3.107.0 made the destination a bare
+  platform logo -- "dont be writing just put logos that are posting" -- which
+  was right while a platform meant one channel and is actively wrong once it
+  means three. Two clips at 07:00 drew two identical YouTube logos. They were
+  going to different channels and nothing on screen said so, which is
+  precisely "everything's posting together". The channel's name now appears
+  beside the logo, and ONLY where there is more than one channel on that
+  platform: with one, the logo still stands alone exactly as he asked. A
+  failure still gets its word either way.
+- **`destinations` is a MODULE-LEVEL helper, so `DATA` is not in scope there.**
+  Reading it would have been undefined and the name would simply never have
+  appeared. `LAST_DATA` is assigned on `bindings()`'s first line and is the
+  current payload by the time this runs.
+
+### Three numbers on one screen disagreed
+
+The day view said **"3 of 4 scheduled"** while the header said "Up to 8 posts
+a day" and the sidebar said "0 of 8 scheduled today". The 4 was a literal that
+v3.71.3 missed when it fixed the other three -- and `schedDayCanAdd` carried
+the same 4, so the Add button was gated on a number nothing else used.
+
+With several channels there is no single total to be "of": the day holds the
+account's windows on EACH of them. So the day states its count, the header
+says "Up to 8 posts a day on each of your 3 channels", and the sidebar says
+"up to 8 on each of your 3 channels". A single-channel account keeps the plain
+"N of 8" wording it always had, and a test pins that -- this must not become
+per-channel language for somebody who has one.
+
+### The chips counted all time while the day counted one day
+
+Two 3s on one screen meaning different things. The lane counts are computed
+over the RANGE ON SCREEN now (day / week / the month grid), so "Main channel
+2" and the two rows under it are the same two clips. Measured with a clip a
+fortnight out: 3 in day and week, 4 in month.
+
+**They are computed low in `bindings()`, not beside `schedLanes`**, because
+`schedView`, `weekStart` and `gridStart` are all declared further down and
+reading them earlier gives undefined.
+
+### The lesson worth keeping
+
+**A logo is a name only while there is one of the thing.** This is the second
+time a "say less" instruction has been taken past the point where it still
+identified anything -- the first was `targets[0]` standing for every
+destination (v3.28.0). When a row can now repeat, check that whatever
+identifies it still distinguishes it.
 
 ## Open items
 

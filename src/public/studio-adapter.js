@@ -1617,6 +1617,19 @@
     cancelled: { word: 'cancelled', colour: 'var(--dc-ink-faint, #6E6E76)' },
   };
   function destinations(clip) {
+    // How many channels this account has switched on per platform. Read once
+    // per call rather than per target.
+    var multiChannel = {};
+    // LAST_DATA, not DATA: this is a module-level helper and DATA is a
+    // parameter of bindings(). Reading it here would be undefined, and the
+    // channel name would never appear. LAST_DATA is assigned on bindings()'s
+    // first line, so it is the current payload by the time this runs.
+    var psAll = (LAST_DATA && LAST_DATA.publishingSettings) || {};
+    PLATFORMS.forEach(function (key) {
+      var item = psAll[key] || {};
+      var ids = (item.accountIds && item.accountIds.length) ? item.accountIds : (item.accountId ? [item.accountId] : []);
+      multiChannel[key] = ids.filter(Boolean).length;
+    });
     return (clip.targets || []).map(function (t) {
       var platform = t.platform || t.provider || '';
       var state = TARGET_STATES[t.status] || TARGET_STATES.scheduled;
@@ -1633,9 +1646,23 @@
       // a refused TikTok "looked entirely fine on the row" (v3.28.0). Anything
       // that needs a person keeps its text; waiting, posting and posted do not.
       var quiet = t.status === 'scheduled' || t.status === 'publishing' || t.status === 'posted';
+      /*
+       * THE CHANNEL'S NAME, but only when there is more than one of it.
+       *
+       * Youssef, 3 Sept 2026: "everything's posting together, and I don't
+       * know. It's just confusing." Two clips at 07:00 both drew a bare
+       * YouTube logo, because v3.107.0 made the logo carry the destination --
+       * right while a platform meant one channel, and actively wrong once it
+       * means three. The rows were going to different channels and there was
+       * nothing on screen that said so.
+       *
+       * With one channel on a platform the logo still stands alone, exactly as
+       * he asked. The name appears only where it is doing work.
+       */
+      var manyHere = (multiChannel[platform] || 0) > 1;
       return {
         name: '',
-        who: '',
+        who: manyHere && t.accountName ? String(t.accountName) : '',
         state: quiet ? '' : ' ' + state.word,
         // The whole sentence is still there, on hover, for the rows that no
         // longer print it.
@@ -2112,7 +2139,13 @@
         return empty ? 'No lectures yet — paste a link on Home to make your first clips'
           : plural(ctx.projects.length, 'lecture') + ' · ' + plural(ctx.clips.length, 'clip') + ' generated';
       case 'templates': return 'Set once — every clip renders with it, still editable per clip';
-      case 'schedule': return 'Up to ' + (ctx.postSlots || 0) + ' posts a day · every clip is checked before it goes out';
+      // With more than one channel the account has that many windows on EACH
+      // of them, so a flat "up to 8 posts a day" understated it by a factor
+      // of three -- and contradicted the day view sitting underneath it.
+      case 'schedule': return ctx.laneCount > 1
+        ? 'Up to ' + (ctx.postSlots || 0) + ' posts a day on each of your ' + ctx.laneCount
+          + ' channels · every clip is checked before it goes out'
+        : 'Up to ' + (ctx.postSlots || 0) + ' posts a day · every clip is checked before it goes out';
       case 'music': return plural(ctx.tracks.length, 'nasheed') + ' · shuffled automatically';
       case 'deenai': return 'Growth advice from your own numbers — nothing leaves this server';
       case 'help': return 'How every part of DeenClipped works, with screenshots of the real app';
@@ -2264,15 +2297,7 @@
     // '' is every channel at once. A key that no longer exists (its channel was
     // disconnected while the tab was open) falls back to that rather than
     // showing an empty schedule with no explanation.
-    // How much is waiting on each lane. A switcher with bare names says which
-    // channels exist; with counts it says which one needs attention, which is
-    // the question somebody opens this screen with.
     var allScheduled = clips.filter(function (c) { return c.scheduledAt && !c.postedAt; });
-    schedLanes.forEach(function (lane) {
-      lane.count = allScheduled.filter(function (c) {
-        return (c.targets || []).some(function (t) { return targetLane(t) === lane.key; });
-      }).length;
-    });
     var schedChannel = schedLanes.filter(function (l) { return l.key === UI.schedChannel; })[0] ? UI.schedChannel : '';
     var scheduled = clips.filter(function (c) { return c.scheduledAt && !c.postedAt; })
       .filter(function (c) {
@@ -2313,7 +2338,7 @@
       for (var i = 0; i < n; i += 1) out.push(i);
       return out;
     }
-    var ctx = { projects: projects, clips: clips, tracks: tracks, needsCount: needsCount, planLabel: planLabel, postSlots: daySlots };
+    var ctx = { projects: projects, clips: clips, tracks: tracks, needsCount: needsCount, planLabel: planLabel, postSlots: daySlots, laneCount: schedLanes.length };
 
     var providers = PLATFORMS.map(function (k) { return providerInfo(DATA, k); });
     // "Does this account have anywhere to post RIGHT NOW" -- the same test the
@@ -2800,6 +2825,28 @@
     var gridStart = monthFirst - MONDAY_INDEX(monthFirst) * DAY_MS;
     var daysInMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 0).getDate();
     var weeksNeeded = Math.ceil((MONDAY_INDEX(monthFirst) + daysInMonth) / 7);
+
+    // How much is waiting on each lane, OVER THE RANGE ON SCREEN.
+    //
+    // Counting all time put a number on the chip that had nothing to do with
+    // the day underneath it -- two 3s on one screen meaning different things,
+    // which is its own small confusion. The chips count exactly what the view
+    // is showing, so "Main channel 2" and the two rows below it are the same
+    // two clips. Computed HERE rather than beside schedLanes because schedView,
+    // weekStart and gridStart are all declared further down and reading them
+    // earlier gives undefined.
+    var laneRange = schedView === 'day' ? [schedAnchor, schedAnchor + DAY_MS]
+      : schedView === 'week' ? [weekStart, weekStart + 7 * DAY_MS]
+        : [gridStart, gridStart + weeksNeeded * 7 * DAY_MS];
+    var laneVisible = allScheduled.filter(function (c) {
+      var at = Number(c.scheduledAt);
+      return at >= laneRange[0] && at < laneRange[1];
+    });
+    schedLanes.forEach(function (lane) {
+      lane.count = laneVisible.filter(function (c) {
+        return (c.targets || []).some(function (t) { return targetLane(t) === lane.key; });
+      }).length;
+    });
     var schedMonthWeeks = [];
     for (var wk = 0; wk < weeksNeeded; wk += 1) {
       (function (rowStart) {
@@ -5137,8 +5184,25 @@
         };
       }),
       schedDayItems: schedDayItems,
-      schedDayCount: schedDayItems.length + ' of 4 scheduled',
-      schedDayCanAdd: schedDayItems.length < 4 && schedAnchor >= today,
+      /*
+       * "3 of 4 scheduled" sat on a screen whose header said "Up to 8 posts a
+       * day" and whose sidebar said "0 of 8 scheduled today". Three numbers,
+       * one day, two of them wrong -- the 4 was a literal that v3.71.3 missed
+       * when it fixed the other three.
+       *
+       * The denominator is also per CHANNEL now, so in the all-channels view
+       * there is no single number to be "of": the day holds daySlots posts on
+       * each of them. It says the count and how many channels it is spread
+       * over instead of inventing a total.
+       */
+      schedDayCount: (schedLanes.length > 1 && !schedChannel)
+        // The header above already carries the capacity and the "All channels"
+        // chip already carries the count; saying either again here was three
+        // statements of one fact stacked down the screen.
+        ? plural(schedDayItems.length, 'post') + ' this day, across your channels'
+        : schedDayItems.length + ' of ' + daySlots + ' scheduled',
+      schedDayCanAdd: schedDayItems.length < daySlots * Math.max(1, schedChannel ? 1 : schedLanes.length)
+        && schedAnchor >= today,
       schedDayAdd: addClipTo(schedAnchor),
       schedDayEmpty: !schedDayItems.length,
       schedPrev: shiftAnchor(-1),
@@ -5248,7 +5312,7 @@
       schedLanes: schedLanes,
       schedHasLanes: schedLanes.length > 1,
       schedChannel: schedChannel,
-      schedLaneTotal: allScheduled.length,
+      schedLaneTotal: laneVisible.length,
       schedChannelName: schedChannel
         ? (schedLanes.filter(function (l) { return l.key === schedChannel; })[0] || {}).name || ''
         : 'All channels',
@@ -6507,6 +6571,14 @@
         // really fill. The "four checks" is a different four -- nasheed,
         // captions, Clip Style, render -- and does not move with the plan.
         var slots = daySlots;
+        // A day is only "full" against ONE channel's windows. With three
+        // channels the account has three times the room, so counting its posts
+        // against one channel's allowance said "Today is full" while two
+        // channels sat empty.
+        if (schedLanes.length > 1 && !schedChannel) {
+          return plural(todayCount, 'post') + ' today, up to ' + slots + ' on each of your '
+            + schedLanes.length + ' channels. Nothing posts unless its four checks pass.';
+        }
         return todayCount >= slots
           ? 'Today is full — ' + slots + ' of ' + slots + '. Nothing posts unless its four checks pass.'
           : todayCount + ' of ' + slots + ' scheduled today. Nothing posts unless its four checks pass.';
