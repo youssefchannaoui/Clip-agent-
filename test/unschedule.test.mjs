@@ -147,7 +147,8 @@ test('both surfaces offer Remove, and the week cell cannot nest a button', () =>
     'the day card is skipped');
   // The drag ghost carries neither control -- a handle or an x on something
   // already in the air means nothing.
-  assert.ok(/'\.dc-grip,\.dc-unsched'/.test(host), 'the ghost is stripped of both');
+  assert.ok(/'\.dc-grip,\.dc-unsched,\.dc-slot-more'/.test(host),
+    'the ghost is stripped of every control drawn into the cell');
   // It writes through the one host handler, which names the route.
   assert.ok(/onUnschedule=id=>studioDo\(\(\)=>api\(`\/api\/clips\/\$\{encodeURIComponent\(id\)\}\/unschedule`/.test(host),
     'and it calls the unschedule route');

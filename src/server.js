@@ -1917,6 +1917,13 @@ async function route(req, res, url) {
       };
       const next = {
         enabled: Boolean(body.enabled),
+        // What a clip does when a platform has more than one channel on it:
+        // 'all' posts it to every one (the default, and what every record
+        // written before this holds), 'rotate' gives each clip to one of them
+        // in turn. Coerced to the two known values rather than stored as sent
+        // -- an unrecognised mode reaching the publish path would silently
+        // become "all" anyway, and this says so at the door.
+        spread: body.spread === 'rotate' ? 'rotate' : 'all',
         youtube: { ...current.youtube, ...withCap('youtube', body.youtube || {}), enabled: Boolean(body.youtube?.enabled) },
         instagram: { ...current.instagram, ...withCap('instagram', body.instagram || {}), enabled: Boolean(body.instagram?.enabled), shareToFeed: body.instagram?.shareToFeed !== false },
         facebook: { ...current.facebook, ...withCap('facebook', body.facebook || {}), enabled: Boolean(body.facebook?.enabled) },

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1291 JS + 592 Python**
+- `npm test` and `npm run check` must pass. Currently **1302 JS + 592 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4515,6 +4515,114 @@ the source cell and bubbles to the grid. Dispatch on the cell.
 
 **The export edit was proven byte-stable first** (CSS identical, no hashed
 class name moved), the route this repo established for `data-dc-week`.
+
+## Three channels, three schedules (v3.115.0, 3 Sept 2026)
+
+Youssef, 3 Sept 2026: "you know how you can connect on a studio membership ...
+you can connect to the accounts. The only problem is that with the three
+accounts, there should be three different schedules ... you should auto detect.
+If it has two accounts, it should show [two] different schedules that you can
+switch between ... How will it work with three different accounts? I want you
+to have all the freedom. Just make it look very nice, not too clustered and
+crazy and confusing."
+
+Multi-channel shipped in v3.41.0-v3.56.0 and the SCHEDULE never learned about
+it. Two things were wrong underneath, and the switcher he asked for is the
+third.
+
+### Slots were claimed account-wide, so a third channel bought nothing
+
+`scheduleApprovedClip`'s `taken` was every `scheduledAt` the account held, so
+three connected channels competed for ONE set of eight daily windows. A Studio
+customer paying for three channels got eight posts a day *between* them --
+the opposite of what the third channel is for. Slots are claimed **per
+channel** now: two clips may share 12:00 when they go to different channels,
+and may not when they go to the same one. Eight windows each, not eight
+shared.
+
+- The lane key is `provider:accountId`, which is exactly the id a target
+  already carried (`social.js`) -- no new identity, nothing to keep in step.
+- `laneKeysForClip` answers "where would this clip go" WITHOUT building
+  targets, because the scheduler needs the answer before it has picked a time
+  and building them wrote every "no account selected" warning twice per clip
+  per sweep. That is what `enabledTargetsForClip(clip, { quiet: true })` is
+  for; a test asserts the quiet path logs nothing and the loud one still does.
+- **A clip going nowhere keeps the old account-wide behaviour.** Publishing
+  off, or a local export: it has no lane to be alone in, and letting it stack
+  on everything would put two exports on one slot.
+
+### Every clip went everywhere, which is your own channels competing
+
+`spread` is a per-account setting with two values. `all` (the default, and
+what every record written before this holds) posts each clip to every
+connected channel. `rotate` gives each clip to ONE of them in turn, so three
+channels carry three different clips.
+
+- **It rotates WITHIN a platform, never across them.** A clip still reaches
+  YouTube and TikTok both; rotating across platforms would mean a clip landing
+  on one network and not the other, which is not what "share the clips out"
+  means.
+- **The index is the clip's own position in its lecture**, so asking twice
+  gives the same answer. This function runs at schedule time and again when
+  targets are rebuilt, and a rotation that drifted between the two would move
+  a clip to a different channel after it had been scheduled for the first.
+- One channel on a platform is unaffected either way, so switching the mode on
+  before connecting a second channel changes nothing.
+- The default is deliberately unchanged. Turning three channels into three
+  different schedules is a decision the account makes, not one a release makes
+  for it.
+
+### The switcher, and what it had to be told
+
+- **Derived, never stored**: a channel disconnected yesterday leaves no lane
+  behind and one connected this morning needs no migration to appear.
+- **Drawn only at two or more** -- his "auto detect". One channel sees exactly
+  the screen it saw before, and the row appears by itself when a second is
+  connected. Nothing to find, nothing to turn on.
+- **Each chip carries its count**, so the row says which channel needs
+  attention rather than only which channels exist. Day, week and month all
+  filter through the one `scheduled` list, so they cannot disagree.
+- **`targetPublic` now sends the target's `id`.** It did not, and the browser
+  cannot filter a lane without it -- deriving it there instead would be two
+  places building one key, the shape that once put one clip's waveform on
+  another clip's card. The client still falls back to `provider:accountId` so
+  a browser holding an older payload filters correctly rather than showing
+  every lane empty.
+- **Three chips reading "YouTube" would be a switcher you cannot use.** A
+  connection can come back with an empty name, so the fallback chain is the
+  connection's name, then the name a target recorded when it was built, then
+  the platform plus a short id -- it distinguishes rather than defaults.
+- **Two rows on purpose, not by wrapping.** Measured at 1440: the chips and
+  the mode pair come to 958px in an 814px column. A wrapped row looks like a
+  mistake where a designed one looks deliberate, and the second row earns its
+  place by SAYING what the mode does -- "Each clip goes to one channel, so
+  your 3 channels carry different clips" -- which is the question three
+  channels raise, answered next to the control that changes the answer.
+
+### The consequence that would have hidden clips
+
+Per-lane slots mean two clips can legitimately sit on one instant, and a week
+cell can only draw one of them. Drawing one while silently hiding the other is
+how a schedule starts lying about what is going out. The cell carries a
+**"+N"** badge (bottom left, clear of the grip and the remove x), and the count
+is zero inside a single lane by construction. Found by measuring the week after
+the engine change, not by looking at it.
+
+### Deliberately NOT built, and why
+
+**Per-channel posting TIMES.** Each lane could have its own clock as well as
+its own clips, but that is a configuration screen per channel for a modest
+gain, and he asked for this not to be cluttered. The lanes differ by CONTENT,
+at the account's own windows. Say so rather than letting anyone assume
+otherwise.
+
+### The fixture trap
+
+`accountsPerPlatform` truncates to ONE for anybody below Studio, so a test
+fixture without a plan sees a single channel and every lane assertion fails
+against correct code. The operator counts as Studio (`atLeast`, not
+`paysForAtLeast`), so `role: 'owner'` on the seeded user is the cheapest way
+to say it.
 
 ## Open items
 

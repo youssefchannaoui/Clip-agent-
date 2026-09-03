@@ -448,7 +448,26 @@ export function scheduleApprovedClip(clip, { at = null, day = null } = {}) {
   // tick() skips held clips before it calls in. A fresh instruction spends the
   // hold, so a removed clip put back by the picker behaves normally afterwards.
   clip.scheduleHold = false;
-  const taken = ownedBy(state.clips, ownerOf(clip)).map(item => item.scheduledAt).filter(Boolean);
+  /*
+   * SLOTS ARE CLAIMED PER CHANNEL, not per account.
+   *
+   * This used to be every scheduledAt the account holds, so three connected
+   * channels competed for one set of eight daily windows -- a Studio customer
+   * paying for three channels got eight posts a day between them, which is the
+   * opposite of what the third channel is for. Two clips may now share 12:00
+   * when they are going to different channels, and may not when they are going
+   * to the same one.
+   *
+   * A clip with no destinations at all (publishing off, local export) keeps the
+   * old account-wide behaviour: it has no lane to be alone in, and letting it
+   * stack on top of everything would put two exports on one slot.
+   */
+  const lanes = social.laneKeysForClip(clip);
+  const sharesLane = (item) => (item.targets || []).some(target => lanes.includes(target.id));
+  const taken = ownedBy(state.clips, ownerOf(clip))
+    .filter(item => item.id !== clip.id && item.scheduledAt)
+    .filter(item => !lanes.length || sharesLane(item))
+    .map(item => item.scheduledAt);
   const exact = Number(at), whole = Number(day);
   // How many windows a day this account may fill. Everyone gets the configured
   // POST_TIMES; Studio gets more, inserted between them rather than spread over

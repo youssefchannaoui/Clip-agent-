@@ -763,7 +763,45 @@ function validateFor(next, userId) {
   return next;
 }
 
-export function enabledTargetsForClip(clip) {
+/**
+ * A stable ordinal for one clip within its lecture.
+ *
+ * Sorted by the clip's own addedAt then id, so it does not move when another
+ * lecture is imported or a sibling is deleted -- and it is the same answer
+ * every time it is asked, which is what makes the rotation safe to recompute.
+ */
+function rotationIndex(clip) {
+  const siblings = (state.clips || [])
+    .filter(item => item.projectId && item.projectId === clip.projectId
+      && ownerOf(item) === ownerOf(clip))
+    .sort((a, b) => (Number(a.addedAt) || 0) - (Number(b.addedAt) || 0)
+      || String(a.id).localeCompare(String(b.id)));
+  const at = siblings.findIndex(item => item.id === clip.id);
+  // A clip with no lecture (or one not found) still needs an answer that does
+  // not change between calls; its id serves.
+  if (at >= 0) return at;
+  let hash = 0;
+  for (const ch of String(clip.id || '')) hash = (hash * 31 + ch.charCodeAt(0)) % 100003;
+  return hash;
+}
+
+/**
+ * Which channels this clip is FOR, without building targets or logging.
+ *
+ * The scheduler needs to know a clip's lanes before it has picked a time,
+ * and building the targets to find out would log every "no account selected"
+ * warning twice per clip. Same rules, same order, ids only.
+ */
+export function laneKeysForClip(clip) {
+  try { return enabledTargetsForClip(clip, { quiet: true }).map(target => target.id); }
+  catch { return []; }
+}
+
+export function enabledTargetsForClip(clip, { quiet = false } = {}) {
+  // `quiet` is for callers that only want to know WHERE this clip would go
+  // (the scheduler, deciding which lane's slots to avoid). Without it every
+  // "no account selected" warning is written twice for every clip.
+  const say = (message, level) => { if (!quiet) log(message, level, ownerOf(clip)); };
   // Everything here follows the clip owner: their publishing settings, their
   // connected accounts. The owner is recorded on each target so the upload and
   // polling steps later cannot drift onto a different account's credentials.
@@ -801,6 +839,7 @@ export function enabledTargetsForClip(clip) {
   // that will be forgotten in one. A clip may still carry its own list, which
   // wins.
   const only = chosenList ? chosenList.map(String) : null;
+  const spreadMode = settings.spread === 'rotate' ? 'rotate' : 'all';
   for (const provider of PROVIDERS) {
     const item = settings[provider];
     if (!item?.enabled) continue;
@@ -820,18 +859,40 @@ export function enabledTargetsForClip(clip) {
     // permitted it. Truncating at build time means the extra destinations stop
     // the moment the plan does, and come back if it resumes.
     const allowed = billing.accountsPerPlatform(owner, provider);
-    const chosen = (item.accountIds?.length ? item.accountIds : [item.accountId]).slice(0, allowed);
+    let chosen = (item.accountIds?.length ? item.accountIds : [item.accountId]).slice(0, allowed);
     if (item.accountIds?.length > allowed) {
-      log(`${provider} has ${item.accountIds.length} accounts selected but this plan allows ${allowed}; posting to the first ${allowed}.`, 'warn', userId);
+      say(`${provider} has ${item.accountIds.length} accounts selected but this plan allows ${allowed}; posting to the first ${allowed}.`, 'warn');
+    }
+    /*
+     * SHARE OUT, or post everywhere.
+     *
+     * With three channels on one platform, "everywhere" means the same clip
+     * on all three at the same minute -- your own channels competing with
+     * each other, which is what paying for three of them should NOT buy.
+     * "Share out" gives each clip to ONE of them instead, so three channels
+     * carry three different clips.
+     *
+     * It rotates WITHIN a platform, never across platforms: a clip still goes
+     * to YouTube and TikTok both. Rotating across platforms would mean a clip
+     * reaching one network and not the other, which nobody asks for.
+     *
+     * The index is derived from the clip's own position in its lecture, so
+     * asking twice gives the same answer -- this function is called at
+     * schedule time and again when targets are rebuilt, and a rotation that
+     * drifted between the two would move a clip to a different channel after
+     * it had been scheduled for the first.
+     */
+    if (spreadMode === 'rotate' && chosen.length > 1) {
+      chosen = [chosen[rotationIndex(clip) % chosen.length]];
     }
     for (const accountId of chosen) {
       if (provider === 'tiktok' && !consented(accountId)) {
-        log(`"${clip.title || clip.id}" was not approved for this TikTok account, so it will not post there.`, 'warn', userId);
+        say(`"${clip.title || clip.id}" was not approved for this TikTok account, so it will not post there.`, 'warn');
         continue;
       }
       const account = selectedAccount(provider, accountId, userId);
       if (!account) {
-        log(`${provider} is switched on but has no account selected, so "${clip.title || clip.id}" will not post there. Pick the account in Connections.`, 'warn', userId);
+        say(`${provider} is switched on but has no account selected, so "${clip.title || clip.id}" will not post there. Pick the account in Connections.`, 'warn');
         continue;
       }
       targets.push({
@@ -1541,6 +1602,11 @@ export function retryDelay(attempts) {
 
 export function targetPublic(target) {
   return {
+    // The destination's own id, `provider:accountId`. It is what the schedule
+    // filters a channel lane by, and deriving it in the browser instead means
+    // two places building one key -- the shape that put one clip's waveform on
+    // another clip's card. Nothing secret: both halves are already here.
+    id: target.id || `${target.provider}:${target.accountId || 'default'}`,
     provider: target.provider, accountId: target.accountId, accountName: target.accountName,
     status: target.status, stage: target.stage || '', attempts: target.attempts || 0,
     nextTryAt: target.nextTryAt || null, error: target.error || null,
