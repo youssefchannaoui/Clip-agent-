@@ -5913,6 +5913,65 @@ Measure the value, do not read it off a low-contrast capture.
 
 ## Open items
 
+### Google verification: branding VERIFIED and PUBLISHED (4 Sept 2026)
+
+Started at Youssef's instruction. The 100-user cap is the only irreversible
+ceiling on this product, so this was the right thing to do first.
+
+**Google had already rejected a verification attempt, and the reasons were
+sitting unread in the console** behind a "View issues" link nobody had opened:
+
+1. "Your privacy policy page ... does not have sufficient content."
+2. "Your homepage does not explain the purpose of your app."
+3. "The app name 'DeenClipped' ... does not match the app name on your homepage."
+
+**All three were already fixed** — by the public-site rebuild (v3.63.0) and the
+24 Aug privacy rewrite, both of which postdate that attempt. Checked before
+claiming so, rather than clicking "I have fixed the issues" on a guess: the
+homepage names DeenClipped 15 times and states the purpose in its title,
+description and first paragraph; the privacy policy is 1832 words with a
+complete YouTube API data list, a 30-day retention statement, and the **Limited
+Use** affirmation Google requires for restricted scopes.
+
+Reverification passed **immediately**, and the branding is now published and
+being shown to users. Note the trap for next time: a verified branding result
+**expires in 7 days if it is not published** — verifying and walking away
+silently loses it.
+
+**One blocker remains, and only one:** the data-access form is complete —
+scope justifications written, URLs and authorised domain in — and `Confirm` is
+disabled solely for *"Missing the following fields for one or more requested
+scopes: demo video."* Google wants a **YouTube-hosted** video link showing the
+consent screen and each scope in use. The TikTok demo does not qualify: it
+demonstrates TikTok.
+
+The App logo is still "Not provided". It did not block branding verification,
+so it is optional, but a 480x480 PNG is ready at
+`~/Downloads/deenclipped-oauth-logo.png`. Its file input only exists after
+clicking Browse, which opens a native picker no session can drive.
+
+### CAN A CUSTOMER ACTUALLY CONNECT? Measured 4 Sept 2026
+
+Youssef: "is this working for sall the public as well". Read off each
+platform's own console rather than assumed, because the answer differs per
+platform and only one of them is yes.
+
+| Platform | Public? | Why |
+|---|---|---|
+| **YouTube** | **Yes, but capped at 100 accounts EVER** | OAuth consent screen is *In production*, User type *External* — so anyone can connect. But the app is **unverified**, which imposes a **100-user lifetime cap** (2 used) that "cannot be reset or changed", and users may meet the "unverified app" warning screen. Lifting it needs Google verification. |
+| **TikTok** | **No** | Submitted for review 4 Sept. An unaudited app may only post to a TikTok account that is itself private. |
+| **Facebook** | **No** | The Meta app is **Unpublished** (development mode) and the permissions are at **Standard Access**. Only someone with a ROLE on the app can connect. |
+| **Instagram** | **No** | Same Meta app, and it points at `eurotrimau` rather than a DeenClipped account. |
+
+**So today the product can onboard a paying customer on YouTube alone, and only
+100 of them, ever.** That is the real ceiling on the First 100 funnel, and it
+was nowhere in this file. Every other platform connects for the operator and
+refuses everybody else.
+
+The Google **100-user cap is the one that cannot be undone** — it applies over
+the project's lifetime. Verification is the only way past it, and it is worth
+starting before the count climbs rather than after.
+
 ### Waiting on Youssef (nothing in the repo unblocks these)
 
 1. ~~**Send the YouTube compliance reply.**~~ **SENT, AND THE REVIEW IS
