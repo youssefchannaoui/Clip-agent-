@@ -855,3 +855,32 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
 }
 #dcTasks .dctk-claim:hover { background: rgba(217,180,120,.24); border-color: rgba(217,180,120,.8); }
 #dcTasks .dctk-claim:disabled { opacity: .6; cursor: default; }
+
+/* ── Scroll anchoring fights a renderer that repaints on every state poll ──
+ *
+ * Youssef, 4 Sept 2026: "when applying anything on template it all works
+ * perfectly it just then once applyed you get scrolled all the way down? on
+ * the side config then you have to go back up."
+ *
+ * Nothing in this app was moving it. Chrome's SCROLL ANCHORING was: when
+ * content above the visible area changes, the browser shifts scrollTop to keep
+ * what you are looking at still. That is the right instinct for a page where
+ * an image loads in above you, and the wrong one here -- the studio re-renders
+ * its panels through innerHTML, so the anchor Chrome picked is gone by the
+ * time it compensates and it pushes the column to the end of its range.
+ *
+ * Measured on Templates, from a column scrolled to 420 of 1129: opening the
+ * option sheet took it to 718 and choosing a value took it to 1129, the very
+ * bottom. With anchoring off it stays at 420 through both. No JS was involved
+ * -- focus() and scrollIntoView() were both instrumented and never called.
+ *
+ * Applied to the screen wrappers and their panels, which are the two things
+ * that scroll, and by TAG rather than by class: every class in the studio's
+ * markup is a hashed name the design import regenerates.
+ *
+ * This only ever disables an optimisation; it cannot change a layout. The
+ * anchoring it gives up is worth nothing in an app whose renderer diffs its
+ * own DOM, and the jump it causes is the whole complaint.
+ */
+#studio main > *,
+#studio main section { overflow-anchor: none; }

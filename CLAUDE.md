@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1350 JS + 608 Python**
+- `npm test` and `npm run check` must pass. Currently **1351 JS + 608 Python**
   (8 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4817,6 +4817,40 @@ commas and a naive split on `"), "` miscounts.
   everything else is exactly the graph the renderer produces. Worker change, so
   `deploy-worker.yml` ships it on push; one Quran or lecture import with rain
   on settles it.
+
+### The config panel jumped to the bottom after every change (v3.118.1)
+
+Youssef: "when applying anything on template it all works perfectly it just
+then once applyed you get scrolled all the way down? on the side config then
+you have to go back up."
+
+**Nothing in this app was moving it**, and that is the whole lesson --
+`focus()` and `scrollIntoView()` were both instrumented on the live page and
+NEITHER WAS CALLED. It is Chrome's **scroll anchoring**: when content above
+the visible area changes, the browser shifts `scrollTop` to keep what you are
+looking at still. That is the right instinct for a page where an image loads
+in above you, and the wrong one for a studio that repaints its panels through
+innerHTML -- the anchor Chrome picked is gone by the time it compensates, so
+it runs the column to the end of its range.
+
+- **Measured, from a column at 420 of 1129**: opening the option sheet took it
+  to 718 and choosing a value took it to **1129, the very bottom**. With
+  `overflow-anchor: none` it stays at 420 through both -- and through every
+  other control on the screen: font chips, sliders, the AI toggles and the
+  host-rendered watermark switch, all 0px moved.
+- **It only reproduces from a SCROLLED column.** From the top it never fires,
+  which is why it survived the release that added the new rows -- it was in my
+  own screenshots and I read it as the panel simply being long.
+- Scoped by TAG (`#studio main > *`, `#studio main section`), never by a class:
+  every class in the studio's markup is a hashed name that a design re-import
+  regenerates. Both halves are needed and each is silent without the other --
+  the screen wrapper scrolls on some screens, the panel inside it on others.
+- It only ever disables an OPTIMISATION and cannot change a layout. Checked
+  across eight screens afterwards: all render, no horizontal overflow, and
+  everything that scrolled still scrolls.
+- Pinned as a SOURCE test, deliberately -- CI has no browser and this rule is
+  invisible when it is missing: the app renders, the suite stays green, and the
+  column just jumps again. The same reason `dc-nav-tail` is pinned that way.
 
 ## Open items
 
