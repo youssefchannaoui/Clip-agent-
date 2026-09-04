@@ -191,6 +191,23 @@ export const CATEGORIES = Object.freeze([
         ],
       },
       {
+        id: 'look-and-atmosphere',
+        title: 'The look, and weather over the video',
+        summary: 'Twelve graded looks — including three kinds of black and white — plus rain, snow, dust or bokeh drifting over the picture.',
+        steps: [
+          'Open **Styles**.',
+          'In the Style group, **Look** grades the picture. Natural leaves it alone; Cinematic and Teal & orange are the film looks; Black & white, Noir and Silver are flat, hard and soft versions of the same idea.',
+          '**Atmosphere** puts particles over the video — rain, snow, dust motes or bokeh lights. Pick one and a **strength** row appears under it.',
+          '**Darken video** dims the picture behind everything. It works on its own, and it is what makes captions read on bright footage.',
+          'Save. New renders carry it; clips you have already approved keep the render you signed off on.',
+        ],
+        notes: [
+          'Dark plus rain is the combination most people are after — they are two separate rows because either one is useful without the other.',
+          'The weather is drawn by the renderer, so the preview on this screen shows its colour and density as a still. The falling is in the exported clip.',
+          'It costs render time: a clip with weather takes roughly two to three times as long to render as one without. Everything else about the job is unchanged.',
+        ],
+      },
+      {
         id: 'watermark',
         title: 'Removing the watermark',
         summary: 'A paid plan turns the DeenClipped mark off.',

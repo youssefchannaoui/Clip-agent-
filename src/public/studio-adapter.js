@@ -1150,7 +1150,9 @@
   var ENUMS = {
     fitMode: ['contain', 'blur', 'crop'],
     smartFramingBias: ['auto', 'left', 'center', 'right'],
-    filterPreset: ['natural', 'crisp', 'warm', 'cinematic', 'monochrome'],
+    filterPreset: ['natural', 'crisp', 'vivid', 'warm', 'cinematic', 'teal',
+      'faded', 'night', 'monochrome', 'noir', 'silver', 'sepia'],
+    overlayEffect: ['none', 'rain', 'snow', 'dust', 'bokeh'],
     captionMode: ['phrase', 'word', 'dynamic-stack', 'stack-build', 'cards'],
     captionPosition: ['top', 'middle', 'bottom'],
     captionHorizontal: ['left', 'center', 'right'],
@@ -1214,12 +1216,25 @@
   // saturation). ffmpeg's brightness is an additive offset, CSS's is a
   // multiplier, so it is applied as 1 + b. Gamma has no CSS equivalent and is
   // left out rather than faked.
+  // The three numbers are the renderer's own eq; `extra` approximates what eq
+  // cannot express -- a sepia matrix, a split-tone curve, lifted blacks. CSS
+  // has no colour matrix and no tone curve, so those are APPROXIMATIONS and
+  // are marked as such; the renderer is the truth and this frame is a guide.
   var LOOK_FILTERS = {
     natural: [0.0, 1.0, 1.0],
     crisp: [0.015, 1.09, 1.08],
-    warm: [0.025, 1.04, 1.12],
+    vivid: [0.010, 1.12, 1.34],
+    warm: [0.025, 1.04, 1.12, ' sepia(.12)'],
     cinematic: [-0.015, 1.13, 0.88],
+    teal: [-0.010, 1.12, 1.10, ' hue-rotate(-7deg)'],
+    // Lifted blacks are a curve, which CSS cannot do: pulling contrast down
+    // and brightness up lands on the same washed, matte picture.
+    faded: [0.060, 0.82, 0.82],
+    night: [-0.075, 1.14, 0.72, ' hue-rotate(9deg)'],
     monochrome: [0.0, 1.08, 0.0],
+    noir: [-0.020, 1.36, 0.0],
+    silver: [0.030, 0.92, 0.0],
+    sepia: [-0.030, 1.08, 1.0, ' sepia(1)'],
   };
 
   function lookFilter(t) {
@@ -1230,7 +1245,46 @@
     var warm = Math.max(-100, Math.min(100, Number(t.warm) || 0)) / 100;
     return 'filter: brightness(' + (1 + b).toFixed(3) + ') contrast(' + c.toFixed(3) + ')'
       + ' saturate(' + Math.max(0, sat + warm * 0.25).toFixed(3) + ')'
+      + (preset[3] || '')
       + (warm ? ' sepia(' + Math.max(0, warm * 0.35).toFixed(3) + ')' : '') + ';';
+  }
+
+  // The weather, as a still. ATMOSPHERES in clip_worker.py generates a moving
+  // noise field; a browser cannot be handed that, and animating a lookalike
+  // here would be a second renderer -- the mistake invariant 4 exists to stop.
+  // So this draws the effect's COLOUR, SIZE and DENSITY as a static field and
+  // the panel says outright that the motion is in the render. Enough to
+  // choose between four effects, and it never claims to be the export.
+  var ATMOS_PREVIEW = {
+    // rx/ry  the particle's radii, in preview pixels
+    // tw/th  the tile it repeats in -- the gap is the tile less the particle
+    rain:  { rgb: '214,228,255', rx: 1.1, ry: 13, tw: 21, th: 62, a: 0.85 },
+    snow:  { rgb: '255,255,255', rx: 3.0, ry: 3.0, tw: 37, th: 41, a: 0.85 },
+    dust:  { rgb: '255,216,150', rx: 1.3, ry: 1.3, tw: 16, th: 18, a: 0.80 },
+    bokeh: { rgb: '255,238,205', rx: 7.5, ry: 7.5, tw: 78, th: 86, a: 0.55 },
+  };
+  function atmosLayers(t) {
+    var spec = ATMOS_PREVIEW[t.overlayEffect];
+    if (!spec) return null;
+    var a = Math.max(0, Math.min(100, Number(t.overlayIntensity) || 0)) / 100;
+    if (!a) return null;
+    function field(alpha) {
+      var ink = 'rgba(' + spec.rgb + ',' + alpha.toFixed(3) + ')';
+      var soft = 'rgba(' + spec.rgb + ',0)';
+      // An ELLIPSE, so one shape covers a round flake and a rain streak: the
+      // radii are what make it a drop or a dot. The tile carries the gap, so
+      // the particles scatter instead of drawing solid columns.
+      return 'radial-gradient(ellipse ' + spec.rx + 'px ' + spec.ry + 'px at 50% 50%, '
+        + ink + ' 0, ' + ink + ' 45%, ' + soft + ' 100%)';
+    }
+    // Two fields on different tile sizes and offsets, so the particles do not
+    // land on one visible square lattice.
+    return {
+      image: [field(a * spec.a), field(a * spec.a * 0.7)],
+      size: [spec.tw + 'px ' + spec.th + 'px',
+        Math.round(spec.tw * 1.44) + 'px ' + Math.round(spec.th * 1.31) + 'px'],
+      position: ['0 0', Math.round(spec.tw * 0.53) + 'px ' + Math.round(spec.th * 0.37) + 'px'],
+    };
   }
 
   // The caption families the worker image actually installs (worker/Dockerfile).
@@ -3259,8 +3313,19 @@
     // Builds a settings row whose options come from the schema's enum, so a
     // picker can only ever offer a value sanitiseTemplate() accepts.
     function tplRow(defs) {
-      return defs.map(function (d) {
+      return defs.filter(function (d) { return d.when === undefined || d.when; }).map(function (d) {
         var current = tpl[d.field];
+        // A numeric field is stored as a number and offered as a few named
+        // levels, so a stored value that is not one of them (a default, or an
+        // older template) still has to read as something. Snap to the nearest
+        // option rather than printing a bare number nobody chose.
+        if (d.numeric) {
+          var want = Number(current) || 0, best = d.opts[0];
+          for (var n = 0; n < d.opts.length; n++) {
+            if (Math.abs(d.opts[n] - want) < Math.abs(best - want)) best = d.opts[n];
+          }
+          current = best;
+        }
         var label = (d.labels && d.labels[current]) || titleCase(current);
         return {
           icon: d.icon, label: d.label, value: label,
@@ -6889,7 +6954,27 @@
         { icon: 'ph ph-layout', label: 'Clip layout', field: 'fitMode', opts: ENUMS.fitMode, labels: { contain: 'Fit with blurred bars', blur: 'Blurred background', crop: 'Fill, face-tracked' } },
         { icon: 'ph ph-crosshair', label: 'Framing bias', field: 'smartFramingBias', opts: ENUMS.smartFramingBias },
         { icon: 'ph ph-closed-captioning', label: 'Caption', field: 'captionMode', opts: ENUMS.captionMode, labels: { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines', 'stack-build': 'Building stack', cards: 'Phrase cards' } },
-        { icon: 'ph ph-palette', label: 'Look', field: 'filterPreset', opts: ENUMS.filterPreset },
+        { icon: 'ph ph-palette', label: 'Look', field: 'filterPreset', opts: ENUMS.filterPreset,
+          labels: {
+            natural: 'Natural', crisp: 'Crisp', vivid: 'Vivid', warm: 'Warm',
+            cinematic: 'Cinematic', teal: 'Teal & orange', faded: 'Faded film',
+            night: 'Night', monochrome: 'Black & white', noir: 'Noir · hard B&W',
+            silver: 'Silver · soft B&W', sepia: 'Sepia',
+          } },
+        // "Dark with rain drops, but still the video." The scrim and the
+        // weather are separate rows because they are separate decisions --
+        // dimming a bright frame so the captions read is worth doing on its
+        // own, and so is rain.
+        { icon: 'ph ph-cloud-rain', label: 'Atmosphere', field: 'overlayEffect', opts: ENUMS.overlayEffect,
+          labels: { none: 'None', rain: 'Rain', snow: 'Snow', dust: 'Dust motes', bokeh: 'Bokeh lights' } },
+        // Only once there is something for it to be the strength OF. A level
+        // control over an effect that is switched off is a dead control.
+        { icon: 'ph ph-sliders-horizontal', label: 'Atmosphere strength', field: 'overlayIntensity',
+          numeric: true, when: tpl.overlayEffect && tpl.overlayEffect !== 'none',
+          opts: [30, 55, 75, 100], labels: { 30: 'Subtle', 55: 'Medium', 75: 'Strong', 100: 'Heavy' } },
+        { icon: 'ph ph-moon-stars', label: 'Darken video', field: 'overlayDarken',
+          numeric: true, opts: [0, 20, 40, 60, 80],
+          labels: { 0: 'Off', 20: 'Light', 40: 'Medium', 60: 'Heavy', 80: 'Very dark' } },
       ]),
       tplBrandRows: tplRow([
         { icon: 'ph ph-image-square', label: 'Watermark position', field: 'watermarkPosition', opts: ENUMS.watermarkPosition },
@@ -7044,17 +7129,27 @@
       pvFxStyle: (function () {
         var vignette = Math.max(0, Math.min(1, Number(tpl.vignette) || 0));
         var grain = Math.max(0, Math.min(100, Number(tpl.grain) || 0)) / 100;
-        if (!vignette && !grain) return 'display: none;';
-        var layers = [];
-        if (vignette) layers.push('radial-gradient(ellipse at center, rgba(0,0,0,0) 42%, rgba(0,0,0,' + (vignette * 0.85).toFixed(3) + ') 100%)');
+        var dark = Math.max(0, Math.min(80, Number(tpl.overlayDarken) || 0)) / 100;
+        var weather = atmosLayers(tpl);
+        if (!vignette && !grain && !dark && !weather) return 'display: none;';
+        var layers = [], sizes = [];
+        // THE SCRIM IS EXACT, the weather is not. A flat black at a fraction
+        // is the same arithmetic the renderer's drawbox does, so this half of
+        // the preview is the truth rather than an impression of it.
+        var spots = [];
+        function layer(image, size, spot) { layers.push(image); sizes.push(size || 'auto'); spots.push(spot || '0 0'); }
+        if (dark) layer('linear-gradient(rgba(0,0,0,' + dark.toFixed(3) + '), rgba(0,0,0,' + dark.toFixed(3) + '))');
+        if (weather) { for (var w = 0; w < weather.image.length; w++) layer(weather.image[w], weather.size[w], weather.position[w]); }
+        if (vignette) layer('radial-gradient(ellipse at center, rgba(0,0,0,0) 42%, rgba(0,0,0,' + (vignette * 0.85).toFixed(3) + ') 100%)');
         if (grain) {
           // A fine two-tone check reads as grain at this scale without needing
           // an image, and scales with the slider.
-          layers.push('repeating-conic-gradient(rgba(255,255,255,' + (grain * 0.16).toFixed(3) + ') 0% 25%, rgba(0,0,0,' + (grain * 0.16).toFixed(3) + ') 0% 50%)');
+          layer('repeating-conic-gradient(rgba(255,255,255,' + (grain * 0.16).toFixed(3) + ') 0% 25%, rgba(0,0,0,' + (grain * 0.16).toFixed(3) + ') 0% 50%)', '3px 3px');
         }
         return 'position: absolute; inset: 0; z-index: 2; pointer-events: none;'
           + ' background-image: ' + layers.join(', ') + ';'
-          + (grain ? ' background-size: auto, 3px 3px;' : '');
+          + ' background-size: ' + sizes.join(', ') + ';'
+          + ' background-position: ' + spots.join(', ') + ';';
       }()),
 
       capGloss: tpl.captionMode === 'quran' && tpl.captionTranslation !== false ? SAMPLE_AYAH.gloss : '',

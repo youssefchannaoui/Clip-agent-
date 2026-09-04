@@ -199,14 +199,14 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1339 JS + 607 Python**
-  (7 Python skipped). These numbers were once wrong by more than a factor of
+- `npm test` and `npm run check` must pass. Currently **1350 JS + 623 Python**
+  (8 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
   output), so this line cannot quietly drift again; a shrinking count is
   reported as tests having VANISHED rather than as a number to update.
-- **The 7 skips are `SpeakerTrackingTests`, and they skip ONLY where ffmpeg
-  is absent** (v3.101.2). They build their own fixture with ffmpeg and run
+- **The 8 skips are `SpeakerTrackingTests` (7) and `AtmosphereFrameTests` (1),
+  and they skip ONLY where ffmpeg is absent** (v3.101.2, v3.118.0). They build their own fixture with ffmpeg and run
   wherever it exists -- all seven pass here in 0.9s -- but the CI runner has
   no working ffmpeg, so there they skip, counted as seven skips with the
   reason in each. The crop ARITHMETIC is therefore exercised by anyone running
@@ -4783,6 +4783,144 @@ real frame yet; the proof here is the ASS event times and the candidate the
 render is handed.
 
 **Worker change, so `deploy-worker.yml` deploys it on push.**
+## Twelve looks and weather over the picture (v3.118.0, 4 Sept 2026)
+
+Youssef: "add more configuration make it match and looks super clean things
+like on looks of the upload like black and white or idk just more so they can
+easily just config beofre posring on the selector so give ideas also add
+another thing so they can add sencery or layover, so layour can be dark with
+rain drops but still the video of couese."
+
+### Where it lives, and why only there
+
+Three new rows in **Templates → Style**, in the same picker shape as the four
+already there -- measured after: ONE left edge (285), ONE row height (38), ONE
+right edge (560), and 0px between every icon's centre and its value's centre
+across all nine rows. That is what "make it match" is: the rows are the
+export's own template, so they inherit the alignment rather than re-deriving it.
+
+**Deliberately NOT also in the job wizard.** The wizard already picks the
+template, and putting look and weather there as well is two controls for one
+setting -- the fault this file has now recorded three times (two onboarding
+systems, two watermark positions, two tour buttons). The template is chosen
+before posting, so the configuration is reached before posting.
+
+### The looks: five became twelve, and every one was rendered
+
+`LOOKS` in clip_worker.py is one table of (eq tuple, extra filters). The five
+that existed are byte-identical -- a saved template cannot start grading
+differently after a deploy, and a test pins each one.
+
+**Two of the first draft were rebuilt because the FRAME said so, not the
+numbers.** "Teal" was indistinguishable from "cinematic" on a real lecture
+still while looking perfectly different in the code, and "night" did not read
+as night at all. Both were re-tuned against the picture. A look that cannot be
+told from the one above it in the list is a menu entry, not a feature.
+
+- **Three are black and white on purpose** -- he asked for "black and white",
+  and flat (monochrome), hard (noir) and soft-with-lifted-blacks (silver) are
+  three different pictures. The row names which is which, or they read as the
+  same entry three times.
+- **Sepia's brightness is pulled back.** The standard sepia matrix brightens as
+  well as tints and the first frame came out blown.
+- **A colour matrix goes straight after the eq**, before the sharpen and the
+  grain -- applied later it tints the texture as well as the picture.
+- The library thumbnail keyed on `monochrome` alone, so noir and silver drew in
+  colour on the one screen that exists to show what a template looks like.
+
+### The atmosphere: generated, never shipped as artwork
+
+Rain, snow, dust and bokeh. **There is no asset file**, so nothing can be
+missing on a box that has not pulled one -- unlike the promo bar, which is
+inert without its PNG. Four effects out of one parameterised generator.
+
+- **A deterministic hash, not `random()`.** ffmpeg's `random()` re-rolls per
+  evaluation, so a field built from it FLICKERS instead of falling. Coherent
+  motion means a static field that is scrolled.
+- **The field is THREE PERIODS TALL with the hash taken modulo one period**, and
+  the window scrolls over the middle band -- the only part whose vertical blur
+  has real neighbours above and below AND which wraps exactly. Measured: the
+  frame-to-frame difference across a wrap is **2.50 against 2.52 mid-cycle**. A
+  truncated seam spikes; this does not.
+- **Everything before `loop` is paid for ONCE.** The source is a single frame,
+  so the hash, the streak blur, the softening and the gain cost one frame
+  however long the clip is. That is what makes a real Gaussian affordable, and
+  a test asserts the ordering -- moved below `loop` it would run per frame on
+  every clip of every lecture.
+
+**Three things were got wrong first, each found by looking at a frame:**
+
+1. **`blend=all_mode=screen` turns the whole frame MAGENTA.** It is the obvious
+   compositor for light particles and it operates PER PLANE: screening a
+   neutral chroma plane (128) against anything pushes it towards 255. Alpha
+   compositing -- what the promo bar already uses -- is correct.
+2. **The particle colour must be a CONSTANT with the field as its ALPHA.** The
+   first version tinted the field by its own value, so a faint particle was
+   dark grey -- and compositing dark grey over a bright wall DARKENS it.
+   Rendered on a lecture in a white-walled masjid, "rain" read as dirt on the
+   lens. This is the single most important line in the chain.
+3. **A box blur makes squares and a Gaussian makes glints.** Bokeh generated
+   small and blurred up came out as hard squares; it is generated coarser, with
+   `gblur` BEFORE the gain (after it, the blur divides the peak away and the
+   particles vanish).
+
+**Cropping a chroma-subsampled stream at a moving odd offset forces
+resampling.** Moving the tint above `loop` looked like a free optimisation and
+made every effect two to three times SLOWER, because the crop then ran on
+yuva420p instead of gray8. Measured, not reasoned about.
+
+### The two halves are separate rows because they are separate decisions
+
+`overlayDarken` dims the picture; `overlayEffect` puts particles over it. "Dark
+with rain" is both; either alone is a real choice, and dimming a bright frame
+so the captions read is worth doing with no weather at all.
+
+- **Darken stops at 80, and the ceiling is enforced in the RENDERER as well as
+  the schema** -- a payload is a dict off the wire, and at 1.0 drawbox paints an
+  opaque black rectangle with the captions floating on it. "But still the video
+  of course." The test found that gap: the schema clamped and the worker did not.
+- **Both go on BEFORE the captions.** Dimming a frame so the words read must not
+  dim the words, and rain in front of a caption is rain on a caption nobody can
+  read.
+- Intensity floors at 10 rather than 0: an effect switched on and drawing
+  nothing is a control that does nothing, and `none` is how it is turned off.
+
+### What it costs, said out loud
+
+**Roughly two to three times the video-filter stage** of a render (measured on
+30s: 4.2s plain, 12.8s rain, 9.4s snow, 8.9s dust, 7.0s bokeh). Rain is the
+dearest because it needs the finer generator -- at half that resolution the
+drops come out fat and read as smears, checked side by side. It is OFF by
+default and the help article states the cost rather than letting somebody
+discover it as a slow queue.
+
+`format=yuv420` on the overlay rather than `auto`: measured a third faster.
+
+### The preview is honest about which half it is guessing
+
+The scrim is EXACT -- the same arithmetic drawbox does. The weather is a static
+CSS field carrying the effect's real colour, size and density, and the help
+article says the falling is in the export. Animating a lookalike here would be
+the second rendering engine invariant 4 exists to prevent.
+
+**A `var()` in an SVG presentation attribute does not resolve** and **every
+background layer must state its own size and position**, or the browser cycles
+the shorter list and the grain's 3px tile lands on the raindrops. A test counts
+them, splitting at the top level only -- these gradients are full of nested
+commas and a naive split on `"), "` miscounts.
+
+### Left undone, deliberately
+
+- **The Styles help screenshot predates these rows.** The article for them
+  ships with no image rather than pointing at a capture that does not show what
+  it describes; recapture `templates.webp` with the rest next time the capture
+  script runs, and give the article an image then.
+- **Not yet seen on a clip from the real box.** Every frame here came from the
+  real `build_video_filter` through ffmpeg on this machine, and the local build
+  has no libass -- so the caption stage was swapped for `null` in the probe and
+  everything else is exactly the graph the renderer produces. Worker change, so
+  `deploy-worker.yml` ships it on push; one Quran or lecture import with rain
+  on settles it.
 
 ## Open items
 
