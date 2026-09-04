@@ -2152,7 +2152,7 @@
 
   <sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ closeSheet }}" style="position: fixed; inset: 0; z-index: 92; display: grid; place-items: center; padding: 24px; background: rgba(6,6,8,.72); backdrop-filter: blur(7px);">
-      <div style="width: 100%; max-width: 340px; display: flex; flex-direction: column; padding: 8px; border: 1px solid #26262A; border-radius: 14px; background: linear-gradient(160deg, #16161A, #101013); box-shadow: 0 34px 90px rgba(0,0,0,.7); animation: dcPop .16s cubic-bezier(.2,.8,.2,1);">
+      <div onClick="{{ swallowClick }}" style="width: 100%; max-width: 340px; display: flex; flex-direction: column; padding: 8px; border: 1px solid #26262A; border-radius: 14px; background: linear-gradient(160deg, #16161A, #101013); box-shadow: 0 34px 90px rgba(0,0,0,.7); animation: dcPop .16s cubic-bezier(.2,.8,.2,1);">
         <div style="display: flex; flex-direction: column; gap: 3px; padding: 13px 12px 12px;">
           <strong style="font-family: Outfit, Inter, sans-serif; font-size: 14.5px; font-weight: 600; letter-spacing: -.02em;">{{ sheetTitle }}</strong>
           <span style="font-size: 11.5px; color: #8B8B93; line-height: 1.5;">{{ sheetSubtitle }}</span>
@@ -2168,7 +2168,7 @@
 
   <sc-if value="{{ activityDetailOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ closeActivityDetail }}" style="position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; padding: 24px; background: rgba(6,6,8,.76); backdrop-filter: blur(8px);">
-      <div style="width: 100%; max-width: 520px; max-height: 82vh; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid #26262A; border-radius: 14px; background: linear-gradient(160deg, #16161A, #101013); box-shadow: 0 34px 90px rgba(0,0,0,.7); animation: dcPop .16s cubic-bezier(.2,.8,.2,1);">
+      <div onClick="{{ swallowClick }}" style="width: 100%; max-width: 520px; max-height: 82vh; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid #26262A; border-radius: 14px; background: linear-gradient(160deg, #16161A, #101013); box-shadow: 0 34px 90px rgba(0,0,0,.7); animation: dcPop .16s cubic-bezier(.2,.8,.2,1);">
 
         <div style="display: flex; align-items: flex-start; gap: 11px;">
           <i class="ph-fill ph-warning-circle" style="font-size: 19px; flex: none; margin-top: 2px; color: #E3928C;"></i>
@@ -2211,7 +2211,7 @@
 
   <sc-if value="{{ playerOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ closePlayer }}" style="position: fixed; inset: 0; z-index: 93; display: grid; place-items: center; padding: 24px; background: rgba(6,6,8,.78); backdrop-filter: blur(8px);">
-      <div data-dc-player style="width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid #26262A; border-radius: 14px; background: #101013; box-shadow: 0 34px 90px rgba(0,0,0,.7); animation: dcPop .16s cubic-bezier(.2,.8,.2,1);">
+      <div onClick="{{ swallowClick }}" data-dc-player style="width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid #26262A; border-radius: 14px; background: #101013; box-shadow: 0 34px 90px rgba(0,0,0,.7); animation: dcPop .16s cubic-bezier(.2,.8,.2,1);">
         <div style="display: flex; align-items: center; gap: 10px;">
           <strong style="font-family: Outfit, Inter, sans-serif; font-size: 13.5px; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ playerTitle }}</strong>
           <button onClick="{{ closePlayer }}" style="margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #8B8B93; cursor: pointer;" style-hover="color: #F2F2F4;"><i class="ph ph-x" style="font-size: 14px;"></i></button>
@@ -2301,7 +2301,7 @@
 
   <sc-if value="{{ connOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ closeConn }}" style="position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 24px; background: rgba(6,6,8,.72); backdrop-filter: blur(7px); animation: dcPop .16s cubic-bezier(.2,.8,.2,1);">
-      <div style="position: relative; width: 100%; max-width: 372px; display: flex; flex-direction: column; gap: 15px; padding: 22px; border: 1px solid #26262A; border-radius: 14px; background: linear-gradient(160deg, #16161A, #101013); box-shadow: 0 34px 90px rgba(0,0,0,.7);">
+      <div onClick="{{ swallowClick }}" style="position: relative; width: 100%; max-width: 372px; display: flex; flex-direction: column; gap: 15px; padding: 22px; border: 1px solid #26262A; border-radius: 14px; background: linear-gradient(160deg, #16161A, #101013); box-shadow: 0 34px 90px rgba(0,0,0,.7);">
         <button onClick="{{ closeConn }}" title="Close" style="position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease;" style-hover="color: #F2F2F4; border-color: #34343A;"><i class="ph ph-x" style="font-size: 14px;"></i></button>
         <div style="display: flex; align-items: center; gap: 12px;">
           <span style="display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 12px; border: 1px solid rgba(217,180,120,.3); background: rgba(217,180,120,.09); color: #F0D6A6; font-size: 22px;"><i class="{{ connIcon }}"></i></span>
