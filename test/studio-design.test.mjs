@@ -3327,41 +3327,51 @@ test('the caption overlay is a positioning ghost, loud only while dragging', () 
   StudioAdapter.ui.edClipId = null;
 });
 
-test('a new account gets the guided tour, and it can be reopened', () => {
+test('a new account gets the guided walkthrough, and it can be reopened', () => {
   const fresh = JSON.parse(JSON.stringify(SAMPLE_STATE));
   fresh.projects = [];
   fresh.clips = [];
-  // Tours are per screen now, so a step belongs to a screen: tourHere and
-  // startTour both set the pair together. Setting only `screen` reads as
-  // navigating away, which correctly abandons whatever tour was running.
+  // ONE walkthrough now, not a tour per tab (v3.124.0). A step names the screen
+  // it belongs to and the walkthrough switches to it, so there is no
+  // per-screen pair to set here any more.
   StudioAdapter.ui.screen = 'home';
-  StudioAdapter.ui.tourScreen = 'home';
   StudioAdapter.ui.tourStep = 0;
-  // A tour never starts on top of another layer, so nothing else may be open.
+  StudioAdapter.ui.tourNavAt = 0;
+  // It never starts on top of another layer, so nothing else may be open.
   Object.assign(StudioAdapter.ui, { job: null, playerClip: null, sheet: null, connProvider: null });
   const vals = StudioAdapter.bindings(fresh);
-  assert.equal(vals.tourOn, true, 'the design ships the tour; it must actually run');
-  // Not a magic number: the count and the dots must simply agree with each
-  // other and with the steps that actually have an anchor on screen.
+  assert.equal(vals.tourOn, true, 'the design ships the card; it must actually run');
   const total = vals.tourDots.length;
-  assert.ok(total >= 3, 'Home walks through the whole pipeline');
+  assert.equal(total, 6, 'the whole pipeline, once');
   assert.match(vals.tourCount, new RegExp(`Step 1 of ${total}`));
   assert.ok(vals.tourTitle.length > 0 && vals.tourBody.length > 0, 'a step says something');
   assert.doesNotMatch(vals.tourVeilStyle, /display: none/, 'the page dims behind it');
 
-  // Every step must point at an anchor the markup actually carries, or the
-  // spotlight highlights nothing.
+  // Step one is connecting, and its button DOES it rather than saying "Next".
+  assert.match(vals.tourTitle, /connect/i, 'it opens on connecting a channel');
+  assert.equal(vals.tourNextLabel, 'Connect a channel');
+
+  // Every anchor the walkthrough points at must exist, or the spotlight
+  // highlights nothing.
   const page = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
-  for (const anchor of ['paste', 'start', 'rail']) {
+  for (const anchor of ['paste', 'rail', 'queue-decide', 'sched-views', 'music-upload']) {
     assert.ok(page.includes(`"data-tour":"${anchor}"`), `the ${anchor} anchor exists in the template`);
   }
 
-  // Last step commits, and the tour is repeatable from the account menu.
-  StudioAdapter.ui.tourScreen = 'home';
+  // A step the account has already satisfied is ticked rather than re-taught.
+  const connected = JSON.parse(JSON.stringify(fresh));
+  connected.social = { providers: { youtube: { connected: true, accounts: [{ id: 'y1', name: 'Main' }] } } };
+  StudioAdapter.ui.tourStep = 0; StudioAdapter.ui.tourNavAt = 0;
+  const ticked = StudioAdapter.bindings(connected);
+  assert.match(ticked.tourBody, /\u2713/, 'a finished step says so');
+  assert.equal(ticked.tourNextLabel, 'Next', 'and offers to move on');
+
+  // Last step commits, and the walkthrough is repeatable from the account menu.
   StudioAdapter.ui.tourStep = total - 1;
+  StudioAdapter.ui.tourNavAt = total - 1;
   const last = StudioAdapter.bindings(fresh);
-  assert.equal(last.tourNextLabel, 'Start clipping');
-  assert.equal(typeof last.startTour, 'function', 'a first-run-only tour would be a dead end');
+  assert.equal(last.tourNextLabel, 'Finish');
+  assert.equal(typeof last.startTour, 'function', 'a first-run-only walkthrough would be a dead end');
 
   StudioAdapter.ui.tourStep = -1;
   const off = StudioAdapter.bindings(fresh);

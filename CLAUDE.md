@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1394 JS + 643 Python**
+- `npm test` and `npm run check` must pass. Currently **1398 JS + 643 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -5498,6 +5498,64 @@ like a shape that works -- and prints what qwen3:1.7b writes.
   `CLIP_STYLES` -- a chip added or a style renamed with the probe left asking
   about the old set would report confidently on shapes nobody can send. All
   five proven red.
+## One walkthrough, not a tour per tab (v3.124.0, 4 Sept 2026)
+
+Youssef: "the first person user demo ... should be more interactive. It should
+go to different tabs alone. Not each tab has a different demo ... the first
+thing should realistically be is they should connect themselves to a social
+media ... you have to go through them, let them do it. And then once they do
+it ... it works with the percentage system as well."
+
+**`TOURS` was a map keyed by SCREEN.** Every tab armed its own tour with its
+own `dcTour:<screen>` key, so the product was explained in six unconnected
+lectures that each began when you happened to arrive, in whatever order you
+wandered -- and nothing ever said what to do FIRST. `TOUR` is one ordered list
+now, with one key (`dcTour:walkthrough`); the old per-screen keys and the
+oldest `dcTourSeen` still count as seen, so nobody who has already been round
+the product is started on a new walkthrough because the storage key moved.
+
+- **Connecting comes first**, and that is the argument for the whole order: a
+  clip with nowhere to go is the one thing this product cannot finish, and it
+  is the step people skipped. Then the nasheed (nothing finishes without one),
+  the lecture, the review, the schedule, and the ladder that carries on
+  counting afterwards.
+- **It steers the tab itself.** Each step names its screen and the walkthrough
+  switches to it -- guarded on `tourNavAt` so it only steers on the paint the
+  step CHANGES, or it would drag you back every time you clicked another tab
+  while the card was up, which is a walkthrough holding you hostage.
+- **An interactive step performs itself and WAITS.** The card's own button
+  opens the connections dialog and does NOT advance; `tourAwait` records which
+  step is waiting, and the walkthrough moves on when the account's own records
+  say it is done. Advancing on the press would be the old behaviour with a
+  better label. Driven end to end: press → dialog opens, step holds at 1 →
+  channel connected → step 2, and the tab changes to Nasheed by itself.
+- **Completion is read from the records, never from which buttons were
+  pressed**, so an account that connected a channel last week opens the
+  walkthrough with step one already ticked and steps past it.
+- **The percentage is SHARED, not recounted.** The card reads `DATA.tasks`,
+  the same field the rail ring draws. Two numbers describing one person's
+  progress would eventually disagree, and this app has shipped that bug more
+  than once. Measured: card and ring both 0%.
+- The done-tick goes in the BODY text, because the card's markup is in the
+  design export and there is no room for an element of its own -- so this cost
+  no re-import.
+
+### The bug that only appeared by driving it
+
+**Step one opened the connections dialog UNDER the tour veil.** `otherLayerOpen`
+watched `UI.connProvider`, which is only set when a single platform is being
+shown -- so the dialog opened with it null, the veil stayed up, and the card
+floated over a dialog nobody could reach. Measured at 1440x950: the dialog
+full-viewport and fully dimmed. Two overlays at once is the exact failure the
+tour already refused to cause for the job panel; the host-rendered dialog was
+simply not on the list. It is read from the DOM (`#studioConn` without `.hide`)
+because the dialog keeps its state in a class rather than in UI, and guarded
+for the no-document case that every test runs in.
+
+**And a reading trap worth keeping:** the rail ring photographed as "13%" in a
+screenshot and the DOM said 0%. The card and the ring agreed all along.
+Measure the value, do not read it off a low-contrast capture.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

@@ -594,95 +594,122 @@
   // one. A step whose anchor is not on screen is SKIPPED rather than shown --
   // a spotlight over nothing is the failure this design invites, and it is
   // invisible to tests.
-  var TOURS = {
-    // The tours teach the pipeline, not the buttons. One lecture goes in, the
-    // worker cuts it into clips, you decide which survive, and the ones you
-    // approve go out at times you choose. Each screen says where it sits in
-    // that line and what it is for.
-    home: [
-      { anchor: 'paste', title: 'One lecture goes in here',
-        body: 'Paste a link to a lecture you own or are allowed to use, or upload an MP4. This is the only thing DeenClipped needs from you — everything after it is automatic until you are asked to decide.' },
-      { anchor: 'start', title: 'It finds the moments for you',
-        body: 'Start asks seven short questions — how much of the lecture to use, how long the clips should be, how the captions look. Then the worker transcribes the whole thing, scores every moment, and renders the best ones as vertical clips with captions and a nasheed underneath.' },
-      { anchor: '#studioLiveHome', title: 'Happening now shows the work',
-        body: 'While a lecture is processing, this tells you exactly what stage it is at and how long is left. You can leave the page — the worker keeps going without the browser open.' },
-      { anchor: 'rail', title: 'Nothing goes out on its own',
-        body: 'Finished clips do not post. They wait in the review queue for you, and only the ones you approve and give a time to are ever published.' },
-    ],
-    library: [
-      { anchor: 'lib-tabs', title: 'Every lecture you have added',
-        body: 'One card per lecture. Processing means the worker is still on it; Ready means the clips are cut and waiting for you.' },
-      { anchor: 'lib-add', title: 'Open a lecture to see its clips',
-        body: 'Each lecture holds the clips cut from it. Open one to review them, re-render them, or cut more from the same source without paying for it twice.' },
-    ],
-    queue: [
-      { anchor: 'queue-tabs', title: 'This is where you decide',
-        body: 'Every clip the worker cuts arrives here and waits. Nothing leaves this screen without your say-so, which is the whole point of it.' },
-      { anchor: 'queue-decide', title: 'Approve, edit or reject',
-        body: 'Approve keeps the clip and starts its full-quality render. Reject sets it aside — it is kept, and you can restore it. The middle button opens the editor if the wording needs a fix first.' },
-    ],
-    schedule: [
-      { anchor: 'sched-views', title: 'The last step: when it goes out',
-        body: 'An approved clip still needs a time. Your account has four posting windows a day; the month shows them all at a glance, and the week draws them as slots you can fill.' },
-      { anchor: 'sched-ready', title: 'Clips waiting for a time',
-        body: 'Everything you approved that has no slot yet. Slot it drops one into the next free window, or press an empty slot in the week to choose exactly when.' },
-      { anchor: 'sched-outlets', title: 'Where it posts to',
-        body: 'Clips go to the accounts you connect here. Until at least one is connected and switched on, approved clips will sit in their slots and never leave.' },
-    ],
-    music: [
-      { anchor: 'music-upload', title: 'Every clip needs a nasheed',
-        body: 'One is mixed underneath every clip, so a lecture cannot finish processing while this library is empty. Upload one to unblock your first job; two or more lets it rotate so consecutive clips do not sound identical.' },
-      { anchor: 'music-level', title: 'How loud it sits',
-        body: 'This is its level under the voice. It is ducked automatically wherever the speaker is loudest, so it never competes with them.' },
-    ],
-    templates: [
-      { anchor: '#studio select', title: 'How your captions look',
-        body: 'One style applies to every new clip. Clean Line is included on the free plan; the others are Pro, and the ones marked Pro will be refused until you upgrade.' },
-      { anchor: '#studioPreviewPic', title: 'What you see is the render',
-        body: 'The frame draws a real caption and watermark at this template\u2019s own sizes and margins. Drag either to move it — the export puts them exactly where you leave them.' },
-      { anchor: 'tpl-save', title: 'Save applies it everywhere',
-        body: 'Changes stay in the browser until you save, and leaving the screen drops them. Saving also re-renders every clip that has not posted yet, so they all match. Re-renders are free.' },
-    ],
-    editor: [
-      { anchor: 'ed-preview', title: 'You are watching the real clip',
-        body: 'This is the rendered file with its captions burned in — the same bytes that would be posted. Your edits appear after the next render, not before.' },
-      { anchor: 'ed-save', title: 'Fix the wording, re-render free',
-        body: 'Save stores your caption edits and re-renders this one clip; the others cut from the same lecture keep what they have. Re-rendering never costs a token.' },
-    ],
-    tokens: [
-      { anchor: 'tokens-balance', title: 'You pay by lecture length',
-        body: 'Tokens are charged per minute of source you actually use — the range you pick, not the whole video. Clips you reject and renders that fail are never charged.' },
-      { anchor: 'tokens-plans', title: 'What a paid plan changes',
-        body: 'Publishing, scheduling, automation, the editor and unlimited clips per lecture are all on the free plan. Paying adds the full caption-style catalogue and lets you remove the watermark.' },
-    ],
-    performance: [
-      { anchor: 'perf-tiles', title: 'What happened to your work',
-        body: 'Everything on this screen answers to the range you pick above: what was cut, what you kept, what actually posted, what a destination refused, and the source minutes it all cost.' },
-      { anchor: 'perf-board', title: 'Scored, not measured',
-        body: 'Clips are ranked by the score the worker gave each one when it cut them. DeenClipped does not collect views or watch time from any platform, so nothing here is audience data -- an invented number would be worse than an absent one.' },
-    ],
-  };
+  /*
+   * ONE WALKTHROUGH, not a tour per tab.
+   *
+   * Youssef, 4 Sept 2026: "the first person user demo ... should be more
+   * interactive. It should go to different tabs alone. Not each tab has a
+   * different demo ... the first thing should realistically be is they should
+   * connect themselves to a social media ... you have to go through them, let
+   * them do it. And then once they do it ... it works with the percentage
+   * system as well."
+   *
+   * What was here was a MAP KEYED BY SCREEN: every tab armed its own tour with
+   * its own `dcTour:<screen>` key, so the product was explained in six
+   * unconnected lectures that each started when you happened to arrive, in
+   * whatever order you wandered. Nothing ever said what to do FIRST.
+   *
+   * This is one ordered list instead. Each step names the screen it belongs to
+   * and the walkthrough SWITCHES TO IT -- that is "go to different tabs alone".
+   *
+   * `does` makes a step interactive: the card's own button performs the thing
+   * rather than describing it, and the step does NOT advance on the press. It
+   * advances when `done` becomes true, which is read from the account's real
+   * records -- so the walkthrough waits while you actually connect a channel,
+   * and moves on by itself the moment you have. A step already satisfied shows
+   * as done and can be stepped past.
+   *
+   * ORDER IS THE ARGUMENT. Connecting comes first because a clip with nowhere
+   * to go is the one thing this product cannot finish, and because it is the
+   * step people skipped.
+   */
+  var TOUR = [
+    {
+      key: 'connect', screen: 'home', anchor: 'rail',
+      title: 'First, connect somewhere to post',
+      body: 'DeenClipped cuts the clips; a channel is where they go. Connect YouTube, TikTok, Instagram or a Facebook Page now — nothing you approve can be published until at least one is on.',
+      cta: 'Connect a channel',
+      does: function () { global.StudioAdapter.onOpenConnections(); },
+      done: function (data) {
+        var provs = ((data || {}).social || {}).providers || {};
+        for (var k in provs) if (provs[k] && provs[k].connected) return true;
+        return false;
+      },
+      doneText: 'Connected. Clips you approve now have somewhere to go.',
+    },
+    {
+      key: 'nasheed', screen: 'music', anchor: 'music-upload',
+      title: 'Add one nasheed',
+      body: 'One is mixed underneath every clip, so a lecture cannot finish processing while this library is empty. One is enough to start; two or more lets it rotate so consecutive clips do not sound identical.',
+      cta: 'Open the nasheed library',
+      done: function (data) { return (((data || {}).tracks) || []).length > 0; },
+      doneText: 'Your library has a nasheed, so a lecture can finish.',
+    },
+    {
+      key: 'import', screen: 'home', anchor: 'paste',
+      title: 'Now give it a lecture',
+      body: 'Paste a link to a lecture you own or are allowed to use, or upload an MP4. This is the only thing DeenClipped needs from you — it transcribes the whole talk, scores every moment and renders the best ones as vertical clips.',
+      cta: 'Go to the paste box',
+      done: function (data) { return (((data || {}).projects) || []).length > 0; },
+      doneText: 'A lecture is in. The worker keeps going with the browser closed.',
+    },
+    {
+      key: 'review', screen: 'queue', anchor: 'queue-decide',
+      title: 'You decide what survives',
+      body: 'Every clip arrives here and waits. Each card says which channel it will post to before you choose, so nothing goes out anywhere you did not intend. Approve keeps it; reject sets it aside and keeps the file.',
+      cta: 'Open the review queue',
+      done: function (data) {
+        return (((data || {}).clips) || []).some(function (c) {
+          return c && (c.status === 'approved' || c.status === 'scheduled' || c.postedAt);
+        });
+      },
+      doneText: 'You have approved a clip.',
+    },
+    {
+      key: 'schedule', screen: 'schedule', anchor: 'sched-views',
+      title: 'And when it goes out',
+      body: 'An approved clip still needs a time. It is placed in your next free posting window automatically, and you can drag it to another. With more than one channel connected, each gets its own windows and its own clips.',
+      cta: 'Open the schedule',
+      done: function (data) {
+        return (((data || {}).clips) || []).some(function (c) { return c && (c.scheduledAt || c.postedAt); });
+      },
+      doneText: 'A clip has a time.',
+    },
+    {
+      key: 'finish', screen: 'home', anchor: '#dcTaskCard',
+      title: 'The rest is tracked here',
+      body: 'This counts the same steps and keeps going after them — posting your first clips, and posting across different days. Open it any time to see what is left and collect what you have earned.',
+      cta: 'Finish',
+    },
+  ];
 
   // Remembered per browser: a tour that reappears on every visit is an
   // interruption, and one that can never be reopened is a dead end -- the
   // account menu can start it again.
-  function tourSeen(screen) {
+  // ONE key. There used to be one per screen, which is what let the product be
+  // explained six times in whatever order somebody wandered.
+  var TOUR_KEY = 'dcTour:walkthrough';
+  var TOUR_OLD = ['home', 'library', 'queue', 'schedule', 'music', 'templates', 'performance', 'tokens', 'owner', 'help', 'deenai', 'editor'];
+  function tourSeen() {
     try {
-      // Anyone who finished the old Home-only tour has already been round the
-      // product; they are not shown a tour on every screen now.
+      // Anyone who finished the old per-screen tours has already been round the
+      // product and is not started on a new one.
       if (global.localStorage.getItem('dcTourSeen') === '1') return true;
-      return global.localStorage.getItem('dcTour:' + screen) === '1';
+      if (global.localStorage.getItem(TOUR_KEY) === '1') return true;
+      for (var i = 0; i < TOUR_OLD.length; i += 1) {
+        if (global.localStorage.getItem('dcTour:' + TOUR_OLD[i]) === '1') return true;
+      }
+      return false;
     } catch (err) { return true; }
   }
-  function markTourSeen(screen) {
-    try { global.localStorage.setItem('dcTour:' + screen, '1'); } catch (err) { /* private mode */ }
+  function markTourSeen() {
+    try { global.localStorage.setItem(TOUR_KEY, '1'); } catch (err) { /* private mode */ }
   }
   function forgetTours() {
     try {
       global.localStorage.removeItem('dcTourSeen');
-      for (var key in TOURS) if (Object.prototype.hasOwnProperty.call(TOURS, key)) {
-        global.localStorage.removeItem('dcTour:' + key);
-      }
+      global.localStorage.removeItem(TOUR_KEY);
+      for (var i = 0; i < TOUR_OLD.length; i += 1) global.localStorage.removeItem('dcTour:' + TOUR_OLD[i]);
     } catch (err) { /* private mode */ }
   }
   function tourAnchorEl(anchor) {
@@ -3909,48 +3936,90 @@
     // while being dragged.
     var edCapDragY = UI.dragPreview && UI.dragPreview.kind === 'caption' ? UI.dragPreview.y : null;
 
-    // Only the steps whose anchor is actually on screen. A tour that points at
-    // an element this account has not got -- an empty library has no cards --
-    // would spotlight nothing at all, and no test would notice.
-    var tourSteps = (TOURS[UI.screen] || []).filter(function (step) {
-      // Off a browser there is nothing to measure, so the model is the answer:
-      // filtering here would make every tour vanish under test and hide the
-      // very thing these steps are checked for.
-      if (!global.document) return true;
-      var el = tourAnchorEl(step.anchor);
-      if (!el || !el.getBoundingClientRect) return false;
-      var box = el.getBoundingClientRect();
-      return Boolean(box.width && box.height);
+    // THE WALKTHROUGH. One ordered list, and every step is shown -- a step is
+    // never dropped for having no anchor on screen, because the step's whole
+    // job may be to send you to the screen where its anchor lives. The
+    // spotlight simply goes unused until the anchor exists.
+    var tourSteps = TOUR;
+    var tourDone = TOUR.map(function (step) {
+      // Read from the account's own records, so the walkthrough reflects what
+      // has actually happened rather than which buttons were pressed while it
+      // was open. An account that connected a channel last week starts the
+      // walkthrough with step one already ticked.
+      try { return step.done ? Boolean(step.done(DATA)) : false; } catch (err) { return false; }
     });
 
-    // Each screen carries its own tour and its own memory of having shown it.
-    //
-    // Bindings are computed BEFORE the new screen's markup reaches the
-    // document, so on the paint that changes screen every anchor still belongs
-    // to the screen being left. Deciding then would file the tour away as
-    // "nothing to show" and never look again -- so the decision waits until the
-    // anchors are visible, and one repaint is scheduled to make them so.
-    // Nothing starts a tour while another layer already owns the screen. A
-    // brand-new browser used to get the old dashboard's six-step modal AND a
-    // screen tour veiling it from above -- two overlays at once, and no way
-    // through either.
-    var otherLayerOpen = Boolean(UI.job || UI.playerClip || UI.sheet || UI.connProvider);
-    var hasTour = !otherLayerOpen && (TOURS[UI.screen] || []).length > 0;
-    var anchorsReady = !global.document || tourSteps.length > 0;
-    if (global.document && hasTour && !anchorsReady && UI.tourSettled !== UI.screen) {
-      UI.tourSettled = UI.screen;
-      global.setTimeout(function () { refresh(); }, 0);
+    /*
+     * Nothing runs while another layer owns the screen -- INCLUDING the
+     * host-rendered connections dialog, which is the one the walkthrough sends
+     * you to.
+     *
+     * `UI.connProvider` is only set when a single platform is being shown, so
+     * "Connect a channel" opened the dialog with connProvider still null: the
+     * veil stayed up and the card floated over a dialog nobody could reach.
+     * Measured -- the dialog was 1440x950 and fully dimmed underneath. Two
+     * overlays at once is the exact failure the tour already refused to cause
+     * for the job panel; the dialog simply was not on the list.
+     *
+     * Read from the DOM because the dialog is the host's and keeps its state
+     * in a class, not in UI. bindings() already reads the document for the
+     * spotlight's rectangle, and it is guarded for the no-document case.
+     */
+    var connDialogOpen = false;
+    if (global.document) {
+      var connRoot = global.document.getElementById('studioConn');
+      connDialogOpen = Boolean(connRoot && !connRoot.classList.contains('hide'));
     }
-    // An explicit start (startTour, tourHere) sets the pair together, so the
-    // screen already matches and nothing is re-decided under it.
-    if (UI.tourScreen !== UI.screen && (anchorsReady || !hasTour)) {
-      UI.tourScreen = UI.screen;
-      UI.tourStep = (tourSteps.length && !tourSeen(UI.screen)) ? 0 : -1;
-    }
+    var otherLayerOpen = Boolean(UI.job || UI.playerClip || UI.sheet || UI.connProvider || connDialogOpen);
+    // First run only, and only once anything is on screen to point at.
     if (UI.tourStep === undefined) UI.tourStep = -1;
-    var tourIndex = Math.max(0, Math.min(Math.max(0, tourSteps.length - 1), Number(UI.tourStep)));
-    var tourOn = Number(UI.tourStep) >= 0 && tourSteps.length > 0 && !otherLayerOpen;
-    var tourStep = tourOn ? tourSteps[tourIndex] : null;
+    if (UI.tourStep === -1 && !UI.tourStarted && !tourSeen() && global.document) {
+      UI.tourStarted = true;
+      // Open on the first thing NOT already done, so somebody who has already
+      // connected a channel is not walked through connecting one.
+      var first = 0;
+      while (first < TOUR.length - 1 && tourDone[first]) first += 1;
+      UI.tourStep = first;
+    }
+    var tourIndex = Math.max(0, Math.min(TOUR.length - 1, Number(UI.tourStep)));
+    var tourOn = Number(UI.tourStep) >= 0 && !otherLayerOpen;
+    var tourStep = tourOn ? TOUR[tourIndex] : null;
+
+    /*
+     * IT GOES TO THE TAB ITSELF.
+     *
+     * "It should go to different tabs alone." The step names its screen and
+     * the walkthrough switches to it, rather than waiting to be found there.
+     * Guarded on tourNavAt so it only steers on the paint the step CHANGES --
+     * otherwise it would drag you back every time you clicked another tab
+     * while the card was up, which is a walkthrough holding you hostage.
+     */
+    if (tourOn && tourStep && tourStep.screen && UI.tourNavAt !== tourIndex) {
+      UI.tourNavAt = tourIndex;
+      if (UI.screen !== tourStep.screen) {
+        UI.screen = tourStep.screen;
+        if (global.document) global.setTimeout(function () { refresh(); }, 0);
+      }
+    }
+    /*
+     * AND IT MOVES ON WHEN YOU HAVE ACTUALLY DONE IT.
+     *
+     * "you have to go through them, let them do it. And then once they do it,
+     * it goes." The interactive steps do not advance on the button press --
+     * the press only opens the thing. This advances when the account's own
+     * records say the step is satisfied, which is what makes connecting a
+     * channel feel like the walkthrough waited for you.
+     *
+     * Only from the step it was waiting on, and only forwards, so stepping
+     * BACK to a finished step to re-read it does not immediately eject you.
+     */
+    if (tourOn && tourStep && tourStep.done && tourDone[tourIndex]
+        && UI.tourAwait === tourIndex && tourIndex < TOUR.length - 1) {
+      UI.tourAwait = null;
+      UI.tourStep = tourIndex + 1;
+      if (global.document) global.setTimeout(function () { refresh(); }, 0);
+    }
+
     var tourRect = null;
     if (tourOn) {
       var anchorEl = tourAnchorEl(tourStep.anchor);
@@ -3959,7 +4028,7 @@
         if (r.width && r.height) tourRect = r;
       }
     }
-    function endTour() { markTourSeen(UI.screen); setUI({ tourStep: -1 }); }
+    function endTour() { markTourSeen(); setUI({ tourStep: -1, tourAwait: null }); }
     // Set by the host only when the rendered file fails to play.
     var edSourceFallback = Boolean(UI.edSourceFallback);
 
@@ -6793,11 +6862,38 @@
       tourOn: tourOn,
       tourNotFirst: tourIndex > 0,
       tourTitle: tourStep ? tourStep.title : '',
-      tourBody: tourStep ? tourStep.body : '',
-      tourCount: tourStep ? 'Step ' + (tourIndex + 1) + ' of ' + tourSteps.length : '',
-      // The last step on Home is the one that hands over to the actual work.
-      tourNextLabel: tourIndex < tourSteps.length - 1 ? 'Next'
-        : UI.screen === 'home' ? 'Start clipping' : 'Got it',
+      // A finished step SAYS it is finished. The card's markup lives in the
+      // design export, so there is no room for a tick of its own -- the line
+      // goes in the body, which costs no re-import.
+      tourBody: (function () {
+        if (!tourStep) return '';
+        if (tourStep.done && tourDone[tourIndex]) {
+          return tourStep.body + '\n\n\u2713 ' + (tourStep.doneText || 'Done.');
+        }
+        return tourStep.body;
+      }()),
+      // THE SAME PERCENTAGE THE RAIL SHOWS. "it works with the percentage
+      // system as well" -- and it is read from DATA.tasks, the one the task
+      // card reads, rather than counted again here. Two numbers describing one
+      // person's progress would eventually disagree, and this app has shipped
+      // that bug more than once.
+      tourCount: (function () {
+        if (!tourStep) return '';
+        var label = 'Step ' + (tourIndex + 1) + ' of ' + tourSteps.length;
+        var tasks = DATA.tasks;
+        var pct = tasks && (tasks.ringPercent != null ? tasks.ringPercent : tasks.percent);
+        return pct == null ? label : label + ' \u00b7 ' + Math.round(pct) + '% set up';
+      }()),
+      // THE BUTTON DOES THE STEP. A walkthrough that only ever says "Next"
+      // describes the product; this one performs it -- Connect a channel opens
+      // the connections dialog, and the step then waits until a channel is
+      // actually connected before moving on.
+      tourNextLabel: (function () {
+        if (!tourStep) return 'Next';
+        if (tourIndex >= tourSteps.length - 1) return tourStep.cta || 'Finish';
+        if (tourDone[tourIndex]) return 'Next';
+        return tourStep.cta || 'Next';
+      }()),
       tourDots: tourSteps.map(function (_step, i) {
         return {
           style: 'width: ' + (i === tourIndex ? '16px' : '6px') + '; height: 6px; border-radius: 20px; background: '
@@ -6849,6 +6945,27 @@
       tourNext: function (e) {
         stop(e);
         if (tourIndex >= tourSteps.length - 1) return endTour();
+        var step = tourSteps[tourIndex];
+        /*
+         * AN UNFINISHED INTERACTIVE STEP PERFORMS ITSELF AND WAITS.
+         *
+         * "you have to go through them, let them do it." Pressing Connect a
+         * channel opens the connections dialog and does NOT advance -- the
+         * walkthrough marks itself as waiting on this step and moves on by
+         * itself once the account really has a channel. Advancing on the press
+         * would be the old behaviour with a better label on it.
+         *
+         * The screen is set here too: `does` usually opens a layer, and the
+         * layer hides the card, so arriving back to the wrong tab afterwards
+         * would lose the thread.
+         */
+        if (step && step.done && !tourDone[tourIndex]) {
+          UI.tourAwait = tourIndex;
+          if (step.screen && UI.screen !== step.screen) UI.screen = step.screen;
+          if (step.does) { step.does(); refresh(); return; }
+          refresh();
+          return;
+        }
         setUI({ tourStep: tourIndex + 1 });
       },
       tourBack: function (e) { stop(e); setUI({ tourStep: Math.max(0, tourIndex - 1) }); },
@@ -6858,10 +6975,24 @@
       tourDismiss: function (e) { stop(e); endTour(); },
       // Offered for good in the account menu, so it is repeatable rather than
       // a one-shot a new user can lose by clicking past it.
-      startTour: function (e) { stop(e); forgetTours(); setUI({ tourStep: 0, tourScreen: 'home', menuOpen: false, screen: 'home' }); },
+      // Repeatable from the account menu. It restarts the WHOLE walkthrough
+      // from step one rather than whatever tour the current tab used to own.
+      startTour: function (e) {
+        stop(e); forgetTours();
+        UI.tourStarted = true; UI.tourAwait = null; UI.tourNavAt = null;
+        setUI({ tourStep: 0, menuOpen: false, screen: TOUR[0].screen });
+      },
       // "Show me around" on the screen you are looking at.
-      tourHere: function (e) { stop(e); setUI({ tourStep: 0, tourScreen: UI.screen }); },
-      tourHereShown: tourSteps.length > 0 && !tourOn,
+      // "Show me around" now resumes the one walkthrough at the first thing
+      // this account has not done, rather than starting a tour of this tab.
+      tourHere: function (e) {
+        stop(e);
+        var at = 0;
+        while (at < TOUR.length - 1 && tourDone[at]) at += 1;
+        UI.tourStarted = true; UI.tourAwait = null; UI.tourNavAt = null;
+        setUI({ tourStep: at, screen: TOUR[at].screen });
+      },
+      tourHereShown: !tourOn,
 
       // The design's own dock is off on every screen. Live work is rendered by
       // the host instead: a stable docked section on Home (#studioLiveHome) and

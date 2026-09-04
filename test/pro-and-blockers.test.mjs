@@ -153,45 +153,122 @@ test('a clip that waived music can still be re-rendered', () => {
 // exist produces a card floating over a dimmed screen, highlighting nothing --
 // and nothing else in the suite would notice.
 
-test('every tour step anchors on something the page actually carries', () => {
+test('the walkthrough is ONE ordered list, not a tour per tab', () => {
+  // Youssef, 4 Sept 2026: "It should go to different tabs alone. Not each tab
+  // has a different demo." What was here was a map keyed by SCREEN, so the
+  // product was explained in six unconnected lectures that each began when you
+  // happened to arrive, in whatever order you wandered -- and nothing ever
+  // said what to do first.
+  const adapter = read('src/public/studio-adapter.js');
+  assert.ok(!/var TOURS = \{/.test(adapter), 'the per-screen map is gone');
+  assert.match(adapter, /var TOUR = \[/, 'one ordered list');
+
+  const block = adapter.slice(adapter.indexOf('var TOUR = ['), adapter.indexOf('\n  ];', adapter.indexOf('var TOUR = [')));
+  const keys = [...block.matchAll(/key: '([^']+)'/g)].map(m => m[1]);
+  // CONNECTING COMES FIRST. "the first thing should realistically be is they
+  // should connect themselves to a social media." A clip with nowhere to go is
+  // the one thing this product cannot finish, and it was the step people
+  // skipped.
+  assert.equal(keys[0], 'connect', 'the walkthrough opens on connecting a channel');
+  assert.deepEqual(keys, ['connect', 'nasheed', 'import', 'review', 'schedule', 'finish'],
+    'and runs the pipeline in the order somebody actually does it');
+
+  // Every step names the tab it belongs to, which is what lets it steer.
+  const screens = [...block.matchAll(/screen: '([^']+)'/g)].map(m => m[1]);
+  assert.equal(screens.length, keys.length, 'every step names its screen');
+  assert.ok(new Set(screens).size > 1, 'and they are not all one tab');
+});
+
+test('it steers the screen itself, and only when the step changes', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  const driver = adapter.slice(adapter.indexOf('IT GOES TO THE TAB ITSELF'), adapter.indexOf('AND IT MOVES ON WHEN YOU HAVE ACTUALLY DONE IT'));
+  assert.match(driver, /UI\.screen = tourStep\.screen/, 'the walkthrough changes tab');
+  // Guarded, or it would drag you back every time you clicked another tab
+  // while the card was up -- a walkthrough holding you hostage.
+  assert.match(driver, /UI\.tourNavAt !== tourIndex/, 'only on the paint the step changes');
+});
+
+test('an interactive step waits for the thing to be DONE, not for the button', () => {
+  // "you have to go through them, let them do it. And then once they do it, it
+  // goes." Advancing on the press would be the old behaviour with a better
+  // label on it.
+  const adapter = read('src/public/studio-adapter.js');
+  const next = adapter.slice(adapter.indexOf('tourNext: function (e) {'), adapter.indexOf('tourBack: function'));
+  assert.match(next, /step\.does\(\)/, 'the button performs the step');
+  assert.match(next, /UI\.tourAwait = tourIndex/, 'and marks the walkthrough as waiting on it');
+  // The press must not advance an unfinished interactive step.
+  const guard = next.slice(next.indexOf('if (step && step.done && !tourDone[tourIndex])'));
+  assert.ok(guard.indexOf('return;') < guard.indexOf('setUI({ tourStep: tourIndex + 1 })'),
+    'it returns before advancing');
+
+  // Completion is read from the account's own records, so a step already
+  // satisfied is ticked rather than re-taught.
+  const block = adapter.slice(adapter.indexOf('var TOUR = ['), adapter.indexOf('\n  ];', adapter.indexOf('var TOUR = [')));
+  assert.match(block, /done: function \(data\)[\s\S]*?providers/, 'connecting is read from the connections');
+  assert.match(block, /done: function \(data\) \{ return \(\(\(data \|\| \{\}\)\.tracks\) \|\| \[\]\)\.length > 0; \}/,
+    'the nasheed step from the library');
+});
+
+test('it shares the percentage rather than counting its own', () => {
+  // "it works with the percentage system as well." Two numbers describing one
+  // person's progress would eventually disagree -- this app has shipped that
+  // bug more than once -- so the card reads DATA.tasks, the same one the rail
+  // ring reads.
+  const adapter = read('src/public/studio-adapter.js');
+  const count = adapter.slice(adapter.indexOf('tourCount: (function () {'), adapter.indexOf('tourNextLabel:'));
+  assert.match(count, /DATA\.tasks/, 'the percentage comes from the task ladder');
+  assert.match(count, /ringPercent/, 'the same field the rail card draws');
+  assert.ok(!/tourDone\.filter/.test(count), 'and is not recounted from the tour steps');
+});
+
+test('the walkthrough is remembered ONCE, and the old per-screen keys still count', () => {
+  const adapter = read('src/public/studio-adapter.js');
+  assert.match(adapter, /var TOUR_KEY = 'dcTour:walkthrough'/, 'one key for the whole product');
+  const seen = adapter.slice(adapter.indexOf('function tourSeen'), adapter.indexOf('function markTourSeen'));
+  // Anyone who already went round the product must not be started on a new
+  // walkthrough because the storage key changed underneath them.
+  assert.match(seen, /dcTourSeen/, 'the oldest flag still counts as seen');
+  assert.match(seen, /TOUR_OLD/, 'and so do the per-screen keys it replaced');
+});
+
+test('the connections dialog counts as a layer, or the walkthrough veils it', () => {
+  // FOUND BY DRIVING IT, not by reading. Step one opens the connections
+  // dialog -- and `UI.connProvider` is only set when a single platform is
+  // being shown, so the dialog opened with it still null: the tour veil stayed
+  // up and the card floated over a dialog nobody could reach. Measured in the
+  // browser at 1440x950, the dialog full-viewport and fully dimmed underneath.
+  //
+  // Two overlays at once is the exact failure the tour already refused to
+  // cause for the job panel; the host-rendered dialog simply was not on the
+  // list of layers.
+  const adapter = read('src/public/studio-adapter.js');
+  const block = adapter.slice(adapter.indexOf('var connDialogOpen = false;'), adapter.indexOf('var otherLayerOpen') + 200);
+  assert.match(block, /getElementById\('studioConn'\)/, 'the host dialog is checked');
+  assert.match(block, /classList\.contains\('hide'\)/, 'by the class it actually keeps its state in');
+  assert.match(block, /otherLayerOpen = Boolean\([^)]*connDialogOpen\)/, 'and it counts as a layer');
+  // Guarded: bindings() runs with no document under test, and an unguarded
+  // read there would throw on every single test in this suite.
+  assert.match(block, /if \(global\.document\)/, 'guarded for the no-document case');
+});
+
+test('every walkthrough step anchors on something the page actually carries', () => {
   const adapter = read('src/public/studio-adapter.js');
   const page = read('src/public/studio-template.generated.js');
   const host = read('src/public/index.html');
 
-  const block = adapter.slice(adapter.indexOf('var TOURS = {'), adapter.indexOf('  };', adapter.indexOf('var TOURS = {')));
+  const block = adapter.slice(adapter.indexOf('var TOUR = ['), adapter.indexOf('\n  ];', adapter.indexOf('var TOUR = [')));
   const anchors = [...block.matchAll(/anchor: '([^']+)'/g)].map(m => m[1]);
-  assert.ok(anchors.length >= 15, 'the tours cover the product, not one screen');
+  assert.equal(anchors.length, 6, 'one anchor per step');
 
   for (const anchor of anchors) {
     if (/^[#.[]/.test(anchor)) {
-      // A CSS selector: at least its distinguishing id must exist somewhere.
       const id = anchor.match(/#([A-Za-z0-9_-]+)/);
-      if (id) {
-        assert.ok(page.includes(id[1]) || host.includes(id[1]), `${anchor} resolves to real markup`);
-      }
+      if (id) assert.ok(page.includes(id[1]) || host.includes(id[1]), `${anchor} resolves to real markup`);
       continue;
     }
     assert.ok(page.includes(`"data-tour":"${anchor}"`),
       `the ${anchor} anchor is missing — its step would spotlight nothing`);
   }
-});
-
-test('every screen with a nav entry has a tour', () => {
-  const adapter = read('src/public/studio-adapter.js');
-  const block = adapter.slice(adapter.indexOf('var TOURS = {'), adapter.indexOf('  };', adapter.indexOf('var TOURS = {')));
-  const covered = [...block.matchAll(/^    (\w+): \[/gm)].map(m => m[1]);
-  for (const screen of ['home', 'queue', 'schedule', 'templates', 'music', 'library', 'performance', 'tokens', 'editor']) {
-    assert.ok(covered.includes(screen), `${screen} has no tour`);
-  }
-});
-
-test('a tour is remembered per screen, not once for the whole product', () => {
-  const adapter = read('src/public/studio-adapter.js');
-  assert.match(adapter, /'dcTour:' \+ screen/, 'each screen remembers its own');
-  // Anyone who already finished the old single tour must not be shown one on
-  // every screen the next time they sign in.
-  const seen = adapter.slice(adapter.indexOf('function tourSeen'), adapter.indexOf('function markTourSeen'));
-  assert.match(seen, /dcTourSeen/, 'the legacy flag still counts as seen');
 });
 
 // ── the retired starter list, and saying what Pro adds ─────────────────────
