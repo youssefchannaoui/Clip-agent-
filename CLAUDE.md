@@ -5913,6 +5913,43 @@ Measure the value, do not read it off a low-contrast capture.
 
 ## Open items
 
+### Google verification: branding VERIFIED and PUBLISHED (4 Sept 2026)
+
+Started at Youssef's instruction. The 100-user cap is the only irreversible
+ceiling on this product, so this was the right thing to do first.
+
+**Google had already rejected a verification attempt, and the reasons were
+sitting unread in the console** behind a "View issues" link nobody had opened:
+
+1. "Your privacy policy page ... does not have sufficient content."
+2. "Your homepage does not explain the purpose of your app."
+3. "The app name 'DeenClipped' ... does not match the app name on your homepage."
+
+**All three were already fixed** — by the public-site rebuild (v3.63.0) and the
+24 Aug privacy rewrite, both of which postdate that attempt. Checked before
+claiming so, rather than clicking "I have fixed the issues" on a guess: the
+homepage names DeenClipped 15 times and states the purpose in its title,
+description and first paragraph; the privacy policy is 1832 words with a
+complete YouTube API data list, a 30-day retention statement, and the **Limited
+Use** affirmation Google requires for restricted scopes.
+
+Reverification passed **immediately**, and the branding is now published and
+being shown to users. Note the trap for next time: a verified branding result
+**expires in 7 days if it is not published** — verifying and walking away
+silently loses it.
+
+**One blocker remains, and only one:** the data-access form is complete —
+scope justifications written, URLs and authorised domain in — and `Confirm` is
+disabled solely for *"Missing the following fields for one or more requested
+scopes: demo video."* Google wants a **YouTube-hosted** video link showing the
+consent screen and each scope in use. The TikTok demo does not qualify: it
+demonstrates TikTok.
+
+The App logo is still "Not provided". It did not block branding verification,
+so it is optional, but a 480x480 PNG is ready at
+`~/Downloads/deenclipped-oauth-logo.png`. Its file input only exists after
+clicking Browse, which opens a native picker no session can drive.
+
 ### CAN A CUSTOMER ACTUALLY CONNECT? Measured 4 Sept 2026
 
 Youssef: "is this working for sall the public as well". Read off each
