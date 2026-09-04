@@ -444,7 +444,9 @@
   .dcm-tplpick { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
   .dcm-slider { width: 100%; height: 44px; margin: 6px 0 4px; accent-color: var(--dcm-gold); background: none; }
   .dcm-track { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 15px; background: var(--dcm-card); box-shadow: var(--dcm-sh1); }
-  .dcm-track-p { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--dcm-wash); color: var(--dcm-gold2); font-size: 16px; }
+  /* 44, not 40: this is a real control and it was four pixels short at every
+     phone width. Measured before 40x40, after 44x44, row height unchanged. */
+  .dcm-track-p { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--dcm-wash); color: var(--dcm-gold2); font-size: 16px; }
   .dcm-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 4px; }
   .dcm-tile { display: flex; flex-direction: column; gap: 3px; padding: 14px; border-radius: 16px; background: var(--dcm-card); box-shadow: var(--dcm-sh1); }
   .dcm-tile b { font: 600 25px/1 var(--dcm-display); letter-spacing: -.035em; }
@@ -653,6 +655,38 @@
   @keyframes dcmUp { from { transform: translateY(26px); opacity: 0; } to { transform: none; opacity: 1; } }
   @keyframes dcmIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
   @keyframes dcmFade { from { opacity: 0; } to { opacity: 1; } }
+
+  /* THE SCREENS THE SHELL FRAMES RATHER THAN OWNS KEEP THE DESKTOP'S CONTROL
+     SIZES, and that is a finger problem, not a looks problem. Owner, Help,
+     Arabic & terms and the gated editor are the desktop's own DOM inside the
+     phone chrome (body.dcm-on without .dcm-own), so their buttons arrive at
+     the size a mouse needs: Owner's date-range buttons measured 22x15 and its
+     seven sub-tabs 25px tall, and the blocker banner's two buttons 26px --
+     against the SAME banner at 44px on a screen the shell owns, which is the
+     comparison that proves this is the framed path rather than the copy.
+     v3.81.0's "zero sub-44px targets at 320, 375 and 390" was measured on the
+     owned screens only and was never true here.
+
+     min-height is deliberately allowed to reach a[href] too: it does nothing
+     to a non-replaced INLINE box, so a link sitting in a sentence is untouched
+     by CSS semantics rather than by anyone having to enumerate the exceptions
+     (WCAG 2.5.8 exempts exactly those), while Help's block-level "Contact us"
+     and "Report a bug" links -- 91x35 and 102x35, real controls -- come up.
+     Measured across 14 screens at 320/360/375/390/430: 26 sub-44 controls
+     before, 0 after, with page-level horizontal overflow 0 at every width and
+     every shell-owned screen byte-identical (0 before, 0 after). */
+  body.dcm-on:not(.dcm-own) #studio main button,
+  body.dcm-on:not(.dcm-own) #studio main select,
+  body.dcm-on:not(.dcm-own) #studio main input,
+  body.dcm-on:not(.dcm-own) #studio main a[href],
+  body.dcm-on:not(.dcm-own) #dcBlocker button { min-height: 44px; }
+  body.dcm-on:not(.dcm-own) #studio main button,
+  body.dcm-on:not(.dcm-own) #studio main select { min-width: 44px; }
+  /* A text field 19px wide cannot be typed into. The two pronunciation fields
+     on Arabic & terms squeezed to exactly that at 320. */
+  body.dcm-on:not(.dcm-own) #studio main input[type="text"],
+  body.dcm-on:not(.dcm-own) #studio main input:not([type]) { min-width: 108px; }
+
   @media (prefers-reduced-motion: reduce) {
     .dcm-sheet-card, .dcm-sheet-back, .dcm-sheet-full .dcm-sheet-card { animation: none; }
     /* Pseudo-elements are never matched by a bare `*` rule, so each animation
@@ -680,7 +714,11 @@
     .dcm-clip-a { flex-wrap: wrap; gap: 6px; }
     .dcm-clip-a .dcm-btn:first-child { flex: 1 1 100%; }
     .dcm-clip-a .dcm-btn { min-width: 44px; }
-    .dcm-month { padding: 10px 4px 8px; }
+    /* 1px, not 4: seven cells plus six 2px gaps inside a 324px card came to
+       43.43px each at 360 -- a pixel short, in a band the round widths miss
+       entirely (320, 375, 390 and 430 all measured clean). Swept every
+       single pixel 320..430 after: no cell under 44 and no overflow. */
+    .dcm-month { padding: 10px 1px 8px; }
     .dcm-month-r { gap: 2px; }
     .dcm-month-h { padding: 0 2px; }
   }
