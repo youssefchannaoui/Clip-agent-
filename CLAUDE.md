@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1407 JS + 658 Python**
+- `npm test` and `npm run check` must pass. Currently **1410 JS + 658 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -5306,6 +5306,79 @@ those passing against a behaviour that changed underneath it. Eight probes,
 all proven red. In the browser at 1440x950, all seven steps: the card inside
 the viewport, never overlapping the spotlight, no page overflow, and the
 spotlit control hit-testable on every step that has one.
+
+## The preview panel was mounting into a card in the grid (v3.124.4, 4 Sept 2026)
+
+Youssef, with a screenshot of the review queue: **"i opened and closed preview
+loook what happened also previews that updaded you did doesnt show? like the
+title ai etc"**, then **"the ai button is covering the select button its super
+buggy evrerything"**. Three faults; the first two are one bug.
+
+### One selector, and it never once found the preview
+
+    const frame = document.querySelector('#studio [style*="aspect-ratio: 9 / 16"]');
+    const card  = frame && frame.parentElement;
+
+**Every clip card's thumbnail carries that inline style** -- it is `thumbStyle`
+in the adapter, three separate call sites -- and the player overlay is a
+root-level sibling of `<main>`, so with the queue or the library behind the
+modal the selector loses on DOCUMENT ORDER every single time.
+
+MEASURED with three clips seeded at 1440x950: the panel mounted into
+`ARTICLE[data-clip=c1]`, the FIRST CARD IN THE GRID. So
+
+- **the configuration column has never appeared in the preview** when it was
+  opened from the queue or the library -- which is every way anybody opens it;
+- and the card it landed in was left wrecked.
+
+**v3.121.0 measured this panel carefully and still shipped it**, because the
+harness reused a profile and laid the page out at innerWidth 780 (that release
+records the trap) -- below the panel's own 900px seam, where the column stacks
+and the wrong mount reads as the design working.
+
+It anchors on `[data-dc-player]` now, added to the player card in the export
+with `npm run design:import` **proven byte-stable first**: generated CSS
+identical, no hashed class moved, 20 bytes of template delta being the
+attribute. Measured after: the panel is a 320x678 column at x=751 beside the
+360px frame, gap 22, one left edge, inside the card, no page overflow, in both
+themes.
+
+### And closing it left the card that way FOR THE SESSION
+
+`data-host-*` is the one attribute family the patcher never strips -- which is
+exactly why it survives a re-render, and why nothing but the host removes it.
+The close branch removed the panel NODE and left `data-host-pp` on the card and
+two of its children, so the preview's own grid CSS went on laying that card out
+for every later paint. Measured after closing: **the card 314px wide against
+its siblings' 202px**, and `[data-host-pp]` still stamped on three nodes.
+
+`clearClipToolsAreas()` sweeps `#studio [data-host-pp]` on close. It sweeps the
+WHOLE studio rather than a remembered node, deliberately: a card wrecked by an
+earlier paint then heals on the next close instead of staying broken until a
+reload. Measured after: 0 stamped, every card 202px.
+
+**The existing unmount test could not have caught either half.** It asserts the
+closed branch calls `clipToolsNode.remove()`, which it always did. Removing the
+node is not the same as undoing what mounting it changed -- anything that
+stamps a `data-host-*` attribute owns taking it off again.
+
+### The AI star was sitting exactly on the select control
+
+Measured on a real card: the export's select button is at **top 9, right 9,
+22x22**; the star was a **26px box at top 8, right 8**. Bigger, on top, and
+`z-index: 3` -- so on a hovered card the tick was completely covered and the
+clip could not be selected. It is at `top: 40px` now, clearing the button's
+bottom edge (31) by 9px, with nothing else drawn there.
+
+The test pins the RELATIONSHIP rather than the number -- the star's top edge
+must clear the control's bottom edge -- so it stays true if the star is
+resized. Verified by hit-test: with the pointer on the card, the element at the
+centre of the select button IS the button, and the star reports zero overlap
+with any absolutely-positioned control on all four cards in both themes.
+
+**Five probes, all proven red**: the loose 9:16 lookup restored, the export
+anchor deleted, the sweep neutered, the close branch not sweeping, and the star
+back at `top: 8px`.
 
 ## Two kinds of title, and a star that costs nothing (v3.120.0, 4 Sept 2026)
 

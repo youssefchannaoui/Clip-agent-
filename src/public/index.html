@@ -4132,16 +4132,38 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
     }
 
+    /* CLEARING THE GRID AREAS IS AS IMPORTANT AS SETTING THEM.
+       data-host-* is the one attribute family the patcher never strips, which
+       is exactly why it survives a re-render -- and why nothing but this
+       removes it. Left behind, the CSS goes on laying that node out as the
+       preview panel for the rest of the session. It sweeps the whole studio
+       rather than a remembered node, so a card wrecked by an earlier paint
+       heals on the next close instead of staying broken until a reload. */
+    function clearClipToolsAreas(){
+      for (const n of document.querySelectorAll('#studio [data-host-pp]')) n.removeAttribute('data-host-pp');
+    }
+
     function paintClipTools(vals){
       if (!vals.playerOpen){
         if (clipToolsNode){ clipToolsNode.remove(); clipToolsNode = null; }
+        clearClipToolsAreas();
         CLIPTOOLS.note = ''; CLIPTOOLS.busy = '';
         return;
       }
       const clip = clipToolsClip();
-      const frame = document.querySelector('#studio [style*="aspect-ratio: 9 / 16"]');
-      const card = frame && frame.parentElement;
-      if (!clip || !card) return;
+      /* THE PLAYER'S OWN CARD, never "the first 9:16 box in the studio".
+         MEASURED: with the review queue behind the modal that selector
+         returned the FIRST CLIP CARD IN THE GRID -- every clip card's
+         thumbnail carries `aspect-ratio: 9 / 16` (thumbStyle), and the
+         overlay is a root-level sibling of <main>, so it loses on document
+         order every time. So the panel mounted into a card in the grid: the
+         preview showed no configuration column at all, and the card was left
+         414px wide beside its 202px siblings once the stamps stayed behind.
+         `data-dc-player` was added to the export and the re-import proven
+         byte-stable first -- generated CSS identical, no hashed class moved. */
+      const card = document.querySelector('#studio [data-dc-player]');
+      const frame = card && card.querySelector('[style*="aspect-ratio: 9 / 16"]');
+      if (!clip || !card || !frame){ clearClipToolsAreas(); return; }
       card.setAttribute('data-host-pp', 'card');
       /* Re-stamped every paint, because the patcher rebuilds these nodes
          whenever their markup changes. */
