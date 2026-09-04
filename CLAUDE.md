@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1398 JS + 643 Python**
+- `npm test` and `npm run check` must pass. Currently **1398 JS + 658 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -5439,6 +5439,148 @@ removed from the route, and a shape overriding the recitation reference.
 **Worker change, so `deploy-worker.yml` deploys it on push.** The shapes reach
 the model only from the box; nothing here has been seen against the real
 Ollama yet.
+
+## The star was handing back the title it already had (v3.122.1 / v3.123.2, 4 Sept 2026)
+
+The first thing the new probe below was pointed at, and it found this in one
+run. Asked for a title with the clip's current one in the prompt, the box's
+qwen3:1.7b answered:
+
+    (no shape)         The door that never closes
+    Promise / Warmer   The door that never closes
+    Question           The door that never closes
+    Subject: payoff    The door that never closes: The promise of turning around
+    Shorter            The door that never closes
+
+**Four of five shapes returned the current title word for word** -- a Question
+chip returning something that is not a question, a Shorter chip returning the
+same length. Youssef asked for "a star ... which will create a DIFFERENT
+title", and on the case that actually happens (a clip that already has a
+title, which is every clip the star is pressed on) it created no title at all.
+
+- **Nine passing tests could not have caught it, and that is the point.** They
+  assert the PROMPT and the prompt was correct: `CLIP_STYLES` says what each
+  shape means, the fence is right, the style travels. What no test in this repo
+  can see is what a 1.7B model DOES with a correct prompt. Only the real model
+  showed it, which is the whole argument for the probe.
+- **The shape is restated in the BEFORE-YOU-ANSWER line now.** This file
+  already records that the restatement last before the data is the only place
+  a rule reliably lands on this model; the shape was named once, higher up, and
+  that was not enough.
+- **AND the echo is caught in code**, because a 1.7B model does not reliably
+  obey a negative instruction -- the oldest lesson here about this model, and
+  the same reason `looks_copied` and `strip_unbacked_attribution` exist. An
+  answer that normalises equal to the current title is asked ONCE more, with
+  the failure named outright; the retry costs a whole generation on a
+  single-slot box, so it fires only on an actual echo.
+- **`normalise_title` is clip_worker's own**, so "the same title" means here
+  exactly what it means to the dedupe pass. "The Door That Never Closes..." is
+  the same title. Two definitions of one thing is how every drift in this file
+  started.
+- **A second echo is reported, never dressed up.** `source: "unchanged"` reaches
+  the panel as *"DeenAI kept your title -- it could not better it. Try another
+  shape, or ask for a change below."* and the toast says the same. A button that
+  quietly returns what was already on screen is a control that does nothing
+  (invariant 9), and that is exactly how this presented.
+- **A failed retry still reports `unchanged`.** The first answer stands rather
+  than failing the request -- but it IS the current title, and `source` reaches
+  a customer's screen, so a broad `except` around the block would have it claim
+  otherwise. Each failure is handled where it happens for that one reason, and
+  a test drives the box going away mid-retry.
+- Ten tests on executed output -- the bytes that go to Ollama and the dict that
+  comes back, never the source that builds them. All five probes proven red.
+
+**Worker change, so `deploy-worker.yml` ships it on push.** Re-probing after
+the deploy is one dispatch.
+
+### And with no current title it did three worse things (v3.123.2)
+
+The same probe, asked with NO current title so the model had to write from the
+transcript, and this is the run that matters:
+
+    (no shape)         The door does not close because you walked through it
+                       yesterday. He is not waiting for you to run out
+    Promise / Warmer   The door does not close because you walked through it
+                       yesterday. He is waiting for you to turn around.
+    Question           What turns shame into grace
+    Subject: payoff    The shape asked for: Sheikh Salman : He is not waiting
+                       for you to run out of chances, He is
+    Shorter            The door does not close because you walked through it
+                       yesterday.
+
+**One good title out of five, and the other four are three separate faults.**
+
+- **IT INVENTED A SCHOLAR.** "Sheikh Salman", on a clip whose lecture title was
+  EMPTY -- so the prompt's own rule ("name the speaker ONLY if the lecture
+  title names them") was broken outright. `strip_unbacked_attribution` could
+  not see it: that guard removes a TRAILING "- Name", and this name sits in the
+  middle, behind this prompt's own heading. This is the failure this file calls
+  the worst available on the product, and it was live.
+- **It copied the transcript**, three shapes out of five. `looks_copied` has
+  guarded the AUTOMATIC titler against exactly that since 31 Aug 2026 and was
+  never applied to the star -- the same function, one call away, on a route
+  written three days later.
+- **It leaked this prompt's own furniture into the answer** ("The shape asked
+  for:"), which is what carried the invented name.
+- **Two titles were cut mid-word** ("...turn arou") by the length limit.
+
+`unusable(value)` is one gate for all of it, applied to the first answer and to
+the retry: prompt wording, an echo of the current title, a transcript copy.
+Rejected once, the model is asked again WITH THE REASON NAMED; rejected twice,
+the current title is kept (`unchanged`) or -- with nothing to keep -- the same
+`title_from_text` the render falls back to (`fallback`). Both are said plainly
+on screen, because a button that quietly hands back what was already there, or
+the clip's own opening sentence, is a control that does nothing.
+
+**THE LEAK GUARD IS NOT A GENERAL NAME GUARD, and the comment says so.** There
+is no reliable way to spot an invented name mid-sentence; what is caught is the
+shape that actually produced one on the box. Claiming more than that is the
+stale-claim failure this file keeps paying for.
+
+**A red probe came back GREEN on the word-boundary test**, for the third time
+in this repo's history and for the dullest reason: the fixture was
+`"Mercy " * 40`, and 120 divides evenly by `"Mercy "`, so the naive cut landed
+on a boundary anyway. The replacement asserts character 120 falls inside a word
+before testing anything. The second fixture then tripped the COPY guard,
+because it was built out of the transcript. Check that a fixture exercises the
+line you think it does.
+
+Fifteen tests on executed output -- the prompt bytes and the returned dict.
+
+### Measured again after the fix, on the same box, same transcript
+
+**The real case -- a clip that already has a title**, which is every clip the
+star is pressed on:
+
+| shape | v3.122.0 | v3.123.2 |
+|---|---|---|
+| (no shape) | "The door that never closes" *claimed as new* | **unchanged**, said so |
+| Promise / Warmer | "The door that never closes" *claimed as new* | **unchanged**, said so |
+| Question | "The door that never closes" | **"The turning point that doesn't fade"** |
+| Subject: payoff | "...: The promise of turning around" | **"The door that never closes: a call to turn around and face the opportunity before it slips away."** |
+| Shorter | "The door that never closes" | **unchanged**, said so |
+
+**With no current title**, where it had invented a scholar: nothing invented,
+nothing leaked, no transcript copied through. Question wrote *"What does
+turning around mean in the context of Allah's mercy?"*; the other four fell
+back to `title_from_text` and the screen says so.
+
+**THE LYING IS GONE; THE MODEL'S CEILING IS NOT.** Two shapes of five write a
+genuinely different title and three admit they cannot -- which is strictly
+better than four of five silently handing back what was already there, and it
+is not the feature working well. That ceiling is qwen3:1.7b, and this file
+already records what raises it: the CPX41 rescale (open item 5) is what makes
+`qwen3:4b` fit under the 2G cap. More prompt work is not the lever.
+
+**"Shorter" returning unchanged on a five-word title is arguably right**, and
+worth not mistaking for a fault: there is very little to shorten in "The door
+that never closes".
+
+**The retry costs a second generation**, so a rejected first answer roughly
+doubles the wait -- 6-8s warm on the box, and the route's own Ollama timeout is
+90s per generation. Watch that if the box is ever loaded; it is the reason the
+retry fires only on an actual rejection rather than on every ask.
+
 
 ## The box can be ASKED what the model writes (4 Sept 2026)
 
