@@ -170,7 +170,10 @@ test('the walkthrough is ONE ordered list, not a tour per tab', () => {
   // the one thing this product cannot finish, and it was the step people
   // skipped.
   assert.equal(keys[0], 'connect', 'the walkthrough opens on connecting a channel');
-  assert.deepEqual(keys, ['connect', 'nasheed', 'import', 'review', 'schedule', 'finish'],
+  // `style` joined it in v3.124.2 and sits BEFORE the import: the caption
+  // style is applied when the clips are cut, so choosing it afterwards means
+  // re-rendering. test/walkthrough.test.mjs pins the order on its own.
+  assert.deepEqual(keys, ['connect', 'nasheed', 'style', 'import', 'review', 'schedule', 'finish'],
     'and runs the pipeline in the order somebody actually does it');
 
   // Every step names the tab it belongs to, which is what lets it steer.
@@ -196,10 +199,14 @@ test('an interactive step waits for the thing to be DONE, not for the button', (
   const next = adapter.slice(adapter.indexOf('tourNext: function (e) {'), adapter.indexOf('tourBack: function'));
   assert.match(next, /step\.does\(\)/, 'the button performs the step');
   assert.match(next, /UI\.tourAwait = tourIndex/, 'and marks the walkthrough as waiting on it');
-  // The press must not advance an unfinished interactive step.
-  const guard = next.slice(next.indexOf('if (step && step.done && !tourDone[tourIndex])'));
-  assert.ok(guard.indexOf('return;') < guard.indexOf('setUI({ tourStep: tourIndex + 1 })'),
+  // The FIRST press must not advance an unfinished interactive step. The
+  // second one must -- every gated step was otherwise a wall, and review,
+  // schedule and finish were unreachable in a first sitting; that half is
+  // DRIVEN in test/walkthrough.test.mjs rather than read here.
+  const guard = next.slice(next.indexOf('if (step && step.does && step.done'));
+  assert.ok(guard.indexOf('return;') < guard.indexOf('setUI({ tourStep: tourIndex + 1'),
     'it returns before advancing');
+  assert.match(guard, /UI\.tourAwait !== tourIndex/, 'and only waits once');
 
   // Completion is read from the account's own records, so a step already
   // satisfied is ticked rather than re-taught.
@@ -257,8 +264,15 @@ test('every walkthrough step anchors on something the page actually carries', ()
   const host = read('src/public/index.html');
 
   const block = adapter.slice(adapter.indexOf('var TOUR = ['), adapter.indexOf('\n  ];', adapter.indexOf('var TOUR = [')));
-  const anchors = [...block.matchAll(/anchor: '([^']+)'/g)].map(m => m[1]);
-  assert.equal(anchors.length, 6, 'one anchor per step');
+  // An anchor may be a LIST, tried in order: the review step wants the deck's
+  // Approve button but falls back to the queue's tab row, because an account
+  // walking this for the first time has no clips yet.
+  const anchors = [
+    ...[...block.matchAll(/anchor: '([^']+)'/g)].map(m => m[1]),
+    ...[...block.matchAll(/anchor: \[([^\]]+)\]/g)]
+      .flatMap(m => [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1])),
+  ];
+  assert.ok(anchors.length >= 6, 'the steps that point at something name it');
 
   for (const anchor of anchors) {
     if (/^[#.[]/.test(anchor)) {
@@ -383,7 +397,10 @@ test('the tour card is clamped on both axes', () => {
 test('a tour never opens on top of another layer, and the veil is a way out', () => {
   const adapter = read('src/public/studio-adapter.js');
   assert.match(adapter, /otherLayerOpen/, 'nothing starts while a dialog owns the screen');
-  assert.match(adapter, /tourDismiss:/, 'the dimmed area ends the tour');
+  // It PUTS IT AWAY rather than ending it: clicking the dim used to write the
+  // seen key, so one slip spent the walkthrough for ever. Driven in
+  // test/walkthrough.test.mjs.
+  assert.match(adapter, /tourDismiss:/, 'the dimmed area is a way out');
   const design = read('design/studio-dashboard.dc.html');
   assert.match(design, /onClick="\{\{ tourDismiss \}\}" style="\{\{ tourVeilStyle \}\}"/,
     'a veil with nothing to dismiss it is an unusable page');

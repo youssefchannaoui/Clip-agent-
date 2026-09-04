@@ -3342,7 +3342,11 @@ test('a new account gets the guided walkthrough, and it can be reopened', () => 
   const vals = StudioAdapter.bindings(fresh);
   assert.equal(vals.tourOn, true, 'the design ships the card; it must actually run');
   const total = vals.tourDots.length;
-  assert.equal(total, 6, 'the whole pipeline, once');
+  // Seven since v3.124.2 -- the caption style joined it. The per-screen tours
+  // this replaced covered Templates and the single walkthrough had dropped it,
+  // so a first run went connect -> nasheed -> import with whatever caption
+  // style happened to be the default.
+  assert.equal(total, 7, 'the whole pipeline, once');
   assert.match(vals.tourCount, new RegExp(`Step 1 of ${total}`));
   assert.ok(vals.tourTitle.length > 0 && vals.tourBody.length > 0, 'a step says something');
   assert.doesNotMatch(vals.tourVeilStyle, /display: none/, 'the page dims behind it');
@@ -3354,7 +3358,7 @@ test('a new account gets the guided walkthrough, and it can be reopened', () => 
   // Every anchor the walkthrough points at must exist, or the spotlight
   // highlights nothing.
   const page = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
-  for (const anchor of ['paste', 'rail', 'queue-decide', 'sched-views', 'music-upload']) {
+  for (const anchor of ['paste', 'queue-decide', 'queue-tabrow', 'sched-views', 'music-upload', 'tpl-pick', 'tpl-save']) {
     assert.ok(page.includes(`"data-tour":"${anchor}"`), `the ${anchor} anchor exists in the template`);
   }
 

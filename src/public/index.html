@@ -8740,8 +8740,18 @@ function paintFirstRun(vals){
   /* An INSTRUCTION, not a slogan, and deliberately smaller than the marketing
      headline it replaces: the paste field has to be the loudest thing on this
      screen, and at 58px nothing else could be. */
+  /* EVERY NODE THE HOST PUTS INTO THE GENERATED TREE MUST SAY SO.
+     `data-host-owned` is how the patcher is told to skip a node when it pairs
+     the live children against the freshly rendered ones. Without it the extra
+     node shifts the pairing, and everything after it is replaced or removed --
+     MEASURED on this very screen: three unmarked nodes here (head, steps,
+     cost) made a repaint remove indices 5, 6 and 7 of the hero column, one of
+     which is the PASTE BOX. So typing into it destroyed the input after the
+     first character, focus fell to <body>, and every later keystroke went
+     nowhere. Pasting worked, which is why it survived unnoticed. It is also
+     exactly the control the walkthrough's import step tells you to use. */
   let head=document.getElementById('dcFirstRunHead');
-  if(!head){head=document.createElement('div');head.id='dcFirstRunHead';h1.parentNode.insertBefore(head,h1)}
+  if(!head){head=document.createElement('div');head.id='dcFirstRunHead';head.setAttribute('data-host-owned','');h1.parentNode.insertBefore(head,h1)}
   head.setAttribute('style','flex:none;display:flex;flex-direction:column;gap:9px;margin:2px 0 4px;max-width:620px');
   head.innerHTML=
     '<h2 style="margin:0;font-family:Outfit,Inter,sans-serif;font-size:34px;line-height:1.12;font-weight:600;'
@@ -8753,7 +8763,7 @@ function paintFirstRun(vals){
   /* WHAT HAPPENS AFTER YOU PRESS IT, with the real number in it. Somebody who
      knows it takes twenty minutes comes back; somebody who does not, leaves. */
   let steps=document.getElementById('dcFirstRunSteps');
-  if(!steps){steps=document.createElement('div');steps.id='dcFirstRunSteps'}
+  if(!steps){steps=document.createElement('div');steps.id='dcFirstRunSteps';steps.setAttribute('data-host-owned','')}
   steps.setAttribute('style','flex:none;display:flex;gap:0;flex-wrap:wrap;margin:14px 0 2px;max-width:640px');
   const beat=(n,t,note)=>'<span style="flex:1 1 180px;min-width:150px;display:flex;flex-direction:column;gap:4px;'
     +'padding:0 14px 0 0">'
@@ -8770,7 +8780,7 @@ function paintFirstRun(vals){
 
   /* What it costs, beside the thing that spends it. */
   let cost=document.getElementById('dcFirstRunCost');
-  if(!cost){cost=document.createElement('p');cost.id='dcFirstRunCost'}
+  if(!cost){cost=document.createElement('p');cost.id='dcFirstRunCost';cost.setAttribute('data-host-owned','')}
   cost.setAttribute('style','flex:none;margin:9px 0 0;font-size:11.5px;line-height:1.55;color:var(--dc-n-6e6e76, #6E6E76)');
   cost.innerHTML='A lecture costs about one token a minute of the stretch you pick, so a five-minute run is '
     +'roughly five tokens'+(ob.tokensLeft!=null?' of your '+obEsc(String(ob.tokensLeft)):'')+'. '
@@ -8799,7 +8809,7 @@ function paintFirstRunShowcase(hero,vals){
     if(kid.style.display!=='none'){kid.setAttribute('data-dcfr-was',kid.style.display||'');kid.style.display='none'}
   }
   let show=document.getElementById('dcFirstRunShow');
-  if(!show){show=document.createElement('div');show.id='dcFirstRunShow';col.appendChild(show)}
+  if(!show){show=document.createElement('div');show.id='dcFirstRunShow';show.setAttribute('data-host-owned','');col.appendChild(show)}
   show.setAttribute('style','flex:none;display:flex;flex-direction:column;gap:13px;min-width:0;padding:17px 18px;'
     +'border:1px solid rgba(217,180,120,.3);border-radius:14px;'
     +'background:linear-gradient(180deg,rgba(217,180,120,.075),rgba(217,180,120,.02))');
