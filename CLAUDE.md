@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1384 JS + 643 Python**
+- `npm test` and `npm run check` must pass. Currently **1384 JS + 653 Python**
   (8 Python skipped where ffmpeg is absent, which is CI). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -5348,6 +5348,59 @@ removed from the route, and a shape overriding the recitation reference.
 **Worker change, so `deploy-worker.yml` deploys it on push.** The shapes reach
 the model only from the box; nothing here has been seen against the real
 Ollama yet.
+
+## The star was handing back the title it already had (v3.122.1, 4 Sept 2026)
+
+The first thing the new probe below was pointed at, and it found this in one
+run. Asked for a title with the clip's current one in the prompt, the box's
+qwen3:1.7b answered:
+
+    (no shape)         The door that never closes
+    Promise / Warmer   The door that never closes
+    Question           The door that never closes
+    Subject: payoff    The door that never closes: The promise of turning around
+    Shorter            The door that never closes
+
+**Four of five shapes returned the current title word for word** -- a Question
+chip returning something that is not a question, a Shorter chip returning the
+same length. Youssef asked for "a star ... which will create a DIFFERENT
+title", and on the case that actually happens (a clip that already has a
+title, which is every clip the star is pressed on) it created no title at all.
+
+- **Nine passing tests could not have caught it, and that is the point.** They
+  assert the PROMPT and the prompt was correct: `CLIP_STYLES` says what each
+  shape means, the fence is right, the style travels. What no test in this repo
+  can see is what a 1.7B model DOES with a correct prompt. Only the real model
+  showed it, which is the whole argument for the probe.
+- **The shape is restated in the BEFORE-YOU-ANSWER line now.** This file
+  already records that the restatement last before the data is the only place
+  a rule reliably lands on this model; the shape was named once, higher up, and
+  that was not enough.
+- **AND the echo is caught in code**, because a 1.7B model does not reliably
+  obey a negative instruction -- the oldest lesson here about this model, and
+  the same reason `looks_copied` and `strip_unbacked_attribution` exist. An
+  answer that normalises equal to the current title is asked ONCE more, with
+  the failure named outright; the retry costs a whole generation on a
+  single-slot box, so it fires only on an actual echo.
+- **`normalise_title` is clip_worker's own**, so "the same title" means here
+  exactly what it means to the dedupe pass. "The Door That Never Closes..." is
+  the same title. Two definitions of one thing is how every drift in this file
+  started.
+- **A second echo is reported, never dressed up.** `source: "unchanged"` reaches
+  the panel as *"DeenAI kept your title -- it could not better it. Try another
+  shape, or ask for a change below."* and the toast says the same. A button that
+  quietly returns what was already on screen is a control that does nothing
+  (invariant 9), and that is exactly how this presented.
+- **A failed retry still reports `unchanged`.** The first answer stands rather
+  than failing the request -- but it IS the current title, and `source` reaches
+  a customer's screen, so a broad `except` around the block would have it claim
+  otherwise. Each failure is handled where it happens for that one reason, and
+  a test drives the box going away mid-retry.
+- Ten tests on executed output -- the bytes that go to Ollama and the dict that
+  comes back, never the source that builds them. All five probes proven red.
+
+**Worker change, so `deploy-worker.yml` ships it on push.** Re-probing after
+the deploy is one dispatch.
 
 ## The box can be ASKED what the model writes (4 Sept 2026)
 

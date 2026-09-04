@@ -4031,10 +4031,20 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         if (StudioAdapter.ui.playerClip && StudioAdapter.ui.playerClip.id === clip.id) StudioAdapter.ui.playerClip[field] = r.value;
         /* "reference" means the worker derived it from the verses this clip
            recites and never asked the model. Worth saying: it is why a
-           recitation title is a fact rather than a guess. */
-        CLIPTOOLS.note = r.source === 'reference' ? 'Written from the verses this clip recites.' : '';
+           recitation title is a fact rather than a guess.
+
+           "unchanged" means DeenAI was asked twice and could not better the
+           line already there. Said plainly rather than dressed as a new one:
+           measured on the box 4 Sept 2026, four of five shapes handed the
+           current title straight back, and a button that quietly returns what
+           was already on screen reads as a control that does nothing. */
+        const word = kind === 'description' ? 'description' : 'title';
+        const same = r.source === 'unchanged';
+        CLIPTOOLS.note = r.source === 'reference' ? 'Written from the verses this clip recites.'
+          : same ? ('DeenAI kept your ' + word + ' \u2014 it could not better it. Try another shape, or ask for a change below.')
+          : '';
         if (instruction) CLIPTOOLS.ask = '';
-        toast(kind === 'description' ? 'New description written' : 'New title written', 'good');
+        toast(same ? ('DeenAI kept your ' + word) : ('New ' + word + ' written'), same ? 'info' : 'good');
       } catch (err) {
         CLIPTOOLS.note = String((err && err.message) || err);
         toast(CLIPTOOLS.note, 'error');

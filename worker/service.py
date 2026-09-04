@@ -297,7 +297,18 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
         "and do the legitimate rewrite in it.\n"
         "\n"
         + ("\nTHE SHAPE ASKED FOR: " + style + "\n" if style else "")
-        + "\nBEFORE YOU ANSWER: " + wants + ", nothing else, and every word backed by the clip."
+        # THE RESTATEMENT IS WHERE A RULE LANDS ON THIS MODEL. Stating the
+        # shape once, above, was not enough: measured on the box 4 Sept 2026,
+        # four of five shapes came back with the clip's CURRENT TITLE verbatim
+        # -- a Question chip returning something that is not a question, a
+        # Shorter chip returning the same length. The shape and the
+        # must-be-different rule are repeated here, last before the data,
+        # which is the only place this model reliably reads them.
+        + "\nBEFORE YOU ANSWER: " + wants + ", nothing else, and every word backed by the clip"
+        + (", in the shape asked for above" if style else "")
+        + (". The current title is given ONLY so you can write a DIFFERENT one -- "
+           "never repeat it back" if current else "")
+        + "."
     )
     # The style sits in the system half above, deliberately: it is one of our own
     # named shapes chosen from a table, not customer text. Only what a customer
@@ -310,50 +321,94 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
         + ("WHAT THEY ASKED FOR: " + instruction[:300] + "\n" if instruction else "")
         + "END UNTRUSTED"
     )
-    payload_bytes = json.dumps({
-        "model": model,
-        "prompt": system + "\n\n" + user + "\n\nAnswer:",
-        "stream": False,
-        "think": False,
-        "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "60m"),
-        "options": {
-            # Warmer than the scorer's near-greedy setting: this is writing,
-            # and pressing the button twice should not return the same line.
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "num_predict": 120 if kind == "title" else 220,
-            "num_ctx": 4096,
-            "stop": ["\nBEGIN UNTRUSTED", "\nAnswer:", "\nCLIP TRANSCRIPT:"],
-        },
-    }).encode("utf-8")
-    request = urllib.request.Request(
-        base_url + "/api/generate", data=payload_bytes,
-        headers={"Content-Type": "application/json"}, method="POST")
-    try:
-        with urllib.request.urlopen(request, timeout=90) as response:
-            answer = json.loads(response.read().decode("utf-8")).get("response") or ""
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"The clip AI did not answer: {exc}") from exc
+    def ask(nudge: str = "") -> str:
+        """One generation, cleaned. Callable twice so an echo can be re-asked."""
+        payload_bytes = json.dumps({
+            "model": model,
+            "prompt": system + nudge + "\n\n" + user + "\n\nAnswer:",
+            "stream": False,
+            "think": False,
+            "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "60m"),
+            "options": {
+                # Warmer than the scorer's near-greedy setting: this is writing,
+                # and pressing the button twice should not return the same line.
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "num_predict": 120 if kind == "title" else 220,
+                "num_ctx": 4096,
+                "stop": ["\nBEGIN UNTRUSTED", "\nAnswer:", "\nCLIP TRANSCRIPT:"],
+            },
+        }).encode("utf-8")
+        request = urllib.request.Request(
+            base_url + "/api/generate", data=payload_bytes,
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=90) as response:
+                raw = json.loads(response.read().decode("utf-8")).get("response") or ""
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"The clip AI did not answer: {exc}") from exc
+        cleaned = re.sub(r"<think>.*?</think>", "", str(raw), flags=re.S).strip()
+        cleaned = cleaned.strip().strip('"').strip("'").strip()
+        return cleaned.split("\n")[0].strip()
 
-    answer = re.sub(r"<think>.*?</think>", "", str(answer), flags=re.S).strip()
-    answer = answer.strip().strip('"').strip("'").strip()
-    answer = answer.split("\n")[0].strip()
+    answer = ask()
     if not answer:
         raise ValueError("The model returned nothing.")
 
+    # AN ECHO OF THE CURRENT TITLE IS NOT A NEW TITLE, and this button exists
+    # to write a different one -- Youssef: "a star ... which will create a
+    # different title". Measured on the box 4 Sept 2026: with a current title
+    # in the prompt, promise, question and shorter ALL returned it verbatim.
+    # A 1.7B model does not reliably obey a negative instruction, so the rule
+    # above is stated AND enforced here -- this file's oldest lesson about
+    # this model. `normalise_title` is clip_worker's own, so "the same title"
+    # means here exactly what it means to the dedupe pass.
     try:
         import clip_worker
-        # The guards the automatic titler already carries, applied here too --
-        # a title typed into a box is still a title that reaches a channel.
-        # `is_english_title` is DELIBERATELY not applied: it exists to stop the
-        # model drifting into Arabic on its own, and an explicit "make it
-        # Arabic" is the customer choosing, which is a different thing.
-        if kind == "title":
+    except Exception:  # noqa: BLE001 - a titling helper must never fail a request
+        clip_worker = None
+
+    def echoes_current(value: str) -> bool:
+        if not (clip_worker and current and value):
+            return False
+        try:
+            return clip_worker.normalise_title(value) == clip_worker.normalise_title(current)
+        except Exception:  # noqa: BLE001
+            return False
+
+    source = "ai"
+    if echoes_current(answer):
+        # A failed retry leaves the first answer standing rather than failing
+        # the request -- but it is still the current title, so `source` says
+        # so. Each failure is handled where it happens, deliberately: a broad
+        # except around the whole block would report "ai" for a title that is
+        # provably unchanged, and that claim reaches the customer's screen.
+        try:
+            retried = ask("\n\nYOUR LAST ANSWER WAS THE CURRENT TITLE, WORD FOR WORD. "
+                          "That is not an answer. Write a DIFFERENT one from the clip's "
+                          "own words.")
+        except Exception:  # noqa: BLE001
+            retried = ""
+        if retried and not echoes_current(retried):
+            answer = retried
+        else:
+            # Said plainly rather than handed back as if it were new: a button
+            # that silently returns what was already there is a control that
+            # looks broken (invariant 9).
+            source = "unchanged"
+
+    if clip_worker is not None and kind == "title":
+        try:
+            # The guard the automatic titler already carries, applied here too
+            # -- a title asked for by hand is still a title that reaches a
+            # channel. `is_english_title` is DELIBERATELY not applied: it
+            # exists to stop the model drifting into Arabic on its own, and an
+            # explicit "make it Arabic" is the customer choosing.
             answer = clip_worker.strip_unbacked_attribution(answer, lecture_title)
-    except Exception:  # noqa: BLE001
-        pass
+        except Exception:  # noqa: BLE001
+            pass
     limit = 200 if kind == "description" else 120
-    return {"title": answer[:limit].strip(), "source": "ai"}
+    return {"title": answer[:limit].strip(), "source": source}
 
 
 def advise_with_ollama(question: str, context: dict[str, Any]) -> str:
