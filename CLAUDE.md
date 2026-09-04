@@ -6689,11 +6689,18 @@ goes stale the first time a page is added.
   an outage is the one that most needs to finish quickly. `GET /` failing all
   its retries stops the run there. **Measured: 60 seconds and one line, exit
   code 1**, against ~45 × 80s; a healthy origin exits 0.
-- **Driven end to end against a real server**, since the egress policy here
-  denies deenclipped.online: 28 sitemap pages, ten assets, HEAD and the CSP
-  hash all probed against a local instance, every check passing. What is NOT
-  proven from here is the run against PRODUCTION; the first scheduled firing
-  is that.
+- **IT HAS RUN AGAINST PRODUCTION AND PASSED.** This entry first said the
+  production run was "not proven from here" because the egress policy in the
+  agent container denies deenclipped.online — and that was the wrong
+  conclusion, for the second time in this file: **the route already existed.**
+  A `workflow_dispatch` runs it on a GitHub runner, which has no such policy.
+  Run 1, dispatched 4 Sept 2026: **28 sitemap pages, ten studio assets, HEAD
+  and the CSP hash, every one HTTP 200, "Every check passed", in five
+  seconds.** Before putting a verification on somebody else, check whether the
+  workflow you just built reaches it.
+- Five seconds against a healthy origin is what makes the two-hourly schedule
+  cheap. A local instance was used to drive the FAILING paths, which
+  production cannot be asked to demonstrate.
 - **It reports and fixes nothing**, and a test asserts it contains no
   `execSync`, `spawn`, `git` or mutating `curl`. A failed run is the
   notification — GitHub mails the repo owner, with nothing to configure and no
