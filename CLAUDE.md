@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1430 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1434 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -6314,6 +6314,96 @@ The screen-overflow lens landed after v3.125.0 and its five findings are in
 v3.126.0 above. A fourth lens was still running when this shipped, at a
 concurrency cap of two agents; its findings are not in either release.
 
+**The first attempt at the remaining lenses DIED AND SAID SO IN A WAY THAT WAS
+EASY TO MISREAD.** The workflow spawned 46 agents; 4 finished and **42 errored
+instantly** on "You've hit your session limit". So five finder lenses and the
+ENTIRE adversarial verification pass never ran, and the workflow's own output
+listed every finding as `uncertain` with `reproVerdict: MISSING` -- which reads
+like a verification that ran and came back inconclusive, and is not: it is a
+verification that never happened. The eighteen fixes in v3.125.0 and v3.126.0
+stand on measurements taken in a browser by hand, not on that workflow. Re-run
+the lenses after the limit resets rather than treating a dead pass as a clean
+one.
+
+## The phone drew a gold button with nothing in it (v3.126.1, 4 Sept 2026)
+
+The phone lens, re-run once the session limit reset. Three faults, each
+measured in a real browser before and after, each probe proven able to go red.
+
+### A solid gold primary button, empty, on the first screen a new account sees
+
+`studio-mobile.js` rendered the onboarding action button UNCONDITIONALLY while
+`index.html` guards the identical binding (`ob.actionLabel ? '<button ...>' :
+''`). v3.96.0's deferral rule empties `actionLabel` whenever the blocker banner
+carries the same action -- which is **every brand-new account**, because the
+banner is "No publishing account connected" -- so the desktop correctly drew
+nothing and the phone drew a **34x44 solid-gold button with no text, no icon
+and nothing behind it**. Pressing it did nothing: screen 'home' before, 'home'
+after. That is invariant 9 in the open, on the first screen, on the surface
+Youssef actually uses.
+
+- **The guard is `iff('onboarding.actionLabel', [...])`**, which is the exact
+  phone equivalent of the desktop's ternary: the runtime's if-node is
+  `truthy(evalValue(...))` and `''` is falsy.
+- **BOTH DIRECTIONS ARE TESTED, and that is the point.** A fix that hides the
+  button unconditionally would pass a naive "no empty button" assertion while
+  being strictly worse than the bug. The second test forces an `actionLabel`
+  and asserts the button returns, and its red-probe replaces the condition with
+  one that is never true.
+- The test renders the mobile template through the REAL runtime with the REAL
+  adapter bindings, and its onboarding payload is built by calling the REAL
+  `journey()` rather than hand-typed -- this repo has been caught six times by
+  a source-string test passing against behaviour that changed underneath it.
+
+### The screens the shell FRAMES kept the desktop's control sizes
+
+Owner, Help, Arabic & terms and the gated editor are the desktop's own DOM
+inside the phone chrome (`body.dcm-on` without `.dcm-own`), so their controls
+arrive at the size a mouse needs. Measured at 390: Owner's date-range buttons
+**22x15**, its seven sub-tabs **25px** tall, the blocker banner's two buttons
+**26px** -- against the SAME banner at **44px** on a screen the shell owns,
+which is the comparison that proves this is the framed path rather than the
+copy. Whole-screen counts of sub-44 controls: owner 14 of 23, language 5 of 14,
+editor 3 of 12, help 4 of 22.
+
+- **`min-height` is deliberately allowed to reach `a[href]`.** It does nothing
+  to a non-replaced INLINE box, so a link inside a sentence is left alone by
+  CSS semantics rather than by anyone having to enumerate the exceptions (WCAG
+  2.5.8 exempts exactly those), while Help's block-level "Contact us" and
+  "Report a bug" links -- 91x35 and 102x35, real controls -- come up to 44.
+- **A 19px text field cannot be typed into.** The two pronunciation fields on
+  Arabic & terms squeezed to exactly that at 320, so framed text inputs carry a
+  108px floor.
+- Scoped by id (`#studio main`, `#dcBlocker`), never by a hashed `.sNN` class a
+  design re-import regenerates, and every rule sits inside the existing 820px
+  query -- the test that fails when a rule escapes it still passes.
+- **v3.81.0's "zero sub-44px targets at 320, 375 and 390" was measured on the
+  OWNED screens only and was never true here.** That is corrected rather than
+  quietly left standing.
+
+### Two more the same sweep found
+
+- **The nasheed play button was 40x40** -- a real control, `aria-label="Play"`,
+  four pixels short at every phone width, on a screen the shell owns.
+- **The month cells landed at 43.43px in a five-pixel band around 360.** Seven
+  cells plus six 2px gaps inside a 324px card, with the 389-block's 4px of card
+  padding. **320, 375, 390 and 430 all measured clean** -- this is v3.81.0's
+  "audit every width, not the round ones" biting again, from a different band.
+  Card padding 4px -> 1px, then **swept every single pixel from 320 to 430**:
+  no cell under 44 and no overflow at any of them.
+
+### What was measured after
+
+14 screens x 5 widths (320/360/375/390/430), 400 controls each:
+**26 sub-44 controls before, 0 after; horizontal overflow 0 at every width.**
+Every shell-OWNED screen was 0 before and 0 after, so nothing regressed to buy
+this. The desktop at 1440 was re-checked across all 14 screens: `#dcMobile`
+mounts on none of them and page overflow is 0 -- the phone sheet lives entirely
+inside its media query, so the desktop cannot have moved.
+
+**`scripts/build-light-theme.mjs` was run and produced nothing**, correctly:
+these rules set sizes, not colours.
+
 ## Open items
 
 ### Google verification: branding VERIFIED and PUBLISHED (4 Sept 2026)
@@ -9179,7 +9269,7 @@ right way round.
   tested the feature (`channel-lanes`, `schedule-clarity`, `multi-channel`) are
   deleted rather than left asserting behaviour nobody ships.
 
-## A click inside a dialog closed the dialog (v3.127.2, 4 Sept 2026)
+## A click inside a dialog closed the dialog (v3.127.3, 4 Sept 2026)
 
 Youssef, on the clip preview: "when i click any text box to type it closes the
 screen." **The title could not be typed into at all.**

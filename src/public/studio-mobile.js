@@ -278,7 +278,16 @@
             h('span', { class: 'dcm-onb-bt' }, [h('b', {}, [tx('bt.title')]), h('i', {}, [tx('bt.note')])]),
           ])]),
         ])]),
-        h('button', { type: 'button', class: 'dcm-btn dcm-btn-p', on: { click: 'onboarding.action' } }, [tx('onboarding.actionLabel')]),
+        // GUARDED, exactly as the desktop guards it (index.html: `ob.actionLabel
+        // ? '<button ...>' : ''`). While the blocker banner is up the strip
+        // DEFERS -- v3.96.0 empties actionLabel so the banner's own button is
+        // the only one on screen -- and rendering this unconditionally drew a
+        // 34x44 solid-gold button with no text, no icon and nothing behind it
+        // on the first screen a new phone account sees. A control that cannot
+        // do anything must not be shown (invariant 9).
+        iff('onboarding.actionLabel', [
+          h('button', { type: 'button', class: 'dcm-btn dcm-btn-p', on: { click: 'onboarding.action' } }, [tx('onboarding.actionLabel')]),
+        ]),
         iff('onboarding.firstRun', [h('p', { class: 'dcm-onb-cost' }, [tx('onboarding.cost')])]),
       ])]),
       // The five-step "Getting set up" card was here and is retired (v3.95.0):
