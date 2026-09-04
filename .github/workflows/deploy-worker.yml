@@ -41,6 +41,35 @@ on:
         description: Why this deploy is being run
         required: false
         default: manual
+      # The probe below. Off by default and dispatch-only: it spends the box's
+      # own single-slot Ollama, so it must never ride a push.
+      probe:
+        description: Also ask the box's clip AI what each shape writes
+        type: boolean
+        required: false
+        default: false
+      probe_kind:
+        description: 'Probe: title or description'
+        required: false
+        default: title
+      probe_transcript:
+        description: 'Probe: the clip transcript to write from'
+        required: false
+        default: >-
+          Somebody asked me, my brother, I have made the same mistake again and
+          again, does Allah still accept me? And I said listen carefully. The
+          door does not close because you walked through it yesterday. He is
+          not waiting for you to run out of chances, He is waiting for you to
+          turn around. So do not let the shame keep you away from the only One
+          who can lift it.
+      probe_title:
+        description: 'Probe: the clip''s current title'
+        required: false
+        default: The door that never closes
+      probe_lecture:
+        description: 'Probe: the lecture title (the only place a speaker may come from)'
+        required: false
+        default: ''
   # Only worker/ code. Editing this file changes how the deploy runs, not what
   # is running on the box, so it must not trigger a deploy of its own -- an
   # unarmed run going red on every edit to the deploy script is noise, and the
@@ -206,6 +235,58 @@ jobs:
             exit 1
           fi
           echo "Deployed and verified: the running worker is v$running."
+
+      # DISPATCH ONLY, and off unless asked for. On a push the `inputs`
+      # context is empty, so this is skipped and the deploy path is exactly
+      # what it was.
+      #
+      # WHY IT LIVES IN THE DEPLOY WORKFLOW. The connection to the box is one
+      # thing, and a second copy of it is a second thing to keep in step with
+      # a credential format that has already been mis-pasted twice. And a
+      # probe that runs immediately after the version proof is a probe whose
+      # answers you know the version of -- which is the whole point of asking.
+      - name: Ask the box's clip AI what each shape writes
+        if: inputs.probe == true
+        env:
+          HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
+          USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
+          RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
+          PROBE_KIND: ${{ inputs.probe_kind }}
+          PROBE_TEXT: ${{ inputs.probe_transcript }}
+          PROBE_TITLE: ${{ inputs.probe_title }}
+          PROBE_LECTURE: ${{ inputs.probe_lecture }}
+        run: |
+          set -euo pipefail
+          export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
+          # NOTHING FROM A DISPATCH INPUT IS EVER INTERPOLATED INTO A SHELL
+          # COMMAND. The inputs are read from the environment by node, written
+          # into the probe as a JSON literal, and carried over as ONE base64
+          # blob -- and base64 has no shell metacharacter in it, so an input
+          # cannot become a command on the box.
+          node -e '
+            const fs = require("fs");
+            const src = fs.readFileSync(".github/scripts/clip-ai-probe.py", "utf8");
+            if (!src.includes("PARAMS = {}")) throw new Error("the probe lost its PARAMS seam");
+            const params = {
+              kind: process.env.PROBE_KIND || "title",
+              text: process.env.PROBE_TEXT || "",
+              title: process.env.PROBE_TITLE || "",
+              lectureTitle: process.env.PROBE_LECTURE || "",
+            };
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/clip-ai-probe.py",
+              src.replace("PARAMS = {}", "PARAMS = " + JSON.stringify(params)));
+          '
+          BLOB=$(base64 -w0 < "$RUNNER_TEMP/clip-ai-probe.py")
+          "$RUNNER_TEMP/rssh" "PROBE_B64=$BLOB bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f /tmp/dc-clip-ai-probe.py' EXIT
+          printf '%s' "$PROBE_B64" | base64 -d > /tmp/dc-clip-ai-probe.py
+          # Run it INSIDE the container: WORKER_SHARED_SECRET is already in
+          # that environment and the worker answers on 127.0.0.1, so the
+          # secret is never written to disk, never put on a command line and
+          # never crosses the wire. Only the model's answer comes back.
+          docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-clip-ai-probe.py
+          REMOTE
 
       - name: Clean up the credential
         if: always()

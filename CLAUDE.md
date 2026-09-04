@@ -199,8 +199,8 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1384 JS + 638 Python**
-  (8 Python skipped). These numbers were once wrong by more than a factor of
+- `npm test` and `npm run check` must pass. Currently **1384 JS + 643 Python**
+  (8 Python skipped where ffmpeg is absent, which is CI). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
   output), so this line cannot quietly drift again; a shrinking count is
@@ -5348,6 +5348,65 @@ removed from the route, and a shape overriding the recitation reference.
 **Worker change, so `deploy-worker.yml` deploys it on push.** The shapes reach
 the model only from the box; nothing here has been seen against the real
 Ollama yet.
+
+## The box can be ASKED what the model writes (4 Sept 2026)
+
+*No version: this is a workflow, a script and five tests, and nothing in
+`src/` or `worker/` changed. Bumping would move the number the worker deploy
+compares against the running container for a release that ships no code.*
+
+v3.122.0 shipped five named title shapes proven by unit test, and closed with
+a "Needs fixing" line putting the last mile on Youssef: *"The shapes have not
+been through the real Ollama -- this dev box has no worker. Press a chip on a
+live clip and tell me what it writes."* He pasted that line back, verbatim and
+with nothing else, which is the same move as the nasheed-banner exchange -- and
+he was right again. **The ask was premature, and checking took two commands.**
+
+- **The code WAS on the box the whole time.** `deploy-worker.yml` run 46 fired
+  on the v3.122.0 push (`worker/service.py` changed) and its step 6 read the
+  version out of the RUNNING container: *"Deployed and verified: the running
+  worker is v3.122.0."* So "this has not reached production" was never true;
+  only "nobody has read what it writes" was.
+- **And that half was answerable too.** The worker's HTTP port is not routable
+  from an agent container (`curl :8080` -> no route) and `WORKER_SHARED_SECRET`
+  lives only on the box and on Render -- but the deploy workflow already RUNS
+  COMMANDS ON THE BOX over SSH. Anything that can be asked from a shell there
+  can be asked from a dispatch. That is the general lesson: **before putting a
+  verification on somebody, check whether the route you already built for
+  deploying reaches it.**
+
+`.github/scripts/clip-ai-probe.py`, run by `deploy-worker.yml` when dispatched
+with `probe: true`. It asks the running worker for a title once per shape --
+plus the unshaped baseline, without which a shape that changes nothing looks
+like a shape that works -- and prints what qwen3:1.7b writes.
+
+- **It runs INSIDE the container**, where `WORKER_SHARED_SECRET` already is and
+  the worker answers on 127.0.0.1. The secret is never written to disk, never
+  put on a command line and never crosses the wire; only the model's answer
+  comes back into a public run log. A test strips string literals before
+  looking for `SECRET` in a print, because NAMING the variable in an error is
+  what a good error does and matching the raw line failed on the honest one.
+- **No dispatch input is ever interpolated into a shell command.** They are
+  read from the environment by node, written into the probe as a JSON literal,
+  and carried over as ONE base64 blob -- base64 has no shell metacharacter, so
+  an input cannot become a command on the box.
+- **It lives in the deploy workflow rather than beside it.** The connection to
+  the box is one thing, and a second copy is a second thing to keep in step
+  with a credential format that has already been mis-pasted twice. It also
+  runs immediately after the version proof, so an answer is one you know the
+  version of -- which is the entire point of asking.
+- **Dispatch-only and off by default.** It spends the box's single-slot Ollama.
+  On a push the `inputs` context is empty, so the deploy path is exactly what
+  it was.
+- **A DULL TITLE IS NOT A FAILED RUN.** Taste is the finding; the run stays
+  green and prints it. Two things DO fail it: the box refusing every call, and
+  a shape overriding the recitation reference -- that one is a rule, and this
+  is where it is checked against the real service rather than a fixture.
+- The five tests pin the drift CI can see: the probe parses, it keeps the
+  `PARAMS = {}` seam the workflow substitutes, and its shape lists are exactly
+  `CLIP_STYLES` -- a chip added or a style renamed with the probe left asking
+  about the old set would report confidently on shapes nobody can send. All
+  five proven red.
 
 ## Open items
 

@@ -15,8 +15,10 @@ matcher's own map is on the candidate (`Candidate.ayat`), so the surah and the
 numbers are facts. Asking qwen3:1.7b for them would be asking it to remember
 scripture, which is the one thing this product must never do.
 """
+import ast
 import importlib.util
 import pathlib
+import re
 import sys
 import unittest
 
@@ -186,3 +188,71 @@ class ClipStyleTests(unittest.TestCase):
         # The register this content must not borrow -- the same rule the titler
         # already carries.
         self.assertIn("viral", rule)
+
+
+class ClipAiProbeTests(unittest.TestCase):
+    """The shapes can only be judged by what the real model does with them.
+
+    v3.122.0 shipped five named shapes proven by unit test, and closed with
+    "press a chip on a live clip and tell me what it writes" left on Youssef.
+    That was the wrong place for it: deploy-worker.yml already runs commands on
+    the box, so the box can be ASKED. `.github/scripts/clip-ai-probe.py` is
+    that ask, dispatched with `probe: true`.
+
+    A probe cannot be run from CI -- there is no box here, deliberately. What
+    CAN be pinned is the drift: a shape added to a chip or renamed in
+    CLIP_STYLES, with the probe left asking about the old set, would report
+    confidently on shapes nobody can send.
+    """
+
+    PROBE = ROOT / ".github" / "scripts" / "clip-ai-probe.py"
+
+    def setUp(self):
+        self.source = self.PROBE.read_text(encoding="utf-8")
+        sys.path.insert(0, str(ROOT / "worker"))
+        import service
+        self.service = service
+
+    def probe_shapes(self, name):
+        line = next(l for l in self.source.splitlines() if l.startswith(name + " = ["))
+        return [s for s in re.findall(r'"([^"]*)"', line)]
+
+    def test_it_parses(self):
+        # It runs inside the worker container over ssh, where a syntax error
+        # surfaces as a failed deploy step rather than as anything readable.
+        ast.parse(self.source)
+
+    def test_the_params_seam_the_workflow_substitutes_is_there(self):
+        # The step replaces this exact line with a JSON literal, and node
+        # throws if it is missing -- but a run that throws is a run somebody
+        # has to go and read. Fail here instead.
+        self.assertEqual(self.source.count("\nPARAMS = {}\n"), 1)
+
+    def test_every_shape_it_probes_is_a_real_one(self):
+        # "" is the unshaped baseline -- without it a shape that changes
+        # nothing looks like a shape that works.
+        for name in ("TITLE_SHAPES", "DESCRIPTION_SHAPES"):
+            for shape in self.probe_shapes(name):
+                if not shape:
+                    continue
+                self.assertIn(shape, self.service.CLIP_STYLES, name + " asks for " + shape)
+
+    def test_every_real_shape_is_probed(self):
+        asked = set(self.probe_shapes("TITLE_SHAPES")) | set(self.probe_shapes("DESCRIPTION_SHAPES"))
+        self.assertEqual(set(self.service.CLIP_STYLES) - asked, set())
+
+    def test_it_never_prints_the_secret(self):
+        """It signs with WORKER_SHARED_SECRET inside the container, and a run
+        log is public.
+
+        The string literals are stripped BEFORE looking, because naming the
+        variable in a message ("WORKER_SHARED_SECRET is not set") is exactly
+        what a good error does -- what may never happen is the VALUE reaching
+        a print, which is code rather than prose. Matching the raw line failed
+        on the honest message and would have been edited away.
+        """
+        for line in self.source.splitlines():
+            if not (line.lstrip().startswith("print(") or "::error::" in line):
+                continue
+            code = re.sub(r'"[^"]*"|\'[^\']*\'', "", line)
+            self.assertNotIn("SECRET", code, line.strip())
