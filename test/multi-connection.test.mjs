@@ -106,13 +106,22 @@ test('a destination resolves to its OWN connection, never the first', () => {
   assert.equal(tenancy.connectionByAccount(bag, studio.id, 'youtube', 'nope'), null, 'an unknown account resolves to nothing, not to the first');
 });
 
-test('one clip fans out to three real channels, each named correctly', () => {
+test('a stored list of three still posts to exactly one, the first', () => {
+  // THE STORE STILL HOLDS A LIST, and must, because an account that connected
+  // three channels while Studio sold them (v3.41.0 to v3.125.0) has three on
+  // disk. What changed on 4 Sept 2026 is the ALLOWANCE: Youssef retired the
+  // feature -- "REMOVE ALL THINGS TO DO WITH 3 CHANNELS REMOVE IT" -- so
+  // accountsPerPlatform answers 1 for everybody and the extras stop posting
+  // without anybody having to migrate a record.
+  //
+  // `accountName` still comes off the RESOLVED connection, so a wrong
+  // resolution shows up here as the wrong channel rather than as no channel.
   state.socialConnections[studio.id] = {};
   for (const n of [1, 2, 3]) {
     tenancy.addConnection(state.socialConnections, studio.id, 'youtube', channel(n), { max: 3 });
   }
   store.setPublishingSettings(studio, {
-    enabled: true, spread: 'all',
+    enabled: true,
     youtube: { enabled: true, accountIds: ['chan-1', 'chan-2', 'chan-3'] },
   });
   const clip = {
@@ -122,11 +131,8 @@ test('one clip fans out to three real channels, each named correctly', () => {
   state.clips.push(clip);
 
   const yt = social.enabledTargetsForClip(clip).filter(t => t.provider === 'youtube');
-  assert.equal(yt.length, 3);
-  // accountName comes off the RESOLVED connection, so a wrong resolution shows
-  // up here as the same channel named three times.
-  assert.deepEqual(yt.map(t => t.accountName), ['Channel 1', 'Channel 2', 'Channel 3']);
-  assert.equal(new Set(yt.map(t => t.id)).size, 3);
+  assert.equal(yt.length, 1, 'one channel per platform, whatever is on disk');
+  assert.equal(yt[0].accountName, 'Channel 1');
 });
 
 test('a blank account id is honoured only while there is exactly one channel', () => {

@@ -58,20 +58,6 @@ export function settingDefaults() {
       // read-time correction in publishingSettings() below for why this
       // needed both halves.
       enabled: true,
-      // With more than one channel on a platform: 'all' posts every clip to
-      // every one of them, 'rotate' gives each clip to ONE in turn.
-      //
-      // 'rotate' IS THE DEFAULT (v3.119.0). Youssef asked for "three different
-      // schedules" when multi-channel shipped and then twice called the result
-      // confusing; the reason is that the default did the opposite of what
-      // connecting three channels is for. Mirroring puts the same video on all
-      // three at the same minute -- your own channels competing with each other
-      // -- and 'all' is kept for the accounts that genuinely want that.
-      //
-      // It changes nothing for anyone with one channel per platform, which is
-      // every account except the operator's: the rotation only engages where
-      // there is more than one to rotate between.
-      spread: 'rotate',
       // Each provider carries accountIds -- the destinations a clip goes to on
       // that platform -- with accountId kept as its first entry so every reader
       // written before multi-account keeps working. See withAccountList and

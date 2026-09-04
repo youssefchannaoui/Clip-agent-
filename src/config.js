@@ -415,10 +415,6 @@ export const config = {
   // this many slots a day instead. A number, not a second list of times: the
   // schedule spreads them across the day itself.
   postSlotsStudio: Math.max(1, Math.round(number(process.env.POST_SLOTS_STUDIO, 8))),
-  // How many accounts on ONE platform a Studio account may publish a clip to.
-  // Everyone else gets one. See billing.accountsPerPlatform -- the limit is per
-  // platform, not a total across platforms.
-  accountsPerPlatformStudio: Math.max(1, Math.round(number(process.env.ACCOUNTS_PER_PLATFORM_STUDIO, 3))),
   // A trial hands out real machine time: every token is a source minute that
   // costs proxy bandwidth and storage. Uncapped, a yearly trial grants its
   // whole 6000-minute allowance for free, which is more bandwidth than the

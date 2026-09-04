@@ -77,9 +77,9 @@ test('the feature table is exactly what each tier is sold on', () => {
   // told they get; a key added without a gate, or gated without being sold,
   // fails on this line.
   assert.deepEqual(Object.keys(billing.FEATURES).sort(),
-    ['deenai', 'deenaiAsk', 'extraSlots', 'multiChannel', 'priorityRender', 'templates', 'watermark']);
+    ['deenai', 'deenaiAsk', 'extraSlots', 'moreTokens', 'priorityRender', 'templates', 'watermark']);
   assert.deepEqual(Object.keys(billing.PRO_FEATURES).sort(), ['deenai', 'deenaiAsk', 'templates', 'watermark']);
-  assert.deepEqual(Object.keys(billing.STUDIO_FEATURES).sort(), ['extraSlots', 'multiChannel', 'priorityRender']);
+  assert.deepEqual(Object.keys(billing.STUDIO_FEATURES).sort(), ['extraSlots', 'moreTokens', 'priorityRender']);
 });
 
 test('the tiers are cumulative, and Basic is sold nothing', () => {

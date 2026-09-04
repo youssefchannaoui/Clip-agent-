@@ -877,13 +877,6 @@ function appState(user = null) {
     timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
     log: logFor(user, 60), directPublishingEnabled: config.socialPublishEnabled,
     publishingSettings: publishingSettings(user), social: social.connectionStatus(user), billing: billing.publicBilling(user),
-    // How many accounts this plan may post to on each platform, computed by the
-    // same function the route enforces with. The browser needs it to know how
-    // many boxes to let someone tick -- and it is per platform, because the
-    // OAuth store can hold several Meta accounts and only one YouTube channel,
-    // so a single number would offer a choice that cannot be honoured.
-    publishingLimits: Object.fromEntries(['youtube', 'instagram', 'facebook', 'tiktok']
-      .map(provider => [provider, billing.accountsPerPlatform(user, provider)])),
   };
 }
 
@@ -1899,18 +1892,17 @@ async function route(req, res, url) {
     const body = await readBody(req);
     try {
       const current = publishingSettings(currentUser);
-      // How many accounts this plan may publish to on one platform. Enforced
-      // here, at the HTTP boundary, because a limiter the route does not cross
-      // protects nothing -- and refused rather than silently truncated, so
-      // someone who picks four Pages is told why instead of quietly losing one.
+      // ONE account per platform, for every plan (v3.125.0). Enforced here, at
+      // the HTTP boundary, because a limiter the route does not cross protects
+      // nothing -- and refused rather than silently truncated, so someone
+      // whose stored settings still name three Pages is told why instead of
+      // quietly losing two.
       const capAccounts = (provider, supplied) => {
         if (!Array.isArray(supplied)) return undefined;
         const ids = [...new Set(supplied.map(value => String(value || '')).filter(Boolean))];
         const allowed = billing.accountsPerPlatform(currentUser, provider);
         if (ids.length > allowed) {
-          throw new Error(allowed === 1
-            ? `Your plan can post to one ${provider} account. Studio can post to ${config.accountsPerPlatformStudio} on the platforms that support it.`
-            : `Your plan can post to ${allowed} ${provider} accounts at once.`);
+          throw new Error(`DeenClipped posts to one ${provider} account. Choose which one.`);
         }
         return ids;
       };
@@ -1934,13 +1926,6 @@ async function route(req, res, url) {
         // way out. Where a clip goes is the per-platform ticks below; whether
         // it goes at all is the approval. See store.publishingSettings.
         enabled: true,
-        // What a clip does when a platform has more than one channel on it:
-        // 'all' posts it to every one (the default, and what every record
-        // written before this holds), 'rotate' gives each clip to one of them
-        // in turn. Coerced to the two known values rather than stored as sent
-        // -- an unrecognised mode reaching the publish path would silently
-        // become "all" anyway, and this says so at the door.
-        spread: body.spread === 'rotate' ? 'rotate' : 'all',
         youtube: { ...current.youtube, ...withCap('youtube', body.youtube || {}), enabled: Boolean(body.youtube?.enabled) },
         instagram: { ...current.instagram, ...withCap('instagram', body.instagram || {}), enabled: Boolean(body.instagram?.enabled), shareToFeed: body.instagram?.shareToFeed !== false },
         facebook: { ...current.facebook, ...withCap('facebook', body.facebook || {}), enabled: Boolean(body.facebook?.enabled) },
@@ -2876,6 +2861,13 @@ async function route(req, res, url) {
       // for, and pushing scripture through a 1.7B model to make it punchy is
       // the one thing this product must never do.
       const style = String(asked?.style || '').trim().slice(0, 40);
+      // EVERY LINE THIS CLIP HAS ALREADY BEEN OFFERED IN THIS SITTING, so a
+      // second press cannot hand back the first answer -- Youssef, 4 Sept
+      // 2026: "cant chnage more than once". The worker is stateless, so the
+      // browser keeps the list and sends it; capped here because it arrives
+      // from a customer and reaches a prompt.
+      const avoid = (Array.isArray(asked?.avoid) ? asked.avoid : [])
+        .map(v => String(v || '').trim()).filter(Boolean).slice(0, 12).map(v => v.slice(0, 200));
       // DeenAI is one feature behind one tier, and this is the half that spends
       // the box's Ollama. It shipped in v3.120.0 with NO gate at all -- every
       // free account could ask -- which is both a paid feature given away and
@@ -2891,6 +2883,7 @@ async function route(req, res, url) {
         kind,
         instruction,
         style,
+        avoid,
         title: kind === 'description' ? String(clip.description || '') : String(clip.title || ''),
         text: String(clip.transcript || '').slice(0, 4000),
         lectureTitle: String(project?.title || ''),

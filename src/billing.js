@@ -335,20 +335,6 @@ export function atLeast(user, tier) {
   return TIER_RANK[tierOf(user)] >= (TIER_RANK[tier] ?? 99);
 }
 
-/**
- * Platforms whose credentials can currently hold more than one account.
- *
- * This is a fact about the OAuth STORE, not about what is sold. It was
- * facebook and instagram only: a provider slot held ONE connection object and
- * `setConnection` overwrote it, so a second YouTube channel destroyed the
- * first one's refresh token, while Meta already kept its Pages in a list.
- *
- * The slot holds a list for every provider now (`addConnection`,
- * `connectionListFor`), and each credential path resolves by account id, so
- * all four fan out. The constant stays because it is the honest place to
- * record which platforms the STORE can serve -- if a provider ever needs a
- * single credential again, removing it here is the whole change.
- */
 /** How a billing period is said to a customer, rather than spelled as an id. */
 const PERIOD_LABELS = Object.freeze({ weekly: 'weekly', monthly: 'monthly', yearly: 'yearly' });
 
@@ -359,23 +345,30 @@ function periodOf(planId) {
   return PERIOD_LABELS[period] ? period : '';
 }
 
-export const MULTI_ACCOUNT_PROVIDERS = Object.freeze(['facebook', 'instagram', 'youtube', 'tiktok']);
-
 /**
  * How many accounts on ONE platform this account may publish a clip to.
  *
- * Per platform, never a total: Studio is three YouTube channels AND three
- * TikToks, not three destinations shared out between them.
+ * ONE, FOR EVERYBODY. Studio sold three channels per platform from v3.41.0
+ * until v3.125.0, and Youssef retired it on 4 Sept 2026 having watched it in
+ * use: "REMOVE ALL THINGS TO DO WITH 3 CHANNELS ... ITS NOT PRCATICAL THEY
+ * JUST GET 8 UPLAODS AND MORE TOKENS". He is right, and the reason is in this
+ * repo's own record: three channels needed a lane switcher, a share-out mode,
+ * a per-channel denominator on every count and a name beside every logo, and
+ * two releases in a row (v3.115.4, v3.116.0) were spent on the schedule being
+ * "very confusing" as a direct result. Studio is more capacity on one channel
+ * now -- eight windows a day and the larger token allowance -- which needs no
+ * explaining.
  *
- * Deliberately `atLeast`, not `paysForAtLeast`. This is feature access, and the
- * operator must not be locked out of their own product -- the money-based check
- * is for queue position and posting slots, where counting the owner as Studio
- * would let a test import preempt a paying customer.
+ * IT STAYS A FUNCTION, and the plumbing under it stays too. Every credential
+ * path resolves by account id and a stored connection may still be a LIST: an
+ * account that connected three channels while it was sold has three on disk,
+ * and reading only the first is exactly what capping here does. Ripping the
+ * list handling out would touch every publish path to change nothing a
+ * customer can see -- and the paths that would break are the ones that put a
+ * clip on the wrong channel.
  */
-export function accountsPerPlatform(user, provider = '') {
-  if (!atLeast(user, 'studio')) return 1;
-  if (provider && !MULTI_ACCOUNT_PROVIDERS.includes(provider)) return 1;
-  return Math.max(1, config.accountsPerPlatformStudio);
+export function accountsPerPlatform() {
+  return 1;
 }
 
 export function topups() {
@@ -561,6 +554,13 @@ export function ensureUserBilling(user) {
  * is derived from this, the pricing screen is derived from this, and the
  * gate-law test asserts this table against the gates that read it.
  */
+/* Derived from the two plans' own figures, so the sales line cannot drift
+ * from what is actually granted. Declared apart from the table because every
+ * row there is read by `pro-and-blockers` as a one-line `key: Object.freeze({
+ * tier: '...' })` -- a multi-line entry is invisible to it, and the guard that
+ * says "adding a feature means adding its gate" then passes for free. */
+const STUDIO_TOKEN_LABEL = `About ${(config.tokensStudioMonthly / config.tokensMonthly).toFixed(1)}\u00d7 the tokens of Pro \u2014 more lectures every month`;
+
 export const FEATURES = Object.freeze({
   watermark: Object.freeze({ tier: 'pro', label: 'Remove the DeenClipped watermark' }),
   templates: Object.freeze({ tier: 'pro', label: 'Every template in the catalogue, not only the default style' }),
@@ -576,18 +576,17 @@ export const FEATURES = Object.freeze({
   // a fence around a feature people already have takes something away rather
   // than selling something new.
   priorityRender: Object.freeze({ tier: 'studio', label: 'Your lectures jump the render queue' }),
-  // BOTH of these said something the product does not do, and the gap is what
-  // made multi-channel confusing rather than valuable (Youssef, 4 Sept 2026:
-  // "how do I know where I'm posting my video?").
-  //
-  // The windows are per CHANNEL, not per account -- three channels is three
-  // separate audiences and each gets its own day. The old wording read as one
-  // shared allowance, so nobody could tell what a second channel bought them.
-  extraSlots: Object.freeze({ tier: 'studio', label: `Post up to ${config.postSlotsStudio} times a day on every channel, not four` }),
-  // And a channel is a SCHEDULE, not a copy. The old label described mirroring
-  // -- the same clip on all three at once -- which is the mode almost nobody
-  // wants and is no longer the default.
-  multiChannel: Object.freeze({ tier: 'studio', label: `Run up to ${config.accountsPerPlatformStudio} channels on each platform, each with its own schedule` }),
+  // THE HEADLINE STUDIO FEATURE, now that multi-channel is gone. Said against
+  // the number it beats, because "up to 8 a day" means nothing to somebody who
+  // does not know the other plans give four.
+  extraSlots: Object.freeze({ tier: 'studio', label: `Post up to ${config.postSlotsStudio} times a day, not four` }),
+  // MULTI-CHANNEL WAS HERE AND IS GONE (v3.125.0). See accountsPerPlatform
+  // above for why. What Studio sells instead is capacity, and the second half
+  // of it was never on this list at all -- the token allowance was only ever a
+  // number on the pricing card, so nobody comparing the two columns could see
+  // that Studio buys more lectures a month. Derived from the two plans' own
+  // figures, so it cannot drift from what is actually granted.
+  moreTokens: Object.freeze({ tier: 'studio', label: STUDIO_TOKEN_LABEL }),
 });
 
 /** Kept as a name because the marketing pages and tests speak in these terms. */

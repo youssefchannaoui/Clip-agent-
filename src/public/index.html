@@ -294,63 +294,6 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
   background: no-repeat center / 10px 16px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 16'%3E%3Cg fill='%23A0A0A8'%3E%3Ccircle cx='2.5' cy='3' r='1.4'/%3E%3Ccircle cx='7.5' cy='3' r='1.4'/%3E%3Ccircle cx='2.5' cy='8' r='1.4'/%3E%3Ccircle cx='7.5' cy='8' r='1.4'/%3E%3Ccircle cx='2.5' cy='13' r='1.4'/%3E%3Ccircle cx='7.5' cy='13' r='1.4'/%3E%3C/g%3E%3C/svg%3E");
 }
 [data-slot]:hover > .dc-grip { opacity: .95; }
-/* The schedule's channel switcher. One row of chips, the same shape as the
-   Day/Week/Month rail beside it so the two read as one control surface rather
-   than as two competing ideas. */
-#dcSchedChannels .dcsc-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-#dcSchedChannels .dcsc-l {
-  font: 600 10.5px/32px Inter, sans-serif; letter-spacing: .14em; text-transform: uppercase;
-  color: var(--dc-n-7e7a82, #7E7A82); margin-right: 2px;
-}
-/* The second row answers the question three channels raise, in one sentence,
-   next to the control that changes the answer. */
-#dcSchedChannels .dcsc-note {
-  font: 400 12px Outfit, Inter, sans-serif; color: var(--dc-ink-faint, #6E6E76);
-}
-.dcsc {
-  display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 11px;
-  border-radius: 9px; border: 1px solid var(--dc-line, #26262A);
-  background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-dim, #8B8B93);
-  font: 500 12.5px Outfit, Inter, sans-serif; cursor: pointer;
-  transition: color .15s ease, border-color .15s ease, background .15s ease;
-}
-.dcsc i { font-size: 15px; line-height: 1; flex: none; }
-/* The count sits in its own quiet pill so a two-digit channel does not shove
-   the name about, and so the number reads as a count rather than as part of
-   the channel's name. */
-.dcsc b {
-  min-width: 17px; padding: 0 5px; border-radius: 20px;
-  background: var(--dc-n-232329, #232329); color: var(--dc-ink-faint, #6E6E76);
-  font: 700 10.5px/17px Outfit, Inter, sans-serif; text-align: center;
-}
-.dcsc:hover { color: var(--dc-ink, #F2F2F4); border-color: var(--dc-n-3a3a42, #3A3A42); }
-.dcsc.on {
-  color: var(--dc-gold-lit, #F0D6A6); border-color: rgba(240,214,166,.5);
-  background: rgba(217,180,120,.11);
-}
-.dcsc.on b { background: rgba(217,180,120,.2); color: var(--dc-gold-lit, #F0D6A6); }
-.dcsc:focus-visible { outline: 2px solid rgba(240,214,166,.6); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .dcsc { transition: none; } }
-/* The mode pair sits apart from the channel chips -- pushed to the far end
-   with a rule before it -- because it answers a different question. Beside
-   them it would read as a fourth channel. */
-#dcSchedChannels .dcsc-mode { display: inline-flex; margin-left: auto; gap: 4px; }
-.dcsc-mode button {
-  min-height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid transparent;
-  background: none; color: var(--dc-ink-faint, #6E6E76);
-  font: 500 12px Outfit, Inter, sans-serif; cursor: pointer;
-  transition: color .15s ease, background .15s ease, border-color .15s ease;
-}
-.dcsc-mode button:hover { color: var(--dc-ink, #F2F2F4); }
-.dcsc-mode button.on {
-  color: var(--dc-gold-lit, #F0D6A6); border-color: rgba(240,214,166,.4);
-  background: rgba(217,180,120,.1);
-}
-.dcsc-mode button:focus-visible { outline: 2px solid rgba(240,214,166,.6); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .dcsc-mode button { transition: none; } }
-/* On a narrow desktop the mode pair drops to its own line rather than
-   squeezing the channel names to nothing. */
-@media (max-width: 1180px) { #dcSchedChannels .dcsc-mode { margin-left: 0; } }
 /* The week cell's Remove. Bottom right, opposite the grip at top right, so
    the two controls on one 60px cell never sit under the same thumb. It is
    hidden until the cell is hovered or the control itself is focused -- a red
@@ -852,12 +795,6 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
 #studioConnList .studio-conn-drop { border: 0; background: transparent; color: var(--dc-n-8a8a93, #8A8A93); cursor: pointer;
   font-size: 14px; line-height: 1; padding: 0 0 0 2px; }
 #studioConnList .studio-conn-drop:hover { color: var(--dc-n-e3928c, #E3928C); }
-#studioConnList .studio-conn-locked { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px;
-  font-size: 11.5px; color: var(--dc-n-8a8a93, #8A8A93); }
-#studioConnList .studio-conn-locked i { color: var(--dc-gold, #D9B478); }
-#studioConnList .studio-conn-up { border: 1px solid rgba(217,180,120,.45); background: transparent; color: var(--dc-gold, #D9B478);
-  border-radius: 999px; padding: 3px 10px; font-size: 11px; cursor: pointer; }
-#studioConnList .studio-conn-up:hover { background: rgba(217,180,120,.12); }
 #studioConnList .studio-conn-account:has(input:disabled) { opacity: .45; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { #studioConnList .studio-conn-account { transition: none; } }
 /* Connecting an account does not switch it on — publishingSettings.<key>.enabled
@@ -4128,7 +4065,17 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        children stay exactly where they are and are given grid areas through
        a data attribute; moving a generated node into a wrapper of mine is
        what would confuse the patcher's pairing. */
-    const CLIPTOOLS = { ask: '', target: 'title', busy: '', note: '', locked: false };
+    /* `seen` is every line this sitting has already been offered, per clip and
+       per field. It travels to the worker as `avoid`, which is what makes a
+       SECOND press give something else -- Youssef, 4 Sept 2026: "cant chnage
+       more than once". Kept in the browser rather than on the clip: it is
+       about this conversation with the button, not about the clip, and
+       persisting it would mean somebody could never be offered a line again. */
+    const CLIPTOOLS = { ask: '', target: 'title', busy: '', note: '', locked: false, seen: {} };
+    function clipToolsSeen(id, kind){
+      const key = id + '|' + kind;
+      return (CLIPTOOLS.seen[key] = CLIPTOOLS.seen[key] || []);
+    }
     let clipToolsNode = null;
 
     function clipToolsClip(){
@@ -4154,11 +4101,28 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       CLIPTOOLS.note = '';
       paintStudio();
       try {
+        const seen = clipToolsSeen(clip.id, kind);
         const r = await api('/api/clips/' + encodeURIComponent(clip.id) + '/retitle', {
-          method: 'POST', body: JSON.stringify({ kind: kind, instruction: instruction || '', style: style || '' }),
+          method: 'POST', body: JSON.stringify({
+            kind: kind, instruction: instruction || '', style: style || '',
+            /* The line on screen goes with them, so "give me another" means
+               another than THIS one too, not only another than the last.
+               DEDUPED: after the first press the current value IS the last
+               remembered answer, and sending it twice spends one of the twelve
+               slots the prompt can carry on a duplicate. */
+            avoid: [...new Set(seen.concat([String((kind === 'description' ? clip.description : clip.title) || '')]))].filter(Boolean),
+          }),
         });
         if (!r || r.error) throw new Error((r && r.error) || 'The clip AI did not answer.');
         const field = kind === 'description' ? 'description' : 'title';
+        /* Remembered BEFORE it is shown, and only when it is genuinely new: an
+           unchanged answer is the line already in the list. Trimmed, so a long
+           sitting cannot grow an unbounded prompt. */
+        if (r.value && r.source !== 'unchanged'){
+          const seenNow = clipToolsSeen(clip.id, kind);
+          if (!seenNow.includes(r.value)) seenNow.push(r.value);
+          while (seenNow.length > 10) seenNow.shift();
+        }
         const target = (DATA.clips || []).find(c => c.id === clip.id);
         if (target) target[field] = r.value;
         if (StudioAdapter.ui.playerClip && StudioAdapter.ui.playerClip.id === clip.id) StudioAdapter.ui.playerClip[field] = r.value;
@@ -4267,10 +4231,22 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       CLIPSTAR.busy = id;
       paintStudio();
       try {
+        /* The star shares the panel's memory, deliberately: pressing the star
+           twice is the same request as pressing Rewrite twice, and two
+           histories would let one control hand back what the other just
+           rejected. */
+        const seen = clipToolsSeen(id, 'title');
+        const now = (DATA.clips || []).find(c => c.id === id);
         const r = await api('/api/clips/' + encodeURIComponent(id) + '/retitle', {
-          method: 'POST', body: JSON.stringify({ kind: 'title' }),
+          method: 'POST', body: JSON.stringify({
+            kind: 'title', avoid: [...new Set(seen.concat([String((now && now.title) || '')]))].filter(Boolean),
+          }),
         });
         if (!r || r.error) throw new Error((r && r.error) || 'The clip AI did not answer.');
+        if (r.value && r.source !== 'unchanged'){
+          if (!seen.includes(r.value)) seen.push(r.value);
+          while (seen.length > 10) seen.shift();
+        }
         const clip = (DATA.clips || []).find(c => c.id === id);
         if (clip) clip.title = r.value;
         toast(r.value, 'good');
@@ -6384,66 +6360,38 @@ function renderStudio(){
     $$('[data-conn-close]').forEach(el=>el.onclick=closeConn);
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!connEls.root.classList.contains('hide'))closeConn()});
 
-    /* One clip, several accounts on the same platform -- Studio only, and only
-       where the credentials can actually hold more than one. Meta stores a LIST
-       of Pages behind one login, so Facebook and Instagram can fan out today;
-       YouTube and TikTok keep a single connection per user, so their limit
-       comes back as 1 and no picker is drawn. Showing boxes that cannot be
-       ticked would be a control that reaches nothing. */
-    function accountPicker(r,i){
-      const accounts=r.accounts||[],max=Number(r.maxAccounts||1);
-      const tier=(((DATA||{}).billing||{}).current||{}).tierName||'Studio';
-      /* Headroom, said out loud. The picker only appears once a second account
-         exists, so a Studio member with one channel connected was told nothing
-         about the other two they are paying for -- "how do I know I can
-         connect three?" had no answer on the screen that answers it. The
-         Connect button beside this already reads "Add another". */
-      /* THE CONNECTED CHANNELS ARE ALWAYS LISTED, one row each. Youssef,
-         3 Sept 2026, comparing us with OpusClip: "ours is good but not great
-         and no layout to see 3 connected channels with each @".
+    /* THE CONNECTED CHANNEL, listed. Youssef, 3 Sept 2026, comparing us with
+       OpusClip: "no layout to see 3 connected channels with each @". The list
+       used to appear only once a SECOND account existed, so a platform with
+       one channel showed a count and no channel -- the app knew the account's
+       name and did not print it.
 
-         The list used to appear only once a SECOND account existed, so a
-         platform with one channel showed a count and no channel -- and even at
-         three, the rows were bare names. Each row now carries the account's own
-         avatar and, where the platform actually gives us one, its @handle.
-         Where it does not, the display name stands alone: inventing an @ from a
-         display name would be making up a handle that may not exist. */
+       THE PICKER, THE HEADROOM LINE AND THE CAP ARE GONE (v3.125.0). Studio
+       sold three channels per platform until Youssef retired it: "REMOVE ALL
+       THINGS TO DO WITH 3 CHANNELS REMOVE IT". One channel per platform means
+       there is nothing to choose between, and a tick box with one option in it
+       is a control that does nothing (invariant 9).
+
+       An account that connected several while it was sold still has them on
+       disk. They are all listed, and the first is the one that posts -- which
+       is what capping accountsPerPlatform to 1 does. The extras keep their own
+       disconnect so they can be tidied away. */
+    function accountPicker(r, i){
+      const accounts=r.accounts||[];
       if(accounts.length===0)return '';
-      if(max<2&&accounts.length<2){
-        return `<div class="studio-conn-accounts">${accountRows(r,i,accounts,accounts.map(a=>a.id),1,false)}</div>`;
-      }
-      /* Locked rather than absent. With several accounts connected and a plan
-         that allows one, the picker simply not being drawn reads as the app
-         losing the other accounts -- so say which plan posts to them and where
-         to get it. It is a statement and a link, not a control that does
-         nothing. */
-      if(max<2){
-        const locked=(((DATA||{}).billing||{}).current||{}).locked||{};
-        const needs=(locked.multiChannel||{}).tierName||'Studio';
-        return `<div class="studio-conn-accounts"><span class="studio-conn-locked">
-          <i class="ph ph-lock-simple"></i>${needs} posts one clip to 3 accounts here. You are on ${esc((((DATA||{}).billing||{}).current||{}).planName||'Basic')}.
-          <button type="button" class="studio-conn-up" data-conn-upgrade>See plans</button></span></div>`;
-      }
-      /* Only YouTube and TikTok hold a credential per account. Facebook and
-         Instagram are Pages inside ONE Meta login, so a per-account disconnect
-         there would tear out that whole login and take the other platform with
-         it. Unticking is the right gesture for a Page; the credential stays. */
-      const ownCredential=r.key==='youtube'||r.key==='tiktok';
-      const chosen=r.accountIds&&r.accountIds.length?r.accountIds:[];
-      const atCap=chosen.length>=max;
-      return `<div class="studio-conn-accounts">
-        <span class="studio-conn-accounts-h">Posting to ${chosen.length} of ${max} allowed</span>
-        ${accountRows(r,i,accounts,chosen,max,true)}
-      </div>`;
+      const extra=accounts.length>1
+        ? `<span class="studio-conn-accounts-h">DeenClipped posts to the first of these. Disconnect the others to change it.</span>`
+        : '';
+      return `<div class="studio-conn-accounts">${extra}${accountRows(r,i,accounts)}</div>`;
     }
 
     /* One row per connected channel: avatar, name, handle where the platform
        gives us one, a tick for "post here", and its own disconnect. */
-    function accountRows(r,i,accounts,chosen,max,pickable){
+    function accountRows(r,i,accounts){
       const ownCredential=r.key==='youtube'||r.key==='tiktok';
-      const atCap=chosen.length>=max;
-      return accounts.map(a=>{
-        const on=chosen.indexOf(a.id)>-1;
+      return accounts.map((a,n)=>{
+        // The first is the one that posts, so it is the one marked live.
+        const on=n===0;
         const label=a.name||a.id;
         /* TikTok is the one platform that hands us a real username. Everywhere
            else we have a display name and nothing else, and an @ invented from
@@ -6456,7 +6404,6 @@ function renderStudio(){
         return `<label class="studio-conn-account${on?' is-on':''}">
           <span class="studio-conn-face">${face}</span>
           <span class="studio-conn-acct-who"><b>${esc(label)}</b>${handle?`<span>${esc(handle)}</span>`:''}</span>
-          ${pickable?`<input type="checkbox" data-conn-account="${i}" value="${esc(a.id)}" ${on?'checked':''} ${!on&&atCap?'disabled':''}>`:''}
           ${ownCredential?`<button type="button" class="studio-conn-drop" data-conn-drop="${i}" data-account="${esc(a.id)}"
             title="Disconnect ${esc(label)}" aria-label="Disconnect ${esc(label)}">&times;</button>`:''}
         </label>`}).join('');
@@ -6495,7 +6442,7 @@ function renderStudio(){
             aria-label="Publish to ${esc(r.name)}" title="${linked?(on?'Switched on — approved clips can post here':'Switched off — connected, but nothing will post'):'Connect an account first'}"
             data-conn-toggle="${i}" ${linked?'':'disabled'}><i></i></button>
           <span class="studio-conn-actions">
-            <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}>${linked?((r.accounts||[]).length<Number(r.maxAccounts||1)?'Add another':'Reconnect'):'Connect'}</button>
+            <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}>${linked?'Reconnect':'Connect'}</button>
             ${HAS_SETTINGS[r.key]&&linked?`<button type="button" data-conn-settings="${esc(r.key)}"><i class="ph ph-sliders-horizontal"></i>Settings</button>`:''}
             ${linked?`<button type="button" data-conn-test="${esc(r.key)}" title="Ask ${esc(r.name)} for this account's current settings"><i class="ph ph-check-circle"></i>Test</button>`:''}
             <button type="button" class="danger" data-conn-disconnect="${i}" ${linked?'':'disabled'}>Disconnect</button>
@@ -6538,8 +6485,6 @@ function renderStudio(){
         StudioAdapter.bindings(DATA).disconnect({preventDefault(){}})});
       $$('[data-conn-settings]').forEach(b=>b.onclick=()=>{
         StudioAdapter.ui.connSettings=b.dataset.connSettings;paintConnections();});
-      $$('[data-conn-upgrade]').forEach(b=>b.onclick=()=>{
-        closeConn();StudioAdapter.ui.screen='tokens';StudioAdapter.ui.tokensAnimAt=Date.now();renderAll();});
       $$('[data-conn-drop]').forEach(b=>b.onclick=async e=>{
         e.preventDefault();e.stopPropagation();
         const p=rows[Number(b.dataset.connDrop)];
@@ -6548,11 +6493,6 @@ function renderStudio(){
           await api(`/api/social/${encodeURIComponent(p.oauth||p.key)}/disconnect`,{method:'POST',body:JSON.stringify({accountId:b.dataset.account})});
           toast('Account disconnected','good');await refresh();paintConnections();
         }catch(err){toast(err.message,'bad')}});
-      $$('[data-conn-account]').forEach(box=>box.onchange=async()=>{
-        const p=rows[Number(box.dataset.connAccount)];
-        const picked=$$(`[data-conn-account="${box.dataset.connAccount}"]`).filter(x=>x.checked).map(x=>x.value);
-        await StudioAdapter.onPublishingAccounts(p.key,picked);
-        paintConnections();});
       paintTikTokOptions();
     }
     /* index.html has MULTIPLE inline script scopes, and this is the FOURTH
@@ -6796,13 +6736,6 @@ function renderStudio(){
       if(window.DCNotify)window.DCNotify.switched(DEST_NAME[key]||key,on,
         on?'Approved clips will post here':'Clips will skip this destination');
       else toast('Publishing updated','good');});
-    /* Sends the whole settings object, like onPublishingToggle: the route
-       rebuilds every provider from what it is given, so a patch carrying one
-       key would switch the other three off. */
-    StudioAdapter.onPublishingAccounts=(key,ids)=>studioDo(()=>{
-      const cur=DATA?.publishingSettings||{};
-      const next={...cur,[key]:{...(cur[key]||{}),accountIds:ids}};
-      return api('/api/publishing-settings',{method:'POST',body:JSON.stringify(next)})},'Destinations updated');
     StudioAdapter.onTestConnection=name=>studioDo(()=>api(`/api/social/${encodeURIComponent(name)}/test`,{method:'POST',body:JSON.stringify({})}),'Connection looks healthy');
     /* Resolve the pasted link first, so the range picker and the token estimate
        are based on the real source duration rather than a guess. */
@@ -9634,97 +9567,20 @@ function wireScheduleDrag(grid){
   grid.addEventListener('pointercancel',()=>clear());
 }
 
-/* THE CHANNEL SWITCHER, above the schedule.
+/* THE CHANNEL SWITCHER WAS HERE, AND IS GONE (v3.125.0).
 
-   Youssef, 3 Sept 2026: "with the three accounts, there should be three
-   different schedules ... you should auto detect. If it has two accounts, it
-   should show [two] different schedules that you can switch between ... make
-   it look very nice, very cool, not too clustered and crazy and confusing."
+   Studio sold three channels per platform from v3.41.0; each needed a lane to
+   switch between, a share-out mode, a per-channel denominator on every count
+   and a name beside every logo. Two releases running (v3.115.4, v3.116.0)
+   went on the schedule being "very confusing" as a direct result, and on
+   4 Sept 2026 Youssef retired the feature rather than the symptom: "REMOVE
+   ALL THINGS TO DO WITH 3 CHANNELS REMOVE IT, ITS NOT PRCATICAL THEY JUST GET
+   8 UPLAODS AND MORE TOKENS."
 
-   So: it is not drawn at all below two channels. One account sees exactly the
-   screen it saw before, and the row appears by itself the moment a second
-   channel is connected -- nothing to find, nothing to turn on.
-
-   Host-rendered and anchored on [data-tour="sched-views"], a data attribute
-   the design export owns and a re-import cannot renumber. */
-function paintSchedChannels(vals){
-  const rail=document.querySelector('[data-tour="sched-views"]');
-  const header=rail&&rail.parentElement&&rail.parentElement.parentElement;
-  /* The anchor exists only on the schedule screen, so its presence IS the
-     screen check -- the same device paintScheduleWeek uses with
-     [data-dc-week]. `vals.screen` is not a binding and reading it gave
-     undefined, so the row never drew at all. */
-  const on=Boolean(header)&&Boolean(vals.schedHasLanes);
-  let box=document.getElementById('dcSchedChannels');
-  if(!on||!header){ if(box)box.remove(); return }
-  if(!box){ box=document.createElement('div'); box.id='dcSchedChannels'; box.setAttribute('data-host-owned',''); }
-  if(box.parentElement!==header.parentElement||box.previousElementSibling!==header){
-    header.parentElement.insertBefore(box,header.nextSibling);
-  }
-  const lanes=Array.from(vals.schedLanes||[]);
-  const sel=String(vals.schedChannel||'');
-  const sig=[sel,lanes.map(l=>l.key+':'+l.count).join('|'),vals.schedLaneTotal,
-    (((DATA||{}).publishingSettings||{}).spread||'all')].join('~');
-  if(box.dataset.sig===sig)return;
-  box.dataset.sig=sig;
-  box.style.cssText='display:flex;flex-direction:column;gap:9px;margin:-4px 0 0';
-  const chip=(key,label,count,icon)=>{
-    const active=sel===key;
-    return `<button type="button" class="dcsc${active?' on':''}" data-sched-lane="${esc(key)}" `
-      +`aria-pressed="${active?'true':'false'}">`
-      +(icon?`<i class="${esc(icon)}"></i>`:'<i class="ph ph-stack" aria-hidden="true"></i>')
-      +`<span>${esc(label)}</span>`
-      +`<b>${count}</b></button>`;
-  };
-  /* THE ONE QUESTION THREE CHANNELS RAISE, asked where the answer is visible.
-
-     "How will it work with three different accounts?" -- either the same clip
-     goes to all three at the same minute (your own channels competing with
-     each other) or each clip goes to one of them and the three carry different
-     content. It lives here rather than in Connections because this is the
-     screen where you can SEE which it did.
-
-     It is a per-ACCOUNT setting, not per platform, so it is asked once. */
-  const rotate=(((DATA||{}).publishingSettings||{}).spread==='rotate');
-  const mode=`<span class="dcsc-mode">`
-    +`<button type="button" data-sched-spread="all" class="${rotate?'':'on'}" `
-    +`title="One clip goes to every channel">Same clip everywhere</button>`
-    +`<button type="button" data-sched-spread="rotate" class="${rotate?'on':''}" `
-    +`title="Each clip goes to one channel, in turn">Share clips out</button></span>`;
-  /* TWO ROWS ON PURPOSE, not by wrapping. Measured at 1440: the chips and the
-     mode pair come to 958px in an 814px column, so they were going to sit on
-     two lines whatever happened -- and a wrapped row looks like a mistake
-     where a designed one looks deliberate. The second row earns its place by
-     SAYING what the mode does, which is the question three channels raise. */
-  const n=lanes.length;
-  const note=rotate
-    ? `Each clip goes to one channel, so your ${n} channels carry different clips.`
-    : `Every clip goes to all ${n} channels, at the same time.`;
-  box.innerHTML='<div class="dcsc-row">'
-    +'<span class="dcsc-l">Schedule for</span>'
-    +chip('','All channels',vals.schedLaneTotal||0,'')
-    +lanes.map(l=>chip(l.key,l.name,l.count||0,l.icon)).join('')
-    +'</div>'
-    +`<div class="dcsc-row dcsc-row2"><span class="dcsc-note">${esc(note)}</span>${mode}</div>`;
-  box.querySelectorAll('[data-sched-lane]').forEach(b=>b.onclick=e=>{
-    e.preventDefault();
-    StudioAdapter.setSchedChannel(b.dataset.schedLane);
-  });
-  box.querySelectorAll('[data-sched-spread]').forEach(b=>b.onclick=e=>{
-    e.preventDefault();
-    const want=b.dataset.schedSpread;
-    if(want===(rotate?'rotate':'all'))return;
-    /* Optimistic, and it repaints from the local copy first -- the same shape
-       every other switch in this app uses. It only changes where clips
-       ALREADY scheduled were sent when they are rescheduled; the toast says
-       what it does rather than implying the schedule has been rewritten. */
-    const cur=(DATA&&DATA.publishingSettings)||{};
-    if(DATA)DATA.publishingSettings={...cur,spread:want};
-    paintStudio();
-    studioDo(()=>api('/api/publishing-settings',{method:'POST',body:JSON.stringify({...cur,spread:want})}),
-      want==='rotate'?'Each new clip now goes to one channel':'Every new clip now goes to all channels');
-  });
-}
+   One account per platform means one schedule, which is the screen this app
+   had before and the screen it has again. Deleted rather than hidden: a
+   painter left behind on a false binding is the dead code this file's own
+   record warns about. */
 
 function paintScheduleWeek(){
   /* Studio gets eight posting windows, and the week grid divides its height
@@ -9921,7 +9777,6 @@ function paintStudio(){
   paintFirstRun(vals);
   paintOnboarding(vals);
   paintFirstClip(vals);
-  paintSchedChannels(vals);
   paintScheduleWeek();
   paintScheduleDrag();
   if(window.paintEmailNotifRow)window.paintEmailNotifRow(DATA);

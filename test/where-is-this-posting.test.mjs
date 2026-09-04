@@ -19,8 +19,14 @@ import test from 'node:test';
  * So the server answers it: `plannedChannelsFor` says where a clip will go
  * once approved, and every clip carries it as `willPostTo`. Computed on the
  * server on purpose -- where a clip posts is the product of the account's
- * channels, its share-out mode, the lecture's own narrowing and the plan's
- * cap, and a second implementation of those rules in the browser would drift.
+ * connections, the lecture's own narrowing and the one-per-platform cap, and a
+ * second implementation of those rules in the browser would drift.
+ *
+ * The SHARE-OUT MODE was a fourth rule here until 4 Sept 2026, when Youssef
+ * retired multi-channel outright ("REMOVE ALL THINGS TO DO WITH 3 CHANNELS").
+ * The three stored YouTube channels below are kept in the fixture on purpose:
+ * an account that connected them while Studio sold them still has them on
+ * disk, and what this file now proves is that the preview names ONE.
  */
 
 const ROOT = path.dirname(path.dirname(new URL(import.meta.url).pathname));
@@ -32,7 +38,7 @@ const social = await import('../src/social.js');
 
 const userId = 'user_where';
 
-function seed({ spread, tiktok = true } = {}) {
+function seed({ tiktok = true } = {}) {
   state.authUsers = [{ id: userId, email: 'w@example.com', role: 'owner' }];
   state.socialConnections = {
     [userId]: {
@@ -45,7 +51,7 @@ function seed({ spread, tiktok = true } = {}) {
     },
   };
   state.userSettings = { [userId]: { publishingSettings: {
-    enabled: true, ...(spread ? { spread } : {}),
+    enabled: true,
     youtube: { enabled: true, accountId: 'y1', accountIds: ['y1', 'y2', 'y3'] },
     tiktok: { enabled: tiktok, accountId: 't1', accountIds: ['t1'] },
     instagram: { enabled: false }, facebook: { enabled: false },
@@ -66,19 +72,14 @@ test('a clip waiting for review already knows where it is going', () => {
   assert.ok(social.plannedChannelsFor(first).length, 'and it can still answer');
 });
 
-test('sharing out shows a DIFFERENT channel per clip, before any approval', () => {
+test('one channel per platform, whatever the record holds', () => {
+  // Three YouTube channels are stored and the preview names the first, on
+  // every clip. It named a different one per clip while the share-out mode
+  // existed; that is the whole of what came off.
   const [a, b, c] = seed();
   assert.deepEqual(names(a), ['Main', 'tt']);
-  assert.deepEqual(names(b), ['Shorts', 'tt']);
-  assert.deepEqual(names(c), ['Arabic', 'tt']);
-  // Rotation is WITHIN a platform: TikTok has one channel, so every clip still
-  // reaches it. A clip landing on YouTube but not TikTok is not what anyone
-  // means by sharing clips out.
-});
-
-test('mirroring shows every channel on every clip', () => {
-  const [a] = seed({ spread: 'all' });
-  assert.deepEqual(names(a), ['Main', 'Shorts', 'Arabic', 'tt']);
+  assert.deepEqual(names(b), ['Main', 'tt']);
+  assert.deepEqual(names(c), ['Main', 'tt'], 'and it is the same one every time');
 });
 
 test('TikTok is shown even though approving is what consents to it', () => {
@@ -86,7 +87,7 @@ test('TikTok is shown even though approving is what consents to it', () => {
   // waiting clip has none -- and answering honestly from the stored value
   // would tell every reviewer their clip is not going to TikTok, right up
   // until the moment they approve it and it does.
-  const [a] = seed({ spread: 'all' });
+  const [a] = seed();
   assert.equal(a.tiktokConsentAt, undefined, 'no consent yet, by definition');
   assert.ok(names(a).includes('tt'), 'and the preview still names it');
   // The preview never publishes. The real build still refuses without consent,
@@ -104,19 +105,23 @@ test('with nothing connected it says so rather than guessing', () => {
 });
 
 test('a lecture that narrows its platforms narrows the preview too', () => {
-  const [a] = seed({ spread: 'all' });
+  const [a] = seed();
   state.projects[0].publishTo = ['youtube'];
-  assert.deepEqual(names(a), ['Main', 'Shorts', 'Arabic'], 'TikTok was turned off for this lecture');
+  assert.deepEqual(names(a), ['Main'], 'TikTok was turned off for this lecture');
 });
 
-test('the plan cap applies to the preview, so it cannot promise more than it posts', () => {
-  const [a] = seed({ spread: 'all' });
-  // A settings record outlives the plan that wrote it: three ids stay on disk
-  // when Studio lapses. The preview must not keep naming all three.
+test('the cap applies to the preview, so it cannot promise more than it posts', () => {
+  // A settings record outlives the plan that wrote it, and now outlives the
+  // FEATURE: three ids stay on disk from when Studio sold three channels. The
+  // preview must not keep naming all three, on any plan -- including the
+  // operator's, who was the one account that used to get them.
+  const [a] = seed();
+  const asOwner = social.plannedChannelsFor(a).filter(c => c.provider === 'youtube');
+  assert.equal(asOwner.length, 1, 'the operator is capped like everybody else');
   state.authUsers[0].role = 'user';
-  state.authUsers[0].billing = { plan: 'free' };
-  const planned = social.plannedChannelsFor(a).filter(c => c.provider === 'youtube');
-  assert.equal(planned.length, 1, 'one channel is what a non-Studio plan buys');
+  state.authUsers[0].billing = { plan: 'studio_monthly', status: 'active' };
+  const asStudio = social.plannedChannelsFor(a).filter(c => c.provider === 'youtube');
+  assert.equal(asStudio.length, 1, 'and so is a paying Studio subscriber');
 });
 
 test('the browser is told, never left to work it out', () => {
@@ -141,14 +146,19 @@ test('the browser is told, never left to work it out', () => {
   assert.ok(/paintClipDestinations\(vals,DATA\)/.test(host), 'and is passed in');
 });
 
-test('Studio is sold as what it now does', () => {
-  // Both labels described something else: the windows read as one shared
-  // allowance rather than one per channel, and multi-channel described
-  // mirroring -- the mode that is no longer the default.
+test('Studio is sold as the two things it now is', () => {
+  // Youssef, 4 Sept 2026: "THEY JUST GET 8 UPLAODS AND MORE TOKENS". The
+  // second half was never on the feature list at all -- the token allowance
+  // was only ever a number on the pricing card, so nobody comparing the two
+  // columns could see that Studio buys more lectures a month.
   const billing = fs.readFileSync(path.join(ROOT, 'src/billing.js'), 'utf8');
-  assert.match(billing, /times a day on every channel/, '8 a day on EACH channel');
-  assert.match(billing, /channels on each platform, each with its own schedule/);
-  assert.ok(!/accounts on a platform`/.test(billing), 'the old mirroring line is gone');
+  assert.match(billing, /times a day, not four/, 'the posting windows, said against the number they beat');
+  assert.match(billing, /the tokens of Pro/, 'and the allowance, which was invisible before');
+  // Nothing anywhere still sells a channel count.
+  assert.ok(!/channels on each platform/.test(billing));
+  assert.ok(!/multiChannel/.test(billing));
+  assert.ok(!/accountsPerPlatformStudio/.test(fs.readFileSync(path.join(ROOT, 'src/config.js'), 'utf8')),
+    'and the setting that sized it is gone, not merely defaulted to one');
 });
 
 test.after(() => { try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch { /* harmless */ } });
