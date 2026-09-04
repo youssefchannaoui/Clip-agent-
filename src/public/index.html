@@ -7867,6 +7867,85 @@ function helpArticle(a,base){
    A clip rendered before the worker measured it keeps a quiet, obviously flat
    baseline. Drawing an invented shape for it would be the same lie the
    gradient was. */
+/* WHERE THIS CLIP IS GOING, on the card you decide from.
+
+   Youssef, 4 Sept 2026: "it's not just scheduling ... how do I know where I'm
+   posting my video?" The review queue asked people to approve a clip without
+   ever naming its destination -- the channels only appeared on the Schedule,
+   which is after the decision, not before it. With one channel that was merely
+   thin; with three it is the whole complaint.
+
+   The ANSWER COMES FROM THE SERVER (`clip.willPostTo`). Where a clip posts is
+   the product of the account's channels, its share-out mode, the lecture's own
+   narrowing and the plan's cap; re-deriving that here would be a second
+   implementation of rules that already exist in social.js, and the two would
+   drift. This paints what it is told.
+
+   Host-rendered against [data-clip], which the design export already carries
+   for the waveform strip -- so this costs no re-import and a re-import cannot
+   renumber it away. */
+const DEST_MARK={youtube:'ph ph-youtube-logo',tiktok:'ph ph-tiktok-logo',instagram:'ph ph-instagram-logo',facebook:'ph ph-facebook-logo'};
+/* `data` is a PARAMETER, never window.DATA. index.html has several inline
+   script scopes and the studio's own DATA is not the one hanging off window --
+   measured here: window.DATA.clips was empty while the scoped DATA held four
+   clips, so every card read "Nowhere to post". The fifth time this trap has
+   been paid for in this file. */
+function paintClipDestinations(vals, data){
+  const rows=[].concat((vals&&vals.queueClips)||[],(vals&&vals.detailClips)||[]);
+  const byId={};
+  for(const row of rows) if(row&&row.id&&!byId[row.id]) byId[row.id]=row;
+  const clips=(data&&data.clips)||[];
+  const where={};
+  for(const c of clips) if(c&&c.id) where[c.id]=Array.isArray(c.willPostTo)?c.willPostTo:[];
+  /* More than one channel on a platform is the only time the NAME earns its
+     place -- with one, the logo already says it. Same rule the schedule row
+     follows, so the two surfaces cannot disagree. */
+  const ps=(data&&data.publishingSettings)||{};
+  const many={};
+  for(const k of ['youtube','tiktok','instagram','facebook']){
+    const it=ps[k]||{};
+    const ids=(it.accountIds&&it.accountIds.length)?it.accountIds:(it.accountId?[it.accountId]:[]);
+    many[k]=ids.filter(Boolean).length>1;
+  }
+  /* BOTH trees. The phone renders its own cards from the same bindings under
+     #dcMobile, and scoping to #studio painted only the desktop copy -- which
+     body.dcm-own hides, so the rows measured 0px wide and the phone showed
+     nothing at all. */
+  document.querySelectorAll('#studio [data-clip], #dcMobile [data-clip]').forEach(card=>{
+    const id=card.dataset.clip;
+    if(!byId[id])return;                 /* not a card this painter owns */
+    const dests=where[id]||[];
+    const sig=dests.map(d=>d.id+(many[d.provider]?':'+(d.accountName||''):'')).join(',')||'none';
+    let row=card.querySelector(':scope [data-dc-dest]');
+    if(row&&row.dataset.dcDest===sig)return;
+    if(!row){
+      row=document.createElement('div');
+      row.setAttribute('data-dc-dest','');
+      /* Label ALWAYS on its own line. Channel names differ in length, so a
+         single wrapping row broke after the label on some cards and after the
+         first channel on others -- four cards side by side, four different
+         shapes. Two lines every time is the consistent one. */
+      row.style.cssText='display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:0 11px 9px;font-size:10.5px;line-height:1.4;color:var(--dc-ink-faint,#6E6E76)';
+      /* Last thing in the card body, under the score reasons: it is context for
+         the decision, not the headline. */
+      card.appendChild(row);
+    }
+    row.dataset.dcDest=sig;
+    if(!dests.length){
+      row.innerHTML='<span style="display:flex;align-items:center;gap:5px;color:var(--dc-n-e6b980,#E6B980)">'
+        +'<i class="ph ph-warning-circle" style="font-size:12px"></i>Nowhere to post — connect a channel</span>';
+      return;
+    }
+    const parts=dests.map(d=>{
+      const mark=DEST_MARK[d.provider]||'ph ph-share-network';
+      const name=many[d.provider]&&d.accountName?' '+esc(d.accountName):'';
+      return '<span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">'
+        +'<i class="'+mark+'" style="font-size:13px"></i>'+name+'</span>';
+    });
+    row.innerHTML='<span style="letter-spacing:.06em;text-transform:uppercase;font-size:9px;color:var(--dc-ink-faint,#6E6E76)">Posts to</span>'
+      +'<span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+parts.join('')+'</span>';
+  });
+}
 function paintClipWaveforms(vals){
   /* Matched by CLIP ID, never by position. The same card -- and the same strip
      -- is rendered by two different lists: the review queue (queueClips) and a
@@ -9171,6 +9250,7 @@ function paintStudio(){
   paintTasksPanel();
   paintPlanChip((DATA.billing&&DATA.billing.current)||{});
   paintClipWaveforms(vals);
+  paintClipDestinations(vals,DATA);
   paintLibraryAside(vals);
   /* Cheap when shut -- it returns immediately -- and this is what keeps the
      plan, the token count and the email switch honest while it is open. */

@@ -2310,6 +2310,22 @@
     function targetLane(t) {
       return t.id || ((t.provider || '') + ':' + (t.accountId || 'default'));
     }
+    /* THE LANES A CLIP BELONGS TO, committed or planned.
+     *
+     * `targets` only exist once a clip has been scheduled, so filtering on them
+     * alone made every channel chip read 0 for a clip that had not been placed
+     * yet -- and picking any channel then showed an empty schedule while the
+     * clips were plainly on screen under "all channels". Measured: four chips,
+     * all zero, beside "8 posts this day".
+     *
+     * `willPostTo` is the server's own answer to where the clip is going (see
+     * plannedChannelsFor in social.js), so this is the same rules rather than
+     * a second guess at them. Committed targets still win where they exist. */
+    function clipLanes(c) {
+      var live = (c.targets || []).map(targetLane);
+      if (live.length) return live;
+      return (c.willPostTo || []).map(targetLane);
+    }
     var schedLanes = (function () {
       var social = DATA.social || {};
       var provs = social.providers || {};
@@ -2356,7 +2372,7 @@
     var scheduled = clips.filter(function (c) { return c.scheduledAt && !c.postedAt; })
       .filter(function (c) {
         if (!schedChannel) return true;
-        return (c.targets || []).some(function (t) { return targetLane(t) === schedChannel; });
+        return clipLanes(c).indexOf(schedChannel) > -1;
       })
       .sort(function (a, b) { return new Date(a.scheduledAt) - new Date(b.scheduledAt); });
     var recent4 = clips.slice(-4).reverse();
@@ -2898,7 +2914,7 @@
     });
     schedLanes.forEach(function (lane) {
       lane.count = laneVisible.filter(function (c) {
-        return (c.targets || []).some(function (t) { return targetLane(t) === lane.key; });
+        return clipLanes(c).indexOf(lane.key) > -1;
       }).length;
     });
     var schedMonthWeeks = [];
