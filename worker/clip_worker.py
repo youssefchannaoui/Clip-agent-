@@ -1312,15 +1312,30 @@ def attach_lecture_ayat(
             # A verse only half inside the clip is still captioned for the half
             # that is here -- that is what a clip opening mid-recitation looks
             # like, and leaving it bare was the reported symptom.
-            if end - start > 0.05:
-                words = [
-                    (max(0.0, a - candidate.start), min(candidate.duration, b - candidate.start))
-                    for a, b in (hit.get("words") or [])
-                ]
-                mine.append({
-                    "start": start, "end": end, "ayah": hit["ayah"],
-                    "words": [(a, b) for a, b in words if b > a],
-                })
+            if end - start <= 0.05:
+                continue
+            raw = [(float(a), float(b)) for a, b in (hit.get("words") or [])]
+            # WHICH of the verse's words are inside this clip, not only how
+            # many. Without the offset and the total, ayah_events spreads the
+            # WHOLE verse across whatever time survives -- so a clip opening
+            # one second before the end of a twenty-second verse raced the
+            # whole thing past in three pages of a third of a second each.
+            # Measured, 3 Sept 2026, and exactly the "it goes through QUICKLY
+            # to find where the reciter is speaking" that was reported.
+            inside = [
+                index for index, (a, b) in enumerate(raw)
+                if b > candidate.start and a < candidate.end
+            ]
+            mine.append({
+                "start": start, "end": end, "ayah": hit["ayah"],
+                "words": [
+                    (max(0.0, raw[index][0] - candidate.start),
+                     min(candidate.duration, raw[index][1] - candidate.start))
+                    for index in inside
+                ],
+                "wordFrom": inside[0] if inside else 0,
+                "wordCount": len(raw),
+            })
         candidate.ayat = mine
     return selected
 
@@ -1332,22 +1347,42 @@ def snap_clips_to_ayat(
     settings: dict[str, Any],
     ayat: list[dict[str, Any]] | None = None,
 ) -> list[Candidate]:
-    """Start a recitation clip at the start of an ayah, and end it at the end of one.
+    """A recitation clip ALWAYS starts at the start of an ayah.
 
-    Youssef, 2 Sept 2026: "it must start on a aya to make it easy to detect and
-    smoother and cleaner to looking as it starts from the start of an aya not
-    mid way." Both halves of that are real. The look is the obvious one -- a
-    clip opening half way through a verse reads as a mistake. The detection is
-    the bigger one: an opening part-verse scores as a partial against the whole
-    ayah, which is under the floor, so the walk finds nothing until it reaches
-    a verse that happens to be complete. Measured on a real recitation, one
-    clip cut at 51s opened part way through 39:64 and captioned nothing at all
-    for its first fifteen words.
+    Youssef, 3 Sept 2026: "ALWAYS find ayas when the clipper finds only for
+    quran recitation ALWAYS FIND THE START of a AYA." That replaces the
+    earlier rule, which treated the snap as an improvement to be abandoned
+    whenever it did not fit -- and abandoning it is what produced the fault he
+    reported in the same breath: a clip opening three seconds before the end
+    of a twenty-second verse raced the whole verse past in three pages of two
+    thirds of a second each, "it goes through QUICKLY to find where the
+    reciter is speaking".
 
-    Only the Quran template, and only when the corpus is present. Anything that
-    cannot be snapped inside the configured duration band is left exactly where
-    the scorer put it: a clip in the wrong place is worse than one that starts
-    mid-verse.
+    Two changes carry it:
+
+    1. **The reach is the verse, not a tolerance.** The old code looked for an
+       ayah start within AYAH_SNAP_TOLERANCE of the cut and gave up beyond it,
+       so a clip opening deep inside a long verse -- the exact case that races
+       -- was left where it was. The start is now the beginning of the verse
+       being recited AT the cut, however long that verse is. It is bounded by
+       the verse's own length rather than by a number, which is the honest
+       bound: a clip that opens inside a verse belongs at that verse's start.
+       The tolerance survives for the one case it was right for, a cut that
+       lands in a GAP between verses, where there is no verse to return to.
+
+    2. **The start is fixed and the END gives way.** Both edges used to be
+       chosen and then the whole snap thrown out if the pair broke the
+       duration band. Now the start is chosen first and the end is picked to
+       fit around it: the ayah end nearest the scorer's own ending that lands
+       inside the band, and where no ayah end fits, a plain cut clamped into
+       it. An end mid-verse is captioned honestly (see attach_lecture_ayat);
+       a start mid-verse is what could not be.
+
+    The one thing that still refuses is a snap that would carry the clip off
+    the moment the scorer chose -- less than `minimum` of the original window
+    surviving. A clip in the wrong place is still worse than any alignment.
+
+    Only the Quran template, and only when the corpus is present.
     """
     if str(template.get("captionMode", "")) != "quran" or not selected:
         return selected
@@ -1360,50 +1395,95 @@ def snap_clips_to_ayat(
         if corpus is None:
             return selected
         ayat = lecture_ayat(segments, corpus)
-    spans = [(hit["start"], hit["end"]) for hit in ayat]
+    spans = sorted((float(hit["start"]), float(hit["end"])) for hit in ayat)
     if not spans:
         return selected
     starts = sorted({span[0] for span in spans})
     ends = sorted({span[1] for span in spans})
     minimum = float(settings.get("clipMinSeconds", 20))
-    maximum = float(settings.get("clipMaxSeconds", 90))
+    maximum = max(minimum, float(settings.get("clipMaxSeconds", 90)))
 
-    def nearest(values: list[float], want: float) -> float | None:
+    def opening_verse(want: float) -> float | None:
+        """The start of the verse being recited AT `want`, if one is.
+
+        The LATEST such start, because a corpus walk can report two verses
+        overlapping by their shared boundary word and the later one is the
+        one actually being recited here.
+        """
         best = None
-        for value in values:
-            if abs(value - want) > AYAH_SNAP_TOLERANCE:
-                continue
-            if best is None or abs(value - want) < abs(best - want):
-                best = value
+        for begin, finish in spans:
+            if begin <= want < finish and (best is None or begin > best):
+                best = begin
         return best
+
+    def start_options(candidate: Candidate) -> list[float]:
+        """Every ayah start this clip could honestly open on, nearest first.
+
+        Two of them, and which one wins matters. Going BACK to the start of the
+        verse the clip is cutting through is bounded by that verse's own length
+        and never drops anything the scorer chose -- it adds. Going FORWARD to
+        the next verse is bounded by AYAH_SNAP_TOLERANCE because it does drop
+        content. Nearest wins: a clip opening one second before a verse ends
+        belongs at the NEXT verse's start, a second away, not nineteen seconds
+        back at the start of the one it is leaving. Both are offered, in order,
+        so the guards below can refuse the nearer and still land on an ayah.
+        """
+        options = []
+        inside = opening_verse(candidate.start)
+        if inside is not None:
+            options.append(inside)
+        forward = [value for value in starts if value >= candidate.start]
+        if forward and forward[0] - candidate.start <= AYAH_SNAP_TOLERANCE:
+            options.append(forward[0])
+        if inside is None:
+            # A cut that landed in a gap -- between verses, or in the speech
+            # around the recitation. There is no verse to return to, so the
+            # tolerance is the right bound in both directions.
+            back = [value for value in starts if value <= candidate.start]
+            if back and candidate.start - back[-1] <= AYAH_SNAP_TOLERANCE:
+                options.append(back[-1])
+        options.sort(key=lambda value: abs(value - candidate.start))
+        return options
+
+    def pick_end(candidate: Candidate, start: float) -> float:
+        low, high = start + minimum, start + maximum
+        best = None
+        for value in ends:
+            if low <= value <= high and (
+                    best is None or abs(value - candidate.end) < abs(best - candidate.end)):
+                best = value
+        if best is not None:
+            return best
+        return min(max(candidate.end, low), high)
 
     moved = 0
     for candidate in selected:
-        start = nearest(starts, candidate.start)
-        end = nearest(ends, candidate.end)
-        if start is None and end is None:
-            continue
-        start = candidate.start if start is None else start
-        end = candidate.end if end is None else end
-        if end - start < minimum or end - start > maximum:
-            continue
-        group = [
-            segment for segment in segments
-            if float(segment["end"]) > start and float(segment["start"]) < end
-        ]
-        if not group:
-            continue
-        if abs(start - candidate.start) < 0.05 and abs(end - candidate.end) < 0.05:
-            continue
-        candidate.start = start
-        candidate.end = end
-        candidate.segments = group
-        candidate.text = " ".join(str(item["text"]).strip() for item in group).strip()
-        moved += 1
+        for start in start_options(candidate):
+            end = pick_end(candidate, start)
+            if end - start < minimum - 0.05:
+                continue
+            # A snap that carries the clip off the moment the scorer chose is
+            # not an alignment, it is a different clip.
+            kept = min(end, candidate.end) - max(start, candidate.start)
+            if kept < min(minimum, candidate.duration) - 0.05:
+                continue
+            group = [
+                segment for segment in segments
+                if float(segment["end"]) > start and float(segment["start"]) < end
+            ]
+            if not group:
+                continue
+            if abs(start - candidate.start) < 0.05 and abs(end - candidate.end) < 0.05:
+                break
+            candidate.start = start
+            candidate.end = end
+            candidate.segments = group
+            candidate.text = " ".join(str(item["text"]).strip() for item in group).strip()
+            moved += 1
+            break
     if moved:
         emit("progress", stage=f"Aligning {moved} clip(s) to the start of an ayah", progress=72)
     return selected
-
 
 def select_candidates(candidates: list[Candidate], limit: int) -> list[Candidate]:
     selected: list[Candidate] = []
@@ -2501,7 +2581,8 @@ def ornament_text(face: str, ayah: int) -> str:
 def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: float,
                 latin_font: str, translation_size: int, show_translation: bool,
                 ayah_size: int = 0, mark_size: int = 0, ayah_font: str = "",
-                word_times: list[tuple[float, float]] | None = None) -> list[str]:
+                word_times: list[tuple[float, float]] | None = None,
+                word_offset: int = 0, word_count: int = 0) -> list[str]:
     """The Dialogue lines carrying an ayah, a short phrase at a time.
 
     Modelled on the reference clips: a long ayah is not held on screen as one
@@ -2540,9 +2621,58 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
 
     gloss_words = str(found.get("translation") or "").split() if show_translation else []
     span = max(0.4, end - start)
-    # Still capped by the chunk's own length so a short phrase is not all
-    # fade: each side may use at most a third of the time it is on screen.
-    per_chunk_ms = span / max(1, chunk_count) * 1000
+
+    # Where each page ENDS. The default shares the verse's time out by word
+    # count -- a ruler laid over the recitation -- and that is what "the Quran
+    # clips do not sync" was (Youssef, 3 Sept 2026): a reciter holds a madd on
+    # the last word of a page for four seconds and the next page was already
+    # up, because a ruler does not know he paused. When the transcript words
+    # that aligned to this verse are known (the lecture walk carries them,
+    # with the times Whisper heard them at), each page ends where its LAST
+    # ALIGNED WORD ends. Whisper's timing on recitation is imperfect; it is
+    # still the audio, and a ruler is not.
+    #
+    # Uthmani and transcript word counts differ (Whisper runs words together
+    # and splits others), so a page's share of the verse is carried across by
+    # proportion of index, and the boundary then snaps to a real word end.
+    # Monotonic by construction; a boundary that would run backwards falls
+    # back to the ruler for that page only.
+    timed = [(float(a), float(b)) for a, b in (word_times or []) if float(b) > float(a)]
+
+    # Each page's share of the verse in TRANSCRIPT-word indices, and which of
+    # those the clip actually holds. word_offset says how many of the verse's
+    # words were recited before this clip began and word_count how many it has
+    # in all, so a verse the clip opens or closes half way through draws only
+    # the pages that were recited INSIDE it. Without that the pages whose
+    # words are outside were squeezed into whatever time was left, and the
+    # whole verse flashed past at the clip's edges -- Youssef, 3 Sept 2026:
+    # "the start and end ... it goes through QUICKLY to find where the reciter
+    # is speaking". A page nobody recited here is not a page.
+    total = max(1, int(word_count or (word_offset + len(timed))))
+    bounds: list[tuple[int, int]] = []
+    taken_words = 0
+    for chunk in chunks:
+        lo = int(round(taken_words / len(words) * total))
+        taken_words += len(chunk)
+        bounds.append((lo, max(lo, int(round(taken_words / len(words) * total)))))
+    have_from, have_to = word_offset, word_offset + len(timed)
+    # With no word times at all -- an older transcript, or a re-render -- every
+    # page is drawn and the ruler below shares the time out, exactly as before.
+    live = list(range(chunk_count)) if not timed else [
+        index for index, (lo, hi) in enumerate(bounds) if hi > have_from and lo < have_to
+    ]
+    if not live:
+        return []
+    # The mark closes a verse. A clip that ends part way through one has not
+    # reached the end of it, so nothing is closed and no ornament is drawn.
+    complete = (not timed) or have_to >= total
+
+    # Still capped by the page's own length so a short phrase is not all fade:
+    # each side may use at most a third of the time it is on screen. Counted
+    # over the LIVE pages, not every page the verse has -- a lone surviving
+    # page holding the whole window would otherwise be given a third of the
+    # fade it has room for.
+    per_chunk_ms = span / max(1, len(live)) * 1000
     fade_in = min(AYAH_FADE_IN_MS, int(per_chunk_ms / 3))
     fade_out = min(AYAH_FADE_OUT_MS, int(per_chunk_ms / 3))
     fade_tag = f"{{\\fad({fade_in},{fade_out})}}"
@@ -2562,36 +2692,49 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
     # proportion of index, and the boundary then snaps to a real word end.
     # Monotonic by construction; a boundary that would run backwards falls
     # back to the ruler for that page only.
-    timed = [(float(a), float(b)) for a, b in (word_times or []) if float(b) > float(a)]
-    page_ends: list[float] = []
-    taken_words = 0
+    live_words = sum(len(chunks[index]) for index in live) or 1
+    page_ends: dict[int, float] = {}
     at_ruler = start
-    for index, chunk in enumerate(chunks):
-        taken_words += len(chunk)
-        at_ruler = min(end, at_ruler + span * (len(chunk) / len(words)))
-        if index == chunk_count - 1:
-            page_ends.append(end)
+    for position, index in enumerate(live):
+        at_ruler = min(end, at_ruler + span * (len(chunks[index]) / live_words))
+        if position == len(live) - 1:
+            page_ends[index] = end
             continue
         if timed:
-            last = max(0, min(len(timed) - 1, round(taken_words / len(words) * len(timed)) - 1))
-            snapped = timed[last][1]
-            floor = page_ends[-1] if page_ends else start
+            pick = max(0, min(len(timed) - 1, bounds[index][1] - 1 - word_offset))
+            snapped = timed[pick][1]
+            floor = page_ends[live[position - 1]] if position else start
             if floor + 0.15 < snapped < end:
-                page_ends.append(snapped)
+                page_ends[index] = snapped
                 continue
-        page_ends.append(at_ruler)
+        page_ends[index] = at_ruler
+
+    # The translation is shared out over EVERY page, live or not, and only the
+    # live ones are drawn -- so the gloss of a stretch nobody recited here is
+    # dropped with the Arabic it belongs to, and a whole verse splits exactly
+    # as it always did.
+    gloss: dict[int, str] = {}
+    g_taken = 0
+    for index, chunk in enumerate(chunks):
+        if index < chunk_count - 1:
+            g_size = round(len(gloss_words) * len(chunk) / len(words))
+        else:
+            g_size = len(gloss_words) - g_taken
+        g_size = max(0, min(g_size, len(gloss_words) - g_taken))
+        gloss[index] = " ".join(gloss_words[g_taken:g_taken + g_size]).strip()
+        g_taken += g_size
 
     events: list[str] = []
     at = start
-    g_taken = 0
-    for index, chunk in enumerate(chunks):
+    for position, index in enumerate(live):
+        chunk = chunks[index]
         chunk_start, chunk_end = at, max(at, page_ends[index])
-        if index == chunk_count - 1:
+        if position == len(live) - 1:
             chunk_end = end
         at = chunk_end
 
         text = ass_escape(" ".join(chunk))
-        if index == chunk_count - 1:
+        if index == chunk_count - 1 and complete:
             # The ornament at its own size (see ayah_mark_scale). Nothing
             # follows it on this line, and the translation line below sets its
             # own \fn and \fs, so the override needs no reset.
@@ -2599,13 +2742,9 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
             mark_tag = f"{{\\fs{size}}}" if size else ""
             text += "\\h" + mark_tag + ass_escape(ornament)
 
-        if gloss_words:
-            g_size = round(len(gloss_words) * len(chunk) / len(words)) if index < chunk_count - 1 else len(gloss_words) - g_taken
-            g_size = max(0, min(g_size, len(gloss_words) - g_taken))
-            piece = " ".join(gloss_words[g_taken:g_taken + g_size]).strip()
-            g_taken += g_size
-            if piece:
-                text += "\\N{\\fn" + latin_font + "\\fs" + str(translation_size) + "}" + ass_escape(piece)
+        piece = gloss.get(index) or ""
+        if piece:
+            text += "\\N{\\fn" + latin_font + "\\fs" + str(translation_size) + "}" + ass_escape(piece)
 
         # \q0, as the bilingual phrase captions already carry. WrapStyle 2 is
         # "break only where I say", and nothing said where -- so a translation
@@ -3397,7 +3536,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     # is no lecture to walk -- takes exactly the path it always did.
     lecture_hits = [
         {"start": float(hit["start"]), "end": float(hit["end"]), "found": hit["ayah"],
-         "words": hit.get("words") or []}
+         "words": hit.get("words") or [],
+         # How much of the verse this clip actually holds. A verse it opens or
+         # closes half way through draws only the pages recited inside it.
+         "wordFrom": int(hit.get("wordFrom") or 0),
+         "wordCount": int(hit.get("wordCount") or 0)}
         for hit in (candidate.ayat or [])
         if float(hit["end"]) > float(hit["start"])
     ]
@@ -3522,6 +3665,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     show_translation=show_translation, ayah_size=ayah_size,
                     mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
                     ayah_font=ayah_font, word_times=hit.get("words"),
+                    word_offset=int(hit.get("wordFrom") or 0),
+                    word_count=int(hit.get("wordCount") or 0),
                 ))
             for segment in candidate.segments:
                 start = max(0.0, float(segment["start"]) - candidate.start)
@@ -3830,6 +3975,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             show_translation=bool(template.get("captionTranslation", True)), ayah_size=ayah_size,
             mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
             ayah_font=ayah_font, word_times=span.get("words"),
+            word_offset=int(span.get("wordFrom") or 0),
+            word_count=int(span.get("wordCount") or 0),
         ))
     ass_file.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
     # Same reason as the Quran branch: the lecture's verses were seeded ahead
