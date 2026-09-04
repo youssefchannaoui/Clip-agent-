@@ -61,6 +61,19 @@ const home = await probe('/');
 note(home.status >= 200 && home.status < 400, 'GET /',
   home.status ? `HTTP ${home.status}` : home.error);
 
+/* THE SITE BEING DOWN IS ONE FINDING, NOT FORTY-FIVE.
+   Every check retries four times twenty seconds apart, so probing on past a
+   dead origin would take the best part of an hour to say the same thing forty
+   times over -- and the run that reports an outage is the one that most needs
+   to finish quickly. Stop here. */
+if (!(home.status >= 200 && home.status < 400)) {
+  console.error(`\n${BASE} is not answering (${home.status ? 'HTTP ' + home.status : home.error}) `
+    + `after ${TRIES} attempts over ${Math.round((TRIES - 1) * GAP_MS / 1000)}s, `
+    + 'which is well past the 35-40s a deploy takes. Nothing else was probed: if the origin is '
+    + 'down, every other check would report the same one fault.');
+  process.exit(1);
+}
+
 // 2. HEAD answers. Routed on GET alone, every HEAD 404'd -- v3.44.0.
 const head = await probe('/', { method: 'HEAD' });
 note(head.status >= 200 && head.status < 400, 'HEAD /',

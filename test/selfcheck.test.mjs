@@ -150,6 +150,11 @@ test('the external prober exists and fixes nothing', () => {
   assert.match(probe, /script-src\[\^;\]\*sha256-/, 'it does not check the CSP carries a script hash');
   assert.match(probe, /sitemap\.xml/, 'it does not walk the sitemap');
   assert.match(probe, /TRIES/, 'it does not retry through a deploy swap');
+  // THE SITE BEING DOWN IS ONE FINDING, NOT FORTY-FIVE. Without this the run
+  // that most needs to finish quickly takes the best part of an hour saying
+  // the same thing forty times. Measured: 60s and one line, from ~45 x 80s.
+  assert.match(probe, /Nothing else was probed/,
+    'a dead origin is probed on through every remaining check');
   const code = probe.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   assert.doesNotMatch(code, /execSync|spawn|git |curl -X (POST|PUT|DELETE)/, 'the prober must not act on anything');
 });

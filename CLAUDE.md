@@ -6683,6 +6683,17 @@ goes stale the first time a page is added.
 - **A push takes the site down for 35–40 seconds and that is NOT a fault** (the
   service mounts a disk, so Render stops one instance before starting the
   other). Every check retries four times, twenty seconds apart, through it.
+- **THE SITE BEING DOWN IS ONE FINDING, NOT FORTY-FIVE.** With every check
+  retrying for eighty seconds, probing on past a dead origin takes the best
+  part of an HOUR to say the same thing forty times — and the run that reports
+  an outage is the one that most needs to finish quickly. `GET /` failing all
+  its retries stops the run there. **Measured: 60 seconds and one line, exit
+  code 1**, against ~45 × 80s; a healthy origin exits 0.
+- **Driven end to end against a real server**, since the egress policy here
+  denies deenclipped.online: 28 sitemap pages, ten assets, HEAD and the CSP
+  hash all probed against a local instance, every check passing. What is NOT
+  proven from here is the run against PRODUCTION; the first scheduled firing
+  is that.
 - **It reports and fixes nothing**, and a test asserts it contains no
   `execSync`, `spawn`, `git` or mutating `curl`. A failed run is the
   notification — GitHub mails the repo owner, with nothing to configure and no
