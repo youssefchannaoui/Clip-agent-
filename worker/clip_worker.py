@@ -4226,23 +4226,64 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     method = "face" if face_centers else ("upper-body" if body_centers else "foreground")
     return {"x": x, "y": y, "w": crop_w, "h": crop_h, "method": method}
 
+# ── The graded looks ─────────────────────────────────────────────────────
+# Each entry is (brightness, contrast, saturation, gamma) for `eq`, plus any
+# filters that eq cannot express -- a sepia matrix, a split-tone curve.
+#
+# EVERY ONE OF THESE WAS RENDERED AND LOOKED AT before it was kept, on a real
+# lecture frame, side by side with its neighbours. That is not ceremony: the
+# first draft's "teal" was indistinguishable from "cinematic" on a frame while
+# looking perfectly different in the numbers, and its "night" read as nothing
+# at all. Both were rebuilt against the picture. A look that cannot be told
+# apart from the one above it in the list is a menu entry, not a feature.
+LOOKS: dict[str, tuple[tuple[float, float, float, float], list[str]]] = {
+    "natural":    ((0.000, 1.00, 1.00, 1.00), []),
+    "crisp":      ((0.015, 1.09, 1.08, 1.00), []),
+    "vivid":      ((0.010, 1.12, 1.34, 1.00), []),
+    "warm":       ((0.025, 1.04, 1.12, 0.98), ["colorbalance=rs=0.10:bs=-0.10"]),
+    "cinematic":  ((-0.015, 1.13, 0.88, 0.96), []),
+    # Teal and orange: warm skin, cool shadows. The curves do the split; the
+    # colorbalance keeps the shadows from going green.
+    "teal":       ((-0.010, 1.12, 1.10, 0.98),
+                   ["curves=r='0/0.00 0.35/0.38 1/1':b='0/0.14 0.5/0.54 1/0.90'",
+                    "colorbalance=rm=0.10:bm=-0.06:rs=-0.06:bs=0.18"]),
+    # Matte film: blacks lifted off zero, contrast and colour pulled back.
+    "faded":      ((0.020, 0.90, 0.82, 1.04), ["curves=all='0/0.11 1/0.93'"]),
+    "night":      ((-0.075, 1.14, 0.72, 0.92),
+                   ["colorbalance=rs=-0.14:bs=0.26:rm=-0.06:bm=0.12"]),
+    "monochrome": ((0.000, 1.08, 0.00, 1.00), []),
+    "noir":       ((-0.020, 1.36, 0.00, 0.92), []),
+    "silver":     ((0.030, 0.92, 0.00, 1.08), ["curves=all='0/0.09 1/0.96'"]),
+    # The standard sepia matrix brightens as well as tints, so the brightness
+    # is pulled back to compensate -- without it the frame came out blown.
+    "sepia":      ((-0.030, 1.08, 1.00, 1.00),
+                   ["colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131"]),
+}
+
+
 def filter_values(template: dict[str, Any]) -> tuple[float, float, float, float]:
     preset = str(template.get("filterPreset", "natural"))
-    presets = {
-        "natural": (0.0, 1.0, 1.0, 1.0),
-        "crisp": (0.015, 1.09, 1.08, 1.0),
-        "warm": (0.025, 1.04, 1.12, 0.98),
-        "cinematic": (-0.015, 1.13, 0.88, 0.96),
-        "monochrome": (0.0, 1.08, 0.0, 1.0),
-    }
-    if preset != "custom" and preset in presets:
-        return presets[preset]
+    if preset != "custom" and preset in LOOKS:
+        return LOOKS[preset][0]
     return (
         float(template.get("brightness", 0)),
         float(template.get("contrast", 1)),
         float(template.get("saturation", 1)),
         float(template.get("gamma", 1)),
     )
+
+
+def look_extras(template: dict[str, Any]) -> list[str]:
+    """Filters a look needs beyond `eq` -- a colour matrix or a tone curve.
+
+    Separate from filter_values because that returns the eq tuple and is
+    called by name elsewhere; a look with no extras returns an empty list, so
+    every preset that existed before this renders byte-identically.
+    """
+    preset = str(template.get("filterPreset", "natural"))
+    if preset == "custom" or preset not in LOOKS:
+        return []
+    return list(LOOKS[preset][1])
 
 
 def cover_chain(width: int, height: int) -> str:
@@ -4281,6 +4322,117 @@ def background_visual(background: dict[str, Any] | None, width: int, height: int
         )
         return prelude, "vsrc"
     return None
+
+
+# ── The atmosphere ───────────────────────────────────────────────────────
+# Rain, snow, dust or bokeh drifting over the picture, GENERATED rather than
+# shipped: there is no artwork file, so nothing here can be missing on a box
+# that has not pulled an asset, and nothing has to be kept in the repo.
+#
+# How it works, because none of it is guessable from the graph:
+#
+#  1. A DETERMINISTIC noise field is hashed out of X and Y with `geq`. It has
+#     to be deterministic -- ffmpeg's `random()` re-rolls per evaluation, so a
+#     field built from it FLICKERS instead of falling. Coherent motion means a
+#     static field that is scrolled.
+#  2. The field is generated THREE PERIODS TALL with the hash taken modulo one
+#     period, so it is periodic in Y. The middle band is then the only part
+#     whose vertical blur has real neighbours above and below it, and it wraps
+#     exactly. Scrolling a window over that band falls for ever with no seam.
+#     Measured: the frame-to-frame difference across a wrap is 2.50 against
+#     2.52 mid-cycle -- a truncated seam spikes, and this does not.
+#  3. EVERYTHING BEFORE `loop` IS PAID FOR ONCE. The source is a single frame,
+#     so the hash, the streak blur, the softening and the gain all cost one
+#     frame however long the clip is. Only the crop, the tint and the scale
+#     run per frame. That is why the shaping can afford a real Gaussian.
+#
+# Two things were got wrong first and are worth not repeating:
+#
+#  - `blend=all_mode=screen` is the obvious compositor for light particles and
+#    it turns the whole frame MAGENTA. blend works per plane, and screening a
+#    neutral chroma plane (128) against anything pushes it to 255. Alpha
+#    compositing, which is what the promo bar already uses, is correct.
+#  - The particle COLOUR must be a constant with the field as its ALPHA. The
+#    first version tinted the field by its own value, so a faint particle was
+#    dark grey -- and compositing dark grey over a bright wall DARKENS it.
+#    Rendered on a lecture in a white-walled masjid, "rain" read as dirt.
+ATMOSPHERES: dict[str, dict[str, Any]] = {
+    # gw/gh   generator resolution and the height of one falling period
+    # dens    luma threshold: the fraction of pixels that seed a particle
+    # spread/streak   box blur that shapes the particle (streak = fall smear)
+    # sigma   Gaussian softening, applied BEFORE the gain so it stays round
+    # gain    how hard the shaped particle is amplified back up
+    # speed   FINAL-frame pixels per second, converted to generator scale
+    "rain":  dict(gw=540, gh=960, dens=0.9965, spread=1, streak=18, sigma=0.6,
+                  gain=13, speed=1500, up=False, slant=0.10, rgb=(214, 228, 255)),
+    # Bigger, fewer and white; dust is finer, denser and warm. They were near
+    # enough to each other on a frame to be one effect before this.
+    "snow":  dict(gw=540, gh=960, dens=0.9992, spread=4, streak=4, sigma=2.2,
+                  gain=16, speed=200, up=False, slant=0.06, rgb=(255, 255, 255)),
+    "dust":  dict(gw=540, gh=960, dens=0.9975, spread=1, streak=1, sigma=0.8,
+                  gain=9, speed=70, up=True, slant=0.02, rgb=(255, 216, 150)),
+    # Bokeh is generated COARSER on purpose: its particles are large soft
+    # glints, and generating them small and blurring them up is what makes
+    # them square. A box blur squares them too -- hence the Gaussian.
+    "bokeh": dict(gw=270, gh=480, dens=0.99975, spread=1, streak=1, sigma=5.0,
+                  gain=45, speed=110, up=False, slant=0.03, rgb=(255, 238, 205)),
+}
+
+
+def atmosphere_chain(template: dict[str, Any], width: int, height: int,
+                     src: str, out: str) -> str | None:
+    """The overlay chain for the chosen weather, or None when there is none."""
+    name = str(template.get("overlayEffect") or "none")
+    p = ATMOSPHERES.get(name)
+    if p is None:
+        return None
+    intensity = max(0.0, min(100.0, float(template.get("overlayIntensity", 55) or 0)))
+    if intensity <= 0:
+        return None
+    gw, gh = int(p["gw"]), int(p["gh"])
+    # The speed is stated in final-frame pixels so the table reads in the units
+    # somebody watching the clip would use; the crop happens at generator
+    # scale, so it is converted here rather than being written twice.
+    gspeed = float(p["speed"]) * gh / float(max(1, height))
+    hashx = rf"(X+mod(Y\,{gh})*{p['slant']})"
+    hashy = rf"mod(Y\,{gh})"
+    walk = rf"mod(t*{gspeed:.4f}\,{gh})"
+    # Always a POSITIVE modulo: ffmpeg's mod() of a negative gives a negative,
+    # which crop clamps to zero, and the effect silently stops moving.
+    y = rf"{gh}+mod({gh}-{walk}\,{gh})" if p["up"] else f"{gh}+{walk}"
+    r, g, b = p["rgb"]
+    alpha = max(0.0, min(1.0, intensity / 100.0))
+    return (
+        f"color=c=black:s={gw}x{gh * 3}:d=0.04,format=gray8,"
+        f"geq=lum='st(0,sin({hashx}*12.9898+{hashy}*78.233)*43758.5453);"
+        f"st(1,ld(0)-floor(ld(0)));if(gt(ld(1),{p['dens']}),255,0)',"
+        f"avgblur=sizeX={p['spread']}:sizeY={p['streak']},gblur=sigma={p['sigma']},"
+        f"lutyuv=y='min(255,val*{p['gain']})',"
+        f"loop=loop=-1:size=1:start=0,"
+        f"crop={gw}:{gh}:0:'{y}',format=gray8,split=2[atmc][atma];"
+        f"[atmc]format=rgb24,lutrgb=r={r}:g={g}:b={b},format=yuv420p[atmcc];"
+        f"[atma]lutyuv=y='val*{alpha:.3f}'[atmaa];"
+        f"[atmcc][atmaa]alphamerge,scale={width}:{height}[atmlayer];"
+        # format=yuv420 explicitly rather than `auto`: measured a third faster
+        # than letting overlay pick, on the same frames.
+        f"[{src}][atmlayer]overlay=0:0:format=yuv420:eof_action=pass[{out}]"
+    )
+
+
+def darken_filter(template: dict[str, Any]) -> str:
+    """A black scrim over the picture, as a fraction. Empty when there is none.
+
+    Deliberately applied BEFORE the captions, so dimming the video to make a
+    caption pop does not dim the caption with it.
+    """
+    # 80, not 100, and the ceiling is enforced HERE as well as in the schema:
+    # a payload is a dict off the wire, and at 1.0 this draws an opaque black
+    # rectangle with the captions floating on it. The instruction was "but
+    # still the video of course".
+    amount = max(0.0, min(80.0, float(template.get("overlayDarken", 0) or 0)))
+    if amount <= 0:
+        return ""
+    return f",drawbox=x=0:y=0:w=iw:h=ih:color=black@{amount / 100.0:.3f}:t=fill"
 
 
 def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict[str, Any] | None = None,
@@ -4366,6 +4518,10 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
 
     brightness, contrast, saturation, gamma = filter_values(template)
     filters = [f"eq=brightness={brightness:.3f}:contrast={contrast:.3f}:saturation={saturation:.3f}:gamma={gamma:.3f}"]
+    # A look's colour matrix or tone curve, straight after its eq. Empty for
+    # every preset that existed before the look table grew, so those render
+    # byte-identically.
+    filters.extend(look_extras(template))
     sharpen = float(template.get("sharpen", 0.45))
     if sharpen > 0:
         filters.append(f"unsharp=5:5:{sharpen:.3f}:5:5:0")
@@ -4401,13 +4557,24 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
         line_height = int(template.get("brandLineHeight", 8))
         brand = f",drawbox=x=0:y=ih-{line_height}:w=iw:h={line_height}:color={color}:t=fill"
 
+    # The scrim and the weather both go on the GRADED picture and both go on
+    # BEFORE the captions: dimming a bright frame so the words read must not
+    # dim the words with it, and rain in front of a caption is rain on a
+    # caption nobody can read.
+    scrim = darken_filter(template)
+
     if matte_src:
         # Captions behind the speaker. The graded picture is split: one copy
         # takes the subtitles, the other becomes a cut-out of the speaker with
         # the matte as its alpha, and that cut-out is laid back over the
         # captioned copy. Both sides are pinned to the render's own 30fps so
         # alphamerge is never handed two streams with different frame counts.
-        graph += ";[base]" + ",".join(filters) + f",fps={MATTE_FPS}[graded]"
+        weather = atmosphere_chain(template, width, height, "gradedraw", "graded")
+        if weather:
+            graph += ";[base]" + ",".join(filters) + scrim + f",fps={MATTE_FPS}[gradedraw]"
+            graph += ";" + weather
+        else:
+            graph += ";[base]" + ",".join(filters) + scrim + f",fps={MATTE_FPS}[graded]"
         graph += ";[graded]split=2[capbase][subject]"
         graph += f";[capbase]{captions}[captioned]"
         graph += ";" + geometry(matte_src, "mbase", "m", matte=True)
@@ -4415,7 +4582,13 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
         graph += ";[subject][malpha]alphamerge[cutout]"
         graph += f";[captioned][cutout]overlay=0:0:format=auto{brand}[vout]"
         return graph
-    graph += ";[base]" + ",".join(filters) + f",{captions}{brand}[vout]"
+    weather = atmosphere_chain(template, width, height, "graded", "weathered")
+    if weather:
+        graph += ";[base]" + ",".join(filters) + scrim + "[graded]"
+        graph += ";" + weather
+        graph += f";[weathered]{captions}{brand}[vout]"
+        return graph
+    graph += ";[base]" + ",".join(filters) + scrim + f",{captions}{brand}[vout]"
     return graph
 
 

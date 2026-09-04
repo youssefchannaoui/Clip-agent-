@@ -19,3 +19,10 @@ Requirements:
 
 Drop the file in beside this README as `promo-bar.png`. Nothing else is
 needed — the worker picks it up on its next deploy.
+
+## Nothing here is needed for the atmosphere
+
+Rain, snow, dust and bokeh (**Templates → Style → Atmosphere**) are GENERATED
+by the renderer from a deterministic noise field — `ATMOSPHERES` and
+`atmosphere_chain` in `clip_worker.py`. There is no `rain.png` to look for and
+none to keep in step with a deploy, which is why they were built that way.

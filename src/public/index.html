@@ -4832,7 +4832,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        large looks large here. */
     const MINI_W = 124;
     function tplMiniHtml(t){
-      const mono = t.filterPreset === 'monochrome';
+      /* Three looks are black and white, not one: monochrome is flat, noir
+         hard, silver soft. A thumb that only knew about the first drew the
+         other two in colour. */
+      const mono = t.filterPreset === 'monochrome' || t.filterPreset === 'noir' || t.filterPreset === 'silver';
       const fam = `'${esc(t.captionFont || 'Outfit')}',Outfit,Inter,sans-serif`;
       const tt = t.captionUppercase ? 'text-transform:uppercase;' : '';
       const primary = esc(t.captionPrimary || 'var(--dc-n-ffffff, #FFFFFF)');
@@ -9393,7 +9396,7 @@ function renderTemplateEditor(){
         ${editorField('Frame background','frameBackground','color')}
         ${editorField('Width','width','number','min="360" max="2160" step="2"')}
         ${editorField('Height','height','number','min="360" max="3840" step="2"')}
-        ${editorSelect('Filter','filterPreset',[['natural','Natural'],['crisp','Crisp'],['warm','Warm'],['cinematic','Cinematic'],['monochrome','Monochrome']])}
+        ${editorSelect('Filter','filterPreset',[['natural','Natural'],['crisp','Crisp'],['vivid','Vivid'],['warm','Warm'],['cinematic','Cinematic'],['teal','Teal & orange'],['faded','Faded film'],['night','Night'],['monochrome','Black & white'],['noir','Noir'],['silver','Silver'],['sepia','Sepia']])}
         ${editorField('Voice enhancement','voiceEnhance','checkbox')}
       </div>
       <div class="style-note">Fit whole video preserves the complete source and uses the chosen background when the source does not match the output shape. Smart speaker framing keeps the detected main face in-frame when crop mode is used.</div>
@@ -9470,7 +9473,7 @@ function updateTemplatePreview(){
   const hook=$('#templateHook');if(hook)hook.style.display='none';
   const w=$('#templateWatermark');w.textContent=t.watermark||'';w.className=`template-watermark ${t.watermarkPosition||'bottom-right'}`;w.style.color=rgba(t.watermarkColor,t.watermarkOpacity);w.style.fontSize=`${Math.max(9,Number(t.watermarkFontSize||24)/3)}px`;
   const line=$('#templateBrandLine');line.style.display=t.brandLineEnabled?'block':'none';line.style.background=t.brandLineColor||'var(--dc-gold, #D9B478)';line.style.height=`${Math.max(2,Number(t.brandLineHeight||7)/2)}px`;
-  const vid=$('#templatePreviewVideo');const filters={natural:'brightness(1) contrast(1) saturate(1)',crisp:'brightness(1.02) contrast(1.09) saturate(1.08)',warm:'brightness(1.03) contrast(1.04) saturate(1.12)',cinematic:'brightness(.99) contrast(1.13) saturate(.88)',monochrome:'grayscale(1) contrast(1.08)'};vid.style.filter=filters[t.filterPreset]||filters.natural;vid.style.backgroundColor=t.frameBackground||'#000';vid.style.transform=t.fitMode==='crop'?'scale(1.18)':t.fitMode==='contain'?'scale(.82)':'scale(1.03)';
+  const vid=$('#templatePreviewVideo');const filters={natural:'brightness(1) contrast(1) saturate(1)',crisp:'brightness(1.02) contrast(1.09) saturate(1.08)',vivid:'brightness(1.01) contrast(1.12) saturate(1.34)',warm:'brightness(1.03) contrast(1.04) saturate(1.12) sepia(.12)',cinematic:'brightness(.99) contrast(1.13) saturate(.88)',teal:'brightness(.99) contrast(1.12) saturate(1.10) hue-rotate(-7deg)',faded:'brightness(1.06) contrast(.82) saturate(.82)',night:'brightness(.925) contrast(1.14) saturate(.72) hue-rotate(9deg)',monochrome:'grayscale(1) contrast(1.08)',noir:'grayscale(1) brightness(.98) contrast(1.36)',silver:'grayscale(1) brightness(1.03) contrast(.92)',sepia:'sepia(1) brightness(.97) contrast(1.08)'};vid.style.filter=filters[t.filterPreset]||filters.natural;vid.style.backgroundColor=t.frameBackground||'#000';vid.style.transform=t.fitMode==='crop'?'scale(1.18)':t.fitMode==='contain'?'scale(.82)':'scale(1.03)';
   if($('#deleteTemplate'))$('#deleteTemplate').disabled=Boolean(t.builtIn);
 }
 
