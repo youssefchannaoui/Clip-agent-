@@ -272,6 +272,53 @@ for accounts with a role on the app. The prerequisites are both already met:
 `connectMeta` throws outright when `/me/accounts` returns no Page, so those two
 are hard requirements, not nice-to-haves.
 
+## The Page IS shared. This file's central blocker is STALE (4 Sept 2026)
+
+Everything below under "Connecting: permissions are granted, the Page is not
+yet shared" describes a state that no longer exists. Read from the running app:
+
+| Platform | State |
+|---|---|
+| YouTube | **Publishing** → DeenClipped |
+| TikTok | **Publishing** → @deenclipped (production credentials, verified live) |
+| Instagram | **Paused** → `eurotrimau` |
+| Facebook | **Paused** → **DeenClipped Page**, now ticked (`811031118760993`) |
+
+`/me/accounts` is plainly returning the Page — the app lists it by its real id.
+Whatever reconnect fixed it happened between 24 Aug and now. **Do not spend
+time on the "Edit settings vs Continue" hunt below; it is solved.**
+
+Facebook is left PAUSED deliberately: enabling it starts real posts to a live
+Page, and that is the account owner's call, not a session's.
+
+### The bug that was actually blocking it (v3.124.2)
+
+Ticking the Page was refused account-wide with:
+
+> Run TikTok Test connection before enabling it. TikTok requires the latest
+> creator privacy and interaction options to be displayed.
+
+The guard is right — `creator_info` is cached per client key, so swapping the
+TikTok credentials from sandbox to production invalidated it. What was wrong is
+that **the control it names lived only on the legacy `?classic=1` page**.
+`onTestConnection` was wired and the route was live; nothing in the shipped
+dialog could reach it. A required action with no button, and because the
+publishing save validates every provider at once it blocked **Facebook** as
+well as TikTok.
+
+A **Test** button now sits on every connected row. Pressing it on TikTok
+cleared the guard and the Page selection saved on the next attempt — which is
+also the fresh code exchange the TikTok notes wanted as proof of the production
+credentials.
+
+### Instagram is still `eurotrimau`, and Youssef wants DeenClipped
+
+"should go on deenclipped of cours" (4 Sept 2026). The app can only offer the
+Instagram account the **Page** is linked to, so this is not fixable in
+DeenClipped: relink the DeenClipped Page to a DeenClipped Instagram
+professional account in Meta's settings, then press **Reconnect** on the
+Instagram row here.
+
 ## Dashboard state, read 4 Sept 2026
 
 Read off the live console rather than trusted from this file — the TikTok
