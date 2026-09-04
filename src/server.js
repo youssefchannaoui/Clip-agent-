@@ -2840,6 +2840,74 @@ async function route(req, res, url) {
   // Take a clip off the schedule WITHOUT un-reviewing it. Its own route
   // rather than a PATCH status, because the clip's status does not change --
   // it stays approved and simply loses its slot.
+  /*
+   * A NEW TITLE, AND NOTHING RE-RENDERS.
+   *
+   * Youssef, 4 Sept 2026: "there should be, like, a star ... which will
+   * create, like, a different title without rerendering the video ... no
+   * rerendering needs to be done with titlings, of course." It already costs
+   * nothing: the title is metadata on the clip and is never burned into the
+   * frame (the hook overlay is hard-disabled, invariant 9), and `updateClip`
+   * writes title/description without touching `stylePending`, which is the
+   * flag that marks a render out of date. A test drives that rather than
+   * trusting the comment.
+   *
+   * The instruction is FREE TEXT typed by a customer, so it travels to the
+   * worker fenced as untrusted data (invariant 2), exactly like DeenAI's Ask.
+   *
+   * The work happens on the box's own Ollama, which is the same privacy
+   * posture the pipeline already makes: a transcript never leaves a server
+   * this product runs. A deployment with no worker refuses in a sentence
+   * rather than hanging -- the DeenAI precedent.
+   */
+  const clipRetitle = pathname.match(/^\/api\/clips\/([^/]+)\/retitle$/);
+  if (clipRetitle && method === 'POST') {
+    try {
+      const id = decodeURIComponent(clipRetitle[1]);
+      const clip = assertCanAccessClip(currentUser, id);
+      // Each route reads its own body here; there is no shared `body` in scope.
+      const asked = await readBody(req);
+      const kind = String(asked?.kind || 'title').toLowerCase() === 'description' ? 'description' : 'title';
+      const instruction = String(asked?.instruction || '').trim().slice(0, 300);
+      // A named shape from the automatic titler's own four, never free text --
+      // see CLIP_STYLES in the worker. It travels apart from `instruction`
+      // because a style must NOT override the recitation reference: a verse
+      // reference is the right title for a recitation whatever shape is asked
+      // for, and pushing scripture through a 1.7B model to make it punchy is
+      // the one thing this product must never do.
+      const style = String(asked?.style || '').trim().slice(0, 40);
+      // DeenAI is one feature behind one tier, and this is the half that spends
+      // the box's Ollama. It shipped in v3.120.0 with NO gate at all -- every
+      // free account could ask -- which is both a paid feature given away and
+      // an unmetered queue on a single-slot worker.
+      if (!deenai.deenaiAccess(currentUser)) {
+        return json(res, 403, { error: 'Writing titles with DeenAI is on Pro and Studio.', upgrade: true });
+      }
+      if (config.processingMode !== 'remote' || !workerClient.configured()) {
+        return json(res, 503, { error: 'Rewriting a title needs the clip AI, which this deployment does not have configured.' });
+      }
+      const project = state.projects.find(p => p.id === clip.projectId) || null;
+      const result = await workerClient.retitle({
+        kind,
+        instruction,
+        style,
+        title: kind === 'description' ? String(clip.description || '') : String(clip.title || ''),
+        text: String(clip.transcript || '').slice(0, 4000),
+        lectureTitle: String(project?.title || ''),
+        // The matcher's own verses. With these and no instruction the worker
+        // answers from the reference alone and never asks the model, so a
+        // recitation cannot have scripture guessed at.
+        ayahs: Array.isArray(clip.ayahs) ? clip.ayahs.slice(0, 40) : [],
+      });
+      const written = String(result?.title || '').trim();
+      if (!written) return json(res, 502, { error: 'The clip AI returned nothing. Try again.' });
+      const updated = agent.updateClip(id, kind === 'description' ? { description: written } : { title: written });
+      return json(res, 200, { ok: true, kind, value: written, source: result?.source || 'ai', clip: publicClip(updated) });
+    } catch (error) {
+      return json(res, error.statusCode || 502, { error: error.message });
+    }
+  }
+
   const clipUnschedule = pathname.match(/^\/api\/clips\/([^/]+)\/unschedule$/);
   if (clipUnschedule && method === 'POST') {
     try {

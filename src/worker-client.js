@@ -51,3 +51,7 @@ export const cancelJob = id => request(`/jobs/${encodeURIComponent(id)}/cancel`,
 // DeenAI's Ask. A longer window than the default: qwen on a 2-core box thinks
 // in tens of seconds, and aborting at 30 made every long answer a failure.
 export const advise = payload => request('/ai/advise', { method: 'POST', body: payload, timeoutMs: 90_000 });
+// One new title (or description) for one clip. Nothing re-renders -- the title
+// is metadata on the clip, never burned into the frame -- so this is the whole
+// cost of the button. Same window as Ask, for the same reason.
+export const retitle = payload => request('/ai/title', { method: 'POST', body: payload, timeoutMs: 90_000 });

@@ -20,7 +20,7 @@ test('every feature the table sells is enforced server-side, tier by tier', () =
     'adding a feature means adding its gate and its place in the pricing grid too');
   assert.deepEqual(Object.fromEntries(rows), {
     watermark: 'pro', templates: 'pro', deenai: 'pro',
-    deenaiAsk: 'studio', priorityRender: 'studio', extraSlots: 'studio', multiChannel: 'studio',
+    deenaiAsk: 'pro', priorityRender: 'studio', extraSlots: 'studio', multiChannel: 'studio',
   }, 'the tier each feature belongs to is a pricing promise, not an implementation detail');
 
   // Each one refused by the server, not merely hidden by the interface.

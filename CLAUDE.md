@@ -199,8 +199,8 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1361 JS + 623 Python**
-  (8 Python skipped). These numbers were once wrong by more than a factor of
+- `npm test` and `npm run check` must pass. Currently **1394 JS + 643 Python**
+  (8 Python skipped where ffmpeg is absent, which is CI).
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
   output), so this line cannot quietly drift again; a shrinking count is
@@ -4960,6 +4960,88 @@ commas and a naive split on `"), "` miscounts.
   `deploy-worker.yml` ships it on push; one Quran or lecture import with rain
   on settles it.
 
+## The banner told everyone one nasheed stopped their posting (v3.119.0, 4 Sept 2026)
+
+Youssef, reading a handover line that repeated it back at him: "it shouldnt? it
+should just be that its there to notify?"
+
+He was right, and **nothing in the code had ever agreed with the banner.** The
+sentence was *"Only one nasheed uploaded — rotation needs two or more before
+automatic posting can run."* Checked against the three places that would have
+to implement it:
+
+- `local-engine.js` refuses a job only with NO track ("Upload at least one
+  nasheed first"), never with one;
+- `readiness()` answers `musicReady: tracks.length > 0`;
+- **`agent.js` -- the scheduler and the publisher -- never reads the track
+  count at all**, so posting cannot depend on it by construction.
+
+So the app's loudest slot described a limitation that does not exist.
+
+### The masking was worse than the wording
+
+It sat INSIDE the `else if` chain, ABOVE the connection check:
+
+    moneyNotice -> tracks.length === 0 -> tracks.length < 2 -> connectedCount === 0
+
+An account with one nasheed and nothing connected therefore hit the third
+branch and was told to upload a second nasheed -- and **never shown "No
+publishing account connected"**, which is the true and actionable one. That is
+exactly the state Youssef spent days in while fighting TikTok. A false alarm
+that MASKS a real one is the expensive shape here, and the test pins that case
+hardest.
+
+### What it is now
+
+- **The blocker chain is money -> no nasheed -> no connection**, and the
+  one-nasheed case is computed AFTER it, so it can never mask anything again.
+- **It is a NOTE**: "Only one nasheed — every clip mixes in the same one. Add
+  another and they rotate." True, worth saying, and not a reason to stop.
+- **The same banner element carries both**, so this cost no design re-import:
+  `#dcBlocker` has an id, the host stamps `data-tone`, and CSS quiets the
+  ground, the ink and the primary button. Measured on the real markup with the
+  real stylesheet: gold wash + gold ink + gold button for a stop, transparent +
+  secondary ink + outline button for a note.
+- **`blockersOn` and `blockerShowing` are deliberately no longer one value.**
+  The banner renders from `bannerShowing` (a row is up, of either kind); the
+  onboarding strip's deferral reads `blockerShowing = bannerShowing &&
+  Boolean(blocker)` -- a real STOP. Deferring to a note would silently drop a
+  step's button for information nobody has to act on. The strip's flag is still
+  DERIVED from the banner's, so the two cannot disagree about a dismissal.
+- **The dismissal key had to move with it.** It is compared against
+  `bannerText` and was being WRITTEN as `blocker`, which is empty for a note --
+  so a dismissed note came straight back on the next paint. Found by reading
+  the two sides against each other, not by using it.
+- **`blockerIcon` is one source for the mark** (warning diamond vs
+  `ph-music-notes`, a glyph already rendering in the live app). The phone binds
+  it through `phb()`; the desktop's is a literal in the export, so the host
+  swaps only the GLYPH tokens and leaves the hashed sizing class alone --
+  replacing className drew the mark at the body's font size.
+
+### The token trap caught this change, and it was my own two lines
+
+The phone rules were written against `--dcm-ink-2` and `--dcm-ink-3`. The
+declared tokens are **`--dcm-ink2` / `--dcm-ink3`**, no hyphen before the
+digit; the hyphenated pair is declared nowhere in the repo. A `var()` naming a
+token that does not exist fails SILENTLY, and this one would only ever have
+been seen by an account holding exactly one nasheed. `test/nasheed-note.test.mjs`
+now walks every `var()` inside the new rules against the declarations in the
+same file, on both surfaces.
+
+### A source-string test failed against correct code, for the FIFTH time
+
+`onboarding.test.mjs` asserted the literal `blockersOn: blockerShowing` to mean
+"the banner and the strip read one answer". Those are deliberately no longer
+the same value, so it went red while proving nothing about behaviour. The
+property it was protecting -- defer to a stop, never to a note, and hand the
+button back on dismissal -- is DRIVEN now in `test/nasheed-note.test.mjs`
+against the real bindings; the older file keeps one narrow pin that the strip's
+flag is derived from the banner's rather than computed twice.
+
+**A trap inside that test, worth writing down:** the onboarding binding's
+`action` on the OUTPUT is the click HANDLER, not the step name. `actionLabel`
+is the string the deferral empties, and asserting `action` compared a function
+against `'nasheed'` in three tests at once.
 ### The config panel jumped to the bottom after every change (v3.118.1)
 
 Youssef: "when applying anything on template it all works perfectly it just
@@ -5084,7 +5166,337 @@ mean per-channel STYLE -- an Arabic channel wanting the Arabic template, a
 Shorts channel a different caption mode -- which is a real feature and a
 different piece of work. It is not built here and should be confirmed before it
 is.
+## Two kinds of title, and a star that costs nothing (v3.120.0, 4 Sept 2026)
 
+Youssef: "titling is good, I've realized it's better, it's just not perfectly
+the same. For Quran recitations ... maybe try have a search, see how on TikTok
+and YouTube they do Quran recitation titles, because titles for those are very
+different to just regular lectures. Two different types." And: "there should
+be, like, a star ... which will create a different title without rerendering
+the video ... no rerendering needs to be done with titlings, of course."
+
+### A lecture title is a promise; a recitation title is a REFERENCE
+
+Researched rather than guessed. Short-form recitation titles are built on the
+**surah name and the verse numbers**, because that is what somebody types into
+the search box -- "Surah Al-Mulk", "Surah Ar-Rahman", "Surah Yasin" -- where a
+lecture clip is found by the hook it promises. Reciter name and a quality word
+("heart-touching", "emotional") are the other two conventions in use.
+
+**The whole reason this could be built is that NOTHING IS GENERATED.** The
+matcher's own map is already on the candidate (`Candidate.ayat`) and on the
+stored clip (`clip.ayahs`), so the surah and the numbers are FACTS. Asking
+qwen3:1.7b for them would be asking a 1.7B model to remember scripture, which
+is the one thing this product must never do.
+
+    Surah Az-Zumar 71-73
+    Surah Al-Ikhlas 1 — Say He is Allah who is One
+    Surah An-Naba 31, 33 — Indeed for the righteous is attainment
+    Surah An-Naba 40 & Surah An-Naziat 1
+
+- **A GAP IS LISTED, NEVER SMOOTHED.** "31, 33" rather than "31-33": claiming a
+  range the clip does not recite is the same fault as inventing a speaker --
+  somebody arrives for 78:32 and it is not there.
+- **The clause is the verse's OWN translation**, capped so the reference always
+  survives. The only hook a recitation title may carry is scripture's own
+  meaning, never a model's impression of it.
+- **The signal is COVERAGE, not the template.** Scripture is captioned on every
+  template (invariant 7), so a khutbah quoting 2:286 in passing would otherwise
+  be retitled as a recitation of it. `RECITATION_COVERAGE` is 0.6; below it the
+  clip keeps its lecture hook.
+- **The reciter is deliberately NOT named**, though it is a real search term:
+  the only place it could come from is the lecture title, and putting a name on
+  scripture the lecture never claimed is what `strip_unbacked_attribution`
+  exists to prevent.
+- It wins over the model's line inside `ship_title` -- the one gate every title
+  passes -- because the model has neither the surah nor the numbers to work
+  from, so its line about a recitation is a guess at what the verses mean.
+
+### The star: a new title, and nothing re-renders
+
+It already cost nothing and this makes it reachable. The title is metadata on
+the clip and is never burned into the frame (the hook overlay is hard-disabled,
+invariant 9), and `agent.updateClip` writes title/description without touching
+`stylePending` -- the flag that marks a render out of date. **A single line
+moving that flag onto this path would silently start re-rendering every
+retitled clip**, so a test drives it rather than trusting the comment.
+
+- `POST /api/clips/:id/retitle` -> `worker /ai/title`, behind the same HMAC as
+  every other worker route, on the box's own Ollama -- the same privacy posture
+  the pipeline already makes.
+- **A recitation with no instruction never reaches the model.** The route sends
+  the clip's stored `ayahs`; the worker imports `clip_worker` and calls
+  `recitation_title_from_rows`, so the button and the render cannot disagree
+  about the convention. Instant, and it cannot hallucinate.
+- **The instruction is free text a customer typed**, so it travels fenced
+  between BEGIN/END UNTRUSTED with the defence stated first (invariant 2).
+- **`is_english_title` is deliberately NOT applied here.** That rule exists to
+  stop the model drifting into Arabic on its own; "make the title Arabic" typed
+  into the box is the customer choosing, which is a different thing. The
+  automatic titler is unchanged and still English-only.
+- Temperature 0.7 rather than the scorer's 0.1: this is writing, and pressing
+  the button twice should not return the same line.
+- A deployment with no worker refuses in a sentence rather than hanging -- the
+  DeenAI precedent.
+
+### The IDOR probe could not go red, first time
+
+`test/clip-retitle.test.mjs` sent NO cookie and asserted a refusal. It passed
+with `assertCanAccessClip` REMOVED, because the 401 came from the auth layer
+and the route was never reached. It signs up a SECOND account now and asserts
+404 -- someone else's clip does not exist to them -- and that probe goes red.
+
+**Two smaller traps:** there is no shared `body` in this router (each route
+does its own `await readBody(req)`), and the worker's base URL is
+`WORKER_BASE_URL`, not `WORKER_URL` -- the test refused with "this deployment
+does not have the clip AI configured" until that was right, which reads exactly
+like the guard working.
+
+## The clip preview grew a configuration column (v3.121.0, 4 Sept 2026)
+
+Youssef sent a screenshot of the bare modal -- a title, a 9:16 video and a
+scrub bar -- and said: "it should give you buttons on, let's say, on the right
+side ... a nice, like, floating new section that has configuration. So you can
+use the editor. You can click editor. You can use AI titles ... AI, the
+description ... And then it should give you a text box where you can tell the
+AI ... make the title Arabic, and it makes the title Arabic, or improve the
+title ... no rerendering needs to be done with titlings, of course."
+
+- **The card is never restructured.** Its generated children keep their place
+  and are given grid areas through `data-host-pp`, stamped every paint --
+  moving a generated node into a wrapper of mine is what would confuse the
+  patcher's pairing. `data-host-*` is the one attribute family the patcher
+  never strips, so this costs no design re-import and a re-import cannot
+  renumber it away. The mount is found by the export's own inline
+  `aspect-ratio: 9 / 16`, never by a hashed class.
+- **Everything the column writes is METADATA, so nothing re-renders.** Proven
+  by driving it rather than by reading: after a title save the server's clip
+  carries the new title with `stylePending` null and `renderVersion` unmoved.
+  That is Youssef's own condition, and the test asserts the save path is a
+  PATCH that mentions no render at all.
+- **A typed title saves on BLUR, never per keystroke** -- a PATCH per letter is
+  the "waited for the network to look pressed" fault from the other side. Keys
+  are stopped inside the panel so the review deck's one-key verbs (A approve,
+  X reject) cannot fire while somebody types a title.
+- **With no worker the AI refuses in 716ms with a sentence** and re-enables the
+  button, rather than hanging -- measured on this dev server, which has none.
+- **The AI star on the cards is a shortcut, not a second control.** Injected on
+  the article the design already tags with `data-clip` (added for the
+  waveform), on the queue, the library and a lecture's detail screen and
+  nowhere else. It is a `role="button"` span because a nested `<button>` is
+  invalid and swallows the card's own click, and it stops `pointerdown` as well
+  as `click` -- the card starts its gestures on pointerdown, so stopping click
+  alone still selects the clip underneath. Verified: pressing it does not open
+  the preview behind it.
+
+### The measurement was wrong for an hour, and the layout was right all along
+
+**`--window-size` is ignored by headless Chrome when the profile is reused.**
+The harness asked for 1440x950 and the page laid out at **innerWidth 780** --
+under the panel's own 900px seam AND under studio-responsive.css's 820px phone
+seam. So the diagnostic reported one column, `max-width: none` and a stacked
+panel, and every explanation for it was wrong: the CSS was correct, the
+viewport was not. `Emulation.setDeviceMetricsOverride` is the fix. Anything
+measured in an agent browser should print `innerWidth` beside the result.
+
+**The same reused profile kept the THEME**, so a run asking for dark got the
+light one: the harness only ever ADDED `dc-light` and never removed it. A
+capture that says "dark" in its filename is not evidence it was dark -- read
+the body class back.
+
+### Three composition faults, each found by looking rather than by reasoning
+
+1. **An `auto` grid track absorbs the card's free width.** The 360px frame sat
+   centred in a 484px column with 84px of dead space beside it. `minmax(0,
+   max-content)` plus `width: max-content` on the card hugs the picture: cols
+   `360px 320px`, gap exactly 22.
+2. **Anchoring the last row to the foot moved the void into the MIDDLE**, which
+   reads as something missing rather than as a column that ended. The room goes
+   to the field that can use it instead -- the description IS the posted
+   caption and runs to 2200 characters, so `flex: 1` on it is the feature, not
+   filler.
+3. **A card inside the card broke the one left edge.** The "Ask for a change"
+   box inset its own children by 13px; measured lefts 751 / 764 before, one
+   value after. It is a hairline now -- the Owner screen's own call.
+
+Measured at 1440x950 after: gap 22, the scrub bar exactly the video's width,
+both sparkles 0px off the centre of their label TEXT, the column bottom flush
+with the bar, one left edge, 0 elements overflowing and 0 page scroll -- at
+1280, 1100 and 940 too, stacked-and-scrolling at 860, 390 and 375.
+
+**`--dc-ink-faint` measured 2.92:1 on paper**, under AA, and it was carrying
+the sentence the whole panel rests on ("Changing them never re-renders the
+clip"). Dim reads 4.89 light / 5.62 dark. The gold-on-tint buttons sit at
+4.35-4.46 in daylight, which is exactly where the task ladder's gold already
+lives -- left alone rather than making this one panel differ.
+
+**Run `scripts/build-light-theme.mjs` after adding rules to a hand-written
+studio sheet.** It re-emits every rule that sets a colour under `body.dc-light`
+and it is NOT run by anything automatic. Doing so here also produced the
+daylight twin for two v3.119.0 rules that had shipped without one.
+
+### Two red probes came back GREEN, and both assertions read fine
+
+- The un-tokenised-colour probe passed because the filter excluded any hex
+  appearing as a `var()` fallback ANYWHERE in the block, so a bare `#E9E9ED`
+  was excused by an unrelated fallback three rules down. Strip each var()'s own
+  fallback instead.
+- The unmount probe passed because `clipToolsNode.remove()` also appears in the
+  RE-MOUNT path, and the slice meant to isolate the closed branch searched for
+  `return;` at a guessed indentation -- `indexOf` returned -1, `slice(at, -1)`
+  handed back the whole function. Brace-match the branch.
+
+Ten probes, all red now. **The CSP inline-script hash is computed at server
+start, so the preview server must be restarted after every index.html edit** --
+the app renders its shell and never boots otherwise, with no console error.
+Fourth time this file has recorded it.
+
+## DeenAI is one feature at one tier, and it writes your titles (v3.122.0, 4 Sept 2026)
+
+Youssef: "integrate DeenAI to everything. And DeenAI should be for pro users
+and up, not to studio ... do AI changes and etcetera, like with the titling
+and all that and the description as well."
+
+### The clip AI had NO gate at all
+
+`POST /api/clips/:id/retitle` shipped in v3.120.0 with no plan check on it, so
+every free account could spend the box's Ollama -- a paid feature given away,
+and an unmetered queue on a single-slot worker. It is `deenai.deenaiAccess`
+now, the same gate the insights use, and the star that calls it stands down
+for an account that may not press it (invariant 9: a control that always
+refuses is worse than no control).
+
+### One tier, so a button cannot sell the wrong plan again
+
+`deenaiAsk` moved from **studio to pro**. The two halves of DeenAI sitting at
+two tiers is exactly what let v3.72.10 ship a button telling a free account to
+buy Pro for the one half Pro did not include -- the worst copy fault this
+product can have.
+
+**The fix is not a corrected word, it is a derived one.** `aiGateCta` reads
+`current.locked[...].tierName`, which the server builds from the same FEATURES
+table the gates themselves read, so the button and the gate cannot disagree
+whatever the table says next. `test/studio-design.test.mjs` asserts the button
+against `billing.FEATURES` rather than against the string "Pro", so it stays
+true through the next tier change instead of failing and being edited to match
+-- which is what a test pinning a word does.
+
+`aiPlanName` is a binding, so the preview panel and the DeenAI screen read ONE
+name rather than two that can drift.
+
+### The shapes are the automatic titler's own
+
+Researched first, as asked. OpusClip regenerates a title "in various styles
+including interesting, catchy, serious, and question formats", and writes
+titles, descriptions and hashtags per platform. What was taken and what was
+not:
+
+- **Named shapes: taken**, but the four are `clip_worker`'s OWN ("Four shapes
+  that work" in its prompt), so a chip in the studio and a title written during
+  a render mean the same thing rather than two vocabularies drifting apart.
+  Title: Promise / Question / Subject: payoff / Shorter. Description: Shorter /
+  Warmer / + Hashtags.
+- **The counted list is deliberately NOT offered.** It is only right when the
+  clip genuinely enumerates, and a chip that quietly does something else on
+  most clips is worse than no chip. A test pins its absence.
+- **Hashtags: taken, as part of the description** rather than a field of their
+  own -- they belong in the caption on every platform this app posts to, and a
+  new field would mean a data-model change for nothing. The rule carries the
+  same register ban the titler has: nothing about scrolling, going viral or
+  the algorithm.
+- **Per-platform titles: NOT taken.** A clip has one title and one description
+  that go to every destination; making them per-platform is a real data-model
+  change, and the value is available without it by asking in the free-text box.
+  B-roll, stock footage and a virality score were also declined -- this product
+  already scores clips and explains itself, which is better than a number.
+
+### `style` and `instruction` are separate, and that is load-bearing
+
+A shape travels as `style`; only text a customer TYPED travels as
+`instruction`. The recitation override is `if kind == "title" and rows and not
+instruction` -- deliberately not `and not style` -- so **a shape chip on a
+recitation still returns the verse reference.** A verse reference is the right
+title for a recitation whatever shape is asked for, and pushing scripture
+through a 1.7B model to make it punchy is the one thing this product must
+never do. "Make the title Arabic" typed by hand is the customer choosing, and
+still overrides. Both halves have a test, and the probe that adds `and not
+style` goes red.
+
+### Verified
+
+Driven in a browser at 1440x950 in both themes: the chips render and press,
+the request goes out as `{kind:'title', instruction:'', style:'question'}`, the
+description target swaps to its own three, the star returns for Pro and is
+absent for Basic, the lock reads "It is on Pro" with an Unlock button that
+lands on Tokens, and the title and description stay hand-editable for a free
+account -- the gate is on ASKING DeenAI, not on naming your own clip. 0
+overflowing, 0 page scroll.
+
+**All nine probes proven red**, including the two that matter most: the gate
+removed from the route, and a shape overriding the recitation reference.
+
+**Worker change, so `deploy-worker.yml` deploys it on push.** The shapes reach
+the model only from the box; nothing here has been seen against the real
+Ollama yet.
+
+## The box can be ASKED what the model writes (4 Sept 2026)
+
+*No version: this is a workflow, a script and five tests, and nothing in
+`src/` or `worker/` changed. Bumping would move the number the worker deploy
+compares against the running container for a release that ships no code.*
+
+v3.122.0 shipped five named title shapes proven by unit test, and closed with
+a "Needs fixing" line putting the last mile on Youssef: *"The shapes have not
+been through the real Ollama -- this dev box has no worker. Press a chip on a
+live clip and tell me what it writes."* He pasted that line back, verbatim and
+with nothing else, which is the same move as the nasheed-banner exchange -- and
+he was right again. **The ask was premature, and checking took two commands.**
+
+- **The code WAS on the box the whole time.** `deploy-worker.yml` run 46 fired
+  on the v3.122.0 push (`worker/service.py` changed) and its step 6 read the
+  version out of the RUNNING container: *"Deployed and verified: the running
+  worker is v3.122.0."* So "this has not reached production" was never true;
+  only "nobody has read what it writes" was.
+- **And that half was answerable too.** The worker's HTTP port is not routable
+  from an agent container (`curl :8080` -> no route) and `WORKER_SHARED_SECRET`
+  lives only on the box and on Render -- but the deploy workflow already RUNS
+  COMMANDS ON THE BOX over SSH. Anything that can be asked from a shell there
+  can be asked from a dispatch. That is the general lesson: **before putting a
+  verification on somebody, check whether the route you already built for
+  deploying reaches it.**
+
+`.github/scripts/clip-ai-probe.py`, run by `deploy-worker.yml` when dispatched
+with `probe: true`. It asks the running worker for a title once per shape --
+plus the unshaped baseline, without which a shape that changes nothing looks
+like a shape that works -- and prints what qwen3:1.7b writes.
+
+- **It runs INSIDE the container**, where `WORKER_SHARED_SECRET` already is and
+  the worker answers on 127.0.0.1. The secret is never written to disk, never
+  put on a command line and never crosses the wire; only the model's answer
+  comes back into a public run log. A test strips string literals before
+  looking for `SECRET` in a print, because NAMING the variable in an error is
+  what a good error does and matching the raw line failed on the honest one.
+- **No dispatch input is ever interpolated into a shell command.** They are
+  read from the environment by node, written into the probe as a JSON literal,
+  and carried over as ONE base64 blob -- base64 has no shell metacharacter, so
+  an input cannot become a command on the box.
+- **It lives in the deploy workflow rather than beside it.** The connection to
+  the box is one thing, and a second copy is a second thing to keep in step
+  with a credential format that has already been mis-pasted twice. It also
+  runs immediately after the version proof, so an answer is one you know the
+  version of -- which is the entire point of asking.
+- **Dispatch-only and off by default.** It spends the box's single-slot Ollama.
+  On a push the `inputs` context is empty, so the deploy path is exactly what
+  it was.
+- **A DULL TITLE IS NOT A FAILED RUN.** Taste is the finding; the run stays
+  green and prints it. Two things DO fail it: the box refusing every call, and
+  a shape overriding the recitation reference -- that one is a rule, and this
+  is where it is checked against the real service rather than a fixture.
+- The five tests pin the drift CI can see: the probe parses, it keeps the
+  `PARAMS = {}` seam the workflow substitutes, and its shape lists are exactly
+  `CLIP_STYLES` -- a chip added or a style renamed with the probe left asking
+  about the old set would report confidently on shapes nobody can send. All
+  five proven red.
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

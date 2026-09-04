@@ -78,8 +78,8 @@ test('the feature table is exactly what each tier is sold on', () => {
   // fails on this line.
   assert.deepEqual(Object.keys(billing.FEATURES).sort(),
     ['deenai', 'deenaiAsk', 'extraSlots', 'multiChannel', 'priorityRender', 'templates', 'watermark']);
-  assert.deepEqual(Object.keys(billing.PRO_FEATURES).sort(), ['deenai', 'templates', 'watermark']);
-  assert.deepEqual(Object.keys(billing.STUDIO_FEATURES).sort(), ['deenaiAsk', 'extraSlots', 'multiChannel', 'priorityRender']);
+  assert.deepEqual(Object.keys(billing.PRO_FEATURES).sort(), ['deenai', 'deenaiAsk', 'templates', 'watermark']);
+  assert.deepEqual(Object.keys(billing.STUDIO_FEATURES).sort(), ['extraSlots', 'multiChannel', 'priorityRender']);
 });
 
 test('the tiers are cumulative, and Basic is sold nothing', () => {
@@ -91,8 +91,12 @@ test('the tiers are cumulative, and Basic is sold nothing', () => {
     assert.ok(!pro[key] || studio[key], `Studio must include everything Pro has (${key})`);
   }
   assert.equal(pro.deenai, true, 'Pro keeps the insights it shipped with');
-  assert.equal(pro.deenaiAsk, false, 'asking is what Studio adds');
+  // DeenAI is ONE feature at ONE tier since 4 Sept 2026 (Youssef: "DeenAI
+  // should be for pro users and up, not to studio"). Both halves answer the
+  // same tier, which is what stops a button selling the wrong plan.
+  assert.equal(pro.deenaiAsk, true, 'Pro asks DeenAI too');
   assert.equal(studio.deenaiAsk, true);
+  assert.equal(pro.deenai, pro.deenaiAsk, 'the two halves of DeenAI must sit at one tier');
 });
 
 test('the three original plan ids still mean Pro at that period', () => {

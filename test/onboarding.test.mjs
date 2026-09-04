@@ -360,9 +360,23 @@ test('the strip never repeats a line the blocker banner is already showing', () 
   assert.match(block, /blockerShowing/, 'and read the SAME flag the banner renders from, not a second one');
   assert.match(block, /action: '', actionLabel: ''/, 'dropping its button rather than offering a second one');
 
-  // One source for "is the banner up", or the two can disagree about it.
-  assert.match(adapter, /blockersOn: blockerShowing/,
-    'the banner and the strip must read one answer');
+  /*
+   * One source for "is the banner up", or the two can disagree about it.
+   *
+   * This used to assert the literal `blockersOn: blockerShowing`. The banner
+   * carries NOTES as well as blockers now (v3.119.0), so those are
+   * deliberately no longer the same value -- and the string assertion failed
+   * against correct code while proving nothing about behaviour, which is the
+   * fifth time this repo has been caught by a source-string test. What
+   * matters is that the strip's flag is DERIVED from the banner's own
+   * visibility, so the two cannot disagree about a dismissal; the behaviour
+   * itself (defer to a stop, never to a note, and hand the button back on
+   * dismissal) is DRIVEN in test/nasheed-note.test.mjs.
+   */
+  assert.match(adapter, /var blockerShowing = bannerShowing && Boolean\(blocker\)/,
+    'the strip narrows the banner\'s own visibility rather than computing a second one');
+  assert.match(adapter, /blockersOn: bannerShowing/,
+    'and the banner renders from that same visibility');
   assert.equal((adapter.match(/deenBlockerDismissed/g) || []).length, 2,
     'the dismissal is read in one place and written in one place');
 });

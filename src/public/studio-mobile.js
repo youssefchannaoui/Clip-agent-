@@ -207,8 +207,10 @@
 
   // ── the blocker, compact ─────────────────────────────────────────────────
   function blocker() {
-    return iff('blockersOn', [h('div', { class: 'dcm-blocker', role: 'status' }, [
-      h('div', { class: 'dcm-blocker-t' }, [ph('ph-fill ph-warning-diamond'), h('span', {}, [tx('blockerText')])]),
+    // data-tone, not a second class list: the banner carries notes as well as
+    // blockers (v3.119.0) and only its colour and mark change between them.
+    return iff('blockersOn', [h('div', { class: 'dcm-blocker', role: 'status', 'data-tone': b('blockerTone') }, [
+      h('div', { class: 'dcm-blocker-t' }, [phb('blockerIcon'), h('span', {}, [tx('blockerText')])]),
       h('div', { class: 'dcm-blocker-a' }, [
         h('button', { type: 'button', class: 'dcm-btn dcm-btn-p', on: { click: 'resolveBlocker' } }, [tx('blockerCta')]),
         h('button', { type: 'button', class: 'dcm-btn dcm-btn-ghost', on: { click: 'dismissBlocker' } }, 'Dismiss'),
