@@ -197,3 +197,39 @@ test('the phone gets the new rows without a second implementation', () => {
   assert.ok(!/overlayEffect|filterPreset/.test(mobile),
     'and does not name the fields itself');
 });
+
+test('applying a template change does not throw the panel to the bottom', () => {
+  // Youssef, 4 Sept 2026: "when applying anything on template it all works
+  // perfectly it just then once applyed you get scrolled all the way down? on
+  // the side config then you have to go back up."
+  //
+  // NOTHING IN THIS APP WAS MOVING IT. focus() and scrollIntoView() were both
+  // instrumented on the live page and neither was called. It is Chrome's
+  // SCROLL ANCHORING: when content above the visible area changes, the browser
+  // shifts scrollTop to keep what you are looking at still -- right for a page
+  // where an image loads in above you, wrong for a studio that repaints its
+  // panels through innerHTML, because the anchor it chose is gone by the time
+  // it compensates.
+  //
+  // Measured from a column scrolled to 420 of 1129: opening the option sheet
+  // took it to 718 and choosing a value took it to 1129, the very bottom. With
+  // anchoring off it stays at 420 through both, for every kind of control on
+  // the screen -- picker rows, font chips, sliders, toggles and the
+  // host-rendered watermark switch.
+  //
+  // A source test, deliberately: CI has no browser, and this rule is INVISIBLE
+  // when it is missing -- the app renders, the suite stays green, and the
+  // column just jumps again. Same reason `dc-nav-tail` is pinned this way.
+  const css = fs.readFileSync(path.join(ROOT, 'src/public/studio-tokens.css'), 'utf8');
+  const rule = /#studio main > \*,\s*\n#studio main section \{ overflow-anchor: none; \}/;
+  assert.match(css, rule, 'the studio\'s scrollers opt out of scroll anchoring');
+  // Both halves matter and each is silent without the other: the screen
+  // wrapper scrolls on some screens and the panel inside it on others.
+  const block = rule.exec(css)[0];
+  assert.ok(block.includes('#studio main > *'), 'the screen wrapper');
+  assert.ok(block.includes('#studio main section'), 'and the panel inside it');
+  // Selected by TAG, never by a class: every class in the studio's markup is a
+  // hashed name that `npm run design:import` regenerates.
+  assert.ok(!/\.s\d/.test(block), 'no generated class name in the selector');
+});
+
