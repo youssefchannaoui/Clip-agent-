@@ -150,8 +150,11 @@ function seedClip(owner, over = {}) {
 }
 
 test('one clip fans out to every chosen account, each with its own identity', () => {
+  // `spread: 'all'` is stated because it is the mode being tested. It stopped
+  // being the DEFAULT in v3.119.0 -- three channels now means three schedules
+  // rather than the same clip three times -- and mirroring is what fans out.
   store.setPublishingSettings(studio, {
-    enabled: true,
+    enabled: true, spread: 'all',
     facebook: { enabled: true, accountIds: ['page-1', 'page-2', 'page-3'] },
   });
   const clip = seedClip(studio);
@@ -330,3 +333,38 @@ test('what a plan does NOT include is named, with the tier that would', () => {
   const basic = billing.publicBilling({ id: 'b', billing: { plan: 'free', status: 'free' } }).current;
   assert.equal(Object.keys(basic.locked).length, Object.keys(billing.FEATURES).length, 'Basic is sold nothing');
 });
+
+test('but sharing out is the default, and it is one channel per clip', () => {
+  // THE CHANGE ITSELF. Youssef asked for "three different schedules" when
+  // multi-channel shipped and then twice called the result confusing; the
+  // reason was that the default did the opposite of what connecting three
+  // channels is for -- the same video on all three at the same minute, your
+  // own channels competing with each other.
+  const fresh = { id: 'studio_default', email: 'sd@example.com', role: 'owner' };
+  state.authUsers.push(fresh);
+  state.socialConnections[fresh.id] = {
+    meta: { provider: 'meta', accounts: [
+      { pageId: 'page-1', pageName: 'Page 1', pageToken: 'x' },
+      { pageId: 'page-2', pageName: 'Page 2', pageToken: 'x' },
+      { pageId: 'page-3', pageName: 'Page 3', pageToken: 'x' },
+    ] },
+  };
+  // Never expressing a preference is what a real account does, so that is what
+  // is tested -- not a record that stored 'rotate'.
+  store.setPublishingSettings(fresh, {
+    enabled: true, facebook: { enabled: true, accountIds: ['page-1', 'page-2', 'page-3'] },
+  });
+  assert.equal(store.publishingSettings(fresh).spread, 'rotate', 'share out, out of the box');
+
+  // Explicit, increasing addedAt: the rotation is ordered by the clip's own
+  // position in its lecture, and three clips sharing one timestamp fall back to
+  // a random id -- which would make this test flap rather than fail.
+  const first = seedClip(fresh, { id: 'r-1', addedAt: 1 });
+  const second = seedClip(fresh, { id: 'r-2', addedAt: 2 });
+  const third = seedClip(fresh, { id: 'r-3', addedAt: 3 });
+  const at = clip => social.enabledTargetsForClip(clip).filter(t => t.provider === 'facebook').map(t => t.accountId);
+  assert.deepEqual(at(first), ['page-1'], 'one clip, one channel');
+  assert.deepEqual(at(second), ['page-2']);
+  assert.deepEqual(at(third), ['page-3'], 'three clips, three channels');
+});
+

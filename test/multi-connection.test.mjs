@@ -112,7 +112,7 @@ test('one clip fans out to three real channels, each named correctly', () => {
     tenancy.addConnection(state.socialConnections, studio.id, 'youtube', channel(n), { max: 3 });
   }
   store.setPublishingSettings(studio, {
-    enabled: true,
+    enabled: true, spread: 'all',
     youtube: { enabled: true, accountIds: ['chan-1', 'chan-2', 'chan-3'] },
   });
   const clip = {

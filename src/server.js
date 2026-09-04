@@ -757,6 +757,16 @@ function publicClip(clip, { detail = false } = {}) {
     waveform: Array.isArray(clip.waveform) && clip.waveform.length ? clip.waveform : null,
     variantOf: clip.variantOf || null, addedAt: clip.addedAt,
     targets: (clip.targets || []).map(social.targetPublic),
+    // WHERE THIS CLIP IS GOING, answered before the decision instead of after
+    // it. `targets` only exist once a clip has been scheduled, so the review
+    // queue -- the one screen where somebody is deciding whether to publish --
+    // could say nothing at all about the destination. Committed targets win
+    // where they exist; otherwise this is the plan.
+    willPostTo: (clip.targets || []).length
+      ? (clip.targets || []).map(social.targetPublic).map(t => ({
+        id: t.id, provider: t.provider, accountId: t.accountId || '', accountName: t.accountName || '',
+      }))
+      : social.plannedChannelsFor(clip),
     rerender: rerender ? { id: rerender.id, status: rerender.status, stage: rerender.stage, progress: rerender.progress, error: rerender.error || null, asVariant: rerender.asVariant, preview: Boolean(rerender.preview) } : null,
     stylePreview: clip.stylePreview ? { ...clip.stylePreview, url: mediaUrl(clip.stylePreview.url) } : null,
     videoUrl: mediaUrl(clip.clipUrl) || `/api/clips/${encodeURIComponent(clip.id)}/video`, thumbUrl: mediaUrl(clip.thumbUrl) || `/api/clips/${encodeURIComponent(clip.id)}/thumb`,

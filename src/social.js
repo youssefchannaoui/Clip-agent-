@@ -895,12 +895,41 @@ function rotationIndex(clip) {
  * and building the targets to find out would log every "no account selected"
  * warning twice per clip. Same rules, same order, ids only.
  */
+/**
+ * Where this clip WILL go once it is approved -- the answer to "how do I know
+ * where I'm posting my video?" before the decision rather than after it.
+ *
+ * Youssef, 4 Sept 2026: "it's not just scheduling ... how do I know where I'm
+ * posting my video?" The review queue asked people to approve a clip without
+ * ever saying where it would be published; the destinations only appeared on
+ * the Schedule, after the choice had been made.
+ *
+ * Computed HERE and sent down, never re-derived in the browser: where a clip
+ * posts is the product of the account's channels, its share-out mode, the
+ * lecture's own narrowing and the plan's cap, and a second implementation of
+ * those rules would drift from this one. The dashboard renders what this says.
+ *
+ * Consent is assumed because approving is what grants it -- see the note in
+ * enabledTargetsForClip. Never used to publish: this only ever describes.
+ */
+export function plannedChannelsFor(clip) {
+  let targets = [];
+  try { targets = enabledTargetsForClip(clip, { quiet: true, assumeConsent: true }); }
+  catch { return []; }
+  return targets.map(target => ({
+    id: target.id,
+    provider: target.provider,
+    accountId: target.accountId || '',
+    accountName: target.accountName || '',
+  }));
+}
+
 export function laneKeysForClip(clip) {
   try { return enabledTargetsForClip(clip, { quiet: true }).map(target => target.id); }
   catch { return []; }
 }
 
-export function enabledTargetsForClip(clip, { quiet = false } = {}) {
+export function enabledTargetsForClip(clip, { quiet = false, assumeConsent = false } = {}) {
   // `quiet` is for callers that only want to know WHERE this clip would go
   // (the scheduler, deciding which lane's slots to avoid). Without it every
   // "no account selected" warning is written twice for every clip.
@@ -951,10 +980,15 @@ export function enabledTargetsForClip(clip, { quiet = false } = {}) {
     // three posts. A clip approved before per-account consent existed carries
     // only the clip-level stamp, which still counts -- refusing those would
     // strand every clip already approved and waiting in the schedule.
-    const consented = accountId => clip.tiktokConsent
+    // `assumeConsent` is for the PREVIEW: "where will this clip go once I
+    // approve it". Approving is what stamps TikTok consent, so a waiting clip
+    // has none -- and answering the preview honestly with the stored value
+    // would tell every reviewer their clip is not going to TikTok, right up
+    // until the moment they approve it and it does.
+    const consented = accountId => assumeConsent || (clip.tiktokConsent
       ? Boolean(clip.tiktokConsent[String(accountId || 'default')] || clip.tiktokConsent.default)
-      : Boolean(clip.tiktokConsentAt);
-    if (provider === 'tiktok' && clip.approvedBy !== 'manual') continue;
+      : Boolean(clip.tiktokConsentAt));
+    if (provider === 'tiktok' && !assumeConsent && clip.approvedBy !== 'manual') continue;
     // The cap is applied HERE as well as at the route, deliberately. A settings
     // record can outlive the plan that was allowed to write it -- a Studio
     // account that lapses to Pro still has three ids on disk -- and the render

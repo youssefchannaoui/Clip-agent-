@@ -199,8 +199,9 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1384 JS + 653 Python**
-  (8 Python skipped where ffmpeg is absent, which is CI). These numbers were once wrong by more than a factor of
+- `npm test` and `npm run check` must pass. Currently **1394 JS + 653 Python**
+  (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
+  These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
   output), so this line cannot quietly drift again; a shrinking count is
@@ -5076,6 +5077,96 @@ it runs the column to the end of its range.
   invisible when it is missing: the app renders, the suite stays green, and the
   column just jumps again. The same reason `dc-nav-tail` is pinned that way.
 
+## "How do I know where I'm posting my video?" (v3.119.0, 4 Sept 2026)
+
+Youssef, after multi-channel had been called confusing twice already: "Fix the
+studio subscription and how the whole posting to multiple channels cause it's
+very confusing it needs a massive rethink." Asked which model he wanted, he
+answered the question underneath it: "it's not just scheduling. It's more than
+just scheduling ... **how do I know where I'm posting my video?**"
+
+**He could not, and that is the whole finding.** `targets` are only written
+when a clip is SCHEDULED, so the review queue -- the one screen where a person
+decides whether to publish something -- had nothing to say about the
+destination. You approved blind and found out afterwards, on the Schedule.
+Three releases of patching the Schedule could never fix that, because the
+Schedule is downstream of the decision.
+
+### The answer is computed on the server and rendered, never re-derived
+
+`social.plannedChannelsFor(clip)` says where a clip WILL go once approved, and
+every clip carries it as `willPostTo`. Where a clip posts is the product of the
+account's channels, its share-out mode, the lecture's own narrowing and the
+plan's cap -- four rules deep -- and a second implementation of those in the
+browser would drift from the one that actually publishes. The card paints what
+it is told, and a test forbids it from mentioning `spread`, `rotate`,
+`accountsPerPlatform` or `tiktokConsent`.
+
+- **Consent is ASSUMED in the preview and never in the publish path.**
+  Approving is what stamps TikTok consent, so a waiting clip has none --
+  answering honestly from the stored value would tell every reviewer their clip
+  is not going to TikTok, right up until they approve it and it does.
+  `assumeConsent` is preview-only; `enabledTargetsForClip` still refuses
+  without real consent, which keeps TikTok's per-post rule intact.
+- Host-rendered against `[data-clip]`, which the export already carries for the
+  waveform strip -- no re-import, and a re-import cannot renumber it away.
+
+### Sharing out is the DEFAULT now
+
+`spread` defaulted to `'all'`: the same clip on all three channels at the same
+minute, your own channels competing with each other. That is the opposite of
+what connecting three channels is for, and it is why "three different
+schedules" kept not appearing. `'rotate'` is the default (`'all'` stays for
+accounts that genuinely want mirroring), and it changes nothing for anyone with
+one channel per platform -- the rotation only engages where there is more than
+one to rotate between.
+
+Measured on a real Studio account with three YouTube channels and a TikTok:
+four waiting clips reading Main / Shorts / Arabic / Main, each plus TikTok.
+Rotation is WITHIN a platform, so a clip still reaches every network.
+
+### Studio was being sold as something it does not do
+
+Both labels described the old behaviour. `extraSlots` read as ONE shared
+allowance when the windows are per CHANNEL (Youssef's call, 4 Sept: 8 on each),
+and `multiChannel` described mirroring -- "send one clip to up to 3 accounts"
+-- the mode that is no longer the default. They now read "Post up to 8 times a
+day on every channel" and "Run up to 3 channels on each platform, each with its
+own schedule."
+
+### The channel chips were counting nothing
+
+`targets` only exist once a clip is placed, so a scheduled-but-unplaced clip
+matched no lane: four chips all reading **0** beside "8 posts this day", and
+picking any channel showed an empty schedule while the clips were plainly on
+screen. `clipLanes()` falls back to `willPostTo`, so committed targets still
+win and everything else is counted where it is actually going.
+
+### Traps paid for again
+
+- **`window.DATA` is a DIFFERENT object from the studio's `DATA`.** Measured:
+  `window.DATA.clips` empty while the scoped `DATA` held four clips, so every
+  card read "Nowhere to post". The painter takes DATA as a parameter. Fifth
+  time this file has recorded that scope trap.
+- **The painter must cover `#dcMobile` as well as `#studio`.** Scoped to the
+  latter it painted only the desktop copy, which `body.dcm-own` hides -- the
+  rows measured 0px wide and the phone showed nothing.
+- **The CSP inline-script hash is computed at server start**, so editing
+  index.html mid-session blocks the whole script and the app renders its shell
+  and never boots. Restart the preview server.
+- **Three fan-out tests failed on the default change and were CORRECTED, not
+  weakened**: they test mirroring, so they now name `spread: 'all'`, and a new
+  test pins the new default against a record that never expressed a preference.
+- A rotation test flapped because three clips shared one `addedAt` and the
+  tie-break is a random id. Order them explicitly.
+
+### Still open, and named rather than assumed
+
+He also said "everything literally has to be three different types". That may
+mean per-channel STYLE -- an Arabic channel wanting the Arabic template, a
+Shorts channel a different caption mode -- which is a real feature and a
+different piece of work. It is not built here and should be confirmed before it
+is.
 ## Two kinds of title, and a star that costs nothing (v3.120.0, 4 Sept 2026)
 
 Youssef: "titling is good, I've realized it's better, it's just not perfectly
@@ -5460,7 +5551,6 @@ like a shape that works -- and prints what qwen3:1.7b writes.
   `CLIP_STYLES` -- a chip added or a style renamed with the probe left asking
   about the old set would report confidently on shapes nobody can send. All
   five proven red.
-
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

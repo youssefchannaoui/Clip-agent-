@@ -576,8 +576,18 @@ export const FEATURES = Object.freeze({
   // a fence around a feature people already have takes something away rather
   // than selling something new.
   priorityRender: Object.freeze({ tier: 'studio', label: 'Your lectures jump the render queue' }),
-  extraSlots: Object.freeze({ tier: 'studio', label: `Post up to ${config.postSlotsStudio} times a day, not four` }),
-  multiChannel: Object.freeze({ tier: 'studio', label: `Send one clip to up to ${config.accountsPerPlatformStudio} accounts on a platform` }),
+  // BOTH of these said something the product does not do, and the gap is what
+  // made multi-channel confusing rather than valuable (Youssef, 4 Sept 2026:
+  // "how do I know where I'm posting my video?").
+  //
+  // The windows are per CHANNEL, not per account -- three channels is three
+  // separate audiences and each gets its own day. The old wording read as one
+  // shared allowance, so nobody could tell what a second channel bought them.
+  extraSlots: Object.freeze({ tier: 'studio', label: `Post up to ${config.postSlotsStudio} times a day on every channel, not four` }),
+  // And a channel is a SCHEDULE, not a copy. The old label described mirroring
+  // -- the same clip on all three at once -- which is the mode almost nobody
+  // wants and is no longer the default.
+  multiChannel: Object.freeze({ tier: 'studio', label: `Run up to ${config.accountsPerPlatformStudio} channels on each platform, each with its own schedule` }),
 });
 
 /** Kept as a name because the marketing pages and tests speak in these terms. */
