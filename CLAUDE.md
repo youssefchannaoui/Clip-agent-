@@ -261,9 +261,22 @@ These were each a real bug and each has a test named after it.
   frame comes out empty), then measure the ink by decoding the PNG to gray8
   and scanning rows for the leftmost and rightmost lit pixel. That is how the
   overflow fix was proven: unfixed, ink spanned x 0..1079 with 114 rows
-  touching an edge; fixed, x 185..915 and zero. Amiri and Outfit are not in a
-  fresh container, so the substituted face is WIDER -- which makes a passing
-  wrap test conservative rather than optimistic. Say which face rendered.
+  touching an edge; fixed, x 185..915 and zero.
+  **CHECK `fc-list` RATHER THAN ASSUMING THE FACE.** This line used to state
+  flatly that Amiri and Outfit are not in a fresh container and the substituted
+  face is WIDER -- which makes a passing wrap test conservative rather than
+  optimistic, and is still true where they are absent. But on 3 Sept 2026 the
+  agent container had **Amiri, Amiri Quran and KFGQPC HAFS Uthmanic Script all
+  installed**, and the ayah-racing fix below was proven on frames that rendered
+  in real Amiri, medallion and tashkeel and all. Run
+  `fc-list : family | tr ',' '\n' | sort -u` first, and say which face
+  rendered -- an assumed substitution is as misleading as an assumed match.
+  **A COMPARISON NEEDS THE OLD CODE, NOT THE OLD ARGUMENTS.**
+  `git show <sha>:worker/clip_worker.py > old_worker.py` and load it beside the
+  current one under a different module name; then the "before" frames are the
+  code that actually shipped. The first attempt here built its "before" by
+  withholding the new arguments, and the new code simply defaulted them and
+  produced the FIXED output -- a before/after where both halves were after.
 - **`node --test` starts the tests it already has at the module's FIRST
   `await`.** So in a test file with top-level await, a server imported BELOW
   the `test()` declarations comes up, the earlier tests run, the file's
@@ -4782,7 +4795,32 @@ likewise applies to lectures clipped from now on. Neither has been seen on a
 real frame yet; the proof here is the ASS event times and the candidate the
 render is handed.
 
+### It was proven on FRAMES, not only on event times
+
+libass and Amiri were both on the agent container, so the argument did not have
+to stop at the ASS file. The code that SHIPPED and the code in this release
+were loaded side by side (`git show <sha>:worker/clip_worker.py` into a second
+module -- the Verification standard records the trap that makes that necessary)
+and each asked for the same clip; five frames were then rendered across the
+same one second at 1080x1920 over the studio's own ground.
+
+    before   three different pages of the ayah, two of them mid-fade
+    after    ONE page -- the words actually being recited -- held for the
+             whole second, carrying the verse mark
+
+Rendered in real **Amiri**, medallion and tashkeel and all; no substitution.
+The events behind those frames:
+
+    before   0.00-0.33  وسيق الذين كفروا إلى
+             0.33-0.67  جهنم زمرا حتى إذا
+             0.67-1.00  جاءوها فتحت أبوابها وقال ۝٧١
+    after    0.00-1.00  جاءوها فتحت أبوابها وقال ۝٧١
+
+That is still not a frame from the BOX, and the honest limit stated above
+stands: one Quran import settles it there.
+
 **Worker change, so `deploy-worker.yml` deploys it on push.**
+
 ## Twelve looks and weather over the picture (v3.118.0, 4 Sept 2026)
 
 Youssef: "add more configuration make it match and looks super clean things
