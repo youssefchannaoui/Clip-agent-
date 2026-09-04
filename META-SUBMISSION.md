@@ -349,6 +349,47 @@ which is the evidence App Review wants that the integration actually runs:
 app and nobody else. Serving customers needs **Advanced Access**, which is what
 App Review grants.
 
+## Tech Provider, read from the dialog itself (4 Sept 2026)
+
+Reached by Permissions -> Actions -> **Add to App Review** on any permission.
+You cannot add a single permission to App Review without it; the dialog
+replaces the form:
+
+> **To add a permission or feature to App Review, become a Tech Provider**
+>
+> Tech Providers have the ability to request higher access levels to all
+> available permissions and features through App Review.
+>
+> To qualify as a Tech Provider, you must complete access verification. Be
+> aware that this status also involves **additional reviews and stricter data
+> access requirements** to ensure data security.
+>
+> **This decision cannot be reversed after you have been identified as a Tech
+> Provider.**
+
+Its three steps, in order:
+
+1. **Business verification** — verify the business as a legal entity in order
+   to access user data through Meta's APIs.
+2. **Access verification** — verify the business is allowed to access another
+   business portfolio's data.
+3. **App Review** — complete the data usage, data handling and data protection
+   questions, then submit.
+
+### What this means for the demo video
+
+**Do not record a Meta demo video yet.** There is nowhere to submit it: the
+App Review form does not exist for this app until steps 1 and 2 are done, and
+step 3 begins with a questionnaire that may well change what the video has to
+show. Recording first is the mistake the TikTok submission already paid for in
+a different form — a video made before the requirements were read.
+
+**And the irreversibility is worth a pause.** Tech Provider cannot be undone
+and brings stricter ongoing data-access obligations. It is the right call for
+a product that publishes on customers' behalf -- there is no other route to
+public Facebook and Instagram -- but it is a decision the account owner should
+make deliberately rather than by clicking Continue.
+
 ## THE NEW GATE: Tech Provider (not in this file before 4 Sept 2026)
 
 The dashboard now carries:
