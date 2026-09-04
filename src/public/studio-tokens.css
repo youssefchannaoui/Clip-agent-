@@ -1146,3 +1146,54 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
 @media (prefers-reduced-motion: reduce) {
   #studio article[data-clip] > [data-dc-star] { transition: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   A CLIP CARD'S TITLE RESERVES THE TWO LINES IT IS CLAMPED TO.
+
+   The cards sit in a grid, so every card in a visual row is stretched to the
+   same height -- but nothing inside was anchored, and the title had no
+   reserved box. So the moment ONE title in a row wrapped to two lines, that
+   card's Approve / Reject / Edit row and its whole POSTS TO block dropped by
+   exactly one line while its neighbours left the same line as dead space at
+   the bottom. Measured 4 Sept 2026 at 1440x950: action row tops
+   [474.83, 456.70, 456.70, 456.70] -- 18.13px of spread on the primary
+   decision control of the most-used screen in the app. The lecture detail
+   screen renders the same card and had it too.
+
+   Fixed by GEOMETRY, not by a nudge: the title is already
+   `-webkit-line-clamp: 2`, so two lines is its maximum. Making two lines its
+   minimum as well gives it a fixed box, and everything below it then lands at
+   the same y in every card by construction. Measured after: spread 0.00 on
+   both screens, and no card grew -- the dead space simply moved from below the
+   content to inside the title's own box, where it is invisible.
+
+   `2lh` is the honest expression (two of the title's OWN leading, so a font
+   change carries it); the px value above it is the same number for a browser
+   too old for the unit, and was measured at 36.25px = 2 x 18.125px.
+
+   Only re-import-stable hooks: `[data-clip]` is on the card in the design
+   export (added for the waveform strip, v3.78.1), and `p` is a tag. Each card
+   holds exactly one <p>, checked on the rendered markup.
+   ───────────────────────────────────────────────────────────────────────── */
+#studio article[data-clip] p {
+  min-height: 36.25px;
+  min-height: 2lh;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   ROOM FOR THE LIVE BAR.
+
+   `#studioLiveBar` is `position: fixed; bottom: 18px; z-index: 150` and
+   nothing reserved space for it, so while a job runs it is drawn on top of
+   whatever the screen has in that band -- and a control whose centre falls
+   inside its rectangle gets no clicks at all, because the click is dispatched
+   to the bar. Measured 4 Sept 2026: on the review deck at 1100x950 it covered
+   Reject, Edit, Approve and Previous, and a real click at Approve's centre
+   landed on `div.slb-head`; on Templates it took 171x26px of the
+   watermark-position row.
+
+   `body.dc-livebar` is stamped by paintLiveWork from the same place that
+   un-hides the bar, so the allowance appears and disappears with it.
+   55px of bar + 18px of offset + margin.
+   ───────────────────────────────────────────────────────────────────────── */
+body.dc-livebar #studio main { padding-bottom: 92px; }

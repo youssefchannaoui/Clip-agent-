@@ -2619,8 +2619,17 @@ test('Home gets the docked section and every other screen gets the bar', () => {
   assert.match(paint, /screen==='home'/, 'placement is decided by the screen');
   // Never both at once: the collision originally reported was a floating bar and
   // a section on the same page.
-  assert.match(paint, /bar\.classList\.toggle\('hide',!\(!onHome&&any\)\)/,
+  // THE PROPERTY, not the spelling. This asserted the exact expression
+  // `toggle('hide',!(!onHome&&any))` and went red on 4 Sept 2026 when that
+  // value was hoisted to a named constant so the body class could read it too
+  // -- identical behaviour, different bytes. That is the shape this repo has
+  // now been caught by more times than any other. What matters is that the bar
+  // shows only OFF Home and only while something is running, whether the
+  // condition is written inline or named first.
+  assert.match(paint, /!onHome&&any/,
     'the floating bar is for other screens, and only when something is running');
+  assert.match(paint, /bar\.classList\.toggle\('hide',!\(!onHome&&any\)\)|barUp=!onHome&&any;[\s\S]{0,80}bar\.classList\.toggle\('hide',!barUp\)/,
+    'and the hide toggle is driven by exactly that');
   assert.match(paint, /if\(!any\)\{liveEls\.home\.classList\.add\('hide'\);return\}/,
     'the section never shows off Home');
   assert.match(paint, /vals\.liveAll\.map/, 'the section lists everything, not a slice');

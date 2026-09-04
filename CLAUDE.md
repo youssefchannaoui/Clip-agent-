@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1416 JS + 658 Python**
+- `npm test` and `npm run check` must pass. Currently **1440 JS + 658 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -6020,6 +6020,212 @@ for the no-document case that every test runs in.
 **And a reading trap worth keeping:** the rail ring photographed as "13%" in a
 screenshot and the DOM said 0%. The card and the ring agreed all along.
 Measure the value, do not read it off a low-contrast capture.
+
+## The audit: thirteen faults found by driving the dashboard (v3.125.0, 4 Sept 2026)
+
+Youssef: "figure out any issues in terms of overlaying buttons, not centerned all
+issues in terms of lyaout, bugs not working and more give a list and fix them do
+a thorowgh and good job please."
+
+Every one below was MEASURED in a real browser before it was believed and again
+after it was fixed, at 1440x950 and a narrower desktop width, in both themes.
+Twenty-four probes, each proven able to come back red. **All thirteen are silent
+faults**: the app renders, the suite stays green, and the only way to see any of
+them is to open the screen or press Tab -- which is exactly the shape this file
+has been warning about since August.
+
+### THE HARNESS WAS INVALIDATING ITS OWN MEASUREMENTS, and that is the entry to read
+
+The first alignment sweep came back CLEAN against a page that was deliberately
+broken. Two things were wrong with the rig, and both make every icon and text
+measurement a fiction:
+
+- **`unpkg.com` is unreachable from an agent container** (000 to curl AND to
+  the browser), so the Phosphor `@import` in the generated CSS never loads and
+  **every `<i>` measures 0x0**. An icon-vs-text centring sweep over 50 icons
+  therefore reports nothing, for ever, whatever the app does.
+- **Google Fonts is unreachable to CHROMIUM but NOT to curl.** `curl` gets 200
+  through the agent proxy; the browser gets `net::ERR_CONNECTION_RESET`. So a
+  "the fonts are fine, I checked" conclusion drawn from curl is wrong.
+  **573 of 654 leaf text nodes on the studio ask for Inter**, and Inter measures
+  **706px** against the fallback's 640.5px on the same string -- ~10% wider, so
+  every overflow and truncation reading taken without it UNDER-reports.
+
+Both are fixed in `scratchpad/audit/harness.mjs` by serving the real files from
+disk through a Playwright route: the Google Fonts CSS and its 34 woff2 files,
+and the Phosphor package. **`registry.npmjs.org` is in the proxy's `noProxy`
+list**, so where unpkg and jsdelivr are blocked the npm tarball comes down
+directly -- that is the route to any web font this container needs, and it adds
+nothing to the repo (the directory is gitignored).
+
+**A sweep that reports zero has to be shown failing before it is believed.**
+Two of the fix probes here came back green the first time -- one because the
+edit it made never matched (so it tested unmodified code), one because the
+fixture did not exercise the line it named. Print the bytes the edit removed.
+
+### What was wrong, and what each fix was
+
+1. **The lecture detail screen was titled "Studio"** with no subtitle -- the one
+   screen in the app that did not say what it was, because `TITLES` had no
+   `detail` key and `sublineFor` no `detail` case. It reads **Lecture** now,
+   with "5 clips · 2 awaiting review · 2 approved". The lecture's own name is
+   already drawn 18px bold in the body directly underneath, so the header names
+   the KIND rather than repeating it. A test now walks every screen the adapter
+   navigates to and fails on any with no title, so the next one added cannot
+   ship nameless.
+
+2. **NOT ONE DIALOG TRAPPED FOCUS, though all four declare `aria-modal="true"`.**
+   That attribute is a promise to assistive tech that the rest of the page is
+   unreachable. Measured escapes over ~20 Tab presses: Connections **16**,
+   Account **14**, Report a bug **6**, Your tasks **4** -- landing on Start job,
+   Connect an account and the rail, behind the scrim, invisible. Connections did
+   not even move focus into itself: `activeElement` stayed on `<body>`, so the
+   first Tab went to the top of the PAGE.
+   `window.dcTrapFocus` / `dcReleaseFocus` inert every SIBLING along the
+   dialog's own ancestor chain -- never an ancestor, which would inert the
+   dialog with it (that mistake made the first red-proof read 19 -> 10 instead
+   of 19 -> 0). Measured after: **0 escapes into page content on all four**,
+   Escape still closes, focus returns to the opener.
+   **`document.body` is not an escape.** Tabbing off the last control goes to
+   browser chrome and back in; no trap of any kind can prevent that, and
+   counting it made the first measurement unreadable.
+
+3. **Account settings rebuilt its own controls on every state poll.** It ran
+   from paintStudio with a bare `innerHTML =`, so a keyboard user was thrown out
+   of the open dialog every few seconds -- measured, focus inside before three
+   repaints and on `<body>` after, while Connections, Your tasks and Report a
+   bug all survived. `window.dcSetHtml` now, the v3.124.5 rule that reached
+   every host panel except this one.
+
+4. **The failure guidance stated a prerequisite that does not exist.** The
+   nasheed entry said *"Upload two or more before turning on automatic
+   posting"* -- the claim v3.119.0 removed from the banner, left standing here,
+   in front of somebody whose lecture had just failed. `agent.js` never reads
+   the track count (`grep -c tracks` is **0**); it calls `musicSatisfied(clip)`,
+   a per-clip render check. The test asserts that count is still zero, so the
+   copy cannot go stale silently.
+
+5. **It also sent people to "Platforms", a screen that does not exist.** 163
+   control labels were measured across all thirteen studio screens, the account
+   menu and the connections dialog: not one carries the word. It lives only in
+   the DEAD legacy dashboard. Now "Open Connections from the \"Posting to\" row
+   on Home" -- the app's own name for the dialog (its sibling entries already
+   used it) PLUS where it opens from, since no rail item carries either word.
+
+6. **A clip card's action row moved when its title wrapped.** Cards sit in a
+   grid so every card in a row is stretched to the same height, but nothing
+   inside was anchored and the title had no reserved box -- so one two-line
+   title dropped that card's Approve / Reject / Edit row and its whole POSTS TO
+   block by **18.13px** while its neighbours left the line as dead space at the
+   bottom. On the most-used screen in the app, and on the lecture detail too.
+   Fixed by GEOMETRY: the title is already `-webkit-line-clamp: 2`, so two lines
+   is its maximum; making two lines its minimum gives it a fixed box and
+   everything below lands at the same y by construction. `min-height: 2lh` with
+   the measured px underneath it for a browser without the unit. Measured after:
+   **0.00 on both screens**, no card grew.
+
+7. **An Owner panel in its EMPTY state lost its card.** The card treatment was
+   keyed on CONTENT (`:has(> div > table)` / `.dcow-fill`), so a bar list with
+   no rows matched neither and rendered bare -- 16px above and 18px left of its
+   carded neighbours in the same grid row. On **Traffic, Money in AND Money
+   out**, which is the operator's normal state on a young deployment. Now keyed
+   on the panel's POSITION (a direct child of one of the two panel grids) plus
+   the label block every panel opens with; `:has(> div > span)` is what keeps
+   the grids' trailing empty cell out, so an empty box is never drawn. The union
+   with the old rules was measured across all seven tabs -- it adds exactly the
+   bare panels and takes nothing away.
+
+8. **Eleven caption sliders started at seven different x.** `.hl-row` gives the
+   LABEL `flex: 1`, so the slider's left edge and width were set by how many
+   characters the value happened to read ("Off" vs "5 per line"): spread
+   **31.5px**, three widths, and 42px of ragged left edge on the right-pinned
+   value chips. A basis for each of the three cells (108px label -- the longest
+   measures 104 -- and 80px value -- the longest measures 68), scoped with
+   `:has(> input[type="range"])` so the colour rows, which are a different
+   shape and 46px tall against 22, are left alone. All four spreads **0.00**.
+
+9. **The three plan buttons were not on one line.** The "Opening soon" note is
+   `display: none` in a priced card, so it took its height out of ONE card and
+   that card's bottom-anchored button rose **30.79px** with all three cards the
+   same height. Live in production -- Studio has no Stripe prices. The note
+   keeps its line in every card now (`visibility: hidden` and a non-breaking
+   space), so the three CTAs a customer compares are level.
+
+10. **A stranded button retitled a clip that was not on screen.** Going Review
+    queue -> Lecture library, `patch()` pairs the queue's clip `<article>`
+    against the library's lecture `<article>` by index, `syncAttributes` strips
+    `data-clip` because the new render does not carry it, and the
+    `data-host-owned` star and Posts-to row survive inside. Both painters walk
+    `[data-clip]`, so **neither could ever see them again**: four lecture cards
+    each carrying a stranded star, +68px of card height, and the star still
+    bound to the QUEUE clip's id -- clickable, keyboard-reachable, and firing a
+    retitle against a clip nobody was looking at.
+    Both painters sweep by their OWN marker now, the rule `clearClipToolsAreas`
+    already followed; the star also carries the id it was built for, so a node
+    that ends up on a different clip is rebuilt rather than keeping the first
+    clip's closure. Measured: **0 stranded on every navigation path**, card
+    height back to the direct-navigation control's 253px.
+
+11. **The live bar was painted over real controls.** `#studioLiveBar` is fixed
+    at `bottom: 18px` with `z-index: 150` and nothing reserved space for it, so
+    a control whose centre fell in its band received no clicks at all -- they
+    went to the bar. `body.dc-livebar` is stamped from the same place that
+    un-hides it, and padding `#studio main` shrinks the scroller inside it
+    (measured 835 -> 743px, its bottom edge 950 -> 858 against the bar's top at
+    877). Covered-not-clipped controls: **3 on the queue at 1280 and 1 on the
+    library at 1100 before, 0 at 1100/1280/1440 after.**
+    **CLIPPED IS NOT COVERED**, and conflating them is what made two earlier
+    readings useless: a control scrolled out of its own overflow container is
+    reachable by scrolling, and a probe that only asks "is the bar topmost
+    here" counts every one of those as a fault.
+
+12. **On the review deck, "Posts to" was drawn underneath the video.** The
+    painter matched the deck card too, and that card is a fixed 9:16 stage with
+    `overflow: hidden` into which the host mounts the clip as an
+    absolutely-positioned `<video>` at z-index 1 -- so a statically-positioned
+    row appended there had a covering fraction of **1.00**, and it was the ONLY
+    such row on the screen. The one place the decision is taken showed no
+    destination at all. It mounts in the deck's INFO COLUMN now, under the score
+    reasons beside the Approve button. `data-deck-info` was added to the design
+    export and the re-import **proven byte-stable first**: the generated CSS came
+    back identical, no hashed class moved, 21 bytes of template delta.
+
+13. **A confirmation swallowed a navigation click.** The notification dock sits
+    above everything and each card takes pointer events back so it can be
+    hovered (pausing its countdown) and dismissed. Measured: a real click on
+    Home's "Schedule" link was dispatched to the toast and the screen did not
+    change, for the whole 4.2s of its life; four stacked cards also covered "See
+    all 8" and two Approve buttons. The four kinds that leave BY THEMSELVES pass
+    their clicks through now; `work` (sticky) and `bad` (7s, worth re-reading)
+    keep both. Proven with a real click: the link is topmost and navigates.
+
+### A source-string test failed against correct code, for the sixth time
+
+`studio-design.test.mjs` asserted the exact expression
+`toggle('hide',!(!onHome&&any))`. Hoisting that value to a named constant so the
+body class could read it too -- identical behaviour, different bytes -- turned
+it red. It pins the PROPERTY now (off Home, and only while something runs) and
+accepts either spelling. That is the failure mode this file has recorded more
+often than any other, and it goes both ways: the same shape has also passed
+against behaviour that had changed underneath it.
+
+### What was measured and found CLEAN, worth recording as negatives
+
+Zero icon-vs-text centring errors across all thirteen screens once the real
+fonts and the real icon font were loaded. Zero real page errors across 356
+clicks over every screen. All seven Owner sub-tabs structurally sound. No
+control made unreachable by scrolling. The topbar's five controls all 34px at
+one centre line (v3.94.0 holds); the live row's spinner 0.00px off its title
+(v3.113.0 holds); the schedule week grid one set of left edges and identical
+heights. The connections dialog IS reachable once every platform is connected --
+a definitive probe clicking all 356 controls found 8 routes, which refuted a
+high-severity finding I had drafted from a text scan of labels.
+
+### Still open from this pass
+
+Two more finders (screen-level overflow, and a fourth lens) were still running
+when this shipped, at a concurrency cap of two agents. Their findings are not in
+this release.
 
 ## Open items
 

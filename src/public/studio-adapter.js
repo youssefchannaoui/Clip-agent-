@@ -1050,7 +1050,7 @@
       cause: 'Every clip mixes one in, so a lecture cannot finish rendering without at least one uploaded.',
       fixes: [
         'Upload a nasheed in the Nasheed library.',
-        'Upload two or more before turning on automatic posting, so they can rotate.',
+        'One is enough to post with. A second is optional \u2014 with two or more they rotate between clips.',
       ],
     },
     {
@@ -1058,7 +1058,7 @@
       title: 'The connected account needs reconnecting',
       cause: 'The permission this account gave us has expired or been withdrawn, so we can no longer post on its behalf. Nothing was published.',
       fixes: [
-        'Open Platforms and reconnect the account.',
+        'Open Connections from the "Posting to" row on Home and reconnect the account.',
         'Approve every permission on the consent screen — a skipped one causes exactly this.',
         'Then press Retry on the clip.',
       ],
@@ -2299,6 +2299,11 @@
     templates: 'Templates', music: 'Nasheed library', language: 'Arabic & terms',
     performance: 'Performance', editor: 'Clip editor \u00b7 BETA', tokens: 'Tokens & billing',
     owner: 'Owner', deenai: 'DeenAI', help: 'Help',
+    // The lecture's own name is drawn 18px bold in the BODY directly under this
+    // header (detailTitle), so the header names the kind of screen rather than
+    // repeating it. Without an entry here pageTitle fell through to the generic
+    // 'Studio' -- the one screen in the app that did not say what it was.
+    detail: 'Lecture',
   };
 
   function sublineFor(screen, ctx) {
@@ -2328,6 +2333,25 @@
       case 'deenai': return 'Growth advice from your own numbers — nothing leaves this server';
       case 'help': return 'How every part of DeenClipped works, with screenshots of the real app';
       case 'tokens': return ctx.planLabel;
+      // The body already carries the lecture's name, its source length and how
+      // many clips came back, so the subline says how those clips STAND -- the
+      // one thing the screen does not otherwise state.
+      case 'detail': {
+        var dc = ctx.detailClips || [];
+        if (!ctx.detailOpen) return 'Open a lecture from the library';
+        if (!dc.length) return 'No clips from this lecture yet';
+        var waiting = 0, kept = 0;
+        dc.forEach(function (c) {
+          var d = decision(c);
+          if (d === null) waiting += 1;
+          else if (d === 'approved') kept += 1;
+        });
+        var parts = [plural(dc.length, 'clip')];
+        if (waiting) parts.push(waiting + ' awaiting review');
+        if (kept) parts.push(kept + ' approved');
+        if (!waiting && !kept) parts.push('all decided');
+        return parts.join(' \u00b7 ');
+      }
       default: return '';
     }
   }
@@ -2813,7 +2837,14 @@
     });
 
     var detail = projects.filter(function (p) { return p.id === UI.openProject; })[0] || projects[0] || null;
-    var detailClips = detail ? clipsOf(detail.id).sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).map(clipCard) : [];
+    var detailRaw = detail ? clipsOf(detail.id) : [];
+    var detailClips = detail ? detailRaw.slice().sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).map(clipCard) : [];
+    // The header's subline is built by sublineFor, which is module-level and
+    // cannot see these locals -- so they travel on ctx like everything else it
+    // reads. The RAW clips, not the cards: decision() is the one place that
+    // says what state a clip is in, and it reads the server's own status.
+    ctx.detailOpen = Boolean(detail);
+    ctx.detailClips = detailRaw;
 
     // Schedule: the next seven days, filled from clips that already hold a slot.
     var DAY_MS = 86400000;
@@ -4798,8 +4829,18 @@
           + (isCurrent || tier === 'basic' || unconfigured
             ? 'var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-faint, #6E6E76); cursor: default;'
             : 'rgba(217,180,120,.45); background: rgba(217,180,120,.13); color: var(--dc-gold-lit, #F0D6A6); cursor: pointer;'),
-        foot: unconfigured ? 'Not open for checkout yet.' : '',
-        footStyle: unconfigured ? 'font-size: 10.5px; color: var(--dc-ink-faint, #6E6E76);' : 'display: none;',
+        // THE NOTE KEEPS ITS LINE IN EVERY CARD, whether or not it has anything
+        // to say. `display: none` took its height out of ONE card, and since
+        // the button is bottom-anchored (`margin-top: auto`) that card's
+        // call-to-action rose by the note plus the card's 14px gap -- measured
+        // 30.79px, with all three cards the same height. Studio has no Stripe
+        // prices in production, so the three buttons a customer compares are
+        // not on one line on the live billing screen.
+        // `visibility: hidden` reserves the line instead; the non-breaking
+        // space is what gives an empty note a line box to reserve.
+        foot: unconfigured ? 'Not open for checkout yet.' : '\u00a0',
+        footStyle: 'font-size: 10.5px; line-height: 1.6; color: var(--dc-ink-faint, #6E6E76);'
+          + (unconfigured ? '' : ' visibility: hidden;'),
         cardStyle: 'position: relative; display: flex; flex-direction: column; gap: 14px; padding: 26px 24px 24px; border-radius: 16px; border: 1px solid '
           + (isCurrent ? 'rgba(127,209,166,.4)' : tier === 'studio' ? 'rgba(217,180,120,.4)' : 'var(--dc-line-soft, #1E1E22)')
           + '; background: ' + (tier === 'basic' ? 'var(--dc-bg, #121214)' : 'linear-gradient(180deg, rgba(217,180,120,.05), rgba(217,180,120,.01)), var(--dc-bg, #121214)') + ';',
