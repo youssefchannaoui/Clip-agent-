@@ -63,7 +63,7 @@ on:
           turn around. So do not let the shame keep you away from the only One
           who can lift it.
       probe_title:
-        description: 'Probe: the clip''s current title'
+        description: 'Probe: the clip''s current title, or "none" for a clip with none'
         required: false
         default: The door that never closes
       probe_lecture:
@@ -267,11 +267,20 @@ jobs:
             const fs = require("fs");
             const src = fs.readFileSync(".github/scripts/clip-ai-probe.py", "utf8");
             if (!src.includes("PARAMS = {}")) throw new Error("the probe lost its PARAMS seam");
+            // "none" is a SENTINEL, and it has to be: a workflow_dispatch
+            // input passed as an empty string is treated as not supplied and
+            // falls back to its default, so there is otherwise no way to ask
+            // for the no-current-title case. Cost a wasted run on 4 Sept to
+            // discover -- run 48 was identical to 47 and proved nothing.
+            const asked = (name) => {
+              const value = (process.env[name] || "").trim();
+              return value.toLowerCase() === "none" ? "" : value;
+            };
             const params = {
               kind: process.env.PROBE_KIND || "title",
-              text: process.env.PROBE_TEXT || "",
-              title: process.env.PROBE_TITLE || "",
-              lectureTitle: process.env.PROBE_LECTURE || "",
+              text: asked("PROBE_TEXT"),
+              title: asked("PROBE_TITLE"),
+              lectureTitle: asked("PROBE_LECTURE"),
             };
             fs.writeFileSync(process.env.RUNNER_TEMP + "/clip-ai-probe.py",
               src.replace("PARAMS = {}", "PARAMS = " + JSON.stringify(params)));
