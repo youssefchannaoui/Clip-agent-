@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1361 JS + 623 Python**
+- `npm test` and `npm run check` must pass. Currently **1368 JS + 633 Python**
   (8 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -5075,6 +5075,92 @@ it runs the column to the end of its range.
 - Pinned as a SOURCE test, deliberately -- CI has no browser and this rule is
   invisible when it is missing: the app renders, the suite stays green, and the
   column just jumps again. The same reason `dc-nav-tail` is pinned that way.
+
+## Two kinds of title, and a star that costs nothing (v3.120.0, 4 Sept 2026)
+
+Youssef: "titling is good, I've realized it's better, it's just not perfectly
+the same. For Quran recitations ... maybe try have a search, see how on TikTok
+and YouTube they do Quran recitation titles, because titles for those are very
+different to just regular lectures. Two different types." And: "there should
+be, like, a star ... which will create a different title without rerendering
+the video ... no rerendering needs to be done with titlings, of course."
+
+### A lecture title is a promise; a recitation title is a REFERENCE
+
+Researched rather than guessed. Short-form recitation titles are built on the
+**surah name and the verse numbers**, because that is what somebody types into
+the search box -- "Surah Al-Mulk", "Surah Ar-Rahman", "Surah Yasin" -- where a
+lecture clip is found by the hook it promises. Reciter name and a quality word
+("heart-touching", "emotional") are the other two conventions in use.
+
+**The whole reason this could be built is that NOTHING IS GENERATED.** The
+matcher's own map is already on the candidate (`Candidate.ayat`) and on the
+stored clip (`clip.ayahs`), so the surah and the numbers are FACTS. Asking
+qwen3:1.7b for them would be asking a 1.7B model to remember scripture, which
+is the one thing this product must never do.
+
+    Surah Az-Zumar 71-73
+    Surah Al-Ikhlas 1 — Say He is Allah who is One
+    Surah An-Naba 31, 33 — Indeed for the righteous is attainment
+    Surah An-Naba 40 & Surah An-Naziat 1
+
+- **A GAP IS LISTED, NEVER SMOOTHED.** "31, 33" rather than "31-33": claiming a
+  range the clip does not recite is the same fault as inventing a speaker --
+  somebody arrives for 78:32 and it is not there.
+- **The clause is the verse's OWN translation**, capped so the reference always
+  survives. The only hook a recitation title may carry is scripture's own
+  meaning, never a model's impression of it.
+- **The signal is COVERAGE, not the template.** Scripture is captioned on every
+  template (invariant 7), so a khutbah quoting 2:286 in passing would otherwise
+  be retitled as a recitation of it. `RECITATION_COVERAGE` is 0.6; below it the
+  clip keeps its lecture hook.
+- **The reciter is deliberately NOT named**, though it is a real search term:
+  the only place it could come from is the lecture title, and putting a name on
+  scripture the lecture never claimed is what `strip_unbacked_attribution`
+  exists to prevent.
+- It wins over the model's line inside `ship_title` -- the one gate every title
+  passes -- because the model has neither the surah nor the numbers to work
+  from, so its line about a recitation is a guess at what the verses mean.
+
+### The star: a new title, and nothing re-renders
+
+It already cost nothing and this makes it reachable. The title is metadata on
+the clip and is never burned into the frame (the hook overlay is hard-disabled,
+invariant 9), and `agent.updateClip` writes title/description without touching
+`stylePending` -- the flag that marks a render out of date. **A single line
+moving that flag onto this path would silently start re-rendering every
+retitled clip**, so a test drives it rather than trusting the comment.
+
+- `POST /api/clips/:id/retitle` -> `worker /ai/title`, behind the same HMAC as
+  every other worker route, on the box's own Ollama -- the same privacy posture
+  the pipeline already makes.
+- **A recitation with no instruction never reaches the model.** The route sends
+  the clip's stored `ayahs`; the worker imports `clip_worker` and calls
+  `recitation_title_from_rows`, so the button and the render cannot disagree
+  about the convention. Instant, and it cannot hallucinate.
+- **The instruction is free text a customer typed**, so it travels fenced
+  between BEGIN/END UNTRUSTED with the defence stated first (invariant 2).
+- **`is_english_title` is deliberately NOT applied here.** That rule exists to
+  stop the model drifting into Arabic on its own; "make the title Arabic" typed
+  into the box is the customer choosing, which is a different thing. The
+  automatic titler is unchanged and still English-only.
+- Temperature 0.7 rather than the scorer's 0.1: this is writing, and pressing
+  the button twice should not return the same line.
+- A deployment with no worker refuses in a sentence rather than hanging -- the
+  DeenAI precedent.
+
+### The IDOR probe could not go red, first time
+
+`test/clip-retitle.test.mjs` sent NO cookie and asserted a refusal. It passed
+with `assertCanAccessClip` REMOVED, because the 401 came from the auth layer
+and the route was never reached. It signs up a SECOND account now and asserts
+404 -- someone else's clip does not exist to them -- and that probe goes red.
+
+**Two smaller traps:** there is no shared `body` in this router (each route
+does its own `await readBody(req)`), and the worker's base URL is
+`WORKER_BASE_URL`, not `WORKER_URL` -- the test refused with "this deployment
+does not have the clip AI configured" until that was right, which reads exactly
+like the guard working.
 
 ## Open items
 

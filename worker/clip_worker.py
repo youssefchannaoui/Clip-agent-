@@ -4046,12 +4046,138 @@ def clip_english(candidate: Any) -> str:
     return " ".join(parts) if parts else text
 
 
+# How much of a clip has to BE recitation before it is titled as recitation.
+# A lecture that quotes one ayah in passing is still a lecture and wants a
+# lecture's title; a clip that is mostly a reciter reciting is a different
+# product and wants the reference somebody would search for.
+RECITATION_COVERAGE = 0.6
+# Short-form titles are read in a feed at a glance. The reference is the part
+# that must survive, so the clause after it gives way first.
+RECITATION_TITLE_MAX = 68
+
+
+def recited_ayat(candidate: Any) -> list[dict[str, Any]]:
+    """The verses this clip recites, in order, or [] if it is not a recitation.
+
+    Derived from the matcher's own map (`Candidate.ayat`, clip-local), so it
+    knows the surah and the verse NUMBERS as facts rather than as something a
+    1.7B model was asked to remember. That is the whole reason a recitation
+    title can be built at all: nothing here is generated.
+    """
+    ayat = getattr(candidate, "ayat", None)
+    duration = float(getattr(candidate, "duration", 0) or 0)
+    if not ayat or duration <= 0:
+        return []
+    covered = 0.0
+    rows = []
+    for hit in ayat:
+        row = hit.get("ayah") or {}
+        if not row.get("surah") or not row.get("ayah"):
+            continue
+        covered += max(0.0, float(hit.get("end", 0)) - float(hit.get("start", 0)))
+        rows.append(row)
+    if not rows or covered / duration < RECITATION_COVERAGE:
+        return []
+    rows.sort(key=lambda r: (int(r["surah"]), int(r["ayah"])))
+    return rows
+
+
+def surah_reference(rows: list[dict[str, Any]]) -> str:
+    """"Surah Al-Mulk 1-5" -- what somebody actually searches for.
+
+    Researched rather than guessed (4 Sept 2026): short-form recitation titles
+    are built on the SURAH and the verse numbers, because that is the query. A
+    lecture's title is a promise and a recitation's is a reference, which is
+    why they cannot share a shape.
+
+    A clip spanning two surahs names both; a run of verses is a range, and a
+    gap in the middle is listed rather than smoothed over, because claiming a
+    range the clip does not recite is the same fault as inventing a speaker.
+    """
+    if not rows:
+        return ""
+    parts = []
+    for surah in sorted({int(r["surah"]) for r in rows}):
+        here = sorted({int(r["ayah"]) for r in rows if int(r["surah"]) == surah})
+        name = next((str(r.get("surahName") or "") for r in rows if int(r["surah"]) == surah), "")
+        spans, start, prev = [], here[0], here[0]
+        for value in here[1:]:
+            if value == prev + 1:
+                prev = value
+                continue
+            spans.append((start, prev)); start = prev = value
+        spans.append((start, prev))
+        verses = ", ".join(str(a) if a == b else f"{a}-{b}" for a, b in spans)
+        parts.append((f"Surah {name} {verses}" if name else f"Quran {surah}:{verses}").strip())
+    return " & ".join(parts)
+
+
+def recitation_clause(rows: list[dict[str, Any]]) -> str:
+    """A short clause from the verses' OWN translation, or nothing.
+
+    The hook a recitation title can honestly carry is scripture's own meaning,
+    never a model's impression of it -- so this only ever quotes the corpus.
+    Taken from the FIRST verse, which is what the clip opens on now that a
+    Quran clip always starts at an ayah (v3.118.1).
+    """
+    text = " ".join(str((rows[0] if rows else {}).get("translation") or "").split())
+    if not text:
+        return ""
+    for stop in (";", " - ", " \u2014 "):
+        text = text.split(stop)[0]
+    words = text.strip(" ,.!?").split()
+    if len(words) < 3:
+        return ""
+    clause = " ".join(words[:9]).strip(" ,.!?")
+    return clause if len(clause) >= 12 else ""
+
+
+def recitation_title(candidate: Any) -> str:
+    """The title a recitation clip ships with, or '' when it is not one.
+
+    Deliberately NOT the reciter's name: it is a real search term, but the only
+    place it could come from is the lecture title, and putting a name on
+    scripture that the lecture never claimed is the failure this file guards
+    hardest (`strip_unbacked_attribution`). Reference plus meaning, both of
+    them facts.
+    """
+    return recitation_title_from_rows(recited_ayat(candidate))
+
+
+def recitation_title_from_rows(rows: list[dict[str, Any]]) -> str:
+    """The same title from the ayah ROWS alone.
+
+    Split out so the on-demand retitle can reach it: the app stores exactly
+    these rows on the clip (`clip.ayahs`), and service.py imports clip_worker
+    rather than growing a second copy of the convention. A title that differed
+    between the render and the retitle button would be two answers to one
+    question, which is how every drift in this file started.
+    """
+    reference = surah_reference(rows or [])
+    if not reference:
+        return ""
+    clause = recitation_clause(rows)
+    if clause and len(reference) + len(clause) + 3 <= RECITATION_TITLE_MAX:
+        return f"{reference} \u2014 {clause}"
+    return reference
+
+
 def ship_title(candidate: Any, number: int) -> str:
     """The title a clip actually ships with -- the AI's, else the fallback
     titler over the clip's ENGLISH words -- and never one in Arabic script.
 
     The numbered fallback is bland and it is English; a good Arabic title is
     still an Arabic title, and the instruction was every title, not most."""
+    # A RECITATION IS TITLED AS A REFERENCE, NOT AS A PROMISE (4 Sept 2026).
+    # Youssef: "for Quran recitations ... titles for those are very different
+    # to just regular lectures. Two different types." He is right, and the
+    # research agrees: a lecture title is a hook somebody reads, a recitation
+    # title is what somebody TYPES -- the surah and the verses. This wins over
+    # the model's line, because it is derived from the matcher's own map and
+    # the model has neither the surah nor the numbers to work from.
+    recited = recitation_title(candidate)
+    if recited:
+        return recited
     title = str(getattr(candidate, "ai_title", "") or "") or title_from_text(clip_english(candidate), number)
     return title if is_english_title(title) else f"Important reminder {number}"
 
