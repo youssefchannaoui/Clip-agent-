@@ -199,13 +199,23 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1445 JS + 658 Python**
+- `npm test` and `npm run check` must pass. Currently **1444 JS + 658 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
   output), so this line cannot quietly drift again; a shrinking count is
   reported as tests having VANISHED rather than as a number to update.
+  **COUNT THE SUITE THE WAY CI COUNTS IT, NOT THE WAY YOUR SHELL DOES.**
+  A bare `node --test` scans the WHOLE WORKING TREE, and `scratchpad/` is
+  gitignored -- so a stray probe named `*-test.mjs` left lying there is counted
+  locally and does not exist in CI. That is how the v3.126.0 line came to say
+  1445 against a real 1444: one throwaway file of my own. It never showed up as
+  a failure, it showed up as a number one too high -- which `check-handover`
+  then reads on the runner as a test having VANISHED, and the branch goes red
+  for a file CI has never seen. Before writing a count, check nothing under
+  `scratchpad/` matches node's test patterns (`*.test.*`, `*-test.*`,
+  `*_test.*`, `test-*.*`, or anything inside a directory called `test`).
 - **The 8 skips are `SpeakerTrackingTests` (7) and `AtmosphereFrameTests` (1),
   and they skip ONLY where ffmpeg is absent** (v3.101.2, v3.118.0). They build their own fixture with ffmpeg and run
   wherever it exists -- all seven pass here in 0.9s -- but the CI runner has
