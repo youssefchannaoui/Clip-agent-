@@ -4040,11 +4040,15 @@ function studioWanted(){return window.STUDIO_SHELL===true}
            was already on screen reads as a control that does nothing. */
         const word = kind === 'description' ? 'description' : 'title';
         const same = r.source === 'unchanged';
+        const fell = r.source === 'fallback';
         CLIPTOOLS.note = r.source === 'reference' ? 'Written from the verses this clip recites.'
           : same ? ('DeenAI kept your ' + word + ' \u2014 it could not better it. Try another shape, or ask for a change below.')
+          : fell ? ('DeenAI could not write a usable ' + word + ', so this one is drawn from the clip\u2019s own opening. Try another shape, or ask for a change below.')
           : '';
         if (instruction) CLIPTOOLS.ask = '';
-        toast(same ? ('DeenAI kept your ' + word) : ('New ' + word + ' written'), same ? 'info' : 'good');
+        toast(same ? ('DeenAI kept your ' + word)
+          : fell ? ('Drawn from the clip \u2014 DeenAI could not write one')
+          : ('New ' + word + ' written'), (same || fell) ? 'info' : 'good');
       } catch (err) {
         CLIPTOOLS.note = String((err && err.message) || err);
         toast(CLIPTOOLS.note, 'error');

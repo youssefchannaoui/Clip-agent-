@@ -376,26 +376,75 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             return False
 
+    # OUR OWN PROMPT'S FURNITURE, COMING BACK AS THE ANSWER. Measured on the
+    # box 4 Sept 2026 with NO lecture title, the Subject shape returned:
+    #
+    #   "The shape asked for: Sheikh Salman : He is not waiting for you to..."
+    #
+    # -- this prompt's own heading, and behind it an INVENTED SCHOLAR on a
+    # lecture that named nobody. `strip_unbacked_attribution` could not see it:
+    # that guard only ever removes a TRAILING "- Name", and this name sits in
+    # the middle. Rejecting the leak removes this one. It is NOT a general
+    # guard against an invented name mid-sentence -- there is no reliable way
+    # to spot one -- so the honest claim is that the shapes that produced it
+    # are now refused, not that the model can no longer invent a name.
+    LEAKED = ("the shape asked for", "before you answer", "begin untrusted",
+              "end untrusted", "clip transcript:", "current title",
+              "lecture title", "what they asked for", "your last answer")
+
+    def unusable(value: str) -> str:
+        """Why this answer cannot ship, or "" if it can."""
+        low = value.casefold()
+        for phrase in LEAKED:
+            if phrase in low:
+                return "it repeated this prompt's own wording back"
+        if echoes_current(value):
+            return "it was the current title, word for word"
+        # The guard the automatic titler has always had, missing here until
+        # now: with no current title the model returned the clip's own opening
+        # sentence for three shapes out of five.
+        if clip_worker is not None and kind == "title":
+            try:
+                if clip_worker.looks_copied(value, text):
+                    return "it was a sentence copied straight out of the clip"
+            except Exception:  # noqa: BLE001
+                pass
+        return ""
+
     source = "ai"
-    if echoes_current(answer):
-        # A failed retry leaves the first answer standing rather than failing
-        # the request -- but it is still the current title, so `source` says
-        # so. Each failure is handled where it happens, deliberately: a broad
-        # except around the whole block would report "ai" for a title that is
-        # provably unchanged, and that claim reaches the customer's screen.
+    problem = unusable(answer)
+    if problem:
+        # A failed retry never fails the request -- but `source` reaches the
+        # customer's screen, so it must not claim the answer is new when it is
+        # the current title or a fallback. Each failure is handled where it
+        # happens for that reason: one broad except around the block would
+        # report "ai" for all three.
         try:
-            retried = ask("\n\nYOUR LAST ANSWER WAS THE CURRENT TITLE, WORD FOR WORD. "
-                          "That is not an answer. Write a DIFFERENT one from the clip's "
-                          "own words.")
+            retried = ask("\n\nYOUR LAST ANSWER WAS REJECTED, because " + problem + ". "
+                          "That is not an answer. Write a NEW one, in your own words, "
+                          "from what the clip says.")
         except Exception:  # noqa: BLE001
             retried = ""
-        if retried and not echoes_current(retried):
+        if retried and not unusable(retried):
             answer = retried
-        else:
+        elif current:
             # Said plainly rather than handed back as if it were new: a button
             # that silently returns what was already there is a control that
             # looks broken (invariant 9).
-            source = "unchanged"
+            answer, source = current, "unchanged"
+        else:
+            # Nothing to keep, so the sanctioned fallback -- the same titler
+            # the render uses when no AI title survives. It strips filler
+            # openers and trims on a word boundary, which the raw echo does
+            # not.
+            fallback = ""
+            if clip_worker is not None:
+                try:
+                    fallback = clip_worker.title_from_text(text, 1)
+                except Exception:  # noqa: BLE001
+                    fallback = ""
+            if fallback:
+                answer, source = fallback, "fallback"
 
     if clip_worker is not None and kind == "title":
         try:
@@ -407,8 +456,15 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
             answer = clip_worker.strip_unbacked_attribution(answer, lecture_title)
         except Exception:  # noqa: BLE001
             pass
+    # Trim on a WORD BOUNDARY. The box returned "...He is waiting for you to
+    # turn arou" -- a title cut mid-word reads as a bug in the product rather
+    # than as a long answer.
     limit = 200 if kind == "description" else 120
-    return {"title": answer[:limit].strip(), "source": source}
+    answer = answer.strip()
+    if len(answer) > limit:
+        cut = answer[:limit]
+        answer = (cut.rsplit(" ", 1)[0] if " " in cut else cut).rstrip(" ,;:-")
+    return {"title": answer.strip(), "source": source}
 
 
 def advise_with_ollama(question: str, context: dict[str, Any]) -> str:

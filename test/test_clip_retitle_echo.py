@@ -81,7 +81,10 @@ class RetitleEchoTests(unittest.TestCase):
         self.assertEqual(out["title"], "Why your mistakes have not closed the door")
         self.assertEqual(out["source"], "ai")
         self.assertEqual(len(fake.prompts), 2, "it should have asked a second time")
-        self.assertIn("WORD FOR WORD", fake.prompts[1])
+        # The retry NAMES the reason, so the model is told what was wrong
+        # rather than merely asked again.
+        self.assertIn("REJECTED", fake.prompts[1])
+        self.assertIn("the current title, word for word", fake.prompts[1])
 
     def test_a_second_echo_is_reported_as_unchanged_rather_than_as_new(self):
         # A button that quietly returns what was already on screen is a control
@@ -179,3 +182,103 @@ class RetitlePromptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetitleUnusableAnswerTests(unittest.TestCase):
+    """The other three things the box actually did, 4 Sept 2026, run 49.
+
+    Asked with NO current title, qwen3:1.7b returned:
+
+        (no shape)         The door does not close because you walked through
+                           it yesterday. He is not waiting for you to run out
+        Promise / Warmer   The door does not close because you walked through
+                           it yesterday. He is waiting for you to turn around.
+        Question           What turns shame into grace
+        Subject: payoff    The shape asked for: Sheikh Salman : He is not
+                           waiting for you to run out of chances, He is
+        Shorter            The door does not close because you walked through
+                           it yesterday.
+
+    Three of five are the clip's own opening sentence -- `looks_copied` has
+    guarded the automatic titler against exactly that since 31 Aug and was
+    never applied here. One is this prompt's own heading with an INVENTED
+    SCHOLAR behind it, on a lecture that named nobody. And two are cut
+    mid-word by the length limit.
+    """
+
+    TEXT = ("The door does not close because you walked through it yesterday. "
+            "He is not waiting for you to run out of chances, He is waiting "
+            "for you to turn around.")
+
+    def setUp(self):
+        import service
+        self.service = service
+        self.env = mock.patch.dict(os.environ, {"OLLAMA_URL": "http://127.0.0.1:11434"})
+        self.env.start()
+        self.addCleanup(self.env.stop)
+
+    def ask(self, *answers, **payload):
+        fake = FakeOllama(*answers)
+        body = {"kind": "title", "text": self.TEXT}
+        body.update(payload)
+        with mock.patch.object(self.service.urllib.request, "urlopen", fake):
+            return self.service.retitle_clip(body), fake
+
+    def test_a_sentence_copied_out_of_the_clip_is_refused(self):
+        copied = "The door does not close because you walked through it yesterday."
+        out, fake = self.ask(copied, "Mercy has no closing time")
+        self.assertEqual(out["title"], "Mercy has no closing time")
+        self.assertEqual(len(fake.prompts), 2)
+        self.assertIn("copied straight out of the clip", fake.prompts[1])
+
+    def test_this_prompt_s_own_wording_coming_back_is_refused(self):
+        """The one that carried an invented scholar.
+
+        This does NOT claim to catch an invented name in general -- there is no
+        reliable way to spot one mid-sentence, and `strip_unbacked_attribution`
+        only removes a trailing "- Name". What it catches is the shape that
+        actually produced one on the box.
+        """
+        leaked = "The shape asked for: Sheikh Salman : He is not waiting for you"
+        out, fake = self.ask(leaked, "Mercy has no closing time")
+        self.assertNotIn("Sheikh Salman", out["title"])
+        self.assertEqual(out["title"], "Mercy has no closing time")
+        self.assertIn("this prompt's own wording", fake.prompts[1])
+
+    def test_with_nothing_to_keep_it_falls_back_to_the_transcript_titler(self):
+        copied = "The door does not close because you walked through it yesterday."
+        out, _ = self.ask(copied, copied)
+        self.assertEqual(out["source"], "fallback")
+        # The sanctioned fallback, not the raw echo: it is the same titler the
+        # render uses when no AI title survives.
+        self.assertTrue(out["title"])
+        self.assertNotEqual(out["title"], copied)
+
+    def test_a_long_answer_is_cut_on_a_word_boundary(self):
+        """The box returned "...He is waiting for you to turn arou".
+
+        THE FIXTURE MATTERS AND THE FIRST ONE DID NOT TEST THIS. It was
+        "Mercy " * 40, and 120 divides evenly by "Mercy " -- so the naive cut
+        landed exactly on a word boundary anyway and the probe came back GREEN
+        against `answer[:limit]`. The words here are deliberately uneven, so
+        character 120 falls INSIDE "finally"; asserted below rather than
+        assumed.
+        """
+        # None of these words are in the transcript above, deliberately:
+        # the copy guard fires first, and the second fixture tripped it.
+        long_answer = ("Mercy stays open longer than shame can hold you and every "
+                       "honest return is welcomed again today when a tired heart "
+                       "finally decides to knock")
+        self.assertNotEqual(long_answer[119], " ")
+        self.assertNotEqual(long_answer[120], " ")
+        out, _ = self.ask(long_answer)
+        self.assertLessEqual(len(out["title"]), 120)
+        self.assertTrue(out["title"].endswith("heart"), out["title"])
+
+    def test_a_good_short_title_is_left_exactly_as_it_came(self):
+        # "What turns shame into grace" was the one genuinely good answer of
+        # the five, and nothing here may touch it.
+        out, fake = self.ask("What turns shame into grace")
+        self.assertEqual(out["title"], "What turns shame into grace")
+        self.assertEqual(out["source"], "ai")
+        self.assertEqual(len(fake.prompts), 1)

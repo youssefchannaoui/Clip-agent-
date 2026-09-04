@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1394 JS + 653 Python**
+- `npm test` and `npm run check` must pass. Currently **1394 JS + 658 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -5440,7 +5440,7 @@ removed from the route, and a shape overriding the recitation reference.
 the model only from the box; nothing here has been seen against the real
 Ollama yet.
 
-## The star was handing back the title it already had (v3.122.1, 4 Sept 2026)
+## The star was handing back the title it already had (v3.122.1 / v3.123.2, 4 Sept 2026)
 
 The first thing the new probe below was pointed at, and it found this in one
 run. Asked for a title with the clip's current one in the prompt, the box's
@@ -5492,6 +5492,61 @@ title, which is every clip the star is pressed on) it created no title at all.
 
 **Worker change, so `deploy-worker.yml` ships it on push.** Re-probing after
 the deploy is one dispatch.
+
+### And with no current title it did three worse things (v3.123.2)
+
+The same probe, asked with NO current title so the model had to write from the
+transcript, and this is the run that matters:
+
+    (no shape)         The door does not close because you walked through it
+                       yesterday. He is not waiting for you to run out
+    Promise / Warmer   The door does not close because you walked through it
+                       yesterday. He is waiting for you to turn around.
+    Question           What turns shame into grace
+    Subject: payoff    The shape asked for: Sheikh Salman : He is not waiting
+                       for you to run out of chances, He is
+    Shorter            The door does not close because you walked through it
+                       yesterday.
+
+**One good title out of five, and the other four are three separate faults.**
+
+- **IT INVENTED A SCHOLAR.** "Sheikh Salman", on a clip whose lecture title was
+  EMPTY -- so the prompt's own rule ("name the speaker ONLY if the lecture
+  title names them") was broken outright. `strip_unbacked_attribution` could
+  not see it: that guard removes a TRAILING "- Name", and this name sits in the
+  middle, behind this prompt's own heading. This is the failure this file calls
+  the worst available on the product, and it was live.
+- **It copied the transcript**, three shapes out of five. `looks_copied` has
+  guarded the AUTOMATIC titler against exactly that since 31 Aug 2026 and was
+  never applied to the star -- the same function, one call away, on a route
+  written three days later.
+- **It leaked this prompt's own furniture into the answer** ("The shape asked
+  for:"), which is what carried the invented name.
+- **Two titles were cut mid-word** ("...turn arou") by the length limit.
+
+`unusable(value)` is one gate for all of it, applied to the first answer and to
+the retry: prompt wording, an echo of the current title, a transcript copy.
+Rejected once, the model is asked again WITH THE REASON NAMED; rejected twice,
+the current title is kept (`unchanged`) or -- with nothing to keep -- the same
+`title_from_text` the render falls back to (`fallback`). Both are said plainly
+on screen, because a button that quietly hands back what was already there, or
+the clip's own opening sentence, is a control that does nothing.
+
+**THE LEAK GUARD IS NOT A GENERAL NAME GUARD, and the comment says so.** There
+is no reliable way to spot an invented name mid-sentence; what is caught is the
+shape that actually produced one on the box. Claiming more than that is the
+stale-claim failure this file keeps paying for.
+
+**A red probe came back GREEN on the word-boundary test**, for the third time
+in this repo's history and for the dullest reason: the fixture was
+`"Mercy " * 40`, and 120 divides evenly by `"Mercy "`, so the naive cut landed
+on a boundary anyway. The replacement asserts character 120 falls inside a word
+before testing anything. The second fixture then tripped the COPY guard,
+because it was built out of the transcript. Check that a fixture exercises the
+line you think it does.
+
+Fifteen tests on executed output -- the prompt bytes and the returned dict.
+
 
 ## The box can be ASKED what the model writes (4 Sept 2026)
 
