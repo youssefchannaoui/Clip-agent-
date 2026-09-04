@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1399 JS + 658 Python**
+- `npm test` and `npm run check` must pass. Currently **1407 JS + 658 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -5167,6 +5167,146 @@ mean per-channel STYLE -- an Arabic channel wanting the Arabic template, a
 Shorts channel a different caption mode -- which is a real feature and a
 different piece of work. It is not built here and should be confirmed before it
 is.
+## The walkthrough told you to do things and then prevented them (v3.124.2, 4 Sept 2026)
+
+Youssef, with a screenshot of step 3 -- the card reading "Now give it a
+lecture", the paste box ringed in gold behind it: **"see cant do anything here,
+like it needs to be better."** He was exactly right, and there were FOUR faults
+under it, three of them structural and one of them a bug that had nothing to do
+with the walkthrough at all.
+
+### The paste box could not be typed into, walkthrough or no walkthrough
+
+**Measured first, and this is the finding of the session.** With the
+walkthrough up: type one character, and `{"value":"h","focused":false}`. With
+the walkthrough OFF and no veil anywhere: `{"value":"a","focused":false}`. So it
+was never the tour.
+
+`studio-runtime`'s `patch()` pairs a container's LIVE children against the
+freshly rendered ones **by index**, skipping anything carrying
+`data-host-owned`. `paintFirstRun` injects three nodes into the hero column --
+`#dcFirstRunHead`, `#dcFirstRunSteps`, `#dcFirstRunCost` -- and a fourth,
+`#dcFirstRunShow`, into the column beside it. **None of them said so.** So the
+pairing shifted by three, and every repaint of that column removed indices
+5, 6 and 7. Index 5 is the paste row.
+
+    rm DIV.s2g          <- the paste box
+    rm P#dcFirstRunCost
+    rm DIV.s2n          <- "Posting to"
+
+Traced by wrapping `Node.prototype.removeChild` and reading the stack: three
+nested `patch` frames, the `!newNode` branch. `captureFocus`/`restoreFocus`
+could not save it -- they walk an index PATH, and the path no longer resolved
+while the container was three children short, so `restoreFocus` returned
+without ever calling `focus()`.
+
+**Typing was destroyed after the first character and focus fell to `<body>`.
+Pasting worked**, because a paste is a single input event that completes the
+value before the swap -- which is exactly why this survived unnoticed, on the
+one control the walkthrough's import step tells you to use, on the first-run
+screen where those three nodes exist.
+
+Four `setAttribute('data-host-owned','')` calls. Measured after: **12 DOM
+operations on that column per repaint -> 0**, and a 33-character URL typed one
+key at a time lands in the box and keeps focus, with the walkthrough up.
+
+**THE GENERAL RULE, and it is not new -- it is stated at the top of index.html
+and was simply not followed here: every node the host puts into the generated
+tree must carry `data-host-owned`.** A repaint that changes nothing must touch
+nothing; the probe for that is to force `STUDIO.lastHtml = ''` and count DOM
+operations through a wrapped `removeChild`/`replaceChild`/`appendChild`.
+
+**Two more injectors are still unmarked and are NOT fixed here**, because both
+RESTRUCTURE generated markup rather than adding a sibling, so the marker alone
+would duplicate a node: `paintBrandSeal` wraps the rail's arch in a
+`span.dc-seal`, and `seatTaskCard` MOVES the rail's footer slot into the nav.
+Both churn 8 operations per markup-changing repaint and both self-heal --
+measured across six repaints, no node accumulates, no duplicate seal, ring, nav
+tail or task card. The visible cost is the seal's 28s rotation restarting.
+
+### The veil blocked every action it asked for
+
+`elementFromPoint` at the centre of the spotlit paste box returned the VEIL:
+a full-screen span at z-200 with pointer events, under a spotlight that is
+`pointer-events: none`. So "let them do it" could not happen for any step
+except the one that opens a dialog.
+
+`clip-path` cuts a REAL hit-testing hole -- a clipped-away region is not
+hit-tested. Measured on all seven steps: inside the ring the spotlit control is
+what the pointer finds (`INPUT`, `SELECT`, `SPAN`, `BUTTON`), and one pixel
+outside it the veil is still topmost, so dismissing still works. The polygon
+and the ring take their padding from ONE constant (`SPOT_PAD`), so the hole and
+the ring cannot drift apart. **The spotlight's own `0 0 0 9999px` shadow had to
+go with it**: left in place it dims the page a second time AND paints straight
+back over the hole the veil just opened.
+
+### Every gated step was a wall
+
+A step with a `done` refused to advance until its condition was met. So a new
+account could not get past "connect a channel" without connecting one, nor past
+the import without a lecture -- **and a lecture takes about twenty minutes, so
+the review, schedule and finish steps were UNREACHABLE in a first sitting.**
+Pressing the button again did nothing at all: a dead control (invariant 9) on
+the screen that exists to teach the product.
+
+The first press still performs the step and waits; **the second is an ordinary
+Next.** The card says so while it waits ("Waiting for you. This moves on by
+itself the moment it is done, or press Next to carry on"), and moving on clears
+the wait, or a condition met later would yank somebody back to a step they
+deliberately walked past. A step with no `does` never waits -- there is nothing
+for its button to perform.
+
+### One stray click spent it for ever
+
+`tourDismiss` called `endTour()`, which writes the seen key. The veil covers the
+whole page and eats any click, so a single slip ended the walkthrough
+permanently with no way back except finding it in the account menu -- which is
+the shape of "it randomly popped up for a sec then disappeared". Clicking the
+dim now PUTS IT AWAY without marking it seen, so it is there again next visit;
+the explicit **Skip tour** is a decision and still finishes it for good. (The
+per-screen pop-ups that message may also have meant are already gone: v3.124.0
+replaced six tours keyed by screen with one keyed once.)
+
+### Two steps pointed at nothing, or at everything
+
+- **The review step's anchor does not exist on the account it is written for.**
+  `queue-decide` is the deck's Approve button, and somebody walking this has
+  just imported and has no clips -- measured on a fresh account, that step drew
+  NO highlight. An anchor may be a LIST now, tried in order. It falls back to
+  the queue's tab row. **A comma selector would NOT do this**: `querySelector`
+  returns the first match in DOCUMENT order and the tab row is above the deck
+  in the markup, so the fallback would always win.
+- **The fallback had to be a CONTROL, not the screen.** The container already
+  tagged `queue-tabs` measures **1224x847 on a 1440x950 screen** -- 96% of the
+  viewport. That is the same fault as step one's `rail` anchor, which measured
+  `[0,0,228,950]` and has been dropped: a highlight covering a quarter of the
+  screen names nothing. Both new anchors (`queue-tabrow`, `tpl-pick`) were
+  added to the export with `npm run design:import` **proven byte-stable first**
+  -- generated CSS identical, no hashed class name moved, 56 bytes of template
+  delta being exactly the two attributes.
+- **The new style step first rang the Save button.** "Choose how the captions
+  look" highlighting the control that COMMITS a choice rather than makes one is
+  the same fault by another door; `tpl-pick` rings the style picker.
+
+### And the caption style had been dropped from the walkthrough entirely
+
+The per-screen tours this replaced covered Templates; the single walkthrough
+did not, so a first run went connect -> nasheed -> import and the captions were
+whatever the default happened to be. It sits BEFORE the import deliberately --
+the style is applied when the clips are cut, so choosing it afterwards means
+re-rendering. It carries no `done`: there is always a default, so nothing here
+blocks. Seven steps now, not six.
+
+### Verified by driving it, and the tests drive it too
+
+`test/walkthrough.test.mjs` vm-loads the adapter and CALLS `tourNext`,
+`tourDismiss` and `tourSkip` -- the tests that shipped with the walkthrough
+assert source strings, and this repo has now been caught five times by one of
+those passing against a behaviour that changed underneath it. Eight probes,
+all proven red. In the browser at 1440x950, all seven steps: the card inside
+the viewport, never overlapping the spotlight, no page overflow, and the
+spotlit control hit-testable on every step that has one.
+
 ## Two kinds of title, and a star that costs nothing (v3.120.0, 4 Sept 2026)
 
 Youssef: "titling is good, I've realized it's better, it's just not perfectly

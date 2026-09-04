@@ -623,9 +623,22 @@
    * to go is the one thing this product cannot finish, and because it is the
    * step people skipped.
    */
+  // The hole the veil cuts and the ring drawn over it are the same
+  // rectangle, so they take their padding from one number.
+  var SPOT_PAD = 6;
+
   var TOUR = [
     {
-      key: 'connect', screen: 'home', anchor: 'rail',
+      /*
+       * NO ANCHOR, DELIBERATELY. This pointed at `rail`, which MEASURED
+       * [0, 0, 228, 950] -- a spotlight over the entire sidebar on a step
+       * whose one action is the card's own button. A highlight that covers
+       * a quarter of the screen names nothing, and it drew the eye away
+       * from the gold button that actually does the thing. With no anchor
+       * the card centres and the button is the brightest thing on screen,
+       * which is the honest highlight for this step.
+       */
+      key: 'connect', screen: 'home',
       title: 'First, connect somewhere to post',
       body: 'DeenClipped cuts the clips; a channel is where they go. Connect YouTube, TikTok, Instagram or a Facebook Page now — nothing you approve can be published until at least one is on.',
       cta: 'Connect a channel',
@@ -641,23 +654,78 @@
       key: 'nasheed', screen: 'music', anchor: 'music-upload',
       title: 'Add one nasheed',
       body: 'One is mixed underneath every clip, so a lecture cannot finish processing while this library is empty. One is enough to start; two or more lets it rotate so consecutive clips do not sound identical.',
-      cta: 'Open the nasheed library',
+      cta: 'Upload one now',
+      // The anchor is the drop area's own <label>, so clicking it opens the
+      // file picker -- the button does the thing it is named after rather
+      // than telling you where to find it.
+      does: function () { var el = revealAnchor('music-upload'); if (el && el.click) el.click(); },
       done: function (data) { return (((data || {}).tracks) || []).length > 0; },
       doneText: 'Your library has a nasheed, so a lecture can finish.',
     },
     {
+      /*
+       * The one remaining decision that changes every clip, and the
+       * walkthrough did not mention it. The per-screen tours it replaced
+       * covered Templates; the single walkthrough dropped it, so a first
+       * run went connect -> nasheed -> import and the captions were
+       * whatever the default happened to be.
+       *
+       * It sits BEFORE the import deliberately: the style is applied when
+       * the clips are cut, so choosing it afterwards means re-rendering.
+       * There is always a default, so it carries no `done` -- nothing here
+       * blocks, and it can be passed with Next.
+       *
+       * It rings the style PICKER, not the Save button. The only anchor this
+       * screen carried was `tpl-save`, so the first cut of this step said
+       * "choose how the captions look" and highlighted a control at the far
+       * right that commits a choice rather than makes one -- pointing at the
+       * wrong thing, which is the same fault as the review step's missing
+       * anchor. `tpl-pick` was added to the export and the re-import proven
+       * byte-stable first: generated CSS identical, no hashed class moved.
+       */
+      key: 'style', screen: 'templates', anchor: ['tpl-pick', 'tpl-save'],
+      title: 'Choose how the captions look',
+      body: 'One style applies to every clip this account cuts. The frame beside it draws a real caption at this template\u2019s own sizes and margins \u2014 drag the caption or the watermark and the export puts them exactly where you leave them. Clean Line and Quran Recitation are on the free plan.',
+      cta: 'Next',
+    },
+    {
       key: 'import', screen: 'home', anchor: 'paste',
+      // The hole in the veil makes this box genuinely typeable, so the
+      // button puts the cursor in it rather than describing where it is.
+      does: function () {
+        var box = revealAnchor('paste');
+        var field = box && box.querySelector('input, textarea');
+        if (field && field.focus) field.focus();
+      },
       title: 'Now give it a lecture',
       body: 'Paste a link to a lecture you own or are allowed to use, or upload an MP4. This is the only thing DeenClipped needs from you — it transcribes the whole talk, scores every moment and renders the best ones as vertical clips.',
-      cta: 'Go to the paste box',
+      cta: 'Paste a lecture link',
       done: function (data) { return (((data || {}).projects) || []).length > 0; },
       doneText: 'A lecture is in. The worker keeps going with the browser closed.',
     },
     {
-      key: 'review', screen: 'queue', anchor: 'queue-decide',
+      /*
+       * TWO ANCHORS. The deck's Approve button is the right thing to ring --
+       * but it only exists once a clip is waiting, and somebody walking this
+       * for the first time imported a minute ago. Measured on a fresh
+       * account: no Approve button, so this step drew NO highlight at all.
+       * The queue's own tab row is always there.
+       *
+       * The fallback is `queue-tabrow`, NOT the `queue-tabs` container that
+       * already existed: that one measures 1224x847 on a 1440x950 screen --
+       * 96% of the viewport, a "highlight" that names nothing, which is the
+       * exact reason the first step's `rail` anchor was taken off. The
+       * attribute was added to the export and `npm run design:import` proven
+       * byte-stable first: the generated CSS is identical and no hashed class
+       * name moved, the route `data-dc-week` and `data-dc-wave` established.
+       *
+       * No `does`, deliberately: approving is a decision about somebody's
+       * content and the walkthrough's button must never make it for them.
+       */
+      key: 'review', screen: 'queue', anchor: ['queue-decide', 'queue-tabrow'],
       title: 'You decide what survives',
       body: 'Every clip arrives here and waits. Each card says which channel it will post to before you choose, so nothing goes out anywhere you did not intend. Approve keeps it; reject sets it aside and keeps the file.',
-      cta: 'Open the review queue',
+      cta: 'Next',
       done: function (data) {
         return (((data || {}).clips) || []).some(function (c) {
           return c && (c.status === 'approved' || c.status === 'scheduled' || c.postedAt);
@@ -669,7 +737,7 @@
       key: 'schedule', screen: 'schedule', anchor: 'sched-views',
       title: 'And when it goes out',
       body: 'An approved clip still needs a time. It is placed in your next free posting window automatically, and you can drag it to another. With more than one channel connected, each gets its own windows and its own clips.',
-      cta: 'Open the schedule',
+      cta: 'Next',
       done: function (data) {
         return (((data || {}).clips) || []).some(function (c) { return c && (c.scheduledAt || c.postedAt); });
       },
@@ -712,10 +780,39 @@
       for (var i = 0; i < TOUR_OLD.length; i += 1) global.localStorage.removeItem('dcTour:' + TOUR_OLD[i]);
     } catch (err) { /* private mode */ }
   }
+  /*
+   * An anchor may be a LIST, tried in order, because the best thing to point
+   * at is not always on screen. The review step wants the deck's Approve
+   * button -- but a brand-new account walking the walkthrough has just
+   * imported and has no clips yet, so there is no Approve button to ring, and
+   * the step drew no highlight at all. It falls back to the queue's own tabs.
+   *
+   * A comma selector would NOT do this: querySelector returns the first match
+   * in DOCUMENT order, and the tab row is above the deck in the markup, so the
+   * fallback would always win. They have to be tried one at a time.
+   */
   function tourAnchorEl(anchor) {
-    if (!global.document) return null;
-    var sel = /^[#.[]/.test(anchor) ? anchor : '[data-tour="' + anchor + '"]';
-    try { return global.document.querySelector(sel); } catch (err) { return null; }
+    if (!global.document || !anchor) return null;
+    var list = Object.prototype.toString.call(anchor) === '[object Array]' ? anchor : [anchor];
+    for (var i = 0; i < list.length; i += 1) {
+      var one = list[i];
+      var sel = /^[#.[]/.test(one) ? one : '[data-tour="' + one + '"]';
+      try {
+        var el = global.document.querySelector(sel);
+        if (el) return el;
+      } catch (err) { /* a malformed selector is not a reason to fail the paint */ }
+    }
+    return null;
+  }
+
+  // Put the step's control on screen before the highlight is measured against
+  // it -- a ring drawn round something below the fold points at nothing.
+  function revealAnchor(anchor) {
+    var el = tourAnchorEl(anchor);
+    if (el && el.scrollIntoView) {
+      try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (err) { el.scrollIntoView(); }
+    }
+    return el;
   }
 
   function toast(message) { global.StudioAdapter.onToast(message); }
@@ -6870,6 +6967,13 @@
         if (tourStep.done && tourDone[tourIndex]) {
           return tourStep.body + '\n\n\u2713 ' + (tourStep.doneText || 'Done.');
         }
+        // Once the card's button has performed its thing, say what happens
+        // next -- otherwise the walkthrough looks like it stopped responding
+        // while it is in fact waiting on you.
+        if (tourStep.does && tourStep.done && UI.tourAwait === tourIndex) {
+          return tourStep.body + '\n\n\u2026 Waiting for you. This moves on by itself the moment it is done, '
+            + 'or press Next to carry on and come back to it.';
+        }
         return tourStep.body;
       }()),
       // THE SAME PERCENTAGE THE RAIL SHOWS. "it works with the percentage
@@ -6892,6 +6996,9 @@
         if (!tourStep) return 'Next';
         if (tourIndex >= tourSteps.length - 1) return tourStep.cta || 'Finish';
         if (tourDone[tourIndex]) return 'Next';
+        // Already performed and waiting: the button becomes an ordinary Next
+        // so the step is never a dead end. See tourNext.
+        if (tourStep.does && tourStep.done && UI.tourAwait === tourIndex) return 'Next';
         return tourStep.cta || 'Next';
       }()),
       tourDots: tourSteps.map(function (_step, i) {
@@ -6900,9 +7007,51 @@
             + (i === tourIndex ? 'var(--dc-gold-lit, #F0D6A6)' : 'var(--dc-n-33333a, #33333A)') + '; transition: width .18s ease, background .18s ease;',
         };
       }),
-      tourVeilStyle: tourOn
-        ? 'position: fixed; inset: 0; z-index: 200; background: rgba(6,6,8,.72); backdrop-filter: blur(2px);'
-        : 'display: none;',
+      /*
+       * THE VEIL HAS A HOLE IN IT, AND THAT IS THE WHOLE POINT.
+       *
+       * Youssef, 4 Sept 2026, on step 3 -- the card reading "Now give it a
+       * lecture", the paste box ringed in gold behind it: "see cant do
+       * anything here, like it needs to be better."
+       *
+       * He was exactly right and it was structural. This veil was a
+       * full-screen span at z-200 with `pointer-events: auto`, and the
+       * spotlight above it is `pointer-events: none` -- so MEASURED,
+       * `elementFromPoint` at the centre of the spotlit paste box returned
+       * the VEIL, not the input. Every step told you to do something and
+       * then physically prevented it. "Let them do it" could not happen for
+       * any step except the one that opens a dialog.
+       *
+       * `clip-path` cuts a real hole: a clipped-away region is not
+       * hit-tested, so the spotlit control is genuinely clickable and
+       * typeable while everything around it stays dim and still dismisses.
+       * Proven in Chromium before it was built -- inside the hole the
+       * target is topmost and a real click lands on it; one pixel outside,
+       * the veil is topmost.
+       *
+       * The dim also stops being doubled. The spotlight used to paint its
+       * own 9999px shadow on top of this, so outside the ring sat at ~.92
+       * and the page behind was unreadable. One layer dims now; the
+       * spotlight is the gold ring alone.
+       */
+      tourVeilStyle: (function () {
+        if (!tourOn) return 'display: none;';
+        var base = 'position: fixed; inset: 0; z-index: 200; background: rgba(6,6,8,.72); backdrop-filter: blur(2px);';
+        var box = tourRect;
+        if (!box) return base;
+        var vw = global.innerWidth || 1440;
+        var vh = global.innerHeight || 900;
+        var L = Math.max(0, Math.round(box.left - SPOT_PAD));
+        var T = Math.max(0, Math.round(box.top - SPOT_PAD));
+        var R = Math.min(vw, Math.round(box.left + box.width + SPOT_PAD));
+        var B = Math.min(vh, Math.round(box.top + box.height + SPOT_PAD));
+        // Around the outside, in to the hole, around it the other way, and
+        // back out -- the standard single-path rectangle-with-a-rectangular-
+        // hole. A polygon cannot be rounded, so the hole is square and the
+        // ring above it carries the radius.
+        return base + ' clip-path: polygon(0px 0px, 0px 100%, ' + L + 'px 100%, ' + L + 'px ' + T + 'px, '
+          + R + 'px ' + T + 'px, ' + R + 'px ' + B + 'px, ' + L + 'px ' + B + 'px, ' + L + 'px 100%, 100% 100%, 100% 0px);';
+      }()),
       // The spotlight is the anchor's own rectangle, measured each paint, with
       // a ring around it -- so it keeps up with a collapsing rail or a resize
       // instead of pointing at where an element used to be.
@@ -6910,10 +7059,14 @@
         if (!tourOn) return 'display: none;';
         var box = tourRect;
         if (!box) return 'display: none;';
+        // The RING only. The dim belongs to the veil, which now has a hole
+        // cut in it at exactly this rectangle -- painting a second 9999px
+        // shadow here would darken the page twice and, worse, paint back
+        // over the hole the veil just opened.
         return 'position: fixed; z-index: 201; pointer-events: none; border-radius: 12px;'
-          + ' left: ' + Math.round(box.left - 6) + 'px; top: ' + Math.round(box.top - 6) + 'px;'
-          + ' width: ' + Math.round(box.width + 12) + 'px; height: ' + Math.round(box.height + 12) + 'px;'
-          + ' box-shadow: 0 0 0 9999px rgba(6,6,8,.72), 0 0 0 2px rgba(240,214,166,.9);';
+          + ' left: ' + Math.round(box.left - SPOT_PAD) + 'px; top: ' + Math.round(box.top - SPOT_PAD) + 'px;'
+          + ' width: ' + Math.round(box.width + SPOT_PAD * 2) + 'px; height: ' + Math.round(box.height + SPOT_PAD * 2) + 'px;'
+          + ' box-shadow: 0 0 0 2px rgba(240,214,166,.9), 0 0 24px rgba(240,214,166,.28);';
       }()),
       tourCardStyle: (function () {
         if (!tourOn) return 'display: none;';
@@ -6947,32 +7100,62 @@
         if (tourIndex >= tourSteps.length - 1) return endTour();
         var step = tourSteps[tourIndex];
         /*
-         * AN UNFINISHED INTERACTIVE STEP PERFORMS ITSELF AND WAITS.
+         * AN UNFINISHED INTERACTIVE STEP PERFORMS ITSELF AND WAITS -- ONCE.
          *
          * "you have to go through them, let them do it." Pressing Connect a
-         * channel opens the connections dialog and does NOT advance -- the
-         * walkthrough marks itself as waiting on this step and moves on by
-         * itself once the account really has a channel. Advancing on the press
-         * would be the old behaviour with a better label on it.
+         * channel opens the connections dialog and does NOT advance; the
+         * walkthrough marks itself as waiting and moves on by itself once the
+         * account really has a channel.
+         *
+         * THE SECOND PRESS MOVES ON, AND THAT HALF WAS MISSING. Every gated
+         * step refused to advance until its condition was met, so a brand-new
+         * account could not get past "connect a channel" without connecting
+         * one, past the nasheed without uploading one, or past the import
+         * without a lecture -- and a lecture takes about twenty minutes to
+         * come back, so the review, schedule and finish steps were UNREACHABLE
+         * in a first sitting. Pressing the button again did nothing at all,
+         * which is a dead control on the one screen that exists to teach the
+         * product. It still waits, it still advances by itself when you do the
+         * thing, and it is no longer a wall.
+         *
+         * A step with no `does` never waits: the walkthrough has already
+         * switched to its screen and ringed its control, and there is nothing
+         * for the card's own button to perform.
          *
          * The screen is set here too: `does` usually opens a layer, and the
          * layer hides the card, so arriving back to the wrong tab afterwards
          * would lose the thread.
          */
-        if (step && step.done && !tourDone[tourIndex]) {
+        if (step && step.does && step.done && !tourDone[tourIndex] && UI.tourAwait !== tourIndex) {
           UI.tourAwait = tourIndex;
           if (step.screen && UI.screen !== step.screen) UI.screen = step.screen;
-          if (step.does) { step.does(); refresh(); return; }
+          step.does();
           refresh();
           return;
         }
-        setUI({ tourStep: tourIndex + 1 });
+        // Moving on clears the wait, so a condition satisfied later cannot
+        // yank somebody back to a step they deliberately walked past.
+        setUI({ tourStep: tourIndex + 1, tourAwait: null });
       },
       tourBack: function (e) { stop(e); setUI({ tourStep: Math.max(0, tourIndex - 1) }); },
       tourSkip: function (e) { stop(e); endTour(); },
-      // The dimmed area is a way out. A veil with nothing to dismiss it is an
-      // unusable page, and that is the one failure a tour must never cause.
-      tourDismiss: function (e) { stop(e); endTour(); },
+      /*
+       * CLICKING THE DIM PUTS IT AWAY. IT DOES NOT SPEND IT.
+       *
+       * This called endTour(), which writes the seen key -- so one stray
+       * click anywhere on the page while the walkthrough was up ended it
+       * FOREVER, and the click itself was eaten rather than doing whatever
+       * was intended. That is exactly the shape of "it randomly popped up
+       * for a sec then disappeared": something you never chose to dismiss,
+       * gone with no way back except finding it in the account menu.
+       *
+       * The dim must still be a way out -- a veil with nothing to dismiss
+       * it is an unusable page, and that is the one failure a walkthrough
+       * must never cause. So it still closes, and it is still there on the
+       * next visit. Finishing it for good is the explicit "Skip tour",
+       * which is a decision rather than a slip.
+       */
+      tourDismiss: function (e) { stop(e); setUI({ tourStep: -1, tourAwait: null }); },
       // Offered for good in the account menu, so it is repeatable rather than
       // a one-shot a new user can lose by clicking past it.
       // Repeatable from the account menu. It restarts the WHOLE walkthrough

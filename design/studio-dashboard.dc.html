@@ -475,7 +475,7 @@
 
       <section style="flex: 1 1 480px; display: flex; flex-direction: column; gap: 13px; min-width: 0;">
         <span style="font-size: 12px; color: #8B8B93; line-height: 1.5; max-width: 70ch;">Every clip still waiting on a decision, highest score first — across all lectures. To work through one lecture at a time, open it in the <a href="#" onClick="{{ goLibrary }}">lecture library</a>.</span>
-        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+        <div data-tour="queue-tabrow" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
           <sc-for list="{{ qTabs }}" as="tab" hint-placeholder-count="4">
             <button onClick="{{ tab.select }}" style="{{ tab.style }}">{{ tab.label }}<span style="{{ tab.countStyle }}">{{ tab.count }}</span></button>
           </sc-for>
@@ -909,7 +909,7 @@
   <sc-if value="{{ isTemplates }}" hint-placeholder-val="{{ false }}">
     <div style="flex: 1; min-height: 0; overflow: auto; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1);">
       <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 40px; border-bottom: 1px solid #1E1E22; background: #0C0C0E;">
-        <label style="{{ selectWrapStyle }}">
+        <label data-tour="tpl-pick" style="{{ selectWrapStyle }}">
           <i class="ph ph-text-aa" style="font-size: 14px; color: #8B8B93;"></i>
           <select value="{{ activeTpl }}" onChange="{{ setActiveTpl }}" style="{{ selectStyle }}">
             <sc-for list="{{ tplList }}" as="opt" hint-placeholder-count="5"><option value="{{ opt }}">{{ opt }}</option></sc-for>
