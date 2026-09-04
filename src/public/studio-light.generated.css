@@ -534,7 +534,7 @@ body.dc-light #dcOwnerScreen .dcow-lift:hover{background-color:rgba(162, 118, 44
 body.dc-light #dcOwnerScreen .dcow-lift > span:first-child{color:#62626B !important}
 body.dc-light #dcOwnerScreen .dcow-lift > span:last-child{color:#72706D !important}
 body.dc-light #dcOwnerScreen thead th{color:#86868F !important}
-body.dc-light #dcOwnerScreen div:has(> div > table) > div:first-child > span:first-child,body.dc-light #dcOwnerScreen div:has(> div > span > .dcow-fill) > div:first-child > span:first-child{color:#4A4948 !important}
+body.dc-light #dcOwnerScreen div:has(> div > table) > div:first-child > span:first-child,body.dc-light #dcOwnerScreen div:has(> div > span > .dcow-fill) > div:first-child > span:first-child,body.dc-light #dcOwnerScreen .dcow-d4 > div:has(> div > span) > div:first-child > span:first-child,body.dc-light #dcOwnerScreen .dcow-d5 > div:has(> div > span) > div:first-child > span:first-child{color:#4A4948 !important}
 @media (max-width: 820px){
 body.dc-light #dcRail{border-top:1px solid #E2E2E6}
 }

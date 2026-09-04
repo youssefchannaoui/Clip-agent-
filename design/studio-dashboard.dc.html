@@ -510,7 +510,7 @@
                     <div style="position: relative; width: 100%; height: 3px; border-radius: 20px; background: #1D1D21; overflow: hidden;"><span style="{{ deckProgStyle }}"></span></div>
                     <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8B8B93;"><span>{{ deckPos }} waiting</span><span style="margin-left: auto; color: #6E6E76;">{{ deckTally }}</span></div>
                   </div>
-                  <div style="display: flex; flex-direction: column; gap: 5px;">
+                  <div data-deck-info="1" style="display: flex; flex-direction: column; gap: 5px;">
                     <span style="font-size: 14px; line-height: 1.45; font-weight: 600; color: #F2F2F4; text-wrap: pretty; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">{{ deckClip.caption }}</span>
                     <span style="font-size: 10.5px; color: #6E6E76; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">{{ deckClip.lecTitle }}</span>
                     <span style="{{ deckWhyStyle }}"><i class="ph ph-sparkle" style="font-size: 11px; flex: none; margin-top: 2px; color: #C9A87A;"></i>{{ deckWhy }}</span>
@@ -1089,8 +1089,9 @@
                         </span>
                       </span>
                       <sc-for list="{{ cell.chips }}" as="chip" hint-placeholder-count="1">
-                        <span style="{{ chip.rowStyle }}">
+                        <span title="{{ chip.tip }}" style="{{ chip.rowStyle }}">
                           <span style="{{ chip.thumbStyle }}"></span>
+                          <span style="{{ chip.timeStyle }}">{{ chip.time }}</span>
                           <span style="{{ chip.style }}">{{ chip.label }}</span>
                         </span>
                       </sc-for>

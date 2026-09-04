@@ -1050,7 +1050,7 @@
       cause: 'Every clip mixes one in, so a lecture cannot finish rendering without at least one uploaded.',
       fixes: [
         'Upload a nasheed in the Nasheed library.',
-        'Upload two or more before turning on automatic posting, so they can rotate.',
+        'One is enough to post with. A second is optional \u2014 with two or more they rotate between clips.',
       ],
     },
     {
@@ -1058,7 +1058,7 @@
       title: 'The connected account needs reconnecting',
       cause: 'The permission this account gave us has expired or been withdrawn, so we can no longer post on its behalf. Nothing was published.',
       fixes: [
-        'Open Platforms and reconnect the account.',
+        'Open Connections from the "Posting to" row on Home and reconnect the account.',
         'Approve every permission on the consent screen — a skipped one causes exactly this.',
         'Then press Retry on the clip.',
       ],
@@ -1865,7 +1865,6 @@
     for (var a = 0; a < accounts.length; a++) live[accounts[a].id] = 1;
     var chosen = (setting.accountIds && setting.accountIds.length ? setting.accountIds : [setting.accountId])
       .filter(function (id) { return id && live[id]; });
-    var limit = ((DATA.publishingLimits || {})[key]) || 1;
     return {
       key: key,
       title: PLATFORM_TITLES[key] || key,
@@ -1875,7 +1874,6 @@
       status: status,
       accounts: accounts,
       accountIds: chosen,
-      maxAccounts: limit,
       account: account,
       connected: Boolean(status.connected),
       // An absent provider counts as configured, matching the server's shape.
@@ -2282,6 +2280,11 @@
     templates: 'Templates', music: 'Nasheed library', language: 'Arabic & terms',
     performance: 'Performance', editor: 'Clip editor \u00b7 BETA', tokens: 'Tokens & billing',
     owner: 'Owner', deenai: 'DeenAI', help: 'Help',
+    // The lecture's own name is drawn 18px bold in the BODY directly under this
+    // header (detailTitle), so the header names the kind of screen rather than
+    // repeating it. Without an entry here pageTitle fell through to the generic
+    // 'Studio' -- the one screen in the app that did not say what it was.
+    detail: 'Lecture',
   };
 
   function sublineFor(screen, ctx) {
@@ -2305,6 +2308,25 @@
       case 'deenai': return 'Growth advice from your own numbers — nothing leaves this server';
       case 'help': return 'How every part of DeenClipped works, with screenshots of the real app';
       case 'tokens': return ctx.planLabel;
+      // The body already carries the lecture's name, its source length and how
+      // many clips came back, so the subline says how those clips STAND -- the
+      // one thing the screen does not otherwise state.
+      case 'detail': {
+        var dc = ctx.detailClips || [];
+        if (!ctx.detailOpen) return 'Open a lecture from the library';
+        if (!dc.length) return 'No clips from this lecture yet';
+        var waiting = 0, kept = 0;
+        dc.forEach(function (c) {
+          var d = decision(c);
+          if (d === null) waiting += 1;
+          else if (d === 'approved') kept += 1;
+        });
+        var parts = [plural(dc.length, 'clip')];
+        if (waiting) parts.push(waiting + ' awaiting review');
+        if (kept) parts.push(kept + ' approved');
+        if (!waiting && !kept) parts.push('all decided');
+        return parts.join(' \u00b7 ');
+      }
       default: return '';
     }
   }
@@ -2721,7 +2743,14 @@
     });
 
     var detail = projects.filter(function (p) { return p.id === UI.openProject; })[0] || projects[0] || null;
-    var detailClips = detail ? clipsOf(detail.id).sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).map(clipCard) : [];
+    var detailRaw = detail ? clipsOf(detail.id) : [];
+    var detailClips = detail ? detailRaw.slice().sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).map(clipCard) : [];
+    // The header's subline is built by sublineFor, which is module-level and
+    // cannot see these locals -- so they travel on ctx like everything else it
+    // reads. The RAW clips, not the cards: decision() is the one place that
+    // says what state a clip is in, and it reads the server's own status.
+    ctx.detailOpen = Boolean(detail);
+    ctx.detailClips = detailRaw;
 
     // Schedule: the next seven days, filled from clips that already hold a slot.
     var DAY_MS = 86400000;
@@ -2945,7 +2974,23 @@
               // were spilling past the cell's own border. min-width:0 so the
               // grid column may actually shrink -- without it a long chip sets
               // the column's floor and the whole row grows instead of clipping.
-              style: 'position: relative; display: flex; flex-direction: column; gap: 3px; height: 100%; min-height: 62px; padding: 5px 7px 6px;'
+              // THE CELL MUST BE TALL ENOUGH FOR WHAT IT CHOOSES TO DRAW.
+              // It picks its chips from the ITEM COUNT but its floor was a flat
+              // 62px, and the week row is `flex: 1 1 0` -- so wherever the
+              // calendar section is short (the schedule's side column wraps
+              // below 1246px, taking the section from 795px to 415) the row
+              // fell to that floor and the cell's own content no longer fitted.
+              // Measured 4 Sept 2026 at 1245px and below, down to 900: cell
+              // clientHeight 60 against scrollHeight 89, the second chip cut
+              // through the middle and the "+2 more" line drawn ENTIRELY below
+              // the border under overflow:hidden -- so a day holding four clips
+              // showed one, half of another, and no count. The v3.72.1 fix for
+              // this exact symptom was measured at 1440 only, where the row is
+              // 120-138px, and does not hold once the row collapses.
+              // 89px is what the current content measures: date 16 + two chips
+              // 42 + more-line 12 + padding 11 + border 2 + gaps. It changes
+              // nothing at 1440, where the row is already taller.
+              style: 'position: relative; display: flex; flex-direction: column; gap: 3px; height: 100%; min-height: 89px; padding: 5px 7px 6px;'
                 + ' overflow: hidden; min-width: 0;'
                 + ' border: 1px solid ' + (isToday ? 'rgba(240,214,166,.45)' : 'var(--dc-n-1c1c21, #1C1C21)') + '; border-radius: 10px;'
                 + ' background: ' + (isToday ? 'rgba(217,180,120,.05)' : inMonth ? 'var(--dc-n-141418, #141418)' : 'var(--dc-n-0f0f12, #0F0F12)') + ';'
@@ -3001,11 +3046,25 @@
               // the count instead of fitting it, which is not the same thing.
               chips: items.slice(0, items.length > 3 ? 2 : 3).map(function (c) {
                 return {
-                  label: timeOf(c.scheduledAt) + '  ' + String(c.title || 'Clip'),
+                  // THE TIME IS ITS OWN CELL, so only the TITLE ellipsises.
+                  // Built as one string, the fixed-width time always won and
+                  // what was left for the title was whatever the cell had
+                  // spare: measured 4 Sept 2026, a 26-character title showed 9
+                  // characters at 1440, 3 at 1280 and ONE at 900. Two clips
+                  // from the same lecture were indistinguishable on the one
+                  // screen whose job is to say which clip goes out when.
+                  time: timeOf(c.scheduledAt),
+                  label: String(c.title || 'Clip'),
+                  // And the whole thing on hover, since no ellipsis can be
+                  // widened enough for an 88-character lecture title. There was
+                  // no `title` or `aria-label` anywhere from the span up to
+                  // #studio, so the identity was unrecoverable.
+                  tip: timeOf(c.scheduledAt) + ' \u2014 ' + String(c.title || 'Clip'),
+                  timeStyle: 'flex: none; font-size: 10.5px; line-height: 1.35; color: var(--dc-ink-faint, #6E6E76); font-variant-numeric: tabular-nums;',
                   rowStyle: 'display: flex; align-items: center; gap: 5px; min-width: 0;',
                   thumbStyle: 'width: 12px; height: 21px; flex: none; border-radius: 3px; border: 1px solid var(--dc-line, #26262A);'
                     + ' background: ' + thumb(c.thumbUrl) + ';',
-                  style: 'display: block; font-size: 10.5px; line-height: 1.35; color: var(--dc-ink-body, #BCBCC3);'
+                  style: 'flex: 1 1 auto; min-width: 0; font-size: 10.5px; line-height: 1.35; color: var(--dc-ink-body, #BCBCC3);'
                     + ' white-space: nowrap; overflow: hidden; text-overflow: ellipsis;',
                 };
               }),
@@ -4685,8 +4744,18 @@
           + (isCurrent || tier === 'basic' || unconfigured
             ? 'var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-faint, #6E6E76); cursor: default;'
             : 'rgba(217,180,120,.45); background: rgba(217,180,120,.13); color: var(--dc-gold-lit, #F0D6A6); cursor: pointer;'),
-        foot: unconfigured ? 'Not open for checkout yet.' : '',
-        footStyle: unconfigured ? 'font-size: 10.5px; color: var(--dc-ink-faint, #6E6E76);' : 'display: none;',
+        // THE NOTE KEEPS ITS LINE IN EVERY CARD, whether or not it has anything
+        // to say. `display: none` took its height out of ONE card, and since
+        // the button is bottom-anchored (`margin-top: auto`) that card's
+        // call-to-action rose by the note plus the card's 14px gap -- measured
+        // 30.79px, with all three cards the same height. Studio has no Stripe
+        // prices in production, so the three buttons a customer compares are
+        // not on one line on the live billing screen.
+        // `visibility: hidden` reserves the line instead; the non-breaking
+        // space is what gives an empty note a line box to reserve.
+        foot: unconfigured ? 'Not open for checkout yet.' : '\u00a0',
+        footStyle: 'font-size: 10.5px; line-height: 1.6; color: var(--dc-ink-faint, #6E6E76);'
+          + (unconfigured ? '' : ' visibility: hidden;'),
         cardStyle: 'position: relative; display: flex; flex-direction: column; gap: 14px; padding: 26px 24px 24px; border-radius: 16px; border: 1px solid '
           + (isCurrent ? 'rgba(127,209,166,.4)' : tier === 'studio' ? 'rgba(217,180,120,.4)' : 'var(--dc-line-soft, #1E1E22)')
           + '; background: ' + (tier === 'basic' ? 'var(--dc-bg, #121214)' : 'linear-gradient(180deg, rgba(217,180,120,.05), rgba(217,180,120,.01)), var(--dc-bg, #121214)') + ';',
@@ -8413,14 +8482,14 @@
             : 'Active',
           icon: p.icon,
           key: p.key,
-          // Everything the account picker needs. `accounts` is what the
-          // connection actually holds (one Facebook login can carry several
-          // Pages), `accountIds` is what has been chosen, and `maxAccounts` is
-          // what this plan allows on THIS platform -- 1 for YouTube and TikTok
-          // whatever the plan, because their credentials can only hold one.
+          // What the connection actually holds. A slot may still be a LIST --
+          // one Facebook login carries several Pages, and an account that
+          // connected three YouTube channels while Studio sold them (v3.41.0
+          // to v3.125.0) has three on disk. The dialog lists them all and says
+          // which one posts; the cap that decides that lives in billing, not
+          // here, so there is no `maxAccounts` for a surface to disagree with.
           accounts: p.accounts,
           accountIds: p.accountIds,
-          maxAccounts: p.maxAccounts,
           // Opens the combined dialog rather than a per-platform one: seeing all
           // four at once is what makes the publishing picture legible.
           open: function (e) { stop(e); global.StudioAdapter.onOpenConnections(p.key); },

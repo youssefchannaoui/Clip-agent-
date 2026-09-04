@@ -24,6 +24,18 @@ import test from 'node:test';
 
 const ROOT = path.dirname(path.dirname(new URL(import.meta.url).pathname));
 const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+/**
+ * The same file with its comments taken out.
+ *
+ * Every sweep below asks "does this identifier still appear", and a comment
+ * saying WHY it was removed contains it by definition. That is this repo's
+ * recurring "the test fails on its own explanation" shape -- now the fifth
+ * time -- and its danger is that it pushes the next person to reword a comment
+ * rather than to fix anything. Strip; do not reword.
+ */
+const code = rel => read(rel)
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/^\s*\/\/.*$/gm, '');
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-onechan-'));
 process.env.DATA_DIR = dataDir;
@@ -83,15 +95,15 @@ test('the share-out mode is gone from the store, the route and the publish path'
   // so leaving it would be a stored setting no code path can act on -- the
   // dead flag this repo already paid for once (v3.116.0, the master publishing
   // switch that had been false in production for the life of the product).
-  assert.ok(!/spread/.test(read('src/social.js')), 'the publish path');
-  assert.ok(!/rotationIndex/.test(read('src/social.js')), 'and the ordinal it needed');
-  assert.ok(!/spread:/.test(read('src/store.js')), 'the stored default');
-  assert.ok(!/body\.spread/.test(read('src/server.js')), 'and the route that wrote it');
+  assert.ok(!/spread/.test(code('src/social.js')), 'the publish path');
+  assert.ok(!/rotationIndex/.test(code('src/social.js')), 'and the ordinal it needed');
+  assert.ok(!/spread:/.test(code('src/store.js')), 'the stored default');
+  assert.ok(!/body\.spread/.test(code('src/server.js')), 'and the route that wrote it');
 });
 
 test('no surface offers a channel to switch between', () => {
-  const host = read('src/public/index.html');
-  const adapter = read('src/public/studio-adapter.js');
+  const host = code('src/public/index.html');
+  const adapter = code('src/public/studio-adapter.js');
   // The schedule's switcher, its chips and the mode pair.
   for (const gone of ['dcSchedChannels', 'data-sched-lane', 'data-sched-spread', 'dcsc']) {
     assert.ok(!host.includes(gone), `${gone} is still in the host`);
@@ -104,13 +116,18 @@ test('no surface offers a channel to switch between', () => {
   // And the connections dialog's picker.
   assert.ok(!host.includes('data-conn-account'), 'the account picker');
   assert.ok(!host.includes('onPublishingAccounts'), 'and the handler behind it');
+  // The allowance the picker sized itself from. It travelled all the way from
+  // billing to /api/state to the dialog; a number still being sent that nobody
+  // reads is a second answer waiting to disagree with the one in billing.
+  assert.ok(!code('src/server.js').includes('publishingLimits'), 'and the payload that carried it');
+  assert.ok(!adapter.includes('maxAccounts'), 'and its binding');
 });
 
 test('the schedule has ONE denominator again', () => {
   // "3 of 4 scheduled" beside "Up to 8 posts a day" beside "0 of 8 scheduled
   // today" is the three-numbers-disagreeing bug that multi-channel caused and
   // v3.116.0 papered over by removing the denominator entirely.
-  const adapter = read('src/public/studio-adapter.js');
+  const adapter = code('src/public/studio-adapter.js');
   assert.match(adapter, /schedDayCount: schedDayItems\.length \+ ' of ' \+ daySlots \+ ' scheduled'/);
   assert.ok(!/on each of your/.test(adapter), 'no per-channel wording anywhere');
   assert.ok(!/across your channels/.test(adapter));
@@ -129,7 +146,7 @@ test('help no longer teaches a feature that is gone', () => {
   // An article describing "press Connect again — it now reads Add another" is
   // worse than no article: it sends somebody looking for a button that does
   // not exist and reads as the product being broken.
-  const help = read('src/help.js');
+  const help = code('src/help.js');
   assert.ok(!/multi-channel/.test(help));
   assert.ok(!/Add another/.test(help));
   assert.ok(!/up to 3 accounts/.test(help));

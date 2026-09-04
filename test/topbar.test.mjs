@@ -94,8 +94,19 @@ test('the topbar row shares one height and the search does not follow the headin
   // x=597 on Help.
   assert.ok(host.includes('#dcTopbar > label, #dcTopbar > button, #dcTopbar > div > button { height: 34px'),
     'one height for the whole control row');
-  assert.ok(host.includes('#dcSearchBox { flex: 0 0 300px; margin-left: auto; }'),
-    'the search hangs off the right cluster, not the heading');
+  // THE PROPERTY IS `margin-left: auto` AND THE 300px BASIS, not the shrink
+  // factor. This pinned the whole declaration and went red on 4 Sept 2026 when
+  // the basis was made shrinkable -- because rigid at 300px, the heading block
+  // absorbed every pixel of a narrow desktop and the screen's own subtitle was
+  // cut to 22% of itself at 981px (nine of thirteen screens lost part of theirs
+  // at 1024). That copy is the app explaining itself, so it gives way LAST.
+  // What this test exists for is unaffected and was re-measured across all ten
+  // screens: travel at 1440 is 0px with the field at 300px on every one of
+  // them, and 28px at 1280 against the 26px v3.94.0 recorded. Below that the
+  // field does move -- the deliberate trade, and the alternative is destroying
+  // the sentence.
+  assert.ok(host.includes('#dcSearchBox { flex: 0 1 300px; min-width: 150px; margin-left: auto; }'),
+    'the search hangs off the right cluster, not the heading, and yields before the copy');
   assert.ok(/#dcTopbar > button, #dcTopbar > div:not\(:first-child\) \{ flex: none/.test(host),
     'only the heading gives way, or the chips wrap inside their pills');
 });

@@ -877,13 +877,6 @@ function appState(user = null) {
     timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
     log: logFor(user, 60), directPublishingEnabled: config.socialPublishEnabled,
     publishingSettings: publishingSettings(user), social: social.connectionStatus(user), billing: billing.publicBilling(user),
-    // How many accounts this plan may post to on each platform, computed by the
-    // same function the route enforces with. The browser needs it to know how
-    // many boxes to let someone tick -- and it is per platform, because the
-    // OAuth store can hold several Meta accounts and only one YouTube channel,
-    // so a single number would offer a choice that cannot be honoured.
-    publishingLimits: Object.fromEntries(['youtube', 'instagram', 'facebook', 'tiktok']
-      .map(provider => [provider, billing.accountsPerPlatform(user, provider)])),
   };
 }
 

@@ -244,7 +244,20 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
    subtitle ellipsizes rather than pushing anything. */
 #dcTopbar > div:first-child { flex: 0 1 auto; min-width: 0; }
 #dcTopbar > div:first-child > span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#dcSearchBox { flex: 0 0 300px; margin-left: auto; }
+/* THE SEARCH GIVES WAY BEFORE THE COPY DOES.
+   It was `flex: 0 0 300px` -- rigid -- so between the 980px collapse and about
+   1180px the heading block absorbed the whole shortfall and the screen's own
+   subtitle took it: measured 4 Sept 2026 at 981px, 84 of 386px, 22% of "How
+   every part of DeenClipped works, with screenshots of the real app", drawn as
+   "How every part of Dee...". At 1024, nine of the thirteen screens lost part
+   of their subtitle. One pixel narrower, at 980, the field hides outright and
+   every subtitle comes back whole -- which is what shows the field was the
+   cause rather than the width.
+   That copy is the app explaining itself, not user data, so it must be the
+   LAST thing to give way. 150px still holds a usable field; v3.94.0's rule
+   that the search does not travel between screens is unaffected wherever there
+   is slack, which is every width it was measured at. */
+#dcSearchBox { flex: 0 1 300px; min-width: 150px; margin-left: auto; }
 /* The heading is the only thing allowed to give way. Without this the chips
    shrank instead and "2 of 5 done" wrapped onto two lines inside its pill. */
 #dcTopbar > button, #dcTopbar > div:not(:first-child) { flex: none; white-space: nowrap; }
@@ -341,6 +354,30 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
 #studioHighlight .hl-label { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--dc-ink-faint, #6E6E76); }
 #studioHighlight .hl-row { display: flex; align-items: center; gap: 8px; }
 #studioHighlight .hl-row > span:first-child { flex: 1; font-size: 12px; color: var(--dc-ink-soft, #A2A2AA); }
+/* THE SLIDER ROWS ARE A COLUMN, so they are given column widths.
+   The rule above puts `flex: 1` on the LABEL, so the label swelled or shrank
+   to swallow whatever the value chip did not use -- which means the slider's
+   left edge and its width were set by how many characters the value happened
+   to read ("Off" vs "5 per line"). Measured 4 Sept 2026 at 1440x950: eleven
+   sliders at SEVEN different left edges (spread 31.5px) and three different
+   widths, with the right-pinned value chips leaving 42px of ragged LEFT edge.
+   CLAUDE.md's alignment standard names exactly that: "the left edge of each
+   column across every row, as a SET: more than one value is a ragged column".
+
+   Fixed by geometry: a basis for each of the three cells. 108px holds the
+   longest label (measured natural width 104px, "Words per line") and 80px the
+   longest value (68px, "5 per line") with room for a two-digit count; nothing
+   is `overflow: hidden`, so a longer value can still never be lost.
+   Measured after: all four spreads 0.00, no label truncated, slider 102px.
+
+   Scoped with `:has(> input[type="range"])` so it reaches only the eleven
+   slider rows. The colour rows are a different shape -- label, hex, swatch,
+   46px tall against 22 -- and are deliberately left alone; measured unchanged
+   at 46px after. The same panel serves Templates and the gated clip editor,
+   so this squares both. */
+#studioHighlight .hl-row:has(> input[type="range"]) > span:first-child { flex: 0 0 108px; }
+#studioHighlight .hl-row:has(> input[type="range"]) > input[type="range"] { flex: 1 1 auto; min-width: 0; margin: 0; }
+#studioHighlight .hl-row:has(> input[type="range"]) > .hl-hex { flex: 0 0 80px; text-align: right; }
 #studioHighlight .hl-fonts { display: flex; flex-wrap: wrap; gap: 6px; }
 #studioHighlight .hl-font {
   padding: 5px 9px; border: 1px solid var(--dc-line, #26262A); border-radius: 8px; background: var(--dc-bg-raised, #17171A);
@@ -2694,6 +2731,80 @@ select:focus{outline:none;border-color:var(--blue)}
 
 <script>
 'use strict';
+/* ─────────────────────────────────────────────────────────────────────────
+   FOCUS TRAP FOR THE MODAL DIALOGS.
+
+   All four of them -- #studioConn, #studioAccount, #studioBug, #dcTasks --
+   declare `aria-modal="true"`, which is a PROMISE to assistive tech that the
+   rest of the page is unreachable while they are up. It was not. Measured
+   over ~20 Tab presses from each open dialog: 16 escapes out of Connections,
+   14 out of Account, 6 out of Report a bug, 4 out of Your tasks -- landing on
+   Start job, Connect an account and the rail, behind the scrim, invisible.
+   Connections did not even move focus INTO itself on open: activeElement
+   stayed on <body>, so the first Tab went to the top of the PAGE.
+
+   `pointer-events: none` on a scrim stops the mouse and nothing else -- the
+   lesson the editor gate already paid for (v3.78.x): only `inert` stops
+   tabbing. So the trap inerts every SIBLING along the dialog's own ancestor
+   chain, never an ancestor itself (inerting an ancestor would inert the
+   dialog with it -- the mistake that made the first red-proof read 19 -> 10
+   instead of 19 -> 0).
+
+   Window-pinned because index.html has several inline script scopes and the
+   open/close sites live in different ones -- the trap this file has recorded
+   five times now. Call it as window.dcTrapFocus / window.dcReleaseFocus.
+   ───────────────────────────────────────────────────────────────────────── */
+(function(){
+  var TRAPS = [];   /* a stack, so a nested dialog releases in the right order */
+  function focusables(root){
+    return Array.prototype.filter.call(
+      root.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'),
+      function(el){ return el.offsetWidth || el.offsetHeight || el.getClientRects().length; });
+  }
+  window.dcTrapFocus = function(root){
+    if(!root || TRAPS.some(function(t){ return t.root === root; })) return;
+    var inerted = [];
+    var node = root;
+    while(node && node.parentElement){
+      var parent = node.parentElement;
+      for(var i=0;i<parent.children.length;i+=1){
+        var sib = parent.children[i];
+        /* Skip the chain itself, anything already inert (someone else's trap
+           or the editor gate), and <script>, which cannot hold focus anyway. */
+        if(sib === node || sib.inert || sib.tagName === 'SCRIPT') continue;
+        sib.inert = true;
+        inerted.push(sib);
+      }
+      node = parent;
+      if(parent === document.body) break;
+    }
+    var opener = document.activeElement;
+    TRAPS.push({ root: root, inerted: inerted, opener: opener });
+    /* Move focus IN. The dialog's own close button is the wrong landing spot --
+       it puts the first Tab past everything -- so prefer the first control that
+       is not a close. */
+    var list = focusables(root);
+    var first = list.filter(function(el){
+      return !el.hasAttribute('data-conn-close') && !el.hasAttribute('data-acct-close')
+        && !el.hasAttribute('data-bug-close') && !el.hasAttribute('data-tasks-close');
+    })[0] || list[0];
+    if(first){ try{ first.focus(); }catch(e){} }
+    else { root.setAttribute('tabindex','-1'); try{ root.focus(); }catch(e){} }
+  };
+  window.dcReleaseFocus = function(root){
+    for(var i=TRAPS.length-1;i>=0;i-=1){
+      if(TRAPS[i].root !== root) continue;
+      var t = TRAPS.splice(i,1)[0];
+      /* Undo exactly what this trap set -- never a blanket sweep, or it would
+         un-inert the editor gate's own blur. */
+      t.inerted.forEach(function(el){ el.inert = false; });
+      if(t.opener && t.opener.focus && document.contains(t.opener)){
+        try{ t.opener.focus(); }catch(e){}
+      }
+      return;
+    }
+  };
+}());
 /* Ambient-motion housekeeping for studio-motion.css: pause idle animation
    while the tab is hidden, and play the one-per-session arrival veil when
    the visitor came from the public site — never for warm sessions, deep
@@ -4064,13 +4175,30 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          that always refuses -- invariant 9 by another door. */
       const allowed = !(vals && vals.aiLocked);
       const wanted = allowed && (screen === 'queue' || screen === 'library' || screen === 'detail');
+      /* SWEEP BY OUR OWN MARKER FIRST, never by the card.
+         patch() pairs a container's children by index and skips data-host-owned
+         ones, and syncAttributes strips any attribute the new render does not
+         carry -- so going Review queue -> Lecture library pairs a clip <article>
+         against a lecture <article>, takes data-clip off it, and leaves the star
+         inside. A loop over `[data-clip]` can then never see it again: measured
+         4 Sept 2026, four lecture cards each carrying a stranded star and a
+         Posts-to row, +68px of card height, and the star still bound to the
+         QUEUE clip's id -- clickable, keyboard-reachable, and retitling a clip
+         that is not on screen. Same rule clearClipToolsAreas already follows. */
+      for (const n of document.querySelectorAll('#studio [data-dc-star], #dcMobile [data-dc-star]')){
+        const owner = n.parentElement;
+        if (!owner || !owner.hasAttribute('data-clip') || owner.getAttribute('data-clip') !== n.getAttribute('data-dc-star')) n.remove();
+      }
       for (const card of document.querySelectorAll('#studio article[data-clip]')){
         const id = card.getAttribute('data-clip');
         let star = card.querySelector(':scope > [data-dc-star]');
         if (!wanted || !id){ if (star) star.remove(); continue; }
         if (!star){
           star = document.createElement('span');
-          star.setAttribute('data-dc-star', '');
+          /* The id it was BUILT for. The sweep above compares it against the
+             card's own data-clip, so a star that ends up on a different clip is
+             removed and rebuilt instead of firing the first clip's closure. */
+          star.setAttribute('data-dc-star', id);
           star.setAttribute('data-host-owned', '');
           /* role=button rather than <button>: these cards are clickable
              regions and a nested button would swallow the outer click --
@@ -4760,13 +4888,39 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          leftover height; the settings column takes the scrolling. min-height:0
          on both, or a flex child refuses to shrink below its content and the
          overflow never engages. */
+      /* ONLY LOCK THE LAYOUT WHEN IT CAN HOLD THE CONTENT.
+         `overflow-y: hidden` on the scroller is what keeps the preview pinned
+         while the two columns sit side by side and fit -- but the moment they
+         do not, everything below the cut is DRAWN AND THEN HIDDEN with nothing
+         able to scroll it. Measured 4 Sept 2026 at 1366x768, the commonest
+         desktop viewport: 105px lost, the "Preview on a real clip" button drawn
+         at y 751 while the panel clips at 676, and twelve wheel gestures
+         totalling 4800px leaving scrollTop at 0. Also 1280x800 (73px) and
+         1536x864 (9px, the CTA row half cut); and below 1050px wide, where the
+         row wraps and the preview column goes under the settings entirely.
+         The preview IS the screen, so losing it is worse than a page that
+         scrolls.
+         Two conditions, both measured on the live nodes: the columns must still
+         be side by side, and the row must fit the space it is being locked
+         into. Otherwise stand down and let the screen's own `overflow: auto`
+         scroll as one -- the honest fallback, and what this did before v3.53. */
+      const sideBySide=Math.abs(previewCol.getBoundingClientRect().top-settings.getBoundingClientRect().top)<4;
+      const fits=row.scrollHeight<=scroller.clientHeight+1;
+      if(!sideBySide||!fits){clearTemplatesLayout();return}
       set(scroller,{'overflow-y':'hidden','display':'flex','flex-direction':'column'});
       for(const child of scroller.children){
         if(child!==row)set(child,{'flex':'0 0 auto'});
       }
       set(row,{'flex':'1 1 auto','min-height':'0','align-items':'flex-start'});
       set(settings,{'max-height':'100%','overflow-y':'auto','min-height':'0'});
+      /* A resize changes both answers and does not repaint the studio, so the
+         lock would survive into a viewport that cannot hold it. */
+      if(!window.__dcTplResize){
+        window.__dcTplResize=true;
+        window.addEventListener('resize',()=>{ if(window.paintTemplatesLayoutNow)window.paintTemplatesLayoutNow(); });
+      }
     }
+    window.paintTemplatesLayoutNow=()=>{ try{ paintTemplatesLayout(); }catch(e){} };
 
     /* The editor has the same problem the Templates screen had, worse: the
        preview column runs 1363px tall inside a 481px row, so the 9:16 frame is
@@ -6043,7 +6197,20 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       alive(liveEls.home);alive(liveEls.bar);
       const onHome=StudioAdapter.ui.screen==='home';
       const any=vals.liveCount>0;
-      liveEls.bar.classList.toggle('hide',!(!onHome&&any));
+      const barUp=!onHome&&any;
+      liveEls.bar.classList.toggle('hide',!barUp);
+      /* THE BAR IS PAINTED OVER THE PAGE, so the page has to be told it is
+         there. It is fixed at bottom:18px with z-index 150 and nothing
+         reserved space for it, so any control whose centre fell in its band
+         received no clicks at all -- the click went to the bar. Measured
+         4 Sept 2026: on the review deck at 1100x950 it covered Reject, Edit,
+         Approve and Previous, and a real click at Approve's centre was
+         dispatched to `div.slb-head`; on Templates it took 171x26px of the
+         watermark-position row.
+         The class lets every scrolling screen bring its foot above the bar.
+         The DECK is the one screen that deliberately does not scroll, so it
+         gets the allowance as its own bottom offset instead. */
+      document.body.classList.toggle('dc-livebar',barUp);
       if(onHome){
         dockLiveHome(liveEls.home);
         /* Stable: on Home the section stays put whether or not anything is
@@ -6189,7 +6356,7 @@ function renderStudio(){
        at a glance. Rendered here because the design's dialog only carries
        bindings for a single platform. */
     const connEls={root:$('#studioConn'),list:$('#studioConnList'),summary:$('#studioConnSummary')};
-    const closeConn=()=>{connEls.root.classList.add('hide');StudioAdapter.ui.connProvider=null};
+    const closeConn=()=>{connEls.root.classList.add('hide');window.dcReleaseFocus(connEls.root);StudioAdapter.ui.connProvider=null};
     $$('[data-conn-close]').forEach(el=>el.onclick=closeConn);
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!connEls.root.classList.contains('hide'))closeConn()});
 
@@ -6337,7 +6504,7 @@ function renderStudio(){
        nowhere a user looks. Anything reached across scopes goes through
        window. */
     window.paintConnections=paintConnections;
-    StudioAdapter.onOpenConnections=()=>{paintConnections();connEls.root.classList.remove('hide')};
+    StudioAdapter.onOpenConnections=()=>{paintConnections();connEls.root.classList.remove('hide');window.dcTrapFocus(connEls.root)};
     /* /api/clip-settings validates all three fields together, so a partial patch
        has to be merged onto what the account already has or it 400s.
 
@@ -6946,7 +7113,7 @@ StudioAdapter.onProbeSource=async url=>{try{
        has no password to change and a row offering one would be a control that
        cannot do anything. */
     const acctEls={root:$('#studioAccount'),body:$('#studioAcctBody'),sub:$('#studioAcctSub')};
-    function closeAcct(){acctEls.root.classList.add('hide')}
+    function closeAcct(){acctEls.root.classList.add('hide');window.dcReleaseFocus(acctEls.root)}
     $$('[data-acct-close]').forEach(el=>el.onclick=closeAcct);
     addEventListener('keydown',e=>{if(e.key==='Escape'&&!acctEls.root.classList.contains('hide'))closeAcct()});
 
@@ -6974,7 +7141,7 @@ StudioAdapter.onProbeSource=async url=>{try{
        an email with it all prefilled, or a copy button for when no mail client
        is configured -- a bare mailto silently does nothing there. */
     const bugEls={root:$('#studioBug'),body:$('#studioBugBody'),sub:$('#studioBugSub')};
-    function closeBug(){bugEls.root.classList.add('hide')}
+    function closeBug(){bugEls.root.classList.add('hide');window.dcReleaseFocus(bugEls.root)}
     $$('[data-bug-close]',bugEls.root).forEach(n=>n.onclick=closeBug);
     addEventListener('keydown',e=>{if(e.key==='Escape'&&!bugEls.root.classList.contains('hide'))closeBug()});
     function bugFacts(){
@@ -7032,6 +7199,9 @@ StudioAdapter.onProbeSource=async url=>{try{
         setTimeout(()=>{b.textContent='Copy details'},2200);
       };
       bugEls.root.classList.remove('hide');
+      window.dcTrapFocus(bugEls.root);
+      /* The trap lands on the first control; this dialog wants the textarea,
+         so it is focused afterwards and wins. */
       const box=document.getElementById('studioBugText');
       if(box)box.focus();
     }
@@ -7085,7 +7255,13 @@ StudioAdapter.onProbeSource=async url=>{try{
         :'Off — turn on to be told when clips are ready, a post goes out, or a lecture fails.';
 
       acctEls.sub.textContent=u.email||'';
-      acctEls.body.innerHTML=`
+      /* dcSetHtml, not innerHTML: this runs from paintStudio on every state
+         poll, and an unconditional write rebuilt the open dialog's controls
+         every few seconds -- measured, focus fell from a button inside it to
+         <body> after three repaints, while Connections, Your tasks and Report
+         a bug all survived. The v3.124.5 rule (a panel is redrawn only when
+         its markup changed) reached every host panel except this one. */
+      window.dcSetHtml(acctEls.body,`
         <div class="studio-acct-me">
           <span class="studio-acct-face">${u.picture?`<img src="${esc(u.picture)}" alt="">`:esc(initials)}</span>
           <span class="studio-acct-who">
@@ -7187,7 +7363,7 @@ StudioAdapter.onProbeSource=async url=>{try{
               <span>Every lecture, clip, transcript and connected channel is removed and cannot be recovered.${hasSub?' Cancel your subscription first — deleting the account does not stop the billing.':''}</span></span>
             <button type="button" class="studio-acct-act danger" data-acct="delete">Delete</button>
           </div>
-        </div>`;
+        </div>`);
 
       acctEls.body.onclick=async e=>{
         const el=e.target.closest('[data-acct]');
@@ -7231,6 +7407,9 @@ StudioAdapter.onProbeSource=async url=>{try{
       StudioAdapter.ui.menuOpen=false;
       acctEls.root.classList.remove('hide');
       paintAccount();
+      /* AFTER paintAccount: the panel's rows are host-rendered, so before it
+         runs there is nothing inside to move focus onto. */
+      window.dcTrapFocus(acctEls.root);
     };
     /* Handing over the file. Downloads are triggered one at a time with a gap:
        browsers silently drop a burst of simultaneous downloads from one page,
@@ -8254,12 +8433,36 @@ function paintClipDestinations(vals, data){
      #dcMobile, and scoping to #studio painted only the desktop copy -- which
      body.dcm-own hides, so the rows measured 0px wide and the phone showed
      nothing at all. */
+  /* Sweep by our own marker first -- see paintClipStars for why a loop over
+     `[data-clip]` cannot reach a row whose card lost the attribute. */
+  document.querySelectorAll('#studio [data-dc-dest], #dcMobile [data-dc-dest]').forEach(n=>{
+    const owner=n.parentElement;
+    if(!owner){ n.remove(); return; }
+    /* The deck's copy lives in the info column, which carries no data-clip. */
+    if(owner.hasAttribute('data-deck-info')||owner.hasAttribute('data-clip')) return;
+    n.remove();
+  });
   document.querySelectorAll('#studio [data-clip], #dcMobile [data-clip]').forEach(card=>{
     const id=card.dataset.clip;
     if(!byId[id])return;                 /* not a card this painter owns */
+    /* The DECK card is a fixed 9:16 stage with overflow:hidden, and the host
+       mounts the rendered clip into it as an absolutely-positioned <video> at
+       z-index 1 -- so a statically-positioned row appended here is painted
+       BEHIND the video and can never be read. Measured: the covering fraction
+       of its own "POSTS TO" text was 1.00, and it was the only such row on the
+       screen, so the one place the decision is made showed no destination at
+       all. It is mounted in the deck's INFO COLUMN instead -- under the score
+       reasons and beside the Approve button, where the decision is actually
+       taken. One painter and one source for where a clip posts, in a place it
+       can be read. `data-deck-info` was added to the design export and the
+       re-import was proven byte-stable first: the generated CSS came back
+       identical and no hashed class name moved (s54 stayed s54). */
+    const deck=card.hasAttribute('data-deck-card');
+    const mount=deck?document.querySelector('#studio [data-deck-info]'):card;
+    if(!mount)return;
     const dests=where[id]||[];
     const sig=dests.map(d=>d.id+(many[d.provider]?':'+(d.accountName||''):'')).join(',')||'none';
-    let row=card.querySelector(':scope [data-dc-dest]');
+    let row=mount.querySelector(':scope > [data-dc-dest]')||(deck?null:card.querySelector(':scope [data-dc-dest]'));
     if(row&&row.dataset.dcDest===sig)return;
     if(!row){
       row=document.createElement('div');
@@ -8271,8 +8474,9 @@ function paintClipDestinations(vals, data){
          shapes. Two lines every time is the consistent one. */
       row.style.cssText='display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:0 11px 9px;font-size:10.5px;line-height:1.4;color:var(--dc-ink-faint,#6E6E76)';
       /* Last thing in the card body, under the score reasons: it is context for
-         the decision, not the headline. */
-      card.appendChild(row);
+         the decision, not the headline. On the deck, `mount` is the info
+         column rather than the 9:16 stage the video fills. */
+      mount.appendChild(row);
     }
     row.dataset.dcDest=sig;
     if(!dests.length){
@@ -8575,10 +8779,13 @@ function openTasks(){
   if(!root)return;
   root.classList.remove('hide');
   paintTasksPanel();
+  window.dcTrapFocus(root);
 }
 function closeTasks(){
   const root=document.getElementById('dcTasks');
-  if(root)root.classList.add('hide');
+  if(!root)return;
+  root.classList.add('hide');
+  window.dcReleaseFocus(root);
 }
 window.openTasks=openTasks;
 

@@ -242,7 +242,23 @@
    without a table in them: label, then rows carrying a .dcow-fill. Keyed on
    that stable dc- class rather than on the hashed wrapper a re-import
    renumbers. Without this they sat bare beside two cards on Traffic. */
-#dcOwnerScreen div:has(> div > span > .dcow-fill) {
+#dcOwnerScreen div:has(> div > span > .dcow-fill),
+/* AND THE SAME BLOCK IN ITS EMPTY STATE, which neither selector above can see:
+   a bar list with no rows has no `.dcow-fill`, and a table panel with nothing
+   in it still has its table, so only the bar lists went bare. Measured 4 Sept
+   2026 -- Traffic drew Channels, Devices and Languages with no padding, no
+   border and no ground beside three carded neighbours in the same grid row,
+   16px above them and 18px to their left; Money in did it to "Active plans"
+   and Money out to "By category". That is the operator's NORMAL state on a
+   young deployment, which is when the screen is read most.
+   Keyed on the panel's own POSITION (a direct child of one of the two panel
+   grids) plus the label block every panel opens with, rather than on what it
+   happens to contain -- content-keyed carding is what left the empty case out.
+   `:has(> div > span)` is what excludes the grids' trailing empty cell, so an
+   empty box is never drawn. The union with the rules above was measured across
+   all seven tabs: it adds exactly the bare panels and takes nothing away. */
+#dcOwnerScreen .dcow-d4 > div:has(> div > span),
+#dcOwnerScreen .dcow-d5 > div:has(> div > span) {
   padding: 15px 17px;
   border-radius: 14px;
   border: 1px solid rgba(242, 242, 244, .055);
@@ -251,7 +267,11 @@
 /* A block's own heading, brighter than the notes beneath it so the eye can
    find the boundaries at a glance. */
 #dcOwnerScreen div:has(> div > table) > div:first-child > span:first-child,
-#dcOwnerScreen div:has(> div > span > .dcow-fill) > div:first-child > span:first-child {
+#dcOwnerScreen div:has(> div > span > .dcow-fill) > div:first-child > span:first-child,
+/* Widened with the card rule above, or a panel that has just gained its card
+   keeps a heading dimmer than its neighbours' -- half a fix reads as a fault. */
+#dcOwnerScreen .dcow-d4 > div:has(> div > span) > div:first-child > span:first-child,
+#dcOwnerScreen .dcow-d5 > div:has(> div > span) > div:first-child > span:first-child {
   color: #A8A8B0 !important; font-size: 10.5px !important;
 }
 /* The host-rendered growth blocks stack directly on each other; give them the
