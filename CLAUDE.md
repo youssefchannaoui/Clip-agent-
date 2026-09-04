@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1440 JS + 658 Python**
+- `npm test` and `npm run check` must pass. Currently **1445 JS + 658 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -6221,11 +6221,87 @@ heights. The connections dialog IS reachable once every platform is connected --
 a definitive probe clicking all 356 controls found 8 routes, which refuted a
 high-severity finding I had drafted from a text scan of labels.
 
+### And five more, from the screen-overflow lens (v3.126.0, same day)
+
+The third finder landed after v3.125.0 shipped. Same discipline: measured, fixed,
+measured again, seven more probes proven red.
+
+14. **Templates lost its preview column, with no way to scroll to it.**
+    `paintTemplatesLayout` forces `overflow-y: hidden` on the scroller so the
+    preview stays pinned -- correct while the two columns fit, and a trap the
+    moment they do not, because everything below the cut is DRAWN AND THEN
+    HIDDEN with nothing able to scroll it. Measured at **1366x768, the
+    commonest desktop viewport**: 105px lost, the "Preview on a real clip"
+    button drawn at y 751 while the panel clips at 676, and twelve wheel
+    gestures totalling 4800px leaving scrollTop at 0. Also 1280x800 (73px) and
+    1536x864 (9px, the CTA row half cut), and below 1050px wide where the row
+    wraps and the preview goes under the settings entirely. **The preview is
+    the screen**, so losing it is worse than a page that scrolls. It now locks
+    only when the columns are still side by side AND the row fits, and
+    re-evaluates on resize -- a resize changes both answers and does not
+    repaint the studio. Reachable at 1024, 1100, 1280, 1366 and 1440 after.
+
+15. **Every notification longer than about 45 characters lost its second
+    half.** `toast()` puts the whole message in the TITLE slot and leaves the
+    detail line empty, and the title was one `nowrap` line in a 370px dock --
+    so the tail, reliably the actionable half, was ellipsised away. Measured on
+    the app's own strings, identically at 1440, 1024 and 900: *"Publishing is
+    switched off, so nothing was sent. The clip is ready to download"* showed
+    57%; *"The browser blocked notifications -- allow them in site settings"*
+    showed 68%, losing the entire instruction. The title wraps to three lines
+    now: free up to two, one row taller at three, and a short message is
+    unchanged.
+
+16. **A busy day in the month calendar cut its second chip in half and lost
+    "+N more" entirely.** The cell picks its chips from the ITEM COUNT and had
+    a flat 62px floor, and the week row is `flex: 1 1 0` -- so wherever the
+    calendar section is short (the schedule's side column wraps below 1246px,
+    taking the section from 795px to 415) the row fell to that floor and the
+    content no longer fitted. Measured at 1245 and below: cell clientHeight 60
+    against scrollHeight 89, the "+2 more" span at y 288..300 while the cell
+    clips at 276 -- INVISIBLE, not merely tight. So a day holding four clips
+    showed one, half of another, and no count. **The v3.72.1 fix for this exact
+    symptom was measured at 1440 only**, where the row is 120-138px. The floor
+    is 89px now, which is what the content measures and changes nothing at
+    1440. 0 overflowing cells at every width.
+
+17. **A calendar chip could not say which clip it was.** The time and the title
+    shared one ellipsis and the fixed-width time always won: a 26-character
+    title showed 9 characters at 1440, 3 at 1280 and **ONE at 900**. There was
+    no `title` or `aria-label` anywhere from the span up to `#studio`, so
+    hovering revealed nothing -- two clips from the same lecture were
+    indistinguishable on the one screen whose job is to say which clip goes out
+    when. The time is its own `flex: none` cell now so only the title
+    ellipsises, and the chip carries the whole "HH:MM - title" on hover.
+    `title="{{ chip.tip }}"` was added to the export; the re-import was proven
+    byte-stable first (generated CSS byte-identical, no hashed class moved).
+
+18. **The search field starved the screen's own subtitle.** `#dcSearchBox` was
+    `flex: 0 0 300px` -- rigid -- so between the 980px collapse and about
+    1180px the heading block absorbed the entire shortfall and the subtitle
+    took it. Measured at 981px: **84 of 386px, 22%** of "How every part of
+    DeenClipped works, with screenshots of the real app". One pixel narrower
+    the field hides outright and the subtitle comes back whole, which is what
+    proved the field was the cause. At 1024, nine of thirteen screens were
+    losing part of theirs. That copy is the app explaining itself, so it gives
+    way LAST: the field now shrinks to a 150px floor first. Help went 30% ->
+    61% at 1024 and 49% -> 72% at 1100.
+    **v3.94.0's property is intact and was re-measured**: travel across all ten
+    screens is **0px at 1440** with the field at 300px on every one, and 28px
+    at 1280 against the 26px that release recorded. Below that the field does
+    move -- the deliberate trade, against destroying the sentence.
+
+**Two more source-string tests failed against correct code in this pass**, on
+top of the one in v3.125.0: `topbar.test.mjs` pinned the whole `#dcSearchBox`
+declaration when the property it protects is `margin-left: auto` and the 300px
+basis, and one of my own new assertions spanned two string literals joined with
+`+`. Both are corrected to the property. That is three in one session.
+
 ### Still open from this pass
 
-Two more finders (screen-level overflow, and a fourth lens) were still running
-when this shipped, at a concurrency cap of two agents. Their findings are not in
-this release.
+The screen-overflow lens landed after v3.125.0 and its five findings are in
+v3.126.0 above. A fourth lens was still running when this shipped, at a
+concurrency cap of two agents; its findings are not in either release.
 
 ## Open items
 

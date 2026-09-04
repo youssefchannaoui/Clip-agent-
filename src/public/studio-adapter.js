@@ -3089,7 +3089,23 @@
               // were spilling past the cell's own border. min-width:0 so the
               // grid column may actually shrink -- without it a long chip sets
               // the column's floor and the whole row grows instead of clipping.
-              style: 'position: relative; display: flex; flex-direction: column; gap: 3px; height: 100%; min-height: 62px; padding: 5px 7px 6px;'
+              // THE CELL MUST BE TALL ENOUGH FOR WHAT IT CHOOSES TO DRAW.
+              // It picks its chips from the ITEM COUNT but its floor was a flat
+              // 62px, and the week row is `flex: 1 1 0` -- so wherever the
+              // calendar section is short (the schedule's side column wraps
+              // below 1246px, taking the section from 795px to 415) the row
+              // fell to that floor and the cell's own content no longer fitted.
+              // Measured 4 Sept 2026 at 1245px and below, down to 900: cell
+              // clientHeight 60 against scrollHeight 89, the second chip cut
+              // through the middle and the "+2 more" line drawn ENTIRELY below
+              // the border under overflow:hidden -- so a day holding four clips
+              // showed one, half of another, and no count. The v3.72.1 fix for
+              // this exact symptom was measured at 1440 only, where the row is
+              // 120-138px, and does not hold once the row collapses.
+              // 89px is what the current content measures: date 16 + two chips
+              // 42 + more-line 12 + padding 11 + border 2 + gaps. It changes
+              // nothing at 1440, where the row is already taller.
+              style: 'position: relative; display: flex; flex-direction: column; gap: 3px; height: 100%; min-height: 89px; padding: 5px 7px 6px;'
                 + ' overflow: hidden; min-width: 0;'
                 + ' border: 1px solid ' + (isToday ? 'rgba(240,214,166,.45)' : 'var(--dc-n-1c1c21, #1C1C21)') + '; border-radius: 10px;'
                 + ' background: ' + (isToday ? 'rgba(217,180,120,.05)' : inMonth ? 'var(--dc-n-141418, #141418)' : 'var(--dc-n-0f0f12, #0F0F12)') + ';'
@@ -3145,11 +3161,25 @@
               // the count instead of fitting it, which is not the same thing.
               chips: items.slice(0, items.length > 3 ? 2 : 3).map(function (c) {
                 return {
-                  label: timeOf(c.scheduledAt) + '  ' + String(c.title || 'Clip'),
+                  // THE TIME IS ITS OWN CELL, so only the TITLE ellipsises.
+                  // Built as one string, the fixed-width time always won and
+                  // what was left for the title was whatever the cell had
+                  // spare: measured 4 Sept 2026, a 26-character title showed 9
+                  // characters at 1440, 3 at 1280 and ONE at 900. Two clips
+                  // from the same lecture were indistinguishable on the one
+                  // screen whose job is to say which clip goes out when.
+                  time: timeOf(c.scheduledAt),
+                  label: String(c.title || 'Clip'),
+                  // And the whole thing on hover, since no ellipsis can be
+                  // widened enough for an 88-character lecture title. There was
+                  // no `title` or `aria-label` anywhere from the span up to
+                  // #studio, so the identity was unrecoverable.
+                  tip: timeOf(c.scheduledAt) + ' \u2014 ' + String(c.title || 'Clip'),
+                  timeStyle: 'flex: none; font-size: 10.5px; line-height: 1.35; color: var(--dc-ink-faint, #6E6E76); font-variant-numeric: tabular-nums;',
                   rowStyle: 'display: flex; align-items: center; gap: 5px; min-width: 0;',
                   thumbStyle: 'width: 12px; height: 21px; flex: none; border-radius: 3px; border: 1px solid var(--dc-line, #26262A);'
                     + ' background: ' + thumb(c.thumbUrl) + ';',
-                  style: 'display: block; font-size: 10.5px; line-height: 1.35; color: var(--dc-ink-body, #BCBCC3);'
+                  style: 'flex: 1 1 auto; min-width: 0; font-size: 10.5px; line-height: 1.35; color: var(--dc-ink-body, #BCBCC3);'
                     + ' white-space: nowrap; overflow: hidden; text-overflow: ellipsis;',
                 };
               }),

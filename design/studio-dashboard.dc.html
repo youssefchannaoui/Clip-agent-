@@ -1089,8 +1089,9 @@
                         </span>
                       </span>
                       <sc-for list="{{ cell.chips }}" as="chip" hint-placeholder-count="1">
-                        <span style="{{ chip.rowStyle }}">
+                        <span title="{{ chip.tip }}" style="{{ chip.rowStyle }}">
                           <span style="{{ chip.thumbStyle }}"></span>
+                          <span style="{{ chip.timeStyle }}">{{ chip.time }}</span>
                           <span style="{{ chip.style }}">{{ chip.label }}</span>
                         </span>
                       </sc-for>

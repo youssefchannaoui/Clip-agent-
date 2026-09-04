@@ -360,3 +360,83 @@ test('a confirmation that leaves by itself does not swallow a click', () => {
   assert.ok(!/\.dcn-bad[^{]*\{[^}]*pointer-events:\s*none/.test(notifyCss),
     'an error card must stay dismissible');
 });
+
+// ── Overflow: five faults where content was drawn and then hidden ─────────
+
+test('the Templates layout is locked only when it can hold its content', () => {
+  // `overflow-y: hidden` on the scroller keeps the preview pinned while the
+  // columns fit -- and hides everything below the cut with nothing able to
+  // scroll it when they do not. Measured at 1366x768, the commonest desktop
+  // viewport: 105px lost, the "Preview on a real clip" button drawn at y 751
+  // while the panel clipped at 676, and twelve wheel gestures totalling 4800px
+  // leaving scrollTop at 0. The preview IS the screen.
+  const fn = page.slice(page.indexOf('function paintTemplatesLayout()'));
+  const body = fn.slice(0, fn.indexOf('\n    }\n'));
+  assert.match(body, /const sideBySide=/, 'nothing checks the columns are still side by side');
+  assert.match(body, /const fits=row\.scrollHeight<=scroller\.clientHeight/, 'nothing checks the row fits');
+  assert.match(body, /if\(!sideBySide\|\|!fits\)\{clearTemplatesLayout\(\);return\}/,
+    'the lock is applied without either check');
+  // A resize changes both answers and does not repaint the studio.
+  assert.match(page, /addEventListener\('resize',\(\)=>\{ if\(window\.paintTemplatesLayoutNow\)/,
+    'the lock is not re-evaluated on resize');
+});
+
+test('a notification title wraps rather than losing its second half', () => {
+  // toast() puts the WHOLE message in the title slot and leaves the detail
+  // line empty, so one nowrap line cut every message past ~45 characters --
+  // and the tail is reliably the actionable half. Measured on the app's own
+  // strings: 57%, 59% and 68% shown, at 1440, 1024 and 900 alike.
+  const rule = notifyCss.slice(notifyCss.indexOf('.dcn-copy strong {'));
+  const body = rule.slice(0, rule.indexOf('}'));
+  assert.ok(!/white-space:\s*nowrap/.test(body), 'the title is nowrap again');
+  assert.match(body, /-webkit-line-clamp:\s*3/, 'the title has no wrap allowance');
+});
+
+test('a month cell is tall enough for the chips it chooses to draw', () => {
+  // The cell picks its chips from the ITEM COUNT and had a flat 62px floor,
+  // so wherever the week row collapsed (below 1246px, where the schedule's
+  // side column wraps) the second chip was cut through the middle and the
+  // "+N more" line was drawn entirely below the border under overflow:hidden.
+  // 89px is what the content measures; it changes nothing at 1440.
+  assert.match(adapterSrc, /min-height: 89px; padding: 5px 7px 6px;/,
+    'the month cell floor is back below what its content needs');
+  // The count is the thing that must never be hidden.
+  assert.match(adapterSrc, /moreLabel: items\.length > 3 \? '\+' \+ \(items\.length - 2\) \+ ' more' : ''/);
+});
+
+test('a calendar chip says which clip it is', () => {
+  // The time and the title shared one ellipsis and the time always won: a
+  // 26-character title showed 9 characters at 1440, 3 at 1280 and ONE at 900,
+  // with no title or aria-label anywhere from the span up to #studio. Two
+  // clips from the same lecture were indistinguishable on the one screen
+  // whose job is to say which clip goes out when.
+  assert.match(adapterSrc, /time: timeOf\(c\.scheduledAt\),/, 'the time is not its own cell');
+  assert.match(adapterSrc, /tip: timeOf\(c\.scheduledAt\) \+ ' \\u2014 ' \+ String\(c\.title \|\| 'Clip'\)/,
+    'the chip carries no full label for hover');
+  assert.ok(!/label: timeOf\(c\.scheduledAt\) \+ '  ' \+ String\(c\.title/.test(adapterSrc),
+    'the time is glued back into the ellipsised label');
+  // Only the TITLE may ellipsise, so the time cannot eat its width. Asserted in
+  // two halves: this style is built from two string literals joined with `+`,
+  // and a regex spanning both fails against correct code -- the straddling-
+  // literal trap this repo has recorded before.
+  assert.match(adapterSrc, /style: 'flex: 1 1 auto; min-width: 0; font-size: 10\.5px/,
+    'the title span has no flex basis, so the time competes with it again');
+  assert.match(adapterSrc, /' white-space: nowrap; overflow: hidden; text-overflow: ellipsis;',\n {16}\};/,
+    'the title no longer ellipsises');
+  // The tooltip needs the attribute in the export; the re-import was proven
+  // byte-stable (generated CSS identical, no hashed class moved).
+  const design = fs.readFileSync(path.join(root, 'design/studio-dashboard.dc.html'), 'utf8');
+  assert.match(design, /<span title="\{\{ chip\.tip \}\}" style="\{\{ chip\.rowStyle \}\}">/,
+    'the export lost the chip tooltip');
+});
+
+test('the search gives way before the screen\'s own subtitle does', () => {
+  // It was `flex: 0 0 300px` -- rigid -- so the heading block absorbed the
+  // whole shortfall and the subtitle took it: 22% shown at 981px, and nine of
+  // thirteen screens losing part of theirs at 1024. One pixel narrower the
+  // field hides outright and every subtitle comes back whole, which is what
+  // showed the field was the cause. Measured after: help 30% -> 61% at 1024
+  // and 49% -> 72% at 1100, with 1440 unchanged at 100%.
+  assert.match(page, /#dcSearchBox \{ flex: 0 1 300px; min-width: 150px; margin-left: auto; \}/,
+    'the search is rigid again, so the copy pays for it');
+});

@@ -244,7 +244,20 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
    subtitle ellipsizes rather than pushing anything. */
 #dcTopbar > div:first-child { flex: 0 1 auto; min-width: 0; }
 #dcTopbar > div:first-child > span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#dcSearchBox { flex: 0 0 300px; margin-left: auto; }
+/* THE SEARCH GIVES WAY BEFORE THE COPY DOES.
+   It was `flex: 0 0 300px` -- rigid -- so between the 980px collapse and about
+   1180px the heading block absorbed the whole shortfall and the screen's own
+   subtitle took it: measured 4 Sept 2026 at 981px, 84 of 386px, 22% of "How
+   every part of DeenClipped works, with screenshots of the real app", drawn as
+   "How every part of Dee...". At 1024, nine of the thirteen screens lost part
+   of their subtitle. One pixel narrower, at 980, the field hides outright and
+   every subtitle comes back whole -- which is what shows the field was the
+   cause rather than the width.
+   That copy is the app explaining itself, not user data, so it must be the
+   LAST thing to give way. 150px still holds a usable field; v3.94.0's rule
+   that the search does not travel between screens is unaffected wherever there
+   is slack, which is every width it was measured at. */
+#dcSearchBox { flex: 0 1 300px; min-width: 150px; margin-left: auto; }
 /* The heading is the only thing allowed to give way. Without this the chips
    shrank instead and "2 of 5 done" wrapped onto two lines inside its pill. */
 #dcTopbar > button, #dcTopbar > div:not(:first-child) { flex: none; white-space: nowrap; }
@@ -4899,13 +4912,39 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          leftover height; the settings column takes the scrolling. min-height:0
          on both, or a flex child refuses to shrink below its content and the
          overflow never engages. */
+      /* ONLY LOCK THE LAYOUT WHEN IT CAN HOLD THE CONTENT.
+         `overflow-y: hidden` on the scroller is what keeps the preview pinned
+         while the two columns sit side by side and fit -- but the moment they
+         do not, everything below the cut is DRAWN AND THEN HIDDEN with nothing
+         able to scroll it. Measured 4 Sept 2026 at 1366x768, the commonest
+         desktop viewport: 105px lost, the "Preview on a real clip" button drawn
+         at y 751 while the panel clips at 676, and twelve wheel gestures
+         totalling 4800px leaving scrollTop at 0. Also 1280x800 (73px) and
+         1536x864 (9px, the CTA row half cut); and below 1050px wide, where the
+         row wraps and the preview column goes under the settings entirely.
+         The preview IS the screen, so losing it is worse than a page that
+         scrolls.
+         Two conditions, both measured on the live nodes: the columns must still
+         be side by side, and the row must fit the space it is being locked
+         into. Otherwise stand down and let the screen's own `overflow: auto`
+         scroll as one -- the honest fallback, and what this did before v3.53. */
+      const sideBySide=Math.abs(previewCol.getBoundingClientRect().top-settings.getBoundingClientRect().top)<4;
+      const fits=row.scrollHeight<=scroller.clientHeight+1;
+      if(!sideBySide||!fits){clearTemplatesLayout();return}
       set(scroller,{'overflow-y':'hidden','display':'flex','flex-direction':'column'});
       for(const child of scroller.children){
         if(child!==row)set(child,{'flex':'0 0 auto'});
       }
       set(row,{'flex':'1 1 auto','min-height':'0','align-items':'flex-start'});
       set(settings,{'max-height':'100%','overflow-y':'auto','min-height':'0'});
+      /* A resize changes both answers and does not repaint the studio, so the
+         lock would survive into a viewport that cannot hold it. */
+      if(!window.__dcTplResize){
+        window.__dcTplResize=true;
+        window.addEventListener('resize',()=>{ if(window.paintTemplatesLayoutNow)window.paintTemplatesLayoutNow(); });
+      }
     }
+    window.paintTemplatesLayoutNow=()=>{ try{ paintTemplatesLayout(); }catch(e){} };
 
     /* The editor has the same problem the Templates screen had, worse: the
        preview column runs 1363px tall inside a 481px row, so the 9:16 frame is
