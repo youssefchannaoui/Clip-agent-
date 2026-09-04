@@ -4334,7 +4334,7 @@
     var todayCount = scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === today; }).length;
 
     // Blockers name a real gap and send you to the screen that fixes it.
-    var blocker = '', blockerScreen = 'music', blockerCta = 'Upload nasheed', blockerOpensConnections = false;
+    var blocker = '', note = '', blockerScreen = 'music', blockerCta = 'Upload nasheed', blockerOpensConnections = false;
     // The server has been computing these on every request and shipping them to
     // the browser, where nothing read them: trial days left, the free window
     // closing, a declined card, a nearly-empty wallet. A customer whose payment
@@ -4350,11 +4350,40 @@
       blockerScreen = 'tokens';
     }
     else if (tracks.length === 0) { blocker = 'No nasheed uploaded — every clip mixes one in, so processing cannot finish without at least one.'; blockerScreen = 'music'; }
-    else if (tracks.length < 2) { blocker = 'Only one nasheed uploaded — rotation needs two or more before automatic posting can run.'; blockerScreen = 'music'; }
     else if (connectedCount === 0) {
       blocker = 'No publishing account connected — approved clips will queue up with nowhere to go.';
       blockerCta = 'Connect an account';
       blockerOpensConnections = true;
+    }
+
+    /*
+     * ONE NASHEED BLOCKS NOTHING, and for months this banner said it did:
+     * "rotation needs two or more before automatic posting can run."
+     *
+     * Youssef, 4 Sept 2026: "it shouldnt? it should just be that its there to
+     * notify?" He is right, and nothing in the code ever agreed with the
+     * banner. `readiness()` answers `musicReady: tracks.length > 0`;
+     * local-engine refuses a job only with NO track ("Upload at least one
+     * nasheed first"); and agent.js -- the scheduler and the publisher --
+     * never reads the track count at all. So the sentence described a
+     * limitation that does not exist, in the app's loudest slot.
+     *
+     * Worse than the wording: it sat INSIDE the else-if chain, above the
+     * connection check. An account with one nasheed and nothing connected was
+     * therefore told to upload a second nasheed -- and never shown "No
+     * publishing account connected", which is the true and actionable one. A
+     * false alarm that MASKS a real one is the shape this costs the most.
+     *
+     * It is a NOTE now: computed after the chain so it can never mask a
+     * blocker, and rendered in the same banner in a quieter tone (see
+     * paintBlockerTone). Adding a second nasheed is worth doing -- every clip
+     * otherwise mixes in the same one -- which is worth saying and is not a
+     * reason to stop.
+     */
+    if (!blocker && tracks.length === 1) {
+      note = 'Only one nasheed — every clip mixes in the same one. Add another and they rotate.';
+      blockerScreen = 'music';
+      blockerCta = 'Add another';
     }
 
     /*
@@ -4364,12 +4393,22 @@
      * button (v3.95.0) -- two controls for one thing is the fault that release
      * exists to remove.
      */
-    var blockerShowing = Boolean(blocker) && (moneyNotice && moneyNotice.blocking ? true : !UI.blockerDismissed && (function () {
+    var bannerText = blocker || note;
+    var bannerShowing = Boolean(bannerText) && (moneyNotice && moneyNotice.blocking ? true : !UI.blockerDismissed && (function () {
       // Dismissal outlives the tab, keyed by the message: the nasheed nag came
       // back on every page load however many times it was dismissed. A
       // DIFFERENT blocker (new gap, new wording) still shows.
-      try { return global.localStorage.getItem('deenBlockerDismissed') !== blocker; } catch (e) { return true; }
+      try { return global.localStorage.getItem('deenBlockerDismissed') !== bannerText; } catch (e) { return true; }
     }()));
+    /*
+     * A STOP, not merely something on screen. The banner now carries notes as
+     * well as blockers, and the two must not be one answer: the strip below
+     * defers to a real gap it would otherwise repeat, and deferring to a note
+     * would silently drop a step's button for information nobody has to act
+     * on. Everything that asks "is the workflow held up" reads this; only the
+     * banner's own visibility reads bannerShowing.
+     */
+    var blockerShowing = bannerShowing && Boolean(blocker);
 
     var open = UI.railOpen && (global.innerWidth || 1280) > 820;
 
@@ -5171,8 +5210,14 @@
       // A blocking money notice cannot be dismissed away. The nasheed nag is
       // advice; "your free trial has ended" is the reason nothing works, and
       // hiding it would leave the account silently unable to do anything.
-      blockersOn: blockerShowing,
-      blockerText: blocker || '',
+      blockersOn: bannerShowing,
+      blockerText: bannerText || '',
+      // The host reads this to quiet the banner down to a note; it is not a
+      // second answer to "is anything blocked", it is the TONE of one row.
+      blockerTone: blocker ? 'stop' : 'note',
+      // ONE source for the mark, so the phone and the desktop cannot end up
+      // showing a warning diamond and a music note for the same row.
+      blockerIcon: blocker ? 'ph-fill ph-warning-diamond' : 'ph-fill ph-music-notes',
       blockerCta: blockerCta,
       resolveBlocker: function (e) {
         stop(e);
@@ -5182,7 +5227,10 @@
       },
       dismissBlocker: function (e) {
         stop(e);
-        try { global.localStorage.setItem('deenBlockerDismissed', blocker); } catch (err) { /* memory-only fallback */ }
+        // The MESSAGE that was dismissed, whichever kind it is -- the check
+        // above compares against bannerText, so storing `blocker` here left a
+        // dismissed NOTE coming straight back on the next paint.
+        try { global.localStorage.setItem('deenBlockerDismissed', bannerText); } catch (err) { /* memory-only fallback */ }
         setUI({ blockerDismissed: true });
       },
 

@@ -301,6 +301,11 @@
   .dcm-blocker-t .dcm-ph { color: var(--dcm-warn); margin-top: 2px; }
   .dcm-blocker-a { display: flex; gap: 8px; margin-top: 12px; }
   .dcm-blocker-a .dcm-btn-p { flex: 1; }
+  /* A note is not an alarm (v3.119.0). Same row, quieter ink -- see the
+     matching desktop block in studio-tokens.css. */
+  .dcm-blocker[data-tone="note"] { background: transparent; border-color: var(--dcm-edge); }
+  .dcm-blocker[data-tone="note"] .dcm-blocker-t { color: var(--dcm-ink2, #8B8B93); }
+  .dcm-blocker[data-tone="note"] .dcm-blocker-t .dcm-ph { color: var(--dcm-ink3, #6E6E76); }
 
   /* ── clips ─────────────────────────────────────────────────────────── */
   .dcm-seg { display: flex; gap: 4px; padding: 4px; border-radius: 16px; background: var(--dcm-sunk); }

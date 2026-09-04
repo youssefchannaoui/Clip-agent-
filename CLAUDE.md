@@ -4960,6 +4960,89 @@ commas and a naive split on `"), "` miscounts.
   `deploy-worker.yml` ships it on push; one Quran or lecture import with rain
   on settles it.
 
+## The banner told everyone one nasheed stopped their posting (v3.119.0, 4 Sept 2026)
+
+Youssef, reading a handover line that repeated it back at him: "it shouldnt? it
+should just be that its there to notify?"
+
+He was right, and **nothing in the code had ever agreed with the banner.** The
+sentence was *"Only one nasheed uploaded — rotation needs two or more before
+automatic posting can run."* Checked against the three places that would have
+to implement it:
+
+- `local-engine.js` refuses a job only with NO track ("Upload at least one
+  nasheed first"), never with one;
+- `readiness()` answers `musicReady: tracks.length > 0`;
+- **`agent.js` -- the scheduler and the publisher -- never reads the track
+  count at all**, so posting cannot depend on it by construction.
+
+So the app's loudest slot described a limitation that does not exist.
+
+### The masking was worse than the wording
+
+It sat INSIDE the `else if` chain, ABOVE the connection check:
+
+    moneyNotice -> tracks.length === 0 -> tracks.length < 2 -> connectedCount === 0
+
+An account with one nasheed and nothing connected therefore hit the third
+branch and was told to upload a second nasheed -- and **never shown "No
+publishing account connected"**, which is the true and actionable one. That is
+exactly the state Youssef spent days in while fighting TikTok. A false alarm
+that MASKS a real one is the expensive shape here, and the test pins that case
+hardest.
+
+### What it is now
+
+- **The blocker chain is money -> no nasheed -> no connection**, and the
+  one-nasheed case is computed AFTER it, so it can never mask anything again.
+- **It is a NOTE**: "Only one nasheed — every clip mixes in the same one. Add
+  another and they rotate." True, worth saying, and not a reason to stop.
+- **The same banner element carries both**, so this cost no design re-import:
+  `#dcBlocker` has an id, the host stamps `data-tone`, and CSS quiets the
+  ground, the ink and the primary button. Measured on the real markup with the
+  real stylesheet: gold wash + gold ink + gold button for a stop, transparent +
+  secondary ink + outline button for a note.
+- **`blockersOn` and `blockerShowing` are deliberately no longer one value.**
+  The banner renders from `bannerShowing` (a row is up, of either kind); the
+  onboarding strip's deferral reads `blockerShowing = bannerShowing &&
+  Boolean(blocker)` -- a real STOP. Deferring to a note would silently drop a
+  step's button for information nobody has to act on. The strip's flag is still
+  DERIVED from the banner's, so the two cannot disagree about a dismissal.
+- **The dismissal key had to move with it.** It is compared against
+  `bannerText` and was being WRITTEN as `blocker`, which is empty for a note --
+  so a dismissed note came straight back on the next paint. Found by reading
+  the two sides against each other, not by using it.
+- **`blockerIcon` is one source for the mark** (warning diamond vs
+  `ph-music-notes`, a glyph already rendering in the live app). The phone binds
+  it through `phb()`; the desktop's is a literal in the export, so the host
+  swaps only the GLYPH tokens and leaves the hashed sizing class alone --
+  replacing className drew the mark at the body's font size.
+
+### The token trap caught this change, and it was my own two lines
+
+The phone rules were written against `--dcm-ink-2` and `--dcm-ink-3`. The
+declared tokens are **`--dcm-ink2` / `--dcm-ink3`**, no hyphen before the
+digit; the hyphenated pair is declared nowhere in the repo. A `var()` naming a
+token that does not exist fails SILENTLY, and this one would only ever have
+been seen by an account holding exactly one nasheed. `test/nasheed-note.test.mjs`
+now walks every `var()` inside the new rules against the declarations in the
+same file, on both surfaces.
+
+### A source-string test failed against correct code, for the FIFTH time
+
+`onboarding.test.mjs` asserted the literal `blockersOn: blockerShowing` to mean
+"the banner and the strip read one answer". Those are deliberately no longer
+the same value, so it went red while proving nothing about behaviour. The
+property it was protecting -- defer to a stop, never to a note, and hand the
+button back on dismissal -- is DRIVEN now in `test/nasheed-note.test.mjs`
+against the real bindings; the older file keeps one narrow pin that the strip's
+flag is derived from the banner's rather than computed twice.
+
+**A trap inside that test, worth writing down:** the onboarding binding's
+`action` on the OUTPUT is the click HANDLER, not the step name. `actionLabel`
+is the string the deferral empties, and asserting `action` compared a function
+against `'nasheed'` in three tests at once.
+
 ## Open items
 
 ### Waiting on Youssef (nothing in the repo unblocks these)

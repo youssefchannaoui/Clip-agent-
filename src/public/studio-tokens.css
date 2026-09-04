@@ -855,3 +855,33 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
 }
 #dcTasks .dctk-claim:hover { background: rgba(217,180,120,.24); border-color: rgba(217,180,120,.8); }
 #dcTasks .dctk-claim:disabled { opacity: .6; cursor: default; }
+
+/*
+ * The blocker banner carries NOTES as well as blockers (v3.119.0). A note is
+ * information -- "add a second nasheed and they rotate" -- and must not wear
+ * the alarm a real gap wears, or the alarm stops meaning anything. The tone is
+ * stamped on the export's own #dcBlocker by paintBlockerTone; only the colours
+ * move, so the row keeps its exact layout either way.
+ *
+ * The primary button is quieted too: a note's action is worth offering and is
+ * never urgent, and a solid gold button beside "you have one nasheed" is what
+ * made this read as a stop in the first place.
+ */
+#dcBlocker[data-tone="note"] {
+  border-color: var(--dc-line-soft, #1E1E22) !important;
+  background: transparent !important;
+}
+#dcBlocker[data-tone="note"] > i { color: var(--dc-ink-dim, #8B8B93) !important; }
+/* The message itself is warm cream (#E7DCC8) for a blocker; a note reads in
+   the app's ordinary secondary ink, so the row stops carrying the gold that
+   means "act on this". */
+#dcBlocker[data-tone="note"] > span { color: var(--dc-ink-dim, #8B8B93) !important; }
+#dcBlocker[data-tone="note"] button:first-of-type {
+  background: transparent !important;
+  border: 1px solid var(--dc-line, #26262A) !important;
+  color: var(--dc-ink-dim, #8B8B93) !important;
+}
+#dcBlocker[data-tone="note"] button:first-of-type:hover {
+  border-color: var(--dc-line-hover, #34343A) !important;
+  color: var(--dc-ink, #E9E9ED) !important;
+}

@@ -4916,6 +4916,32 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        Home carries a quiet link beside Start job. Host-painted because the
        design has no slot for it. */
     let tourLinkEl=null;
+    /* The banner carries NOTES as well as blockers now (v3.119.0). The
+       element is the export's own #dcBlocker, so the tone is stamped rather
+       than rebuilt -- no design re-import, and a re-import cannot renumber an
+       id away.
+
+       The glyph is a literal `ph-fill ph-warning-diamond` inside the template,
+       and a warning diamond over "add another nasheed" is the alarm this
+       release exists to stop sounding. It is swapped on the element and put
+       back for a stop, because the patcher owns that class and will restore it
+       whenever the markup changes -- so this runs on every paint rather than
+       once. `ph-music-notes` is already rendering elsewhere in the live app
+       (the ph-seedling rule: never a glyph nobody has watched draw). */
+    function paintBlockerTone(vals){
+      const el=document.getElementById('dcBlocker');
+      if(!el)return;
+      el.setAttribute('data-tone',vals.blockerTone==='note'?'note':'stop');
+      const icon=el.querySelector('i');
+      if(!icon)return;
+      /* Swap only the GLYPH tokens and keep every class the export owns --
+         the same element carries a hashed sizing class, so replacing
+         className outright drew the mark at the body's font size. */
+      const want=String(vals.blockerIcon||'').split(/\s+/).filter(Boolean);
+      ['ph-warning-diamond','ph-music-notes'].forEach(g=>{if(!want.includes(g))icon.classList.remove(g)});
+      want.forEach(g=>{if(!icon.classList.contains(g))icon.classList.add(g)});
+    }
+
     function paintTourEntry(vals){
       const start=document.querySelector('#studio [data-tour="start"]');
       const row=start&&start.parentElement;
@@ -9155,6 +9181,7 @@ function paintStudio(){
   stepDirection();
   paintJobStyleRow(vals);
   paintTourEntry(vals);
+  paintBlockerTone(vals);
   paintJobPanelScroll();
   paintEditorMissing();
   paintEditorBetaNotice();
