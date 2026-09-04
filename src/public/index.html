@@ -4226,6 +4226,73 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
     }
 
+    /* EVERY ACTION ON A CLIP CARD IS NAMED.
+       Youssef, 4 Sept 2026, with an OpusClip screenshot: "see how good opus
+       does it, clean very helpful and buttons for many features". Measured
+       against ours first: the card offered SIX actions and FOUR of them had no
+       visible label -- select, edit (a `ph-crop` glyph), reject (`ph-x`) and
+       the AI star. A crop icon does not say "Edit", and this repo has already
+       paid for a glyph that read fine in the source and drew nothing at all
+       (`ph-seedling`, and `ph-bold` never imported). OpusClip's column names
+       all nine of its actions; ours named two.
+
+       THE RULE IS GENERAL, not a list of three buttons: any button inside a
+       clip card that carries a `title` and shows no text gets that title as a
+       visible label. So an icon-only action added later is named without
+       anyone remembering to come back here. SHORT_LABEL only shortens the ones
+       whose title is a sentence -- "Open in editor" does not fit a 76px button.
+
+       Host-rendered because the alternative is adding a <span> inside two
+       buttons in the design export, which means a re-import and every hashed
+       class name in the app regenerating. Marked data-host-owned so patch()
+       leaves it alone, and swept by our OWN marker first for the reason
+       paintClipStars records: a card can be re-paired against a different
+       card's <article> and carry our node with it. */
+    const SHORT_LABEL = { 'Open in editor': 'Edit', 'Write a new title with AI (nothing re-renders)': 'AI title' };
+    function paintClipActions(vals){
+      const screen = StudioAdapter.ui.screen;
+      const wanted = screen === 'queue' || screen === 'library' || screen === 'detail';
+      /* Sweep by the marker, never by the card -- see paintClipStars. */
+      for (const n of document.querySelectorAll('#studio [data-dc-alabel]')){
+        const btn = n.parentElement;
+        const card = btn && btn.closest('article[data-clip]');
+        if (!wanted || !card || card.getAttribute('data-clip') !== n.getAttribute('data-dc-alabel')) n.remove();
+      }
+      if (!wanted) return;
+      for (const card of document.querySelectorAll('#studio article[data-clip]')){
+        const id = card.getAttribute('data-clip');
+        if (!id) continue;
+        for (const btn of card.querySelectorAll('button[title]')){
+          /* NOT AN OVERLAY. The first cut of this rule was "any icon-only
+             button with a title", and it stuffed the word "Select" into the
+             22x22 tick on the thumbnail -- which is pinned by an INLINE width
+             from selStyle, so no stylesheet could widen it and the text was
+             clipped inside the box (scrollWidth > clientWidth, measured).
+             An action sits in the card's flow; a state toggle drawn over the
+             picture is absolutely positioned. That is the structural
+             difference, and it names nothing the design can renumber. */
+          if (getComputedStyle(btn).position === 'absolute') continue;
+          /* Only a button that shows nothing. One that already has words --
+             Approve, Restore -- is left exactly as the design drew it. */
+          const own = [...btn.childNodes].filter(n => !(n.nodeType === 1 && n.hasAttribute && n.hasAttribute('data-dc-alabel')));
+          const shows = own.map(n => n.textContent || '').join('').trim();
+          let tag = btn.querySelector(':scope > [data-dc-alabel]');
+          if (shows){ if (tag) tag.remove(); continue; }
+          const title = btn.getAttribute('title') || '';
+          const label = SHORT_LABEL[title] || title;
+          if (!label) continue;
+          if (!tag){
+            tag = document.createElement('span');
+            tag.setAttribute('data-dc-alabel', id);
+            tag.setAttribute('data-host-owned', '');
+            btn.appendChild(tag);
+          }
+          tag.setAttribute('data-dc-alabel', id);
+          if (tag.textContent !== label) tag.textContent = label;
+        }
+      }
+    }
+
     async function clipStarAsk(id){
       if (CLIPSTAR.busy) return;
       CLIPSTAR.busy = id;
@@ -9757,6 +9824,7 @@ function paintStudio(){
   paintPreviewPlayer(vals);
   paintClipTools(vals);
   paintClipStars(vals);
+  paintClipActions(vals);
   paintHighlight(vals);
   paintJobType(vals);
   paintJobBackground(vals);

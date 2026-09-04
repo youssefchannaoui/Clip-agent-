@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1438 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1445 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -6512,6 +6512,105 @@ All five red probes were proven — the marker removed from `thumb()`, removed
 from the lecture card, the rule deleted, the selector re-pointed at a hashed
 class, and the ink redeclared for daylight — and each printed the bytes it
 removed first.
+
+## The clip card: fewer, wider, and every action named (v3.128.0, 4 Sept 2026)
+
+Youssef, with an OpusClip screenshot: "see how good opus does it, clean very
+helpful and buttons for many features" — then "focus on making the website
+more clean, more spacsious less croweded".
+
+### Measured against ours before anything was designed
+
+The card offered **SIX actions and FOUR of them had no visible label**: the
+select tick, edit (a `ph-crop` glyph), reject (`ph-x`), and the AI star. A crop
+icon does not say "Edit", and this repo has already paid for a glyph that read
+fine in the source and drew nothing at all (`ph-seedling`; `ph-bold` never
+imported). OpusClip's column names all nine of its actions; ours named two.
+
+**And the grid's floor was `minmax(190px, 1fr)`, so a card was ~202px at EVERY
+viewport width** — a wider screen bought MORE cards, never a bigger one. At
+1440 that is four 202px cards inside 850px of content, holding a 176px title, a
+102px Approve and two 30x29 buttons with no words on them.
+
+    card width     before   after
+    1100             202      246   (2 across, was 2)
+    1280             202      336   (2 across, was 3)
+    1440             202      271   (3 across, was 4)
+    1920             202      319   (4 across, was 6)
+
+    unlabelled actions per card:  4 -> 1
+
+The one left is the AI star, which is an overlay on the picture and keeps its
+tooltip. Fewer clips on screen at once is the deliberate cost, and the review
+DECK — one at a time, keyboard-first — is still there for anyone who wants to
+move faster than a grid allows.
+
+### The rule is general, not a list of three buttons
+
+Any button inside a clip card that carries a `title` and shows no text gets
+that title as a visible label, so an icon-only action added later is named
+without anyone remembering to come back. `SHORT_LABEL` only shortens the ones
+whose title is a sentence — "Open in editor" does not fit a 76px button.
+
+- **NOT AN OVERLAY, and the first cut got that wrong.** "Any icon-only button
+  with a title" stuffed the word **Select** into the 22x22 tick on the
+  thumbnail — which is pinned by an INLINE width from `selStyle`, so no
+  stylesheet could widen it and the text was clipped inside the box
+  (`scrollWidth > clientWidth`, measured; it reads as a broken checkbox). An
+  action sits in the card's flow; a state toggle drawn over the picture is
+  absolutely positioned. That is the structural difference, and it names
+  nothing the design can renumber.
+- **Host-rendered**, because the alternative is adding a `<span>` inside two
+  buttons in the design export — a re-import, and every hashed class name in
+  the app regenerating. Marked `data-host-owned`, swept by its OWN marker (the
+  stranded-star rule, v3.125.0 finding 10), and in `paintStudio()`'s list
+  rather than on an observer.
+- **A button that already shows words is left alone.** Approve and Restore are
+  drawn by the design with their own text; the check excludes our own tag, or
+  the label would be removed on the very next repaint.
+
+### The card floor is TWO steps, because one broke the narrow desktop
+
+At 1100 the queue's grid has only **510px** to work with — a 300px aside sits
+beside it at every width — and a flat 258px floor dropped it to a **SINGLE
+510px card per row**, from two. Measured, not reasoned about. Below 1200 the
+floor is 220; above it, 258.
+
+Selected on `[data-clip]`, which the design already carries for the waveform
+strip, so this names no hashed class and a re-import cannot renumber it away.
+It reaches the queue AND a lecture's own clips — the same card from the same
+binding.
+
+### Verified by measurement at four widths in both themes
+
+    DOM operations on an unchanged repaint          0
+    labels after three consecutive repaints         16 -> 16 (idempotent)
+    clipped button text                             0
+    page-level horizontal scroll                    0
+    action-row spread within each grid row          0px, every row
+    icon centre vs its label's centre               0px, all 16 buttons
+
+All six red probes were proven: the painter dropped from paintStudio's list,
+`data-host-owned` removed, the overlay skip removed, the already-shows-text
+guard removed, the grid rule deleted, and the two floors flattened to one.
+
+### One measurement finding, recorded rather than acted on
+
+Every screen's content wrapper uses **40px side gutters except the review
+queue (22px) and Help (26px)** — so the screen someone works in most is the
+most cramped, by 18px a side, and inconsistent with ten siblings. It is left
+alone here deliberately: closing that gap takes 36px straight off the clip
+grid, which is the opposite of what this release is for. Worth doing when the
+queue's permanent 300px aside is looked at.
+
+### And two probes that lied before they told the truth
+
+The first two readings of "how much padding does each screen have" both
+reported a confident **false uniformity of 11px/22px on all thirteen screens**
+— because `[...main.children].find(h > 40)` found `#dcTopbar` every time, and
+then `#dcBlocker`. The real answer is not uniform at all. **Print the class of
+the element a layout probe actually measured** before believing what it says
+about "every screen".
 
 ## Open items
 
