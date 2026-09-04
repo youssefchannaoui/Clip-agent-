@@ -20,6 +20,7 @@ import { wordsForClip, silenceSpans } from './captions.js';
 import * as agent from './agent.js';
 import * as backup from './backup.js';
 import * as alerts from './alerts.js';
+import * as selfcheck from './selfcheck.js';
 import * as ownerFeed from './owner-feed.js';
 import { fallbackThumb } from './local-engine.js';
 import * as social from './social.js';
@@ -1821,7 +1822,17 @@ async function route(req, res, url) {
                 + `That only matters if worker code changed in between, which most releases do not. `
                 + `Check with: git log v${workerVersion}..HEAD -- worker/`,
       };
-      return json(res, 200, { ...health, worker, deploy });
+      /* THE BREAK DETECTOR, ON THE SCREEN AN OPERATOR ACTUALLY OPENS.
+         It alerts by email through the same ledger as the billing checks --
+         and no email goes out at all until EMAIL_API_KEY is set on Render, at
+         which point the only record is a line in the server log nobody reads.
+         Health is the channel that works with nothing configured. Same
+         function, same inputs as the sweep, so the two cannot disagree. */
+      const selfChecks = selfcheck.checks(selfCheckInputs({
+        workerVersion,
+        workerReachable: Boolean(worker) && !worker.error,
+      }));
+      return json(res, 200, { ...health, worker, deploy, selfChecks });
     } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
   if (method === 'GET' && pathname === '/api/owner/costs') {
@@ -3057,6 +3068,38 @@ const INLINE_SCRIPT_HASHES = (() => {
 })();
 
 /**
+ * What the break detector looks at (src/selfcheck.js).
+ *
+ * ONE description, read by both the 15-minute sweep that ALERTS and the
+ * Owner -> Health route that SHOWS. Two copies of this object would be two
+ * answers to one question, which is how every drift in this file started.
+ *
+ * `workerVersion` is passed in rather than fetched here: the two callers
+ * already have it, by different routes (readiness() and health()), and a third
+ * round trip to the box on every owner page load would be waste.
+ */
+function selfCheckInputs({ workerVersion = '', workerReachable = false } = {}) {
+  return {
+    assets: Object.fromEntries(Object.entries(STUDIO_ASSETS).map(([route, entry]) => [route, entry.file])),
+    readSize: file => fs.statSync(file).size,
+    page: (() => { try { return fs.readFileSync(page, 'utf8'); } catch { return ''; } })(),
+    allowed: INLINE_SCRIPT_HASHES,
+    sha256: text => crypto.createHash('sha256').update(text, 'utf8').digest('base64'),
+    mediaPublicBase: config.mediaPublicBase,
+    // A SAMPLE, not every clip: the question is whether the configuration is
+    // missing, and one stored r2.dev URL answers it exactly as well as a
+    // thousand while costing a fraction of the walk.
+    storedSample: (state.clips || []).slice(-40).map(clip => clip.videoUrl || ''),
+    // A worker that is not ANSWERING is checkWorker's condition, not this
+    // one -- alerting twice for one fault is the duplication this repo keeps
+    // paying for, and on a cold start it would fire on every deploy.
+    remote: config.processingMode === 'remote' && workerReachable,
+    appVersion: config.appVersion,
+    workerVersion,
+  };
+}
+
+/**
  * Security headers on every response.
  *
  * There were none at all. The Content-Security-Policy is the one that carries
@@ -3231,6 +3274,49 @@ server.listen(config.port, () => {
     driftTimer.unref?.();
     checkCurrencyDrift().catch(() => {});
   }
+  /*
+   * THE BREAK DETECTOR (src/selfcheck.js).
+   *
+   * Not a second CI: CI already catches code that will not compile or fails a
+   * test. This watches for the conditions that break the running product and
+   * SAY NOTHING -- a served stylesheet that is not on disk, an inline script
+   * the CSP does not cover (the app renders and never boots, five times now),
+   * a player handed the rate-limited r2.dev endpoint, a worker sitting on old
+   * code. Every one of those has happened here, and a person opening the app
+   * was the only detector.
+   *
+   * It lives in server.js rather than agent.tick() because all four of its
+   * inputs are here -- the served asset table, the page bytes, the CSP hashes
+   * and the worker's version -- and agent.js importing this module would be a
+   * cycle.
+   *
+   * Every fifteen minutes, and it costs four stat() calls plus a regex over a
+   * string already in memory. It reports through the SAME alerts ledger as the
+   * checks above, so it inherits the 12-hour dedupe and the restart-surviving
+   * `since` -- an alert channel that cries wolf is one nobody reads, and that
+   * is the whole reason alerts.js exists.
+   */
+  const runSelfCheck = async () => {
+    /* A worker that is not ANSWERING is `checkWorker`'s condition, not this
+       one. Reporting it here too would alert twice for one fault -- the
+       duplication this repo keeps paying for -- and on a cold start it would
+       fire on every single deploy while the box comes up. So an unreachable
+       worker skips the version check entirely rather than reading as behind. */
+    let workerVersion = '';
+    let workerReachable = false;
+    if (config.processingMode === 'remote') {
+      try { workerVersion = (await workerClient.readiness())?.version || ''; workerReachable = true; }
+      catch { workerReachable = false; }
+    }
+    await selfcheck.run(selfCheckInputs({ workerVersion, workerReachable }), alerts.report);
+  };
+  const selfCheckTimer = setInterval(() => { runSelfCheck().catch(() => {}); }, 15 * 60_000);
+  selfCheckTimer.unref?.();
+  /* NOT immediately. Render swaps the instance on every push, so a check run
+     at second zero measures a service that is still coming up -- and the one
+     thing worse than no monitor is one that alerts on every deploy. */
+  const firstCheck = setTimeout(() => { runSelfCheck().catch(() => {}); }, 60_000);
+  firstCheck.unref?.();
   // YouTube API Data is cleared after 30 days (policy III.E.4.a-g). Started
   // here rather than on import so a test that loads this module does not sweep
   // a real state file as a side effect.

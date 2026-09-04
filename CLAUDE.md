@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1445 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1456 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -6611,6 +6611,110 @@ reported a confident **false uniformity of 11px/22px on all thirteen screens**
 then `#dcBlocker`. The real answer is not uniform at all. **Print the class of
 the element a layout probe actually measured** before believing what it says
 about "every screen".
+
+## The break detector (v3.129.0, 4 Sept 2026)
+
+Youssef: "can you make a automated code break detector or issue dector that
+fixes alone when something happens or notfiys".
+
+**It is a narrow thing on purpose, and the bar for adding a check is stated in
+the module:** it must fail SILENTLY today, with a person the only detector. CI
+already catches code that will not compile or fails a test. What has actually
+broken this product in production is a different shape — every one of these is
+in this file, every one was found by somebody opening the app, and not one
+raises an error anywhere:
+
+| check | what it catches | how many times it has happened |
+|---|---|---|
+| `assets` | a route in `STUDIO_ASSETS` whose file is missing or empty | a 404 with nothing in any log — a dead theme, or push that never arrives |
+| `inline-script` | an inline `<script>` the CSP does not cover | **five**: the shell renders and the app never boots, with no page error |
+| `media-domain` | clips stored on `r2.dev` with no `MEDIA_PUBLIC_BASE` | the rate-limited dev endpoint, five straight 503s in one editor session |
+| `worker-version` | the box running older code than the app | weeks, twice |
+
+### What "fixes alone" means here, and what it does not
+
+A check MAY carry a heal, and it may only ever be something this codebase
+already does somewhere else, bounded and reversible — `healPartialPublishes()`
+at boot and the interrupted-job recovery are the precedents. **None of the four
+carries one today**, and that is the honest state: a detector that rewrites
+production on its own judgement is a much bigger idea than the one asked for.
+Everything NOTIFIES.
+
+- **Through the same `alerts.report` ledger the billing checks use**, so it
+  inherits the 12-hour dedupe and the restart-surviving `since` (v3.27.0 — an
+  alert channel that cries wolf is one nobody reads, and then the real one is
+  missed too).
+- **A check that THROWS is reported as failing, never taken as passing.** A
+  monitor that goes quiet when it breaks is worse than no monitor.
+- **An alert that cannot go out never stalls the sweep**, and a test drives a
+  failing mailer to prove the remaining checks still run.
+
+### Three traps it was built around
+
+- **An unreachable worker is `checkWorker`'s condition, not this one.** Reporting
+  it here too would alert twice for one fault, and on a cold start it would
+  fire on EVERY deploy while the box comes up. So `remote` is false when the
+  readiness call throws, and the version check simply does not run.
+- **The first sweep is delayed 60s.** Render swaps the instance on every push,
+  so a check at second zero measures a service still coming up.
+- **`selfCheckInputs()` is ONE description** of what the detector looks at,
+  read by both the sweep that alerts and the Owner → Health route that shows.
+  Two copies of that object is two answers to one question.
+
+### It is on Owner → Health, because email may not be configured at all
+
+`alerts.js` sends nothing until `EMAIL_API_KEY` is set on Render, and then the
+only record is a line in the server log nobody reads. Health is the channel
+that works with nothing configured, and it is the screen an operator actually
+opens. `/api/owner/health` returns `selfChecks` from the same function with the
+same inputs, so the two cannot disagree.
+
+### The half a monitor inside the app can never do
+
+It runs INSIDE the process, so **it cannot detect the app being down.**
+`.github/workflows/watch-live.yml` + `scripts/watch-live.mjs` probe the live
+site from outside every two hours: the homepage, `HEAD /` (routed on
+`method === 'GET'` alone until v3.44.0, so every HEAD 404'd and link
+validators were being told the site did not exist), `/app`, a `script-src`
+hash actually present in the CSP, ten studio assets, and every page in the
+site's OWN sitemap rather than a list typed into the script — a typed list
+goes stale the first time a page is added.
+
+- **A push takes the site down for 35–40 seconds and that is NOT a fault** (the
+  service mounts a disk, so Render stops one instance before starting the
+  other). Every check retries four times, twenty seconds apart, through it.
+- **It reports and fixes nothing**, and a test asserts it contains no
+  `execSync`, `spawn`, `git` or mutating `curl`. A failed run is the
+  notification — GitHub mails the repo owner, with nothing to configure and no
+  credential to hold.
+- 2xx AND 3xx pass: `/app` redirects to `/login` when signed out.
+
+### Proven by breaking it, not by reading it
+
+The real module was driven against the real app's real inputs — the actual
+`STUDIO_ASSETS` table, the actual `index.html`, the actual CSP hash list:
+
+    the app as it stands      25 assets present · 1 inline block covered ·
+                              no r2.dev URLs · not a remote deployment
+
+    stylesheet deleted     -> assets: "/studio-tokens.css (missing)"
+    inline block uncovered -> inline-script: "1 of 1 ... never boots"
+    r2.dev, no base        -> media-domain: "handed the rate-limited endpoint"
+    box behind             -> worker-version: "the app is 3.128.0 and the
+                              worker reports 3.100.0"
+
+Then end to end through the LIVE route: `studio-notify.css` moved off disk and
+`/api/owner/health` came back `assets: ok false` naming it; moved back, `ok
+true` with all 25 present. Eleven tests drive `checks()` and `run()` and read
+their answers — executed output, never a grep of the source.
+
+**`index.html` really does carry ONE inline block, not several.** The two
+`<script>` opens without a `src` are 2,320 characters apart with no `</script>`
+between them, so the second is a string inside the first block's JavaScript
+rather than markup. The check extracts with the SAME regex `INLINE_SCRIPT_HASHES`
+uses, which is what makes the comparison meaningful; the "multiple inline
+script scopes" this file warns about are function scopes inside that one
+525KB block.
 
 ## Open items
 

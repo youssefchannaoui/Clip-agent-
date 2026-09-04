@@ -1,0 +1,47 @@
+# The half a monitor inside the app can never do.
+#
+# src/selfcheck.js watches for conditions that break the running product
+# silently -- a served asset that is not on disk, an inline script the CSP does
+# not cover, a worker on old code. What it cannot do, by construction, is
+# notice the app being DOWN: it is inside the process that would be gone.
+#
+# So this probes the live site from outside, on a schedule, and fails the run
+# when something a customer would hit is broken. A failed run is the
+# notification -- GitHub mails the repo owner, and there is nothing to
+# configure and no credential to hold.
+#
+# WHAT IT DELIBERATELY DOES NOT DO: fix anything. An external prober that can
+# push code or restart a service on its own judgement is a much bigger idea
+# than the one being asked for, and every safe self-heal this product has
+# belongs inside the app where the state is (healPartialPublishes, the
+# interrupted-job recovery). This reports.
+#
+# The 502 window is real and is NOT a fault: a push takes the site down for
+# about 35-40 seconds because the service mounts a disk and Render cannot run
+# two instances side by side. Every check retries through that window rather
+# than reporting a deploy as an outage.
+name: Watch the live site
+
+on:
+  schedule:
+    # Every two hours. Often enough that an outage is caught within one posting
+    # window; rare enough that it is not a load of its own.
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      base:
+        description: 'Origin to probe'
+        required: false
+        default: 'https://deenclipped.online'
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+
+      - name: Probe the live site
+        env:
+          BASE: ${{ github.event.inputs.base || 'https://deenclipped.online' }}
+        run: node scripts/watch-live.mjs
