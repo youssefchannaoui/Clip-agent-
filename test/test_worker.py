@@ -2449,15 +2449,45 @@ class AyahSnapTests(unittest.TestCase):
         self.assertAlmostEqual(clip.start, 10.0, places=2,
                                msg="pulled back to where the verse begins")
 
-    def test_a_snap_that_would_break_the_duration_band_is_refused(self):
+    def test_the_end_gives_way_so_the_start_can_stay_on_the_verse(self):
+        """The rule this test used to hold was reversed on 3 Sept 2026.
+
+        It asserted that a snap breaking the duration band is abandoned
+        ENTIRELY -- start included. Youssef: "ALWAYS find ayas when the clipper
+        finds only for quran recitation ALWAYS FIND THE START of a AYA." So the
+        start is fixed and the END is what gives way: here the only ayah end
+        (16.0) would leave a 6s clip under a 9s minimum, so the end stays where
+        the scorer put it and the clip still opens on the verse.
+        """
         segments = self.segments()
         spans = [{"ayah": {}, "wordStart": 0, "wordEnd": 3, "score": 0.9}]
         clip = self.candidate(12.5, 20.0, segments)
         with mock.patch.object(worker.quran, "load", return_value=self.fake_corpus(spans)):
             worker.snap_clips_to_ayat([clip], segments, {"captionMode": "quran"},
-                                      # 9s minimum: snapping to 10.0-16.0 would be 6s
                                       {"clipMinSeconds": 9, "clipMaxSeconds": 90})
-        self.assertAlmostEqual(clip.start, 12.5, places=2,
+        self.assertAlmostEqual(clip.start, 10.0, places=2, msg="opens on the verse")
+        self.assertAlmostEqual(clip.end, 20.0, places=2, msg="and the end gave way")
+        self.assertGreaterEqual(clip.duration, 9.0, msg="still inside the band")
+
+    def test_a_snap_that_would_carry_the_clip_off_its_moment_is_still_refused(self):
+        """The one thing "always" does not override.
+
+        A clip in the wrong place is worse than one starting mid-verse, so a
+        snap keeping less than `minimum` of the window the scorer chose is
+        still declined. Here the clip opens half a second before the last
+        verse ends, with nothing after it to move forward onto, so the only
+        ayah start on offer is 3.5s back -- and a 10s maximum then pulls the
+        end in to 26.0, leaving 6.5s of the scorer's 12.5s window against a
+        9s minimum.
+        """
+        segments = self.segments()
+        spans = [{"ayah": {}, "wordStart": 0, "wordEnd": 3, "score": 0.9},
+                 {"ayah": {}, "wordStart": 3, "wordEnd": 5, "score": 0.9}]
+        clip = self.candidate(19.5, 32.0, segments)
+        with mock.patch.object(worker.quran, "load", return_value=self.fake_corpus(spans)):
+            worker.snap_clips_to_ayat([clip], segments, {"captionMode": "quran"},
+                                      {"clipMinSeconds": 9, "clipMaxSeconds": 10})
+        self.assertAlmostEqual(clip.start, 19.5, places=2,
                                msg="a clip in the wrong place is worse than one starting mid-verse")
 
     def test_every_other_template_is_left_completely_alone(self):

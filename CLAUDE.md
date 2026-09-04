@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1339 JS + 592 Python**
+- `npm test` and `npm run check` must pass. Currently **1339 JS + 607 Python**
   (7 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -4678,6 +4678,111 @@ time a "say less" instruction has been taken past the point where it still
 identified anything -- the first was `targets[0]` standing for every
 destination (v3.28.0). When a row can now repeat, check that whatever
 identifies it still distinguishes it.
+
+## A Quran clip always opens on an ayah, and its edges stopped racing (v3.118.1, 3 Sept 2026)
+
+Youssef, on the sync that shipped in v3.102.0: "quran recitation sync is GREAT
+but the start and end, it's like it's finding the aya, so what happens is it
+goes through QUICKLY to find where the reciter is speaking" -- then, minutes
+later: "best way of fixing ALWAYS find ayas when the clipper finds only for
+quran recitation ALWAYS FIND THE START of a AYA."
+
+**MEASURED BEFORE ANYTHING WAS DESIGNED**, driving the real `attach_lecture_ayat`
+and `ayah_events` over a twenty-second verse of twelve words, paged four at a
+time:
+
+| where the clip cuts | verse inside it | pages drawn |
+|---|---|---|
+| opens AT the verse start | 20.0s | 6.67 / 6.66 / 6.67s |
+| opens with 3s of it left | 3.0s | 1.33 / 0.67 / 1.00s |
+| opens with 1s of it left | 1.0s | **0.33 / 0.34 / 0.33s** |
+| ENDS 1s into a verse | 1.0s | **0.33 / 0.34 / 0.33s** |
+
+A third of a second a page, each with a fade in and a fade out. That is "goes
+through QUICKLY", exactly, and it is two faults compounding.
+
+### The pager was given the whole verse and only the words that survived the cut
+
+`attach_lecture_ayat` clamps a straddling verse to the clip and drops the
+transcript words recited outside it -- but it passed only the SURVIVORS on,
+with no word of how many there had been or where they sat. So `ayah_events`
+spread the full twelve-word Uthmani text across whatever time was left.
+
+It now carries `wordFrom` and `wordCount`, and the pager draws only the pages
+whose words were actually recited inside this clip. Measured after: the two
+racing cases become ONE page at its real length, and a whole verse is
+byte-identical to before.
+
+- **Which page survives is why the OFFSET matters, not just the count.** A clip
+  opening one second before a verse ends is hearing its LAST four words.
+  Knowing only that one transcript word survived draws the middle page -- the
+  wrong words, confidently. The first probe here did exactly that.
+- **The verse mark closes a verse.** A clip ending part way through one has not
+  reached its end, so no ornament is drawn. `complete` is the flag, and a page
+  that is drawn without its mark is the honest picture.
+- **The fade is computed over the LIVE pages**, not every page the verse has,
+  or a lone surviving page holding the whole window would be given a third of
+  the fade it has room for.
+- **A transcript with no word times at all takes the path it always did** -- an
+  older transcript, or a re-render: every page drawn, the ruler sharing the
+  time out. `word_offset`/`word_count` default to zero and the whole-verse case
+  is unchanged.
+- The translation is still shared out over EVERY page and only the live ones
+  are drawn, so a whole verse splits exactly as it always did and the gloss of
+  a stretch nobody recited here is dropped with the Arabic it belongs to.
+
+### The snap gave up on precisely the clips that raced
+
+`snap_clips_to_ayat` looked for an ayah start within `AYAH_SNAP_TOLERANCE`
+(12s) and abandoned the whole snap -- start AND end -- whenever the pair broke
+the duration band. A clip opening seventeen seconds into a twenty-second verse
+is beyond that tolerance, so it was left where it was, which is what handed the
+pager a verse it had only the tail of. The two faults were one fault.
+
+- **The reach is the VERSE, not a number.** The start is now the beginning of
+  the verse being recited AT the cut, however long that verse is -- bounded by
+  the verse's own length, which is the honest bound. The tolerance survives for
+  the one case it was right for: a cut landing in a GAP between verses, where
+  there is no verse to return to.
+- **Nearest wins, forward or back.** A clip opening one second before a verse
+  ends belongs at the NEXT verse's start, a second away, not nineteen seconds
+  back at the start of the one it is leaving -- that would throw away most of
+  the moment the scorer chose. Both options are offered, nearest first, so a
+  refusal of the nearer one still lands on an ayah.
+- **The start is fixed and the END gives way.** The end is chosen to fit around
+  it: the ayah end nearest the scorer's own ending that lands inside the band,
+  and where none fits, a plain cut clamped into it.
+- **One thing "always" does not override**: a snap keeping less than `minimum`
+  of the scorer's own window is still declined. A clip in the wrong place is
+  worse than one starting mid-verse.
+
+### Two of the six red probes came back GREEN, and that is the entry worth reading
+
+- The ornament probe passed because the case it was tested on never drew the
+  last page at all -- the mark was absent for a different reason. The test now
+  ends the clip after the verse's TENTH word of twelve, so the last page IS
+  drawn and carries no mark.
+- The opening-verse-reach probe passed because the fixture was four twenty-
+  second verses, and from anywhere inside one of those the tolerance can always
+  reach a neighbour. The reach only makes a difference inside a verse longer
+  than TWICE the tolerance, so the fixture gained a forty-five-second verse --
+  which is not exotic: a slow recitation of an ordinary ayah passes 24s easily.
+- A third probe was simply badly chosen (it added a clause `pick_end` already
+  made unreachable) and was replaced by one that restores the OLD `pick_end`
+  wholesale. All six are red now.
+
+### What this does NOT reach
+
+**New imports only, for the sync half.** A re-render captions the STORED
+transcript and does not re-transcribe, so a lecture transcribed before v3.102.0
+carries no per-word times and the pager falls back to the ruler however many
+times it is run -- the note under *The sync on an OLD clip cannot be fixed by
+re-rendering it* still stands. The SNAP is a selection-time decision and
+likewise applies to lectures clipped from now on. Neither has been seen on a
+real frame yet; the proof here is the ASS event times and the candidate the
+render is handed.
+
+**Worker change, so `deploy-worker.yml` deploys it on push.**
 
 ## Open items
 
