@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1426 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1430 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9178,3 +9178,60 @@ right way round.
   in the host, a picker in the dialog and a mode in the store. Three files that
   tested the feature (`channel-lanes`, `schedule-clarity`, `multi-channel`) are
   deleted rather than left asserting behaviour nobody ships.
+
+## A click inside a dialog closed the dialog (v3.127.2, 4 Sept 2026)
+
+Youssef, on the clip preview: "when i click any text box to type it closes the
+screen." **The title could not be typed into at all.**
+
+- **Four overlays in the design are a fixed backdrop carrying
+  `onClick={{ close* }}` with a card sitting inside it, and NO card stopped the
+  bubble** -- so every click on a card's own contents closed it. Invisible for as
+  long as a card held nothing but a title and a picture (clicking the video shut
+  the preview, which nobody read as a fault); the moment the clip panel grew text
+  fields in v3.121.0 it broke the feature outright.
+- **The buttons went on working, which is exactly what disguised it.**
+  `clipToolsNode.onclick` calls `stopPropagation` for `button[data-ct]` and
+  returns BEFORE doing so for anything else -- so chips, Rewrite and Download
+  were fine while every input fell through to the backdrop.
+- **THE FIX IS BOUND TO THE CARD, and it must not be a stopPropagation in the
+  host.** Events are DELEGATED from the studio mount (studio-runtime `bind`), so
+  stopping propagation anywhere below the root kills the delegated dispatch
+  outright -- and the close button lives INSIDE the card, so stopping there
+  would break the ×. `dispatch` walks up from the target and returns at the
+  FIRST element carrying a handler: the × fires and the walk stops, and anything
+  else in the card lands on `swallowClick` and goes no further. No
+  preventDefault, or an input could not take focus.
+- Applied to all four (`closeSheet`, `closeActivityDetail`, `closePlayer`,
+  `closeConn`), not only the one that was reported. The contract "a click inside
+  a dialog is not a click on the dialog" is not a judgement call, and three
+  known-broken modals waiting to be reported is not a smaller change, only a
+  later one.
+- **The host-rendered connections dialog never had this**, and the reason is
+  worth copying: its backdrop is a SIBLING of the card
+  (`.studio-conn-backdrop`), not its parent, so a click inside can never reach
+  it. Prefer that shape for anything new.
+- The re-import was **proven byte-stable first**: both generated stylesheets
+  identical, no hashed class name moved, the template delta being exactly the
+  four attributes and the binding name.
+
+### Testing it without a browser, and without naming a hashed class
+
+`test/dialog-click.test.mjs` asserts against the GENERATED TEMPLATE -- the tree
+the runtime actually renders -- rather than the design source, which would still
+look right if a re-import dropped the attribute.
+
+**The importer HOISTS inline styles into hashed classes**, so a scrim cannot be
+found by reading a style attribute (there is none left) and must not be found by
+naming `.skt` (those renumber on every re-import). It is RESOLVED instead: the
+node's class is looked up in the generated sheet and asked whether it paints a
+full-viewport layer. The first test then pins the LIST of closing backdrops, so
+a dialog added later fails the suite until somebody decides whether its card
+swallows.
+
+Verified in the browser as well, because this is a click-path fault and a green
+suite is no verification for one: clicking the title, the description, the ask
+field, the heading and the video frame all leave it open; typing keeps focus;
+the × and the backdrop still close. **Proven the other way too** -- removing the
+card's `data-dc-h` in the live DOM and repeating the same click closes it, which
+is the old behaviour exactly.

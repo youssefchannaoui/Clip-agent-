@@ -6863,6 +6863,26 @@
       // close button in view on any window.
       playerThumb: 'position: relative; height: min(70vh, 640px); aspect-ratio: 9 / 16; width: auto; margin: 0 auto; border-radius: 10px; background: ' + thumb(UI.playerClip && UI.playerClip.thumbUrl) + ';',
       closePlayer: function (e) { stop(e); setUI({ playerClip: null }); },
+      /*
+       * A CLICK INSIDE A DIALOG IS NOT A CLICK ON THE DIALOG.
+       *
+       * Four overlays here are a fixed backdrop carrying `onClick=close*` with
+       * a card sitting inside it, and no card stopped the bubble -- so every
+       * click on the card's own contents closed it. Harmless while a card held
+       * nothing but a title and a picture; the moment the clip preview grew
+       * text fields (v3.121.0) it meant **the title could not be typed into at
+       * all**. Youssef, 4 Sept 2026: "when i click any text box to type it
+       * closes the screen."
+       *
+       * Bound to the CARD, not written as `stopPropagation` in the host,
+       * because events are DELEGATED from the studio mount: a stopPropagation
+       * below the root kills the delegated dispatch outright, and the close
+       * button lives inside the card. `dispatch` walks up from the target and
+       * returns at the FIRST element carrying a handler -- so the × still
+       * fires and stops the walk, and anything else in the card lands here and
+       * goes no further. No preventDefault: an input must still take focus.
+       */
+      swallowClick: function () { /* the walk stops here, and that is all */ },
       // Scrubs the clip: click anywhere on the timeline to move the playhead,
       // and the video follows. e.dcTarget is the delegation fix -- currentTarget
       // is the mount, not the bar that was clicked.
