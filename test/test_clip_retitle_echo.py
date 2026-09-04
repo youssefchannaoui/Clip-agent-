@@ -86,13 +86,46 @@ class RetitleEchoTests(unittest.TestCase):
         self.assertIn("REJECTED", fake.prompts[1])
         self.assertIn("the current title, word for word", fake.prompts[1])
 
-    def test_a_second_echo_is_reported_as_unchanged_rather_than_as_new(self):
+    def test_three_shots_before_it_gives_up(self):
+        # THREE, not two. Youssef, 4 Sept 2026, on this panel: "cant chnage
+        # more than once". A single retry on a 1.7B model is close to a coin
+        # toss, and another generation costs a few seconds on a button
+        # somebody is already watching -- far cheaper than handing back the
+        # line they pressed it to be rid of. Rising temperature is what stops
+        # attempt two being attempt one again.
+        out, fake = self.ask(self.CURRENT, self.CURRENT, self.CURRENT)
+        self.assertEqual(out["title"], self.CURRENT)
         # A button that quietly returns what was already on screen is a control
         # that looks broken. The host says "DeenAI kept your title" off this.
-        out, fake = self.ask(self.CURRENT, self.CURRENT)
-        self.assertEqual(out["title"], self.CURRENT)
         self.assertEqual(out["source"], "unchanged")
+        self.assertEqual(len(fake.prompts), 3)
+        # Each retry names its reason, so the model is told what was wrong
+        # rather than merely asked again.
+        self.assertIn("the current title, word for word", fake.prompts[2])
+
+    def test_a_line_already_offered_is_refused_as_well(self):
+        """The complaint itself: pressing the button twice gave the same line.
+
+        The worker is stateless, so the app sends every line this clip has
+        already been offered and each is rejected exactly the way the current
+        title is -- through `normalise_title`, so "the same" means here what it
+        means to the dedupe pass.
+        """
+        already = "Mercy has no closing time"
+        out, fake = self.ask(already, "Why the door is still open tonight",
+                             avoid=[already])
+        self.assertEqual(out["title"], "Why the door is still open tonight")
+        self.assertEqual(out["source"], "ai")
         self.assertEqual(len(fake.prompts), 2)
+        self.assertIn("already given that exact line", fake.prompts[1])
+
+    def test_an_avoided_line_is_matched_the_way_the_dedupe_matches(self):
+        # Case and trailing punctuation are not a different title, or the
+        # second press comes back with "Mercy Has No Closing Time..." and the
+        # control still looks broken.
+        out, _ = self.ask("Mercy Has No Closing Time...", "Why the door is still open",
+                          avoid=["Mercy has no closing time"])
+        self.assertEqual(out["title"], "Why the door is still open")
 
     def test_the_same_title_means_what_it_means_to_the_dedupe_pass(self):
         """Case and trailing punctuation are not a different title.
@@ -169,9 +202,33 @@ class RetitlePromptTests(unittest.TestCase):
         said = self.restatement(self.prompt_for())
         self.assertNotIn("in the shape asked for above", said)
 
-    def test_the_never_repeat_it_rule_rides_the_restatement_too(self):
-        said = self.restatement(self.prompt_for(title="The door that never closes"))
-        self.assertIn("never repeat it back", said)
+    def test_a_shape_never_sees_the_current_title_at_all(self):
+        """THE FIX, rather than another guard stacked on one.
+
+        The prompt used to hand the model the current title and then tell it
+        not to use it. That is a negative instruction, and this file's oldest
+        lesson about qwen3:1.7b is that it does not obey one -- measured on the
+        box, four of five shapes returned the current title verbatim. A shape
+        is written from the transcript, so the line is simply not there to
+        copy.
+        """
+        prompt = self.prompt_for(style="question", title="The door that never closes")
+        self.assertNotIn("CURRENT TITLE:", prompt)
+        self.assertNotIn("never repeat it back", self.restatement(prompt))
+
+    def test_shorter_is_the_one_shape_that_needs_it(self):
+        # "Shorter" is defined against the current title. Withholding it would
+        # make the chip meaningless.
+        prompt = self.prompt_for(style="shorter", title="The door that never closes")
+        self.assertIn("CURRENT TITLE: The door that never closes", prompt)
+        self.assertIn("never repeat it back", self.restatement(prompt))
+
+    def test_a_typed_instruction_gets_it_too(self):
+        # "Make the title Arabic" means DO THIS TO THE ONE I HAVE. Without the
+        # current title there is nothing for the request to act on.
+        prompt = self.prompt_for(instruction="make the title Arabic",
+                                 title="The door that never closes")
+        self.assertIn("CURRENT TITLE: The door that never closes", prompt)
 
     def test_a_clip_with_no_current_title_is_told_nothing_about_repeating(self):
         # There is nothing to repeat, and a rule about an absent thing is

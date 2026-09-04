@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1416 JS + 658 Python**
+- `npm test` and `npm run check` must pass. Currently **1398 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -8723,3 +8723,165 @@ which is why this needed more than one edit:
 - Two literals in `design/studio-dashboard.dc.html` moved with it. Sample data
   only -- the generated template carries neither string -- and
   `npm run design:import` was proven byte-stable before and after.
+
+## The rewrite button handed back the line you pressed it to be rid of (v3.127.0, 4 Sept 2026)
+
+Youssef, on the clip preview panel: "THIS NEDS a lot of fixing its so cheap
+barley working so cheap feeling and **cant chnage more than once**."
+
+The last three words are the diagnosis. Three causes, and the first is the one
+that matters.
+
+### The prompt handed the model the current title and told it not to use it
+
+That is a NEGATIVE INSTRUCTION, and this file's oldest lesson about qwen3:1.7b
+is that it does not obey one. It was already measured on the box: four of five
+shapes returned the current title verbatim -- a Question chip answering with
+something that is not a question, a Shorter chip returning the same length.
+v3.122.0 responded by adding a guard that CATCHES the echo and a note that
+SAYS "DeenAI kept your title". Honest, and still a button that does nothing.
+
+The fix is to stop showing it. A named SHAPE is written from the transcript and
+the current line is simply not there to copy. Two cases genuinely need it and
+keep it: **shorter** is defined against it, and a typed instruction ("make the
+title Arabic") means DO THIS TO THE ONE I HAVE.
+
+### Nothing remembered what had already been offered
+
+The worker is stateless, so a second press could only ever differ by luck. The
+browser now keeps a per-clip, per-field history and sends it as `avoid`; each
+entry is rejected exactly the way the current title is, through
+`normalise_title` -- so "the same" means here what it means to the dedupe pass,
+and "Mercy Has No Closing Time..." does not count as a new answer.
+
+- **The line on screen goes in the list too**, deduped, or the very first press
+  can hand back what is already there.
+- **The star and the panel share ONE history.** Two would let the star return
+  what Rewrite had just rejected.
+- It is not persisted: it is about this conversation with the button, not about
+  the clip, and storing it would mean somebody could never be offered a line
+  again.
+
+### One shot and a retry is a coin toss
+
+Three attempts now, at rising temperature (0.7 / 0.95 / 1.1) -- rising is what
+stops attempt two being attempt one again. Each retry NAMES the reason it was
+rejected. A few seconds on a button somebody is already watching is far cheaper
+than handing back the line they pressed it to be rid of.
+
+**Keeping the current line still beats the transcript fallback, and that
+ordering is deliberate.** The route WRITES whatever comes back, so preferring
+the fallback would let one press quietly replace a good title with a raw
+transcript sentence, with no undo. With NOTHING to keep, the fallback walks
+`title_candidates` rather than calling `title_from_text` -- that one always
+returns the FIRST candidate whatever number it is passed, so a second press
+would reach the same sentence again, which is the very complaint.
+
+### "So cheap feeling" was partly a CSS bug that had never worked
+
+`.dcct-row /* comment */ .dcct-ai { color: gold }` -- **a comment is not a
+separator, and CSS read that as the descendant selector `.dcct-row .dcct-ai`.**
+So the one gold mark on the panel had never once been gold, on any screen,
+since it shipped. Found by reading the sheet after the complaint, not by
+looking at it.
+
+The rest: the four shape chips were a flex wrap measuring 74/84/108/66px on two
+ragged lines, and are a 2-up grid of four equal buttons with one right edge; the
+Ask DeenAI section gets a warm wash that bleeds past the column with a negative
+inline margin and pads the same amount back, so the one left edge every label
+and field shares does not move (751 on every element, measured); and Rewrite is
+a SOLID gold button rather than the sixth outlined control on a panel of six.
+
+### The solid button measured 1.52:1 IN DAYLIGHT, and only measuring found it
+
+Written with literals on the reasoning that the brand gold is the same in both
+themes. It is. **The ink is not.** `build-light-theme` re-emits any rule naming
+a colour and remaps every hex it sees, and `#0E0E11` is a page ground
+everywhere else in this app -- so the ink on a gold button inverted to paper and
+went invisible. The comment above it claiming 9.87:1 was written before the
+browser was asked.
+
+`--dc-gold-solid`, `--dc-gold-hover` and `--dc-on-gold` are declared once on
+`:root` and deliberately NOT redeclared in the daylight block. **A rule written
+entirely in var() names has no hex for the generator to remap**, so one
+declaration serves both themes -- that is the escape hatch as well as the
+definition, and it is the route for anything else that sits on the gold.
+
+It also had to be **id-scoped**: the generated sheet emits
+`body.dc-light .dcct-btn { color: … }` at 0-2-0 and a bare `.dcct-primary` is
+0-1-0, so daylight rendered `--dc-ink` instead of the token. Near-black and
+legible by luck, which is the shape that stops being true one edit later.
+Measured after: **9.87:1 in both themes, the same fill and the same ink.**
+
+### Two probes did not go red the first time
+
+The colour test failed on the HEX IN ITS OWN EXPLANATION -- the fourth time
+this repo has hit that shape, and the one that pushes the next person to reword
+a comment rather than fix anything. Comments are stripped now. And the
+"never redeclared in daylight" probe looked for `body.dc-light` by its first
+appearance in the file, which is a line of PROSE in the comment above the
+palette; it came back green against a redeclared token until it was pointed at
+the block's real selector.
+
+## Three channels is gone; Studio is capacity (v3.127.0, 4 Sept 2026)
+
+Youssef, in the same message: "FOR STUDIO REMOVE ALL THINGS TO DO WITH 3
+CHANNELS REMOVE IT, ITS NOT PRCATICAL THEY JUST GET 8 UPLAODS AND MORE TOKENS."
+
+Multi-channel shipped v3.41.0 and is retired here. **The case for retiring it is
+in this file's own record rather than in anybody's opinion:** three channels
+needed a lane switcher, a share-out mode, a per-channel denominator on every
+count and a channel name beside every logo -- and TWO RELEASES RUNNING
+(v3.115.4, v3.116.0) went on the schedule being "very confusing" as a direct
+result of it. The feature was retired rather than the symptom, which is the
+right way round.
+
+- **`accountsPerPlatform()` returns 1, with no argument and no branch.** A
+  function that still reads the tier is a feature waiting to be switched back on
+  by a config change nobody reviews. `ACCOUNTS_PER_PLATFORM_STUDIO` is deleted
+  from config, not defaulted to one.
+- **NOTHING WAS MIGRATED, and that is deliberate.** Every credential path
+  resolves by account id and a stored connection may still be a LIST: an account
+  that connected three while they were sold has three on disk, and capping the
+  ALLOWANCE stops the extras without a migration that could lose a working
+  credential. The dialog lists them all, says "DeenClipped posts to the first of
+  these", and each keeps its own disconnect. `enabledTargetsForClip` LOGS the
+  truncation -- two destinations disappearing with no line anywhere is how a
+  "my clips stopped posting" report starts.
+- **The share-out mode is deleted from the store, the route and the publish
+  path**, along with `rotationIndex`. It only ever meant anything with more than
+  one channel to share between, so leaving it would be a stored setting no code
+  path can act on -- the dead flag this repo already paid for once (v3.116.0,
+  the master publishing switch that had been false in production for the life of
+  the product).
+- **The schedule has ONE denominator again.** "3 of 8 scheduled", in the day
+  view and the sidebar and the header, all from `daySlots`. The per-channel
+  wording that replaced it, and the "N posts this day, across your channels"
+  that had no denominator at all, are gone.
+- **The logo stands alone on a schedule row again** -- which is what Youssef
+  asked for originally ("dont be writing just put logos that are posting") and
+  which only stopped being true because a platform could mean three. A failure
+  still gets its word; that never depended on the channel count.
+- **What Studio sells is now two things, and the second was invisible.**
+  `extraSlots` reads "Post up to 8 times a day, not four" -- said against the
+  number it beats, because "up to 8" means nothing to somebody who does not know
+  the other plans give four. And `moreTokens` is new: the allowance was only
+  ever a number on the pricing card, so nobody comparing the two columns could
+  see that Studio buys more lectures a month. Its label is DERIVED from the two
+  plans' own figures (`tokensStudioMonthly / tokensMonthly`), so the sales line
+  cannot claim a multiple the billing code does not grant.
+- **A multi-line entry in `FEATURES` is invisible to the law test.**
+  `pro-and-blockers` reads each row as a one-line ``key: Object.freeze({ tier:
+  '...' })``, so the first cut of `moreTokens` -- wrapped over four lines for its
+  long label -- was silently not a row, and the guard that says "adding a feature
+  means adding its gate" passed for free. The label is a const above the table
+  now.
+- **The help article went with it.** "Press Connect again -- it now reads Add
+  another" sends somebody looking for a button that does not exist, which reads
+  as the product being broken. An article describing a retired feature is worse
+  than no article.
+- `test/one-channel.test.mjs` is the guard against it creeping back, because the
+  pieces are scattered: an allowance in billing, a cap enforced twice, a switcher
+  in the host, a picker in the dialog and a mode in the store. Three files that
+  tested the feature (`channel-lanes`, `schedule-clarity`, `multi-channel`) are
+  deleted rather than left asserting behaviour nobody ships.

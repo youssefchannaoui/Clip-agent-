@@ -867,28 +867,6 @@ function validateFor(next, userId) {
 }
 
 /**
- * A stable ordinal for one clip within its lecture.
- *
- * Sorted by the clip's own addedAt then id, so it does not move when another
- * lecture is imported or a sibling is deleted -- and it is the same answer
- * every time it is asked, which is what makes the rotation safe to recompute.
- */
-function rotationIndex(clip) {
-  const siblings = (state.clips || [])
-    .filter(item => item.projectId && item.projectId === clip.projectId
-      && ownerOf(item) === ownerOf(clip))
-    .sort((a, b) => (Number(a.addedAt) || 0) - (Number(b.addedAt) || 0)
-      || String(a.id).localeCompare(String(b.id)));
-  const at = siblings.findIndex(item => item.id === clip.id);
-  // A clip with no lecture (or one not found) still needs an answer that does
-  // not change between calls; its id serves.
-  if (at >= 0) return at;
-  let hash = 0;
-  for (const ch of String(clip.id || '')) hash = (hash * 31 + ch.charCodeAt(0)) % 100003;
-  return hash;
-}
-
-/**
  * Which channels this clip is FOR, without building targets or logging.
  *
  * The scheduler needs to know a clip's lanes before it has picked a time,
@@ -971,7 +949,6 @@ export function enabledTargetsForClip(clip, { quiet = false, assumeConsent = fal
   // that will be forgotten in one. A clip may still carry its own list, which
   // wins.
   const only = chosenList ? chosenList.map(String) : null;
-  const spreadMode = settings.spread === 'rotate' ? 'rotate' : 'all';
   for (const provider of PROVIDERS) {
     const item = settings[provider];
     if (!item?.enabled) continue;
@@ -989,38 +966,15 @@ export function enabledTargetsForClip(clip, { quiet = false, assumeConsent = fal
       ? Boolean(clip.tiktokConsent[String(accountId || 'default')] || clip.tiktokConsent.default)
       : Boolean(clip.tiktokConsentAt));
     if (provider === 'tiktok' && !assumeConsent && clip.approvedBy !== 'manual') continue;
-    // The cap is applied HERE as well as at the route, deliberately. A settings
-    // record can outlive the plan that was allowed to write it -- a Studio
-    // account that lapses to Pro still has three ids on disk -- and the render
-    // path must not keep posting to all three because a past subscription once
-    // permitted it. Truncating at build time means the extra destinations stop
-    // the moment the plan does, and come back if it resumes.
+    // ONE ACCOUNT PER PLATFORM, and the cap is applied HERE as well as at the
+    // route. A settings record outlives the plan that wrote it: an account
+    // that connected three channels while Studio sold them (v3.41.0 to
+    // v3.125.0) still has three ids on disk, and the render path must not keep
+    // posting to all three because a past subscription once permitted it.
     const allowed = billing.accountsPerPlatform(owner, provider);
-    let chosen = (item.accountIds?.length ? item.accountIds : [item.accountId]).slice(0, allowed);
+    const chosen = (item.accountIds?.length ? item.accountIds : [item.accountId]).slice(0, allowed);
     if (item.accountIds?.length > allowed) {
-      say(`${provider} has ${item.accountIds.length} accounts selected but this plan allows ${allowed}; posting to the first ${allowed}.`, 'warn');
-    }
-    /*
-     * SHARE OUT, or post everywhere.
-     *
-     * With three channels on one platform, "everywhere" means the same clip
-     * on all three at the same minute -- your own channels competing with
-     * each other, which is what paying for three of them should NOT buy.
-     * "Share out" gives each clip to ONE of them instead, so three channels
-     * carry three different clips.
-     *
-     * It rotates WITHIN a platform, never across platforms: a clip still goes
-     * to YouTube and TikTok both. Rotating across platforms would mean a clip
-     * reaching one network and not the other, which nobody asks for.
-     *
-     * The index is derived from the clip's own position in its lecture, so
-     * asking twice gives the same answer -- this function is called at
-     * schedule time and again when targets are rebuilt, and a rotation that
-     * drifted between the two would move a clip to a different channel after
-     * it had been scheduled for the first.
-     */
-    if (spreadMode === 'rotate' && chosen.length > 1) {
-      chosen = [chosen[rotationIndex(clip) % chosen.length]];
+      say(`${provider} has ${item.accountIds.length} accounts stored; DeenClipped posts to the first one.`, 'warn');
     }
     for (const accountId of chosen) {
       if (provider === 'tiktok' && !consented(accountId)) {

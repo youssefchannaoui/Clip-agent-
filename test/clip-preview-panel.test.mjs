@@ -97,7 +97,13 @@ test('every colour in the panel is a theme token or the brand gold', () => {
   // by "this hex appears as a fallback somewhere in the block" is not the same
   // thing, and let a bare #E9E9ED through because the same hex was a fallback
   // three rules down. That probe came back green.
+  // COMMENTS ARE STRIPPED FIRST. A note explaining that a colour measured
+  // #141418 in daylight is not a colour the panel uses, and failing on it is
+  // this repo's recurring "the test fails on its own explanation" shape --
+  // which pushes the next person to reword the comment rather than fix
+  // anything. Now the fourth time; strip, do not reword.
   const literals = block.slice(0, end)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/var\(\s*(--dc-[a-z0-9-]+)\s*,[^)]*\)/g, 'var($1)')
     .match(/#[0-9A-Fa-f]{3,8}\b/g) || [];
   assert.deepEqual(literals, [], `un-tokenised colours in the panel: ${literals.join(', ')}`);
@@ -289,4 +295,93 @@ test('a shape is sent as `style`, never as the typed instruction', () => {
   assert.match(body, /what\.indexOf\('style-'\) === 0/, 'the chips are handled');
   assert.match(body, /clipToolsAsk\(CLIPTOOLS\.target, '', what\.slice\(6\)\)/,
     'the shape goes in the style slot with an EMPTY instruction');
+});
+
+test('the panel remembers what it has already offered, and sends it', () => {
+  // Youssef, 4 Sept 2026: "cant chnage more than once". The worker is
+  // stateless, so a second press can only differ if the browser tells it what
+  // the first one gave. Both controls read ONE history -- two would let the
+  // star hand back what Rewrite just rejected.
+  assert.match(html, /function clipToolsSeen\(id, kind\)/,
+    'one history, keyed by clip and field');
+  const calls = [...html.matchAll(/\/retitle['"][\s\S]{0,900}?\}\),/g)].map(m => m[0]);
+  assert.equal(calls.length, 2, 'the panel and the star, and nothing else');
+  for (const call of calls) assert.match(call, /avoid:/, 'every retitle call carries the history');
+  // Both READ that one history rather than keeping their own: the call sites
+  // resolve it a line above, so this counts the readers rather than looking
+  // inside each call.
+  assert.equal((html.match(/function clipToolsSeen\(/g) || []).length, 1,
+    'one accessor, so there is one history');
+  assert.equal((html.match(/CLIPTOOLS\.seen\b/g) || []).length, 2,
+    'and it is read and written only through that accessor');
+});
+
+test('the line on screen is avoided too, not only the previous answers', () => {
+  // "Give me another" means another than THIS one as well. Without the current
+  // value in the list the very first press can hand back what is already
+  // there, which is where the complaint started.
+  const calls = [...html.matchAll(/\/retitle['"][\s\S]{0,900}?\}\),/g)].map(m => m[0]);
+  for (const call of calls) assert.match(call, /\.concat\(/, 'the current value joins the list');
+});
+
+test('an unchanged answer is never remembered as a new one', () => {
+  // It IS the line already in the list; recording it again would spend one of
+  // the twelve slots the prompt can carry on a duplicate.
+  assert.match(html, /r\.source !== ['"]unchanged['"]/,
+    'only a genuinely new line is remembered');
+});
+
+test('the avoid list is capped where it arrives from the customer', () => {
+  // It reaches a prompt, so its length and each entry's length are the
+  // server's business rather than the browser's.
+  const route = server.slice(server.indexOf('/retitle$/'));
+  const block = route.slice(0, 2000);
+  assert.match(block, /Array\.isArray\(asked\?\.avoid\)/);
+  assert.match(block, /\.slice\(0, 12\)/, 'a bounded number of lines');
+  assert.match(block, /v\.slice\(0, 200\)/, 'each of a bounded length');
+});
+
+test('the DeenAI mark is gold, and its selector actually matches', () => {
+  // A COMMENT IS NOT A SEPARATOR. This rule was written as
+  // `.dcct-row /* ... */ .dcct-ai { ... }`, which CSS reads as the descendant
+  // selector `.dcct-row .dcct-ai` -- so the one gold mark on the panel had
+  // never once been gold on any screen. Found by reading the sheet, not by
+  // looking at it.
+  const rule = css.slice(css.indexOf('.dcct-ai {'));
+  assert.match(rule.slice(0, 200), /color:\s*var\(--dc-gold-lit/);
+  const before = css.slice(0, css.indexOf('.dcct-ai {'));
+  assert.ok(/[};*/]\s*$/.test(before.trimEnd()),
+    'nothing but a closed rule or comment may precede it, or it is a descendant selector');
+});
+
+
+test('the solid gold button is written in tokens, and they do not flip', () => {
+  // MEASURED IN THE BROWSER at 1.52:1 in daylight before this was tokenised.
+  // `build-light-theme` re-emits any rule naming a colour and remaps every hex
+  // it finds -- and #0E0E11 is a page ground everywhere else in this app, so
+  // the ink on a gold button inverted to paper and vanished. A rule written
+  // entirely in var() names has no hex for the generator to see.
+  const rule = css.slice(css.indexOf('#dcClipTools .dcct-primary {'));
+  const body = rule.slice(0, rule.indexOf('}'));
+  assert.match(body, /background: var\(--dc-gold-solid\)/);
+  assert.match(body, /color: var\(--dc-on-gold\)/);
+  // The pair is declared once, on :root, and NEVER redeclared for daylight --
+  // that is the whole of what makes one declaration serve both themes.
+  // The palette block itself, by its own selector -- not "the first mention of
+  // dc-light anywhere", which is a line of prose in the comment above it and
+  // made this probe come back green against a redeclared token.
+  const at = css.indexOf(':root.dc-light,\nbody.dc-light {');
+  assert.ok(at > -1, 'the daylight palette block moved; this test needs pointing at it');
+  const light = css.slice(at, css.indexOf('\n}', at));
+  for (const token of ['--dc-gold-solid', '--dc-on-gold', '--dc-gold-hover']) {
+    assert.match(css, new RegExp(`\\n\\s*${token}:`), `${token} must be declared`);
+    assert.ok(!light.includes(`${token}:`), `${token} must not be redeclared in daylight`);
+  }
+  // And the generated sheet must not be overriding it either.
+  const gen = fs.readFileSync(path.join(root, 'src/public/studio-light.generated.css'), 'utf8');
+  const emitted = gen.match(/body\.dc-light #dcClipTools \.dcct-primary\{[^}]*\}/);
+  if (emitted) {
+    assert.ok(!/background:|color:/.test(emitted[0]),
+      `daylight is still repainting the button: ${emitted[0]}`);
+  }
 });

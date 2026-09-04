@@ -259,25 +259,6 @@ export const CATEGORIES = Object.freeze([
         ],
       },
       {
-        id: 'multi-channel',
-        title: 'Posting to up to 3 accounts on one platform',
-        summary: 'A Studio feature: one clip, three YouTube channels or three Pages.',
-        image: 'connections.webp',
-        imageAlt: 'The account picker in the connections dialog',
-        steps: [
-          'Open **Connections**.',
-          'Press Connect on the platform and sign in to the first account.',
-          'Press it again — it now reads "Add another" — and sign in to the second, then the third.',
-          'A "Posting to N of 3 allowed" row appears. Tick the accounts each clip should go to.',
-          'The × beside an account disconnects that one and leaves the others alone.',
-        ],
-        notes: [
-          'Sign out of the platform, or use a separate browser profile, between connecting each account — otherwise you will reconnect the same one.',
-          'Facebook and Instagram need no second sign-in: one Facebook login already exposes every Page you shared with the app.',
-          'On Pro and Basic this is one account per platform, and connecting a different one switches to it.',
-        ],
-      },
-      {
         id: 'tiktok-audience',
         title: 'Choosing your TikTok audience',
         summary: 'TikTok requires you to pick this yourself, per account, with nothing preselected.',
@@ -286,7 +267,6 @@ export const CATEGORIES = Object.freeze([
         steps: [
           'Open **Connections** and run Test connection on TikTok, so their latest options are loaded.',
           'In the Posting options panel, choose who can see your posts.',
-          'With more than one TikTok connected, use the "These options are for" selector and choose an audience for each.',
         ],
         notes: [
           'Each TikTok account is a separate post, so each one has its own audience. There is no shared setting.',

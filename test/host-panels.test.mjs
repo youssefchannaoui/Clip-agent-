@@ -42,7 +42,6 @@ const PANELS = [
   ['dcInvite', "box.id='dcInvite'", 'the invite panel on Tokens'],
   ['dcWatermark', "box.id='dcWatermark'", 'the brand switches on Templates'],
   ['dcLibStats', "box.id='dcLibStats'", "the Lecture library's sidebar"],
-  ['dcSchedChannels', "box.id='dcSchedChannels'", 'the channel switcher on Schedule'],
   ['dcHelp', "el.id='dcHelp'", 'the whole Help screen'],
   ['dcOnboard', "row.id='dcOnboard'", 'the Create/Review/Publish strip on Home'],
   ['dcTaskSlot', "slot.id='dcTaskSlot'", "the task ladder's rail card"],

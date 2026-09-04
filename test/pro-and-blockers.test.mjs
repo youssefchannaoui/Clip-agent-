@@ -16,11 +16,11 @@ test('every feature the table sells is enforced server-side, tier by tier', () =
   const table = billing.match(/export const FEATURES = Object\.freeze\(\{([\s\S]*?)\n\}\);/)[1];
   const rows = [...table.matchAll(/^  (\w+): Object\.freeze\(\{ tier: '(\w+)'/gm)].map(m => [m[1], m[2]]);
   assert.deepEqual(rows.map(([key]) => key).sort(),
-    ['deenai', 'deenaiAsk', 'extraSlots', 'multiChannel', 'priorityRender', 'templates', 'watermark'],
+    ['deenai', 'deenaiAsk', 'extraSlots', 'moreTokens', 'priorityRender', 'templates', 'watermark'],
     'adding a feature means adding its gate and its place in the pricing grid too');
   assert.deepEqual(Object.fromEntries(rows), {
     watermark: 'pro', templates: 'pro', deenai: 'pro',
-    deenaiAsk: 'pro', priorityRender: 'studio', extraSlots: 'studio', multiChannel: 'studio',
+    deenaiAsk: 'pro', priorityRender: 'studio', extraSlots: 'studio', moreTokens: 'studio',
   }, 'the tier each feature belongs to is a pricing promise, not an implementation detail');
 
   // Each one refused by the server, not merely hidden by the interface.

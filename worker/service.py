@@ -253,11 +253,17 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
     """
     kind = str(payload.get("kind") or "title").strip().lower()
     instruction = str(payload.get("instruction") or "").strip()
-    style = CLIP_STYLES.get(str(payload.get("style") or "").strip().lower(), "")
+    style_key = str(payload.get("style") or "").strip().lower()
+    style = CLIP_STYLES.get(style_key, "")
     rows = payload.get("ayahs") if isinstance(payload.get("ayahs"), list) else []
     text = str(payload.get("text") or "").strip()
     current = str(payload.get("title") or "").strip()
     lecture_title = str(payload.get("lectureTitle") or "").strip()
+    # EVERY LINE THIS CLIP HAS ALREADY BEEN OFFERED, so pressing the button a
+    # second time cannot hand back the first answer. Youssef, 4 Sept 2026:
+    # "cant chnage more than once". The app keeps the list; the worker is
+    # stateless and must be told.
+    avoid = [str(v).strip() for v in (payload.get("avoid") or []) if str(v).strip()][:12]
 
     if kind == "title" and rows and not instruction:
         try:
@@ -275,6 +281,19 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
     if not base_url:
         raise RuntimeError("Rewriting a title needs the clip AI (OLLAMA_URL), which this box does not have configured.")
     model = os.getenv("OLLAMA_MODEL", "qwen3:1.7b")
+
+    # WHETHER THE MODEL IS SHOWN THE CURRENT TITLE AT ALL, and this is the fix
+    # rather than another guard on top of one. Measured on the box 4 Sept 2026:
+    # given the current title, four of five shapes handed it straight back --
+    # so the prompt asked a 1.7B model to read a line and then not use it,
+    # which is a negative instruction, which this model does not obey. This
+    # file's oldest lesson about it.
+    #
+    # A named SHAPE is written from the transcript, and the current title is
+    # simply not there to copy. Two cases genuinely need it: "shorter" is
+    # defined against it, and a typed instruction ("make the title Arabic")
+    # usually means DO THIS TO THE ONE I HAVE.
+    show_current = bool(current) and (style_key == "shorter" or bool(instruction))
 
     wants = ("a ONE-SENTENCE description for the post, under 200 characters"
              if kind == "description" else "ONE title of 5-12 words")
@@ -307,7 +326,7 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
         + "\nBEFORE YOU ANSWER: " + wants + ", nothing else, and every word backed by the clip"
         + (", in the shape asked for above" if style else "")
         + (". The current title is given ONLY so you can write a DIFFERENT one -- "
-           "never repeat it back" if current else "")
+           "never repeat it back" if show_current else "")
         + "."
     )
     # The style sits in the system half above, deliberately: it is one of our own
@@ -316,13 +335,13 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
     user = (
         "BEGIN UNTRUSTED\n"
         + ("LECTURE TITLE: " + lecture_title[:200] + "\n" if lecture_title else "")
-        + ("CURRENT TITLE: " + current[:200] + "\n" if current else "")
+        + ("CURRENT TITLE: " + current[:200] + "\n" if show_current else "")
         + "CLIP TRANSCRIPT: " + text[:1400] + "\n"
         + ("WHAT THEY ASKED FOR: " + instruction[:300] + "\n" if instruction else "")
         + "END UNTRUSTED"
     )
-    def ask(nudge: str = "") -> str:
-        """One generation, cleaned. Callable twice so an echo can be re-asked."""
+    def ask(nudge: str = "", temperature: float = 0.7) -> str:
+        """One generation, cleaned. Called repeatedly until an answer is usable."""
         payload_bytes = json.dumps({
             "model": model,
             "prompt": system + nudge + "\n\n" + user + "\n\nAnswer:",
@@ -332,8 +351,8 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
             "options": {
                 # Warmer than the scorer's near-greedy setting: this is writing,
                 # and pressing the button twice should not return the same line.
-                "temperature": 0.7,
-                "top_p": 0.9,
+                "temperature": temperature,
+                "top_p": 0.95,
                 "num_predict": 120 if kind == "title" else 220,
                 "num_ctx": 4096,
                 "stop": ["\nBEGIN UNTRUSTED", "\nAnswer:", "\nCLIP TRANSCRIPT:"],
@@ -351,30 +370,22 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
         cleaned = cleaned.strip().strip('"').strip("'").strip()
         return cleaned.split("\n")[0].strip()
 
-    answer = ask()
-    if not answer:
-        raise ValueError("The model returned nothing.")
-
-    # AN ECHO OF THE CURRENT TITLE IS NOT A NEW TITLE, and this button exists
-    # to write a different one -- Youssef: "a star ... which will create a
-    # different title". Measured on the box 4 Sept 2026: with a current title
-    # in the prompt, promise, question and shorter ALL returned it verbatim.
-    # A 1.7B model does not reliably obey a negative instruction, so the rule
-    # above is stated AND enforced here -- this file's oldest lesson about
-    # this model. `normalise_title` is clip_worker's own, so "the same title"
-    # means here exactly what it means to the dedupe pass.
+    # `normalise_title` is clip_worker's own, so "the same line" means here
+    # exactly what it means to the dedupe pass that runs during a render.
     try:
         import clip_worker
     except Exception:  # noqa: BLE001 - a titling helper must never fail a request
         clip_worker = None
 
-    def echoes_current(value: str) -> bool:
-        if not (clip_worker and current and value):
+    def same_as(value: str, other: str) -> bool:
+        if not (value and other):
             return False
+        if not clip_worker:
+            return value.strip().casefold() == other.strip().casefold()
         try:
-            return clip_worker.normalise_title(value) == clip_worker.normalise_title(current)
+            return clip_worker.normalise_title(value) == clip_worker.normalise_title(other)
         except Exception:  # noqa: BLE001
-            return False
+            return value.strip().casefold() == other.strip().casefold()
 
     # OUR OWN PROMPT'S FURNITURE, COMING BACK AS THE ANSWER. Measured on the
     # box 4 Sept 2026 with NO lecture title, the Subject shape returned:
@@ -398,8 +409,14 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
         for phrase in LEAKED:
             if phrase in low:
                 return "it repeated this prompt's own wording back"
-        if echoes_current(value):
+        if same_as(value, current):
             return "it was the current title, word for word"
+        # PRESSING THE BUTTON TWICE MUST GIVE SOMETHING ELSE. Without this, a
+        # second press returns the first answer and the control reads as
+        # broken -- which is exactly what it was reported as.
+        for seen in avoid:
+            if same_as(value, seen):
+                return "you have already given that exact line for this clip"
         # The guard the automatic titler has always had, missing here until
         # now: with no current title the model returned the clip's own opening
         # sentence for three shapes out of five.
@@ -411,40 +428,64 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
                 pass
         return ""
 
+    # THREE SHOTS ON GOAL, WARMER EACH TIME, rather than one and a retry. This
+    # model is small enough that a single generation is a coin toss, and the
+    # cost of another is a few seconds on a button somebody is already
+    # watching -- far cheaper than handing back the line they pressed the
+    # button to be rid of. Rising temperature is what stops attempt two being
+    # attempt one again.
+    answer = ""
     source = "ai"
-    problem = unusable(answer)
-    if problem:
-        # A failed retry never fails the request -- but `source` reaches the
-        # customer's screen, so it must not claim the answer is new when it is
-        # the current title or a fallback. Each failure is handled where it
-        # happens for that reason: one broad except around the block would
-        # report "ai" for all three.
+    problem = ""
+    for attempt, temperature in enumerate((0.7, 0.95, 1.1)):
+        nudge = ""
+        if problem:
+            nudge = ("\n\nYOUR LAST ANSWER WAS REJECTED, because " + problem + ". "
+                     "That is not an answer. Write a NEW one, in your own words, "
+                     "from what the clip says.")
         try:
-            retried = ask("\n\nYOUR LAST ANSWER WAS REJECTED, because " + problem + ". "
-                          "That is not an answer. Write a NEW one, in your own words, "
-                          "from what the clip says.")
-        except Exception:  # noqa: BLE001
-            retried = ""
-        if retried and not unusable(retried):
-            answer = retried
-        elif current:
-            # Said plainly rather than handed back as if it were new: a button
-            # that silently returns what was already there is a control that
-            # looks broken (invariant 9).
+            candidate = ask(nudge, temperature)
+        except Exception:  # noqa: BLE001 - a failed retry never fails the request
+            if attempt == 0:
+                raise
+            break
+        if not candidate:
+            problem = "it was empty"
+            continue
+        problem = unusable(candidate)
+        if not problem:
+            answer = candidate
+            break
+
+    if not answer:
+        # Nothing usable in three tries. `source` reaches the customer's
+        # screen, so it must never claim the answer is new when it is not.
+        #
+        # KEEPING THE CURRENT LINE BEATS THE FALLBACK WHEN THERE IS ONE, and
+        # that ordering is deliberate. The fallback is a sentence lifted from
+        # the transcript; the route WRITES whatever comes back, so preferring
+        # it would let one press quietly replace a good title with a raw
+        # transcript line, with no undo. Said plainly instead -- a button that
+        # silently returns what was already there is a control that looks
+        # broken (invariant 9), and the host's note names the next thing to try.
+        if current:
             answer, source = current, "unchanged"
-        else:
-            # Nothing to keep, so the sanctioned fallback -- the same titler
-            # the render uses when no AI title survives. It strips filler
-            # openers and trims on a word boundary, which the raw echo does
-            # not.
-            fallback = ""
-            if clip_worker is not None:
-                try:
-                    fallback = clip_worker.title_from_text(text, 1)
-                except Exception:  # noqa: BLE001
-                    fallback = ""
-            if fallback:
-                answer, source = fallback, "fallback"
+        elif clip_worker is not None and kind == "title":
+            try:
+                # The sanctioned fallback -- the same candidates the render's
+                # own titler draws from. `title_candidates` is walked rather
+                # than `title_from_text` called: that one always returns the
+                # FIRST candidate whatever number it is passed, so a second
+                # press would reach the same sentence again, which is the very
+                # complaint this release is answering.
+                for guess in clip_worker.title_candidates(text)[:8]:
+                    if guess and not any(same_as(guess, seen) for seen in avoid):
+                        answer, source = guess, "fallback"
+                        break
+            except Exception:  # noqa: BLE001
+                pass
+        if not answer:
+            raise ValueError("The model returned nothing usable.")
 
     if clip_worker is not None and kind == "title":
         try:

@@ -57,19 +57,25 @@ test('Connect says it is doing something', () => {
     'and recovers if the hand-off never happens, rather than sticking on Opening…');
 });
 
-test('the headroom hint does not repeat the button beside it', () => {
-  // It used to be a heading plus "Press Connect again to add another." under
-  // EVERY platform — eight lines of near-identical boilerplate in one dialog,
-  // saying what the button two inches away already says in two words.
-  assert.ok(!host.includes('Press Connect again to add another.'),
-    'the sentence duplicated the Add another button');
-  assert.ok(!host.includes('studio-conn-headroom'),
-    'and its style went with it rather than being left behind');
-  // The count itself stays — "how do I know I get three?" is a real question
-  // and this is the screen that answers it. Its wording moved when the channels
-  // became rows: it now reads "Posting to N of MAX allowed" above them.
-  assert.ok(/Posting to \$\{chosen\.length\} of \$\{max\} allowed/.test(host),
-    'the count stays, above the channel rows');
+test('nothing in the dialog offers a second channel any more', () => {
+  // Studio sold three per platform from v3.41.0 until Youssef retired it on
+  // 4 Sept 2026: "REMOVE ALL THINGS TO DO WITH 3 CHANNELS REMOVE IT, ITS NOT
+  // PRCATICAL". With one channel per platform there is nothing to choose
+  // between, so a tick box with one option in it is a control that does
+  // nothing (invariant 9) -- and a button reading "Add another" points at a
+  // limit that is now always reached.
+  assert.ok(!host.includes('Press Connect again to add another.'));
+  assert.ok(!host.includes('studio-conn-headroom'));
+  assert.ok(!host.includes("'Add another'"), 'the Connect button no longer offers a second');
+  assert.ok(!/of \$\{max\} allowed/.test(host), 'and no allowance is quoted');
+  assert.ok(!host.includes('data-conn-account'), 'no picker, and no handler for one');
+  assert.ok(!host.includes('maxAccounts'), 'the cap is not read here at all');
+  // An account that connected several while it WAS sold still has them on
+  // disk, so they are still listed and still individually disconnectable --
+  // hiding them would read as the app having lost them.
+  assert.ok(host.includes('data-conn-drop'), 'the extras can still be tidied away');
+  assert.ok(/DeenClipped posts to the first of these/.test(host),
+    'and the screen says which one actually posts');
 });
 
 test('creator_info cannot outlive the gateway', () => {

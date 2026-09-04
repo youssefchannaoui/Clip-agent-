@@ -46,6 +46,23 @@
      luminance does not. */
   --dc-gold:       #D9B478;   /* the channel's gold */
   --dc-gold-lit:   #F0D6A6;   /* its lit form, for text on black */
+  /* THE ONLY TWO COLOURS IN THIS SHEET THAT ARE THE SAME IN BOTH THEMES, and
+     they have to be, because they are a pair: a SOLID gold fill and the ink
+     that sits on it. The two tokens above are INK -- they darken on paper so
+     gold stays legible as text -- and neither is right for a filled button.
+     Declared here and deliberately NOT redeclared in the light block below.
+
+     This is the escape hatch as well as the definition. `build-light-theme`
+     re-emits any rule that names a colour, remapping every hex it sees, and
+     `#0E0E11` is a near-black GROUND everywhere else in the app so it inverts
+     to paper -- which turned a filled gold button's ink near-white and
+     MEASURED 1.52:1 in daylight. A rule written entirely in var() names has no
+     hex for the generator to remap, so it is left alone and one declaration
+     serves both themes. Reach for these rather than a literal whenever
+     something sits on the gold. */
+  --dc-gold-solid: #D9B478;   /* a filled gold surface, never text */
+  --dc-gold-hover: #E4C48F;   /* the same, under the pointer */
+  --dc-on-gold:    #0E0E11;   /* and the ink for it: 9.87:1, both themes */
   /* A sunken well — the empty thumbnail an unrendered clip shows. It is an
      rgba, not a hex, so the tokeniser that swept the inline colours could not
      see it: on paper it was the last dark patch left on the screen. */
@@ -978,20 +995,28 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
  * runs to 2200 characters, so a taller box is the feature, not filler. */
 .dcct-grow { flex: 1; min-height: 0; }
 .dcct-grow .dcct-area { flex: 1; }
-.dcct-row /* The DeenAI mark on the section that IS DeenAI. Gold, because it is the one
- * thing on this panel that writes for you -- the same reasoning as the sparkle. */
+/* THE COMMENT USED TO SIT BETWEEN THESE TWO SELECTORS, which CSS reads as the
+ * descendant selector `.dcct-row .dcct-ai` -- so the rule below matched
+ * nothing, and the one gold mark on this panel had never once been gold. A
+ * comment is not a separator; a comma is. Found by reading the sheet after
+ * Youssef called the panel "so cheap". */
 .dcct-ai { display: inline-flex; align-items: center; gap: 6px; color: var(--dc-gold-lit, #F0D6A6); }
 .dcct-ai i { font-size: 12px; }
 
 /* The named shapes. They wrap, because four chips do not fit a 320px column on
  * one line and a row that scrolls sideways inside a panel is worse than one
  * that wraps. */
-.dcct-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* The named shapes, TWO UP rather than wrapped. Measured at 320px: as a flex
+ * wrap the four came out 74/84/108/66px on two ragged lines, which is the
+ * "cheap" this panel was called. A grid gives four equal buttons and one
+ * right edge. */
+.dcct-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .dcct-chip {
-  padding: 5px 9px;
+  padding: 7px 9px;
   border: 1px solid var(--dc-line, #26262A); border-radius: 999px;
-  background: transparent; color: var(--dc-ink-dim, #8B8B93);
+  background: var(--dc-bg-alt, #121214); color: var(--dc-ink, #E9E9ED);
   font: 600 11px/16px Outfit, Inter, system-ui, sans-serif; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: color .14s ease, border-color .14s ease, background .14s ease;
 }
 .dcct-chip:hover:not(:disabled) {
@@ -1050,8 +1075,24 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
  * 13px and broke the one left edge every label and field shares -- measured
  * lefts 751 / 764 before, one value after. The Owner screen made the same
  * call: divide with a rule, spend a border only where it means "object". */
-.dcct-ask { padding-top: 13px; border-top: 1px solid var(--dc-line-soft, #1E1E22); }
-.dcct-seg { display: flex; gap: 6px; }
+/* A hairline and a WASH, not a box. A card here inset its own children by
+ * 13px and broke the one left edge every label and field shares -- measured
+ * lefts 751 / 764 before, one value after. The wash gives the section its
+ * presence back without touching that edge: it bleeds past the column with a
+ * negative inline margin and pads the same amount back, so the content sits
+ * exactly where it always did. */
+.dcct-ask {
+  position: relative;
+  margin: 0 -14px; padding: 14px 14px 15px;
+  border-top: 1px solid var(--dc-line-soft, #1E1E22);
+  border-bottom: 1px solid var(--dc-line-soft, #1E1E22);
+  background: linear-gradient(180deg, rgba(217, 180, 120, .07), rgba(217, 180, 120, 0) 78%);
+  gap: 9px;
+}
+/* 7px, matching the chips below it. At 6 the second button's left edge landed
+ * at 914 against the second chip's 915 -- one ragged column in a panel whose
+ * every other edge is a single value. */
+.dcct-seg { display: flex; gap: 7px; }
 .dcct-seg button {
   flex: 1; padding: 6px 8px;
   border: 1px solid var(--dc-line, #26262A); border-radius: 7px;
@@ -1075,12 +1116,32 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
 }
 .dcct-btn:hover:not(:disabled) { border-color: var(--dc-line-hover, #34343A); background: var(--dc-bg-alt, #121214); }
 .dcct-btn:disabled { opacity: .55; cursor: default; }
-.dcct-primary {
-  border-color: rgba(217, 180, 120, .45);
-  background: rgba(217, 180, 120, .12);
-  color: var(--dc-gold-lit, #F0D6A6);
+/* SOLID, not an outline. It was a washed-out gold border among five other
+ * bordered controls, so the one button that does the thing this panel exists
+ * for read as the quietest.
+ *
+ * WRITTEN ENTIRELY IN TOKENS, and that is load-bearing rather than tidy. The
+ * first cut used literals -- gold, and a near-black ink on top of it -- on the
+ * reasoning that the brand gold is the same in both themes. It is; the INK is
+ * not, because `build-light-theme` remaps every hex it finds and `#0E0E11` is
+ * a ground everywhere else in this app, so it inverted to paper. Measured in
+ * the browser: 1.52:1 in daylight, invisible. --dc-on-gold is declared once,
+ * for both themes, and a rule with no hex in it is left alone by the
+ * generator. */
+/* ID-SCOPED, so the token it names is the one that actually renders. Measured
+ * in daylight: the ink came out #141418 rather than --dc-on-gold, because the
+ * generated light sheet emits `body.dc-light .dcct-btn { color: … }` at 0-2-0
+ * and a bare `.dcct-primary` is 0-1-0. It was near-black and legible by luck,
+ * which is exactly the shape that stops being true one edit later. */
+#dcClipTools .dcct-primary {
+  border-color: var(--dc-gold-solid);
+  background: var(--dc-gold-solid);
+  color: var(--dc-on-gold);
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(217, 180, 120, .18);
 }
-.dcct-primary:hover:not(:disabled) { background: rgba(217, 180, 120, .2); border-color: rgba(217, 180, 120, .6); }
+#dcClipTools .dcct-primary:hover:not(:disabled) { background: var(--dc-gold-hover); border-color: var(--dc-gold-hover); }
+#dcClipTools .dcct-primary:active:not(:disabled) { transform: translateY(1px); }
 
 .dcct-note {
   margin: 0; padding: 8px 10px;
