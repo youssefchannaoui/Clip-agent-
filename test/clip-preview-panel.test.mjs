@@ -112,7 +112,13 @@ test('every colour in the panel is a theme token or the brand gold', () => {
 test('every var() the panel uses is a token that exists', () => {
   // A var() naming a token nobody declares falls back silently, so the rule
   // looks applied and is not.
-  const block = css.slice(css.indexOf('#dcClipTools {'));
+  //
+  // COMMENTS ARE STRIPPED, for the same reason the sibling test above strips
+  // them and for the FIFTH time in this repo: a note explaining that some ink
+  // "was `var(--dc-n-<hex>)`" is prose about a colour, not a var() the sheet
+  // uses -- and failing on it pushes the next person to reword the comment
+  // rather than fix anything. Strip, do not reword.
+  const block = css.slice(css.indexOf('#dcClipTools {')).replace(/\/\*[\s\S]*?\*\//g, '');
   const used = new Set([...block.matchAll(/var\((--dc-[a-z0-9-]+)/g)].map(m => m[1]));
   const declared = new Set([...css.matchAll(/^\s*(--dc-[a-z0-9-]+)\s*:/gm)].map(m => m[1]));
   for (const name of used) assert.ok(declared.has(name), `${name} is used and never declared`);

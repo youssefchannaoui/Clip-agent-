@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1430 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1434 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -2865,7 +2865,8 @@ smaller. The layout was never the complaint.
 - **The look itself.** Cards with
   soft shadows instead of hairline borders, **Fraunces** for every heading
   (loaded from Google Fonts with the stylesheet link MEDIA-SCOPED to the phone
-  query, so a desktop pays nothing for it), gold as INK (#A2762C) rather than
+  query, so a desktop pays nothing for it), gold as INK (#A2762C, darkened to
+  #8A6425 in v3.127.3 to clear AA on paper) rather than
   as glow, emerald for done and rust for refused, 18px gutters, and a tab bar
   that floats as a rounded slab clear of the safe area with a raised gold
   Create button. Nothing about the desktop changed: every rule still lives
@@ -6403,6 +6404,114 @@ inside its media query, so the desktop cannot have moved.
 
 **`scripts/build-light-theme.mjs` was run and produced nothing**, correctly:
 these rules set sizes, not colours.
+
+## Daylight: the ink over a photograph never flipped, and it should not have (v3.127.3, 4 Sept 2026)
+
+Three faults, one shape. A photograph does not get lighter in daylight, so
+anything drawn over one must not flip with the theme — and three separate
+surfaces were flipping it.
+
+### Measured against the real pixels, because the DOM walk cannot see this
+
+A duration chip, a template name and a lecture's status line are drawn on top
+of the thumbnail IMAGE with no ground of their own. A contrast sweep that
+climbs the DOM looking for a background COLOUR sails straight through the
+image and reports the white card behind it — which is not what the eye sees.
+So the probe screenshots each label's own rect with the label hidden, takes
+the mean of those pixels, and measures against that.
+
+    daylight   22 of 22 text nodes over a photograph under 3:1
+    dark        0 of 24
+
+    '0:44'              ink rgb(29,29,34)  on rgb(40,38,38)  1.12
+    'Clean Line'        ink rgb(51,51,58)  on rgb(41,40,41)  1.17
+    'median score 76'   ink rgb(85,85,94)  on rgb(30,29,30)  2.28
+
+Not dim — gone. On the review queue, the lecture library and a lecture's
+detail screen, which is most of where a person looks at clips.
+
+- **`--dc-on-photo` is emitted by `thumb()`, not at the twelve call sites**, so
+  it is inseparable from the image by construction. A card falling back to the
+  raised ground carries no marker and keeps the theme's own ink, which is
+  correct — that ground DOES flip. thumb() returns a value plus a second
+  declaration, which reads oddly and is deliberate: every call site is
+  `'background: ' + thumb(u) + ';'`, so the caller's own semicolon closes it
+  and no call site had to change.
+- **The lecture card builds its own thumbnail and was missed by the first
+  cut.** It does not go through `thumb()` — it paints a `linear-gradient` scrim
+  over the photo itself, and its own comment already recorded that those labels
+  "were unreadable over a bright thumbnail". Same fault, recognised once,
+  ink still flipping. The sweep still reported four labels at 2.28 after the
+  first fix, which is how it was found.
+- **Selected on the marker, never on the hashed class beneath it.** An id gives
+  the rule 1-2-0 against the generated rule's 0-1-0, and a `.sNN` renumbers on
+  a design re-import. Same device as the stage rule above it.
+- **ONE INK FOR THREE TONES**, stated rather than hidden: the design draws
+  these at #E9E9ED, #33333A and #55555E and their classes are hashed, so the
+  middle tone is taken — the quiet label does not shout and the loud one stays
+  legible.
+- **#studio only, and the phone was MEASURED rather than assumed.** It binds
+  `thumbStyle` in five places so it inherits the marker, but the same sweep at
+  390px finds ZERO text nodes over a photograph in either of its themes: the
+  phone draws its chips beside a thumbnail, not on it. A `#dcMobile` arm was
+  written and removed — the phone keeps its theme under a separate class
+  (`body.dcm-light`, not `dc-light`), so the arm as written would have fired on
+  the wrong condition. A rule that matches nothing today and would match
+  wrongly the day it mattered is worse than no rule, because it reads as
+  handled.
+
+### The daylight gold was under AA on every ground it lands on
+
+`#A2762C` measured **3.45:1** on the desktop page, **3.55** on the phone's
+paper, **3.19** on its sunk ground and **3.55** for the notify dock's gold ink
+on its own 12% tint. All three surfaces moved together to **`#8A6425`**, which
+reads 4.19–5.34 across all four.
+
+**The FILL cases improve with it rather than suffering, and that was measured
+rather than reasoned about.** The first reading here used the NIGHT ink
+(`#0E0E11`) on the DAYLIGHT gold — a pair that never renders — and concluded
+the fill got worse. In daylight the ink on a gold fill is near-WHITE: the
+phone's finished step number goes 3.88 → 5.09 and white-on-gold 4.07 → 5.34.
+The notify dock is ink-only; it has no solid gold fill at all.
+
+### Two more inks, and a token block that had gone stale
+
+`--dc-ink-faint` and `--dc-ink-muted` were 3.06 and 3.87 against the page and
+are both at the 4.54 floor now. They therefore hold the **same value**, which
+is the floor doing its job rather than a mistake — their night twins are a hair
+apart and both fell under it. Two labels a shade apart on black read as one
+shade on paper; that is the honest trade for legibility.
+
+**The hand-written `:root.dc-light` block had drifted from the generator by
+three colours** and was caught by `test/light-theme.test.mjs`, which exists for
+exactly this. THOSE VALUES ARE GENERATED, NEVER TYPED: a palette move is
+applied by re-deriving the block from `daylight()`, which is how `--dc-ink-faint`
+came to sit at #86868F for a release after the palette had moved to #6A6A72.
+
+### A test failed on its own explanation, for the FIFTH time
+
+`clip-preview-panel.test.mjs`'s "every var() the panel uses is a token that
+exists" went red on `var(--dc-n-<hex>)` inside a COMMENT explaining why some
+ink must not be a flipping token. The sibling test two lines above it already
+strips comments and already carries the note. It strips them now too. **Strip,
+do not reword** — rewording a comment to appease a test is how a test stops
+protecting anything.
+
+### And the sweep itself had to be taught
+
+After the fix the general contrast sweep reported those same labels at **1.89**
+— because its ground walk climbed past the photograph to the white card. That
+is the CLIPPED-is-not-COVERED mistake in another form, and it made a fix look
+like a regression. The walk now returns null on a background image and hands
+those elements to the pixel probe. Both sweeps agree afterwards: **light 4
+under 3:1, dark 5, the same deliberately-faint elements in both** (the unlit
+future stations in the pipeline strip, the DeenAI kicker, an out-of-month
+calendar day).
+
+All five red probes were proven — the marker removed from `thumb()`, removed
+from the lecture card, the rule deleted, the selector re-pointed at a hashed
+class, and the ink redeclared for daylight — and each printed the bytes it
+removed first.
 
 ## Open items
 

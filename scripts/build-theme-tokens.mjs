@@ -45,10 +45,23 @@ for (const rel of FILES) {
     const light = daylight(ref[3]);
     if (light) found.set(ref[1], { dark: ref[3].toUpperCase(), light });
   }
+  /*
+   * COMMENTS ARE NOT STYLE VALUES, and this script rewrote two of them --
+   * inside the very comment that explains why the literal beneath must stay a
+   * literal. Harmless to the browser and actively misleading to the next
+   * reader, which is worse: the note now said "Tokenised it becomes
+   * var(--dc-n-ececee, #ECECEE)", which is gibberish.
+   */
+  const comments = [];
+  for (const c of text.matchAll(/\/\*[\s\S]*?\*\//g)) comments.push([c.index, c.index + c[0].length]);
+  for (const c of text.matchAll(/^[ \t]*\/\/[^\n]*/gm)) comments.push([c.index, c.index + c[0].length]);
+  const inComment = i => comments.some(([a, b]) => i >= a && i < b);
+
   const out = [];
   let last = 0;
   for (const match of text.matchAll(/#[0-9A-Fa-f]{6}\b/g)) {
     const hex = match[0];
+    if (inComment(match.index)) continue;
     // Already tokenised: the literal sitting inside a var() fallback is the
     // fallback, not a colour to tokenise a second time.
     const before = text.slice(Math.max(0, match.index - 24), match.index);
@@ -69,6 +82,17 @@ for (const rel of FILES) {
      * anyway: it is the brand colour in both themes.
      */
     if (/(?:stroke|fill|stop-color|flood-color|lighting-color)\s*=\s*["'][^"']*$/.test(before)) continue;
+    /*
+     * SOME INK MUST NOT FLIP, AND ONLY THE AUTHOR KNOWS WHICH. Ink drawn ON a
+     * surface that does not change with the theme -- the gold fill of a done
+     * step, the dark scrim over a thumbnail -- has to stay a literal, or it
+     * darkens in daylight while its ground stands still. This script cannot
+     * see that from a hex, so a line may opt out by carrying the marker
+     * `theme-literal`. It exists because this generator turned exactly such a
+     * literal into a flipping token and re-created the 1.7:1 step number that
+     * v3.94.0 had measured and fixed.
+     */
+    if (line.includes('theme-literal')) continue;
     // Anything the palette has an answer for, not only the greys: the status
     // colours are named there too, and an inline #7FD1A6 stat number stayed a
     // pastel on paper while the same green in the stylesheet had darkened.

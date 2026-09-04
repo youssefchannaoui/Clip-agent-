@@ -41,9 +41,20 @@
   --dc-ink-soft:   #A2A2AA;   /* the most common secondary ink */
   --dc-ink-muted:  #75717B;   /* a label that has stepped back further */
   /* Gold. On black it is light and glowing; on paper the SAME gold is a pale
-     smear you cannot read. The phone's paper theme worked this out first
-     (--dcm-gold #A2762C), and these follow it: the brand colour survives, its
-     luminance does not. */
+     smear you cannot read. The phone's paper theme worked the PRINCIPLE out
+     first -- the brand colour survives, its luminance does not -- and the
+     desktop followed it.
+
+     Both then moved together, from #A2762C to #8A6425, because the first
+     answer was still short of AA on every light ground it lands on: measured
+     3.45:1 on the desktop page, 3.55 on the phone's paper, 3.19 on its sunk
+     ground and 3.55 for the notify dock's gold ink on its own 12% tint. The
+     new one reads 4.19-5.34 across all four. The FILL cases improve with it
+     rather than suffering, because the ink on a gold fill in daylight is
+     near-white, not near-black: the phone's finished step number goes 3.88 ->
+     5.09 and white-on-gold 4.07 -> 5.34. That was measured rather than
+     reasoned about -- the first reading here used the NIGHT ink on the
+     DAYLIGHT gold, a pair that never renders, and said the fill got worse. */
   --dc-gold:       #D9B478;   /* the channel's gold */
   --dc-gold-lit:   #F0D6A6;   /* its lit form, for text on black */
   /* THE ONLY TWO COLOURS IN THIS SHEET THAT ARE THE SAME IN BOTH THEMES, and
@@ -87,7 +98,19 @@ body.dc-light {
 
      The page is a light neutral and A CARD IS WHITE, which is what gives a box
      an edge the way night does (page #09090A, card #17171A). The first version
-     made both cream and the boxes disappeared into the page. */
+     made both cream and the boxes disappeared into the page.
+
+     THESE VALUES ARE GENERATED, NOT TYPED. Every one is daylight(<its night
+     twin>), and the test above fails on any that is not -- so a palette move
+     is applied by re-deriving this block, never by editing a hex here. That is
+     how --dc-ink-faint sat at #86868F for a release after the palette had
+     moved on to #6A6A72.
+
+     --dc-ink-faint and --dc-ink-muted now hold the SAME value, and that is the
+     AA floor doing its job rather than a mistake: their night twins (#6E6E76
+     and #75717B) are a hair apart and both landed under 4.5:1 on this page, so
+     both were lifted to the floor. Two labels a shade apart on black read as
+     one shade on paper; that is the honest trade for legibility. */
   --dc-bg-deepest: #ECECEE;
   --dc-bg-deep:    #E7E7EA;
   --dc-bg:         #FFFFFF;
@@ -95,7 +118,7 @@ body.dc-light {
   --dc-line-soft:  #E2E2E6;
   --dc-line:       #D4D4DA;
   --dc-line-hover: #BCBCC4;
-  --dc-ink-faint:  #86868F;
+  --dc-ink-faint:  #6A6A72;
   --dc-ink-dim:    #62626B;
   --dc-ink-body:   #33333A;
   --dc-ink-bright: #1D1D22;
@@ -104,8 +127,8 @@ body.dc-light {
   --dc-page-2:     #E7E7EA;
   --dc-bg-alt:     #F7F7F9;
   --dc-ink-soft:   #55555E;
-  --dc-ink-muted:  #75757E;
-  --dc-gold:       #A2762C;
+  --dc-ink-muted:  #6A6A72;
+  --dc-gold:       #8A6425;
   --dc-gold-lit:   #7E5B18;
   --dc-well:       rgba(20, 20, 24, .05);
 }
@@ -664,6 +687,84 @@ body.dc-light #studio *:has(> #studioEditorVideo),
 body.dc-light #studio *:has(> #studioPlayerVideo) {
   background: #121214 !important;
   border-color: #26262A;
+}
+
+/* ...AND SO DOES THE INK ON IT. The rule above kept the stage's GROUND night
+   and stopped there, so in daylight the frame's own chrome took the paper ink
+   and disappeared into it: the PREVIEW badge measured 10.26:1 -> 1.56:1 and the
+   0:14 duration 14.77:1 -> 1.11:1. The two things that matter most on the stage
+   were already safe -- the caption stayed white at 18.71:1 and the DEENCLIPPED
+   watermark gold at 9.58:1 -- because both carry an INLINE colour, which no
+   stylesheet can outrank. That is exactly what makes this rule safe: it can
+   only reach the labels whose colour comes from a class, which is precisely the
+   set that flipped.
+
+   ONE INK FOR BOTH, and that is a stated trade rather than an oversight. The
+   two labels are a step apart in the dark (#BCBCC3 and #E9E9ED) and their
+   classes are the design export's hashed names, which renumber on re-import --
+   naming them to keep the two tones would cost a re-import for one shade. The
+   quieter of the two is chosen: these are chrome beside a caption that has to
+   dominate, and erring quiet is the safer half. */
+body.dc-light #studio *:has(> #studioPreviewPic) *,
+body.dc-light #studio *:has(> #studioEditorVideo) *,
+body.dc-light #studio *:has(> #studioPlayerVideo) * {
+  color: var(--dc-on-scrim-bcbcc3, #BCBCC3);
+}
+
+/* THE SAME RULE FOR EVERY CLIP AND LECTURE THUMBNAIL, and it is the larger
+   half of this fault. The stage rule above reaches the three big frames; the
+   labels drawn over the little 9:16 and 16:10 thumbnails -- the duration, the
+   template name, a lecture's status line -- are the ones on screen by the
+   dozen, and every one of them flipped.
+
+   MEASURED against the real pixels rather than against the card the DOM walk
+   climbs to (these labels have no scrim of their own, so a walker looking for
+   a background COLOUR sails past the photograph and reports the white card
+   behind it, which is not what the eye sees). Screenshot each label's own
+   rect with the label hidden, take the mean, compare: in daylight ALL 22 text
+   nodes sitting on a photograph were under 3:1 -- '0:44' at 1.12, 'Clean Line'
+   at 1.17, a lecture's 'median score 76' at 2.28 -- against 0 of 24 in the
+   dark. Not dim: gone.
+
+   `--dc-on-photo` is written by the adapter's thumb() and only when there IS
+   an image, so this cannot reach a card showing the fallback ground. Selecting
+   on it rather than on the hashed class beneath is what makes it survive a
+   design re-import; the id gives it 1-2-0 against the generated rule's 0-1-0.
+
+   ONE INK FOR THREE TONES, the same stated trade as the rule above: the
+   design draws these at #E9E9ED, #33333A->#BCBCC3 and #55555E, and their
+   classes are hashed names that renumber. The middle tone is taken, so the
+   quiet label does not shout and the loud one stays legible.
+
+   #studio ONLY, and the phone was measured rather than assumed. It binds
+   thumbStyle in five places, so it inherits the marker -- but the same pixel
+   sweep at 390px finds ZERO text nodes over a photograph there in EITHER of
+   its themes: the phone draws its chips beside a thumbnail, not on it. A
+   `#dcMobile` arm was written and removed: the phone keeps its theme under a
+   separate class (body.dcm-light, not dc-light), so the arm as written would
+   have fired on the wrong condition -- a rule that matches nothing today and
+   would match wrongly the day it mattered is worse than no rule, because it
+   reads as handled. If a label ever lands on a phone thumbnail the sweep says
+   so, and the arm goes back with its own guard. */
+body.dc-light #studio [style*="--dc-on-photo"] * {
+  color: var(--dc-on-scrim-bcbcc3, #BCBCC3);
+}
+
+/* THE LIVE BAR'S GROUND IS DECLARED IN AN INLINE <style> IN index.html, WHICH
+   THE LIGHT GENERATOR HAS NEVER READ. `scripts/build-light-theme.mjs`'s SOURCES
+   list holds the six studio sheets and not index.html, so
+   studio-light.generated.css contains ZERO rules for the live bar: it kept its
+   near-black gradient in daylight while every scrap of ink on it flipped to
+   dark. The lecture's own name measured 1.06:1 -- not dim, gone -- with 42% at
+   2.79 and the ETA at 2.86 (17.8 / 14.1 / 5.89 in the dark). This is the bar
+   that reports a running job, so it is exactly what someone looks at while
+   they wait.
+
+   Fixed here rather than by widening SOURCES: 33 more naked dark literals live
+   in those inline blocks, and remapping all of them in one unreviewed sweep is
+   how a theme change ships a surprise. That is written up as an open item. */
+body.dc-light #studioLiveBar {
+  background: linear-gradient(180deg, #FFFFFF, #F6F6F8) !important;
 }
 
 /* ============================================================================
@@ -1258,3 +1359,30 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
    55px of bar + 18px of offset + margin.
    ───────────────────────────────────────────────────────────────────────── */
 body.dc-livebar #studio main { padding-bottom: 92px; }
+
+/* INK THAT SITS ON THE DARK SCRIM, AND MUST NOT FLIP WITH THE THEME.
+   A score badge, a duration chip and every state pill are drawn over a
+   thumbnail PHOTOGRAPH behind an `rgba(10,10,12,.8x)` scrim. The scrim is
+   correctly the same in both themes -- a photograph does not get lighter in
+   daylight -- but the INK on it was `var(--dc-n-<hex>)`, which the light theme
+   redefines for use on paper. So in daylight the app darkened the one set of
+   labels whose ground had not moved: measured '40m' 10.31:1 -> 1.12:1,
+   'REJECTED' 8.15 -> 1.28, the score badge '69' 13.76 -> 1.68, READY 10.73 ->
+   2.12. Those are the labels a person reads to decide what to approve.
+
+   These are declared on :root and NOWHERE ELSE. `build-light-theme.mjs` skips
+   :root by design (it holds the palette rather than wearing it), so a token
+   defined only here is theme-invariant by construction rather than by anyone
+   remembering not to override it. `build-theme-tokens.mjs` leaves a hex that
+   already sits inside a var() fallback alone, so re-running the tokeniser
+   cannot pull these back onto the flipping neutrals either. */
+:root {
+  --dc-on-scrim-7fd1a6: #7FD1A6;
+  --dc-on-scrim-a2a2aa: #A2A2AA;
+  --dc-on-scrim-bcbcc3: #BCBCC3;
+  --dc-on-scrim-e27c7c: #E27C7C;
+  --dc-on-scrim-e3928c: #E3928C;
+  --dc-on-scrim-e6b770: #E6B770;
+  --dc-on-scrim-e6b980: #E6B980;
+  --dc-on-scrim-f0d6a6: #F0D6A6;
+}

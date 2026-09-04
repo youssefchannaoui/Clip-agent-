@@ -9,6 +9,19 @@
 /** The twelve the palette was designed around, taken from the phone's paper
  *  theme so the two surfaces are one product in daylight. These win over the
  *  algorithm below; everything else is derived. */
+// AA ON PAPER IS MEASURED AGAINST THE PAGE, NOT THE CARD. The page ground is
+// #ECECEE and a card is #FFFFFF, so the PAGE is the stricter ground for dark
+// ink -- targeting white leaves ink that fails everywhere except on a card.
+// Five mappings were under 4.5:1 against it and carried real text: the
+// secondary ink at 3.06 across 104 nodes on every screen, two more muted inks
+// at 3.87 and 2.90, gold used as INK at 3.45 across 28 nodes including Help's
+// eight category icons, and the posted-green a hair under at 4.47. All five
+// now measure 4.53-4.54 on the page and 5.34-5.36 on a card.
+//
+// The gold moving from #A2762C to #8A6425 also fixes white-on-gold, which the
+// Tokens invite button had at 3.96:1 -- it is 5.12 on the new value. Dark ink
+// on gold is unaffected: v3.94.0 deliberately made those a LITERAL #0E0E11 on
+// a literal #D9B478 fill precisely so the theme cannot move them.
 export const NAMED = new Map(Object.entries({
   // GROUNDS. The page is a light neutral and a CARD IS WHITE, so a box reads
   // as a box the way it does at night (where the page is #09090A and a card
@@ -20,12 +33,12 @@ export const NAMED = new Map(Object.entries({
   // LINES. Strong enough to draw the box, quiet enough not to become a grid.
   '#1e1e22': '#E2E2E6', '#26262a': '#D4D4DA', '#34343a': '#BCBCC4', '#37373d': '#B7B7C0',
   // INK, near-black rather than brown.
-  '#6e6e76': '#86868F', '#8b8b93': '#62626B', '#a2a2aa': '#55555E', '#75717b': '#75757E',
-  '#5e5e66': '#8A8A93', '#bcbcc3': '#33333A', '#e9e9ed': '#1D1D22', '#f2f2f4': '#141418',
+  '#6e6e76': '#6A6A72', '#8b8b93': '#62626B', '#a2a2aa': '#55555E', '#75717b': '#6A6A72',
+  '#5e5e66': '#6A6A73', '#bcbcc3': '#33333A', '#e9e9ed': '#1D1D22', '#f2f2f4': '#141418',
   '#f8f8f9': '#141418',
   // Gold darkens rather than disappears: the brand colour at a luminance that
   // can be read on paper.
-  '#d9b478': '#A2762C', '#f0d6a6': '#7E5B18', '#e6b770': '#8C6118',
+  '#d9b478': '#8A6425', '#f0d6a6': '#7E5B18', '#e6b770': '#8C6118',
   // The "+" in an empty posting slot. A faithful inversion keeps it as faint
   // on paper as it is on black, but it is an AFFORDANCE -- it says the square
   // can be pressed — and paper has less to hide behind than a dark ground.
@@ -35,7 +48,7 @@ export const NAMED = new Map(Object.entries({
   // means posted and red still means failed, but #7FD1A6 on paper is a pastel
   // nobody reads as a number — the phone's paper theme darkens them for the
   // same reason (--dcm-ok #2E7955, --dcm-bad #A64738).
-  '#7fd1a6': '#2E7955', '#5bbd8a': '#26654699'.slice(0, 7), '#ff5566': '#A64738',
+  '#7fd1a6': '#2D7854', '#5bbd8a': '#26654699'.slice(0, 7), '#ff5566': '#A64738',
   '#ff0033': '#A11226', '#e5484d': '#A64738',
 }));
 

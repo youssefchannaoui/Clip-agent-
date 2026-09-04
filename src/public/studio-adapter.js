@@ -236,8 +236,20 @@
     if (!u) return '';
     return String(u).replace(/["'\\)]/g, function (c) { return '%' + c.charCodeAt(0).toString(16); });
   }
+  // A PHOTOGRAPH DOES NOT GET LIGHTER IN DAYLIGHT, so the ink drawn over one
+  // must not flip with the theme. `--dc-on-photo` is the marker that says a
+  // real image is being painted here, and studio-tokens.css hands everything
+  // inside it a theme-invariant ink. It is emitted BY THIS FUNCTION rather
+  // than at the twelve call sites, so it is inseparable from the photo by
+  // construction: a card falling back to the raised ground carries no marker
+  // and keeps the theme's own ink, which is correct -- that ground DOES flip.
+  //
+  // It returns a value plus a second declaration, which reads oddly and is
+  // deliberate: every call site is `'background: ' + thumb(u) + ';'`, so the
+  // caller's own semicolon closes it and no call site had to change.
   function thumb(u) {
-    return u ? 'var(--dc-bg-raised, #17171A) url("' + cssUrl(u) + '") center/cover no-repeat' : 'var(--dc-bg-raised, #17171A)';
+    return u ? 'var(--dc-bg-raised, #17171A) url("' + cssUrl(u) + '") center/cover no-repeat; --dc-on-photo: 1'
+             : 'var(--dc-bg-raised, #17171A)';
   }
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
   // A percentage is a true answer that means nothing to the person moving the
@@ -2577,9 +2589,9 @@
         stateChip: st === 'approved' ? (c.scheduleError ? 'Not scheduled' : 'Approved') : st === 'rejected' ? 'Rejected' : '',
         stateChipStyle: st
           ? 'position: absolute; top: 8px; right: 38px; padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border: 1px solid ' +
-            (st === 'rejected' ? 'var(--dc-n-3a2a2a, #3A2A2A); background: rgba(10,10,12,.85); color: var(--dc-n-e3928c, #E3928C);'
-              : (st === 'approved' && c.scheduleError) ? 'rgba(230,185,128,.4); background: rgba(10,10,12,.85); color: var(--dc-n-e6b980, #E6B980);'
-                : 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: var(--dc-n-7fd1a6, #7FD1A6);')
+            (st === 'rejected' ? 'var(--dc-n-3a2a2a, #3A2A2A); background: rgba(10,10,12,.85); color: var(--dc-on-scrim-e3928c, var(--dc-n-e3928c, #E3928C));'
+              : (st === 'approved' && c.scheduleError) ? 'rgba(230,185,128,.4); background: rgba(10,10,12,.85); color: var(--dc-on-scrim-e6b980, var(--dc-n-e6b980, #E6B980));'
+                : 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));')
           : 'display: none;',
         selStyle: 'position: absolute; top: 8px; right: 8px; z-index: 3; display: grid; place-items: center; '
           + 'width: 22px; height: 22px; border-radius: 7px; cursor: pointer; transition: background .12s ease; border: 1px solid '
@@ -2691,13 +2703,13 @@
         thumbStyle: 'position: relative; aspect-ratio: 16 / 9; background-color: var(--dc-bg-raised, #17171A);' +
           (p.sourceThumbUrl
             ? ' background-image: linear-gradient(to bottom, rgba(8,8,10,0) 40%, rgba(8,8,10,.82) 100%), url("' + cssUrl(p.sourceThumbUrl) + '");'
-              + ' background-size: cover, cover; background-position: center, center 30%;'
+              + ' background-size: cover, cover; background-position: center, center 30%; --dc-on-photo: 1;'
             : ''),
         stateChip: state === 'processing' ? 'Processing' : state === 'ready' ? 'Ready' : 'Archived',
         chipStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; border: 1px solid ' +
-          (state === 'processing' ? 'rgba(217,180,120,.4); background: rgba(10,10,12,.82); color: var(--dc-gold-lit, #F0D6A6);'
-            : state === 'ready' ? 'rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: var(--dc-n-7fd1a6, #7FD1A6);'
-            : 'var(--dc-n-33333a, #33333A); background: rgba(10,10,12,.82); color: var(--dc-ink-soft, #A2A2AA);'),
+          (state === 'processing' ? 'rgba(217,180,120,.4); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-f0d6a6, var(--dc-n-f0d6a6, #F0D6A6));'
+            : state === 'ready' ? 'rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));'
+            : 'var(--dc-n-33333a, #33333A); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-a2a2aa, var(--dc-n-a2a2aa, #A2A2AA));'),
         chipIcon: state === 'processing' ? 'ph ph-circle-notch' : state === 'ready' ? 'ph-fill ph-check-circle' : 'ph ph-archive',
         chipIconStyle: 'font-size: 11px;' + (state === 'processing' ? ' animation: dcSpin 1.1s linear infinite;' : ''),
         isProcessing: state === 'processing',
@@ -2835,7 +2847,7 @@
               hasFailing: !ready,
               statusLabel: c.postedAt ? 'Posted' : ready ? '4/4 checks' : failing.length + ' failing',
               statusStyle: 'padding: 2px 8px; border-radius: 20px; font-size: 9.5px; font-weight: 700; border: 1px solid ' +
-                (ready ? 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: var(--dc-n-7fd1a6, #7FD1A6);' : 'var(--dc-n-3a2a2a, #3A2A2A); background: rgba(10,10,12,.85); color: var(--dc-n-e6b770, #E6B770);'),
+                (ready ? 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));' : 'var(--dc-n-3a2a2a, #3A2A2A); background: rgba(10,10,12,.85); color: var(--dc-on-scrim-e6b770, var(--dc-n-e6b770, #E6B770));'),
               cardStyle: 'display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid ' +
                 (ready ? 'var(--dc-line-soft, #1E1E22)' : 'var(--dc-n-2a2024, #2A2024)') + '; border-radius: 10px; background: var(--dc-bg, #121214);',
               // Nothing posts unchecked: the button says why instead of failing.
@@ -5117,9 +5129,9 @@
           clips: plural(p.clipCount || 0, 'clip'),
           chip: processing ? 'Processing' : state === 'ready' ? 'Ready' : p.status === 'cancelled' ? 'Cancelled' : 'Failed',
           chipStyle: 'padding: 2px 7px; border-radius: 20px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border: 1px solid ' +
-            (processing ? 'rgba(230,183,112,.4); background: rgba(10,10,12,.8); color: var(--dc-n-e6b770, #E6B770);'
-              : state === 'ready' ? 'rgba(127,209,166,.35); background: rgba(10,10,12,.8); color: var(--dc-n-7fd1a6, #7FD1A6);'
-              : 'rgba(226,124,124,.4); background: rgba(10,10,12,.8); color: var(--dc-n-e27c7c, #E27C7C);'),
+            (processing ? 'rgba(230,183,112,.4); background: rgba(10,10,12,.8); color: var(--dc-on-scrim-e6b770, var(--dc-n-e6b770, #E6B770));'
+              : state === 'ready' ? 'rgba(127,209,166,.35); background: rgba(10,10,12,.8); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));'
+              : 'rgba(226,124,124,.4); background: rgba(10,10,12,.8); color: var(--dc-on-scrim-e27c7c, var(--dc-n-e27c7c, #E27C7C));'),
           thumbStyle: 'position: relative; aspect-ratio: 16 / 10; background: ' + thumb(p.sourceThumbUrl) + ';',
           open: function (e) { stop(e); setUI({ screen: 'detail', openProject: p.id, menuOpen: false, bellOpen: false }); },
         };
@@ -5165,7 +5177,7 @@
           score: c ? c.score || '' : '',
           stateLabel: state === 'approved' ? 'Approved' : 'In review',
           stateStyle: 'position: absolute; bottom: 6px; left: 6px; display: flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 20px; font-size: 8.5px; font-weight: 700; border: 1px solid ' +
-            (state === 'approved' ? 'rgba(127,209,166,.4); background: rgba(10,10,12,.82); color: var(--dc-n-7fd1a6, #7FD1A6);' : 'rgba(217,180,120,.36); background: rgba(10,10,12,.82); color: var(--dc-gold-lit, #F0D6A6);'),
+            (state === 'approved' ? 'rgba(127,209,166,.4); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));' : 'rgba(217,180,120,.36); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-f0d6a6, var(--dc-n-f0d6a6, #F0D6A6));'),
           style: 'position: absolute; top: ' + p.top + '; left: ' + p.left + '; width: ' + p.w + '; aspect-ratio: 9 / 16; border-radius: 11px; overflow: hidden; rotate: ' + p.rot + '; animation: dcFloat ' + p.dur + ' ease-in-out ' + p.delay + ' infinite;' +
             (c ? ' border: 1px solid var(--dc-line, #26262A); background: ' + thumb(c.thumbUrl) + '; box-shadow: 0 18px 40px rgba(0,0,0,.5);'
                : ' border: 1px dashed var(--dc-n-2c2c32, #2C2C32); background: var(--dc-well, rgba(18,18,20,.5)); display: grid; place-items: center;'),
@@ -5280,7 +5292,7 @@
         : 'position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.45), transparent 34%, rgba(9,9,10,.88));',
       deckSoundStyle: (deckRaw && deckRaw.videoUrl)
         ? 'position: absolute; top: 10px; right: 10px; z-index: 4; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid rgba(255,255,255,.22); border-radius: 50%; background: rgba(10,10,12,.72); color: '
-          + (UI.deckMuted ? 'var(--dc-ink-body, #BCBCC3)' : 'var(--dc-gold-lit, #F0D6A6)') + '; cursor: pointer; transition: color .14s ease, border-color .14s ease;'
+          + (UI.deckMuted ? 'var(--dc-on-scrim-bcbcc3, var(--dc-n-bcbcc3, #BCBCC3))' : 'var(--dc-on-scrim-f0d6a6, var(--dc-n-f0d6a6, #F0D6A6))') + '; cursor: pointer; transition: color .14s ease, border-color .14s ease;'
         : 'display: none;',
       deckSoundIcon: UI.deckMuted ? 'ph ph-speaker-simple-slash' : 'ph ph-speaker-simple-high',
       deckSoundTitle: UI.deckMuted ? 'Sound on (M)' : 'Mute (M)',
@@ -7166,10 +7178,10 @@
         : 'Not connected',
       connStatusStyle: 'padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; border: 1px solid ' +
         (!conn ? 'var(--dc-line, #26262A);'
-          : !conn.configured ? 'var(--dc-n-3a2a2a, #3A2A2A); background: rgba(10,10,12,.85); color: var(--dc-n-e3928c, #E3928C);'
-          : conn.enabled ? 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: var(--dc-n-7fd1a6, #7FD1A6);'
-          : conn.connected ? 'rgba(217,180,120,.4); background: rgba(10,10,12,.85); color: var(--dc-gold-lit, #F0D6A6);'
-          : 'var(--dc-n-33333a, #33333A); background: rgba(10,10,12,.85); color: var(--dc-ink-soft, #A2A2AA);'),
+          : !conn.configured ? 'var(--dc-n-3a2a2a, #3A2A2A); background: rgba(10,10,12,.85); color: var(--dc-on-scrim-e3928c, var(--dc-n-e3928c, #E3928C));'
+          : conn.enabled ? 'rgba(127,209,166,.35); background: rgba(10,10,12,.85); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));'
+          : conn.connected ? 'rgba(217,180,120,.4); background: rgba(10,10,12,.85); color: var(--dc-on-scrim-f0d6a6, var(--dc-n-f0d6a6, #F0D6A6));'
+          : 'var(--dc-n-33333a, #33333A); background: rgba(10,10,12,.85); color: var(--dc-on-scrim-a2a2aa, var(--dc-n-a2a2aa, #A2A2AA));'),
       connDotStyle: 'width: 8px; height: 8px; border-radius: 50%; background: ' +
         (!conn ? 'var(--dc-ink-faint, #6E6E76)' : !conn.configured ? 'var(--dc-n-e3928c, #E3928C)' : conn.enabled ? 'var(--dc-n-7fd1a6, #7FD1A6)' : conn.connected ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-ink-faint, #6E6E76)') + ';',
       // A failed test sets lastTestAt as well as lastTestError, so reporting the
@@ -7649,7 +7661,7 @@
           playIcon: UI.playingTrack === t.id ? 'ph-fill ph-pause' : 'ph-fill ph-play',
           play: function (e) { stop(e); setUI({ playingTrack: UI.playingTrack === t.id ? null : t.id }); global.StudioAdapter.onPlayTrack(t.id); },
           waveStyle: 'flex: 1; height: 22px; border-radius: 4px; background: repeating-linear-gradient(90deg, var(--dc-line, #26262A) 0 2px, transparent 2px 5px);',
-          rotStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 600; cursor: pointer; border: 1px solid rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: var(--dc-n-7fd1a6, #7FD1A6);',
+          rotStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 600; cursor: pointer; border: 1px solid rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));',
           rotIcon: 'ph-fill ph-check-circle',
           rotLabel: 'In rotation',
           remove: function (e) { stop(e); global.StudioAdapter.onRemoveTrack(t.id); },
