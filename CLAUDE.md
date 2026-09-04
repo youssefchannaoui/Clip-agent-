@@ -5840,6 +5840,28 @@ Measure the value, do not read it off a low-contrast capture.
 
 ## Open items
 
+### CAN A CUSTOMER ACTUALLY CONNECT? Measured 4 Sept 2026
+
+Youssef: "is this working for sall the public as well". Read off each
+platform's own console rather than assumed, because the answer differs per
+platform and only one of them is yes.
+
+| Platform | Public? | Why |
+|---|---|---|
+| **YouTube** | **Yes, but capped at 100 accounts EVER** | OAuth consent screen is *In production*, User type *External* — so anyone can connect. But the app is **unverified**, which imposes a **100-user lifetime cap** (2 used) that "cannot be reset or changed", and users may meet the "unverified app" warning screen. Lifting it needs Google verification. |
+| **TikTok** | **No** | Submitted for review 4 Sept. An unaudited app may only post to a TikTok account that is itself private. |
+| **Facebook** | **No** | The Meta app is **Unpublished** (development mode) and the permissions are at **Standard Access**. Only someone with a ROLE on the app can connect. |
+| **Instagram** | **No** | Same Meta app, and it points at `eurotrimau` rather than a DeenClipped account. |
+
+**So today the product can onboard a paying customer on YouTube alone, and only
+100 of them, ever.** That is the real ceiling on the First 100 funnel, and it
+was nowhere in this file. Every other platform connects for the operator and
+refuses everybody else.
+
+The Google **100-user cap is the one that cannot be undone** — it applies over
+the project's lifetime. Verification is the only way past it, and it is worth
+starting before the count climbs rather than after.
+
 ### Waiting on Youssef (nothing in the repo unblocks these)
 
 1. ~~**Send the YouTube compliance reply.**~~ **SENT, AND THE REVIEW IS
