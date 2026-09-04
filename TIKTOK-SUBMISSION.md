@@ -227,6 +227,63 @@ Interlock worth keeping: TikTok refuses branded content on a private post, so
 that combination is blocked in the UI before the save and again in
 `validatePublishingSettings`.
 
+## SUBMITTED — 4 Sept 2026
+
+App `7677448222683531285` is **In review**. The portal replaced Save/Submit
+with **Recall** and said "Your app has been submitted for review."
+
+Submission reason (120/120): *"First submission. Login Kit and Content Posting
+API with Direct Post, demonstrated end to end in the sandbox demo video."*
+
+### What went in
+
+| | |
+|---|---|
+| Icon | `~/Downloads/DeenClipped-TikTok-App-Icon.png`, 1024x1024 |
+| Name / Category | DeenClipped / Education |
+| Description | 111/120, the wording recorded above |
+| Terms / Privacy | `/terms`, `/privacy` — both verified 200 on the day |
+| Platform | Web, `https://deenclipped.online/` |
+| Review note | 996/1000, verbatim as recorded above |
+| Demo video | `0904-50mb.mp4`, 48.3MB (TikTok's cap is 50MB **each**) |
+| Products | Login Kit + redirect URI, Content Posting API with **Direct Post ON** |
+| Scopes | user.info.basic, video.publish, video.upload — all three BUNDLED |
+
+### Two things this file had wrong
+
+- **Products and Scopes did NOT persist.** This file said they survived August
+  and did not need re-entering; the live form had "Add products" and "No scopes
+  yet". Both were re-added. Anything this file claims persists should be READ
+  off the form, not trusted.
+- **The video cap is 50MB per file, not 50MB total** — the form says
+  "Maximum 5 files, up to 50MB each", so 48.3MB was never tight.
+
+### The demo video was checked frame by frame before it was uploaded
+
+The previous recording failed because nobody watched it — it showed TikTok
+"Not connected" at 10:00 of 10:24. This one was sampled at 30 timestamps and
+every one of TikTok's five requirements is on screen:
+
+1. `deenclipped.online` homepage — domain matches the Website URL.
+2. TikTok login, then **"DeenClipped (Sandbox) wants to access your TikTok
+   account"** listing both scopes. The word Sandbox is legible, which is what
+   proves the sandbox requirement was met.
+3. A clip cut from the creator's own imported lecture.
+4. The posting dialog with the audience list, the interaction toggles, the
+   commercial disclosure and the Music Usage Confirmation line.
+5. **The result**: the post live at `tiktok.com/@deenclipped/video/7681572...`,
+   marked **Private** — the only level an unaudited app can use.
+
+The video ends with TikTok being disconnected (the production credentials going
+back), so the last frames read "No publishing account connected". That is after
+the post and is not a problem, but it is worth knowing before anyone panics at
+the final frame.
+
+**The 110MB original was compressed two-pass to 48.3MB** and the consent screen
+was compared between the two at full resolution: indistinguishable. Legibility
+is what a reviewer needs, so compressing on a size target alone would have been
+the wrong call — 10MB would have been unreadable.
+
 ## Remaining steps, in order
 
 0. **Check nothing is scheduled to post to TikTok in the next hour.** Step 1
