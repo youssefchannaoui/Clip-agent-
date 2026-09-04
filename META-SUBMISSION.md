@@ -272,6 +272,75 @@ for accounts with a role on the app. The prerequisites are both already met:
 `connectMeta` throws outright when `/me/accounts` returns no Page, so those two
 are hard requirements, not nice-to-haves.
 
+## Dashboard state, read 4 Sept 2026
+
+Read off the live console rather than trusted from this file — the TikTok
+submission the same day proved these notes can be stale (Products and Scopes
+were recorded as persisting and had not).
+
+| | |
+|---|---|
+| Required actions | **None.** Nothing is at risk or awaiting a response. |
+| App settings | **"All required app settings are complete."** — the Publish page says so outright |
+| Use cases | Both customized, green ticks: Instagram messaging & content, Manage everything on your Page |
+| Publish status | **Unpublished**, and a Publish button is enabled |
+
+### The five permissions are at Standard Access, and have real traffic
+
+The Pages use case lists them as **"Ready for testing"** with API call counts,
+which is the evidence App Review wants that the integration actually runs:
+
+| Permission | Calls |
+|---|---|
+| `pages_show_list` | 14 |
+| `pages_read_engagement` | 14 |
+| `public_profile` | 25 |
+| `business_management` | 2 |
+| `pages_manage_posts` | 1 |
+
+"Ready for testing" is Standard Access: it works for people with a ROLE on the
+app and nobody else. Serving customers needs **Advanced Access**, which is what
+App Review grants.
+
+## THE NEW GATE: Tech Provider (not in this file before 4 Sept 2026)
+
+The dashboard now carries:
+
+> **Become a Tech Provider** — Become a Tech Provider to submit to App Review
+> and request access to user data and data from other businesses. You'll be
+> required to complete access verification.
+
+**App Review cannot be submitted until this is done.** Everything this file
+previously said about "App Review plus Business Verification" is now gated
+behind it. It is an identity/business verification step on the portfolio, so it
+is the account owner's to complete — documents, not configuration.
+
+## The ordering that actually matters
+
+The temptation is to start on App Review because that is the big obvious task.
+It is the wrong first move, and for the same reason the TikTok submission
+failed the first time: **you cannot record the screencasts App Review demands
+until the integration actually works.** Meta wants each permission shown in
+use, and today `/me/accounts` still comes back empty.
+
+So:
+
+1. **Reconnect Meta in the app and click "Edit settings", NOT "Continue".**
+   Continue re-applies the remembered (empty) asset selection — see the section
+   above. Tick the DeenClipped Page and its Instagram account. Until this
+   works, nothing downstream can be recorded.
+2. **Decide the Instagram account.** The one linked to the Page is
+   `eurotrimau`. Whatever connects will publish Reels there. Relink the Page to
+   the right professional account first if that is not intended.
+3. **Become a Tech Provider** (access verification).
+4. **App Review** — screencasts per permission, the same shape as the TikTok
+   demo video, plus written justification.
+5. **Publish.**
+
+Steps 1–3 are all owner-only: a Facebook login, an account decision, and
+identity documents. None of them can be done from a session that must not
+handle credentials.
+
 ## Going public
 
 Publishing needs **App Review** for the five permissions *and* **Business
