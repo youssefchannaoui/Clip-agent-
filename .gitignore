@@ -8,6 +8,12 @@ pnpm-lock.yaml
 # Runtime state written by the app — not source
 data/
 
+# Working files from an agent session — probes, measurement scripts and the
+# desktop screenshots that go in the reply. Delivered to the reader, never
+# part of the product, and a session that captures a dozen PNGs must not
+# leave the tree dirty for the next one.
+scratchpad/
+
 # Python bytecode from the worker and its tests
 __pycache__/
 *.py[cod]
