@@ -1115,8 +1115,13 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
  * a grid of clips is not a grid of buttons -- with :focus-visible for the
  * keyboard and a permanent state where there is no hover at all, because a
  * control reachable only by hovering is no control on a touch screen. */
+/* UNDER the card's own select control, never on top of it. MEASURED at
+ * 1440x950: the select button sits at top 9, right 9, 22x22 -- and this star
+ * was a 26px box at top 8, right 8, so it covered the control completely and
+ * a card could not be ticked while the pointer was on it. 40px clears the
+ * button's bottom edge (31) by 9px; nothing else is drawn there. */
 #studio article[data-clip] > [data-dc-star] {
-  position: absolute; top: 8px; right: 8px; z-index: 3;
+  position: absolute; top: 40px; right: 8px; z-index: 3;
   display: grid; place-items: center;
   width: 26px; height: 26px;
   border: 1px solid rgba(217, 180, 120, .4); border-radius: 8px;

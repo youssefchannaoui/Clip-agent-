@@ -169,6 +169,90 @@ test('the panel unmounts with the preview', () => {
   assert.match(branch, /clipToolsNode\.remove\(\)/, 'the closed branch leaves the panel mounted');
 });
 
+/* ── The three faults Youssef found by using it (v3.124.4) ──────────────── */
+
+test('the panel mounts on the PLAYER, never on the first 9:16 box in the studio', () => {
+  /*
+   * THE BUG THIS PINS IS THE WHOLE FEATURE NOT WORKING.
+   *
+   * The mount was `document.querySelector('#studio [style*="aspect-ratio: 9 / 16"]')`
+   * and then that node's parent. EVERY clip card's thumbnail carries that
+   * inline style (`thumbStyle` in the adapter), and the player overlay is a
+   * root-level sibling of <main> -- so with the review queue behind the modal
+   * the selector lost on document order every single time and returned the
+   * FIRST CARD IN THE GRID.
+   *
+   * MEASURED at 1440x950 with three clips seeded: the panel mounted into
+   * `ARTICLE[data-clip=c1]`. So the configuration column never appeared in the
+   * preview at all, and the card it landed in was left 314px wide beside its
+   * 202px siblings.
+   */
+  const body = fn('paintClipTools');
+  assert.match(body, /querySelector\('#studio \[data-dc-player\]'\)/,
+    'the panel does not anchor on the player');
+  assert.ok(!/querySelector\('#studio \[style\*="aspect-ratio/.test(html),
+    'the loose 9:16 lookup is back — it finds a clip card, not the preview');
+
+  // The anchor has to exist in the generated markup, or the panel silently
+  // never mounts. Exactly one, or `querySelector` picks whichever came first.
+  const template = fs.readFileSync(path.join(root, 'src/public/studio-template.generated.js'), 'utf8');
+  const hits = template.match(/"data-dc-player":""/g) || [];
+  assert.equal(hits.length, 1, 'the player card carries exactly one data-dc-player anchor');
+});
+
+test('closing the preview takes the grid areas off again', () => {
+  /*
+   * `data-host-*` is the ONE attribute family the patcher never strips, which
+   * is exactly why it survives a re-render -- and why nothing but this removes
+   * it. Left behind on a card in the grid, the panel's CSS went on laying that
+   * card out as the preview column for the rest of the session: measured, the
+   * card stayed 314px wide against 202px siblings through every later paint.
+   *
+   * It sweeps the whole studio rather than a remembered node, so a card
+   * wrecked by an earlier paint heals rather than staying broken until a
+   * reload.
+   */
+  const sweep = fn('clearClipToolsAreas');
+  assert.match(sweep, /querySelectorAll\('#studio \[data-host-pp\]'\)/,
+    'the sweep does not look for stamped nodes');
+  assert.match(sweep, /removeAttribute\('data-host-pp'\)/, 'the sweep does not remove the stamp');
+
+  // And the CLOSED branch must call it -- the same brace-matched slice the
+  // unmount test uses, because `clipToolsNode.remove()` appears in the
+  // re-mount path too and asserting on the whole body proves nothing.
+  const body = fn('paintClipTools');
+  const at = body.search(/if \(!vals\.playerOpen\)/);
+  assert.ok(at > -1);
+  const branch = (() => {
+    let i = body.indexOf('{', at), depth = 0;
+    const from = i;
+    for (; i < body.length; i++) {
+      if (body[i] === '{') depth += 1;
+      else if (body[i] === '}') { depth -= 1; if (!depth) break; }
+    }
+    return body.slice(from, i + 1);
+  })();
+  assert.match(branch, /clearClipToolsAreas\(\)/, 'closing leaves the grid areas stamped on the card');
+});
+
+test('the AI star clears the card\'s own select control', () => {
+  /*
+   * MEASURED at 1440x950: the select button sits at top 9, right 9, 22x22 --
+   * and the star was a 26px box at top 8, right 8, so it covered the control
+   * completely and a hovered card could not be ticked. "the ai button is
+   * covering the select button".
+   *
+   * The numbers are the control's, so this stays true if the star is resized:
+   * the star's top edge must clear the button's bottom edge.
+   */
+  const SELECT_TOP = 9, SELECT_SIZE = 22;      // the export's own top-right control
+  const rule = css.slice(css.indexOf('#studio article[data-clip] > [data-dc-star] {'));
+  const top = Number((rule.match(/top:\s*(\d+)px/) || [])[1]);
+  assert.ok(Number.isFinite(top), 'the star has no top offset');
+  assert.ok(top >= SELECT_TOP + SELECT_SIZE,
+    `the star at top ${top}px overlaps the select control, which ends at ${SELECT_TOP + SELECT_SIZE}px`);
+});
+
 test('the panel and the star answer to ONE gate, and it is not typed here', () => {
   // DeenAI is one feature at one tier (v3.122.0). The panel must not carry its
   // own idea of which plan that is -- v3.72.10 shipped a button naming the
