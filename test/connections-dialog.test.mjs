@@ -276,3 +276,41 @@ test('a healthy destination is its logo; a broken one keeps its word', () => {
   // refused TikTok "looked entirely fine on the row" (v3.28.0).
   assert.ok(body.includes('title: label'), 'the full sentence stays available on hover');
 });
+
+test('every action the dialog DEMANDS is a button the dialog offers', () => {
+  // Youssef, 4 Sept 2026, trying to switch Facebook on after swapping the
+  // TikTok credentials to production. The save was refused account-wide with
+  // "Run TikTok Test connection before enabling it. TikTok requires the latest
+  // creator privacy and interaction options to be displayed."
+  //
+  // The guard is correct -- creator_info is fetched per client key, so a
+  // credential swap invalidates it. What was wrong is that the control it
+  // names existed ONLY on the legacy ?classic=1 page. `onTestConnection` was
+  // wired, the route was live, and nothing in the shipped dialog could reach
+  // it: a required action with no button. That is invariant 9 from the other
+  // side, and because the publishing save validates every provider at once it
+  // blocked Facebook as well as TikTok.
+  // `host` is already read at the top of this file.
+
+  // The guard names it...
+  assert.match(host, /Run TikTok Test connection before enabling it/,
+    'the guard still asks for a Test connection');
+  // ...so the dialog must offer it.
+  assert.match(host, /data-conn-test="\$\{esc\(r\.key\)\}"/,
+    'the connections dialog draws a Test button on a connected row');
+  assert.match(host, /\$\$\('\[data-conn-test\]'\)\.forEach/,
+    'and wires it');
+  assert.match(host, /StudioAdapter\.onTestConnection\(b\.dataset\.connTest\)/,
+    'to the handler that already existed');
+
+  // Only on a CONNECTED row: testing a platform with no account would call a
+  // route that can only fail, which is a control that cannot work.
+  const row = /\$\{linked\?`<button type="button" data-conn-test=/.exec(host);
+  assert.ok(row, 'the Test button is drawn only when an account is linked');
+
+  // It repaints afterwards, or the row keeps showing the state the test just
+  // changed -- the whole reason for pressing it.
+  const handler = host.slice(host.indexOf("$$('[data-conn-test]')"), host.indexOf("$$('[data-conn-toggle]')"));
+  assert.match(handler, /paintConnections\(\)/, 'and repaints so the result shows');
+});
+

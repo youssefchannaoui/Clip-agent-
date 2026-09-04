@@ -6286,8 +6286,24 @@ function renderStudio(){
           <span class="studio-conn-actions">
             <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}>${linked?((r.accounts||[]).length<Number(r.maxAccounts||1)?'Add another':'Reconnect'):'Connect'}</button>
             ${HAS_SETTINGS[r.key]&&linked?`<button type="button" data-conn-settings="${esc(r.key)}"><i class="ph ph-sliders-horizontal"></i>Settings</button>`:''}
+            ${linked?`<button type="button" data-conn-test="${esc(r.key)}" title="Ask ${esc(r.name)} for this account's current settings"><i class="ph ph-check-circle"></i>Test</button>`:''}
             <button type="button" class="danger" data-conn-disconnect="${i}" ${linked?'':'disabled'}>Disconnect</button>
           </span>${accountPicker(r,i)}</div>`}).join('');
+      /* TEST CONNECTION, which the studio dialog did not offer at all.
+         Youssef, 4 Sept 2026, trying to switch Facebook on after swapping the
+         TikTok credentials to production: the save is refused account-wide
+         with "Run TikTok Test connection before enabling it. TikTok requires
+         the latest creator privacy and interaction options to be displayed."
+         That guard is right -- creator_info is fetched per client, so a
+         credential swap invalidates it -- but the control it names existed
+         ONLY on the legacy ?classic=1 page. `onTestConnection` was wired and
+         reachable from nothing: a required action with no button, which is
+         invariant 9 from the other side, and it blocked TikTok AND Facebook
+         because the publishing save validates every provider at once. */
+      $$('[data-conn-test]').forEach(b=>b.onclick=async()=>{
+        const was=b.innerHTML; b.disabled=true; b.textContent='Testing…';
+        try{ await StudioAdapter.onTestConnection(b.dataset.connTest); }
+        finally{ b.disabled=false; b.innerHTML=was; paintConnections(); }});
       $$('[data-conn-toggle]').forEach(b=>b.onclick=async()=>{
         const p=rows[Number(b.dataset.connToggle)];
         await StudioAdapter.onPublishingToggle(p.key,b.getAttribute('aria-checked')!=='true');
