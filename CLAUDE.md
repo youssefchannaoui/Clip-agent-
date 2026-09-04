@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1410 JS + 658 Python**
+- `npm test` and `npm run check` must pass. Currently **1416 JS + 658 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -5379,6 +5379,116 @@ with any absolutely-positioned control on all four cards in both themes.
 **Five probes, all proven red**: the loose 9:16 lookup restored, the export
 anchor deleted, the sweep neutered, the close branch not sweeping, and the star
 back at `top: 8px`.
+
+## The same fault was live in ten more panels (v3.124.5, 4 Sept 2026)
+
+Youssef, after the paste-box fix: **"check the whole dashboard for more bugs
+like this."** There were ten, and the sweep that found them is reusable.
+
+### The probe
+
+Force a repaint that changes NOTHING and count what the DOM does:
+
+```js
+STUDIO.lastHtml = '';                       // defeat the render's own cache
+// wrap Node.prototype.removeChild / replaceChild / appendChild / insertBefore
+paintStudio();
+```
+
+**Any operation at all is a mispairing.** `patch()` pairs a container's live
+children against the freshly rendered ones BY INDEX, skipping only nodes
+carrying `data-host-owned`, so an unmarked host node is paired against a
+generated sibling: given that sibling's attributes (its id stripped -- only
+`data-host*` survives `syncAttributes`), its own children replaced with the
+sibling's, and everything AFTER it in the container shifted one place across.
+
+A second probe says what it costs a person: focus a control inside each panel,
+force the repaint, read `document.activeElement`.
+
+Measured across every screen, before and after:
+
+| | before | after |
+|---|---|---|
+| DOM operations on an unchanged repaint | 0-29 per screen | **0** |
+| host nodes destroyed by one | up to 14 | **0** |
+| focus on the Templates watermark switch, the bell's email switch, a Lecture-library row | fell to `<body>` | **kept** |
+| the rail seal's 28s rotation | reset every poll | **runs** |
+
+### What was unmarked
+
+The bell's email-notifications row, Owner's earnings table and First 100
+funnel, the Tokens invite panel, the Templates brand switches, the Lecture
+library sidebar, the Schedule channel switcher, the whole Help screen, the Home
+onboarding strip, the clip card's "Posts to" row, the schedule cells' drag grip
+/ +N badge / remove control, the buffering overlay and the caption echo's
+"approximate" tag. **Four were inserted in the MIDDLE of a generated
+container** -- `insertBefore(box, mount.firstElementChild)` on the Templates
+column, `insertAdjacentElement('afterend')` in the bell dropdown,
+`insertBefore(box, grid.nextSibling)` on Tokens, `insertBefore(box, anchorSec)`
+on Owner -- so those shifted every sibling after them, every poll.
+
+### MARKING IS ONLY HALF, and the second half is what a person feels
+
+`data-host-owned` stops the PATCHER. It does nothing about the PAINTER, which
+assigned `innerHTML` on every call -- so a panel still rebuilt its own controls
+every couple of seconds and focus still fell to `<body>`. `window.dcSetHtml`
+writes only when the markup actually changed, and keeps its signature on a **JS
+property** rather than an attribute: nothing in the patcher can strip it, and it
+dies with the node, which is exactly right -- a node that was rebuilt does need
+redrawing.
+
+### Three needed more than a marker
+
+- **The waveform strip is the DESIGN'S own node.** `syncAttributes` rewrites a
+  generated node's attributes from the render and removes any the render does
+  not carry, so its `data-wave` signature was stripped on every paint and the
+  guard **never once matched**: every card's bars were rebuilt on every poll.
+  It reads `data-host-wave` now, carries `data-host-style` so the host's inline
+  styles survive, and each bar is marked or `patch()` removes it.
+- **The library sidebar REMOVED the design's "Before you import" card.** Taking
+  a generated node out shortens the live list against the rendered one, so
+  everything after it pairs one across -- which is how `#dcLibStats` was handed
+  that card's markup and lost its own id, every poll. It self-healed only
+  because the mangled panel then matched the "Before you import" text and was
+  removed as one. **Hidden in place** (`data-host-style` + `display:none`) now.
+- **The rail seal WRAPPED the arch in a span, and the ring therefore never
+  turned.** A wrapper around a generated node is one the patcher cannot be told
+  to skip: marked, the child it holds is inserted a second time; unmarked --
+  what shipped -- it is paired against the arch's own span, given its class and
+  then patched, which replaced the arch and deleted the ring. Measured on the
+  shipped code, the ring's `currentTime` across four repaints a second apart:
+  **0, 0, 0, 0**. After: **4983, 6117, 7250, 8366**. The ring is a host-owned
+  SIBLING inside the design's own span; the 42px box and the .86 scale moved to
+  that span, addressed through the arch it holds rather than a hashed class.
+  Its geometry is unchanged -- proven by pausing the animation at 0 in both
+  builds: ring 58x58 at [10,12], text rect 57x57 either way. A `getBoundingClientRect`
+  taken mid-rotation reads 79 instead of 64 and looks like a size change; it is
+  the bounding box of a rotated square.
+- **The task ladder's card MOVED the rail's generated footer div into the nav.**
+  Same shape, same result: the nav group's remaining children paired one
+  across, a nav link was replaced by the slot and the last one deleted, and the
+  card's position was unstable between paints. It has its own host-owned
+  `#dcTaskSlot` now and moves nothing; the design's footer div stays empty at
+  the rail's foot where `#dcRail > div:empty` has always hidden it.
+
+### The rule, and the test
+
+**Every node the host puts into the generated tree carries `data-host-owned`,
+and every host panel is redrawn only when its markup changed.** It is stated at
+the top of index.html and was simply not followed; `test/host-panels.test.mjs`
+now reads the source for it, as `rail-nav` and the `overflow-anchor` test
+already do for the same reason -- CI has no browser, and this is exactly the
+rule that is invisible when it goes missing: the app renders, the suite stays
+green, the panel just churns again. All six assertions proven red first.
+
+**A hit-test sweep over every screen came back clean** (`elementFromPoint` at
+each visible control's centre is that control or a descendant), so nothing else
+of the "AI star over the select button" shape is live. Two things that sweep
+must be told, or it reports faults that are not there: a control scrolled out
+of its own overflow container is CLIPPED, not covered, and a modal scrim
+covering the page is not a bug -- walk up from the hit element for a
+fixed/absolute layer spanning the viewport and skip it when the covered control
+sits outside it.
 
 ## Two kinds of title, and a star that costs nothing (v3.120.0, 4 Sept 2026)
 
