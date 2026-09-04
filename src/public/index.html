@@ -3978,6 +3978,267 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       paint();
     }
 
+    /* -- the clip preview grew a configuration column (v3.121.0) ------------
+       Youssef, 4 Sept 2026, with a screenshot of the bare modal: "it should
+       give you buttons on, let's say, on the right side ... a nice, like,
+       floating new section that has configuration. So you can use the editor.
+       You can click editor. You can use AI titles ... And then it should give
+       you a text box where you can tell the AI ... make the title Arabic, and
+       it makes the title Arabic, or improve the title."
+
+       The modal was a title, the video and a scrub bar -- nothing you could
+       DO with the clip you were looking at. Everything here writes METADATA,
+       so nothing re-renders: a title and a description are never burned into
+       the frame.
+
+       HOST-RENDERED, and the card is never restructured. The generated
+       children stay exactly where they are and are given grid areas through
+       a data attribute; moving a generated node into a wrapper of mine is
+       what would confuse the patcher's pairing. */
+    const CLIPTOOLS = { ask: '', target: 'title', busy: '', note: '' };
+    let clipToolsNode = null;
+
+    function clipToolsClip(){
+      const id = StudioAdapter.ui.playerClip && StudioAdapter.ui.playerClip.id;
+      return id ? (DATA.clips || []).find(c => c.id === id) || StudioAdapter.ui.playerClip : null;
+    }
+
+    async function clipToolsWrite(id, patch){
+      /* PATCH is the road the editor's own saves already take, so a title
+         typed here and one typed there cannot diverge. */
+      const r = await api('/api/clips/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify(patch) });
+      if (!r || r.error) throw new Error((r && r.error) || 'Could not save that.');
+      const clip = (DATA.clips || []).find(c => c.id === id);
+      if (clip) Object.assign(clip, patch);
+      if (StudioAdapter.ui.playerClip && StudioAdapter.ui.playerClip.id === id) Object.assign(StudioAdapter.ui.playerClip, patch);
+      return r;
+    }
+
+    async function clipToolsAsk(kind, instruction){
+      const clip = clipToolsClip();
+      if (!clip || CLIPTOOLS.busy) return;
+      CLIPTOOLS.busy = instruction ? 'ask' : kind;
+      CLIPTOOLS.note = '';
+      paintStudio();
+      try {
+        const r = await api('/api/clips/' + encodeURIComponent(clip.id) + '/retitle', {
+          method: 'POST', body: JSON.stringify({ kind: kind, instruction: instruction || '' }),
+        });
+        if (!r || r.error) throw new Error((r && r.error) || 'The clip AI did not answer.');
+        const field = kind === 'description' ? 'description' : 'title';
+        const target = (DATA.clips || []).find(c => c.id === clip.id);
+        if (target) target[field] = r.value;
+        if (StudioAdapter.ui.playerClip && StudioAdapter.ui.playerClip.id === clip.id) StudioAdapter.ui.playerClip[field] = r.value;
+        /* "reference" means the worker derived it from the verses this clip
+           recites and never asked the model. Worth saying: it is why a
+           recitation title is a fact rather than a guess. */
+        CLIPTOOLS.note = r.source === 'reference' ? 'Written from the verses this clip recites.' : '';
+        if (instruction) CLIPTOOLS.ask = '';
+        toast(kind === 'description' ? 'New description written' : 'New title written', 'good');
+      } catch (err) {
+        CLIPTOOLS.note = String((err && err.message) || err);
+        toast(CLIPTOOLS.note, 'error');
+      } finally {
+        CLIPTOOLS.busy = '';
+        paintStudio();
+      }
+    }
+
+    /* -- the AI star on every clip card (v3.121.0) --------------------------
+       Youssef: "on your reviews or your libraries, for each clip there should
+       be, like, a star ... you know how the DeenAI star looks like? Just like
+       that. Just to ... create, like, a different title without rerendering
+       the video. You click it, and it just does the title for you."
+
+       A shortcut, not a second control for the same thing: the preview's
+       column is where a title is READ, edited and asked about; this writes a
+       new one without opening anything. Injected on the card the design
+       already tags with `data-clip` (added for the waveform), so it costs no
+       re-import and a re-import cannot renumber it away. */
+    const CLIPSTAR = { busy: '' };
+
+    function paintClipStars(){
+      const screen = StudioAdapter.ui.screen;
+      const wanted = screen === 'queue' || screen === 'library' || screen === 'detail';
+      for (const card of document.querySelectorAll('#studio article[data-clip]')){
+        const id = card.getAttribute('data-clip');
+        let star = card.querySelector(':scope > [data-dc-star]');
+        if (!wanted || !id){ if (star) star.remove(); continue; }
+        if (!star){
+          star = document.createElement('span');
+          star.setAttribute('data-dc-star', '');
+          star.setAttribute('data-host-owned', '');
+          /* role=button rather than <button>: these cards are clickable
+             regions and a nested button would swallow the outer click --
+             the same reason the schedule's remove control is a span. */
+          star.setAttribute('role', 'button');
+          star.setAttribute('tabindex', '0');
+          star.title = 'Write a new title with AI (nothing re-renders)';
+          /* The card is already position:relative for its own overlays. */
+          if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+          card.appendChild(star);
+          const fire = e => {
+            e.preventDefault(); e.stopPropagation();
+            clipStarAsk(id);
+          };
+          star.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); });
+          star.addEventListener('click', fire);
+          star.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fire(e); });
+        }
+        const busy = CLIPSTAR.busy === id;
+        const want = busy
+          ? '<i class="ph ph-circle-notch dcct-spin"></i>'
+          : '<i class="ph-fill ph-sparkle"></i>';
+        if (star.innerHTML !== want) star.innerHTML = want;
+        star.setAttribute('aria-busy', busy ? 'true' : 'false');
+      }
+    }
+
+    async function clipStarAsk(id){
+      if (CLIPSTAR.busy) return;
+      CLIPSTAR.busy = id;
+      paintStudio();
+      try {
+        const r = await api('/api/clips/' + encodeURIComponent(id) + '/retitle', {
+          method: 'POST', body: JSON.stringify({ kind: 'title' }),
+        });
+        if (!r || r.error) throw new Error((r && r.error) || 'The clip AI did not answer.');
+        const clip = (DATA.clips || []).find(c => c.id === id);
+        if (clip) clip.title = r.value;
+        toast(r.value, 'good');
+      } catch (err){
+        toast(String((err && err.message) || err), 'error');
+      } finally {
+        CLIPSTAR.busy = '';
+        paintStudio();
+      }
+    }
+
+    function paintClipTools(vals){
+      if (!vals.playerOpen){
+        if (clipToolsNode){ clipToolsNode.remove(); clipToolsNode = null; }
+        CLIPTOOLS.note = ''; CLIPTOOLS.busy = '';
+        return;
+      }
+      const clip = clipToolsClip();
+      const frame = document.querySelector('#studio [style*="aspect-ratio: 9 / 16"]');
+      const card = frame && frame.parentElement;
+      if (!clip || !card) return;
+      card.setAttribute('data-host-pp', 'card');
+      /* Re-stamped every paint, because the patcher rebuilds these nodes
+         whenever their markup changes. */
+      const kids = Array.prototype.filter.call(card.children, n => !n.hasAttribute('data-host-owned'));
+      if (kids[0]) kids[0].setAttribute('data-host-pp', 'head');
+      if (kids[1]) kids[1].setAttribute('data-host-pp', 'stage');
+      if (kids[2]) kids[2].setAttribute('data-host-pp', 'bar');
+
+      if (!clipToolsNode || !clipToolsNode.isConnected || clipToolsNode.parentElement !== card){
+        if (clipToolsNode) clipToolsNode.remove();
+        clipToolsNode = document.createElement('div');
+        clipToolsNode.id = 'dcClipTools';
+        clipToolsNode.setAttribute('data-host-owned', '');
+        clipToolsNode.setAttribute('data-host-pp', 'tools');
+        card.appendChild(clipToolsNode);
+      }
+
+      const busy = CLIPTOOLS.busy;
+      const spark = kind => '<button type="button" data-ct="ai-' + kind + '" class="dcct-spark"'
+        + ' title="Write a new ' + kind + ' with AI"' + (busy ? ' disabled' : '') + '>'
+        + '<i class="ph' + (busy === kind ? '' : '-fill') + ' '
+        + (busy === kind ? 'ph-circle-notch dcct-spin' : 'ph-sparkle') + '"></i></button>';
+
+      const sig = [clip.id, clip.title, clip.description, busy, CLIPTOOLS.target, CLIPTOOLS.note].join('|');
+      if (clipToolsNode.dataset.sig !== sig){
+        clipToolsNode.dataset.sig = sig;
+        clipToolsNode.innerHTML = ''
+          + '<div class="dcct-grp">'
+          +   '<label class="dcct-lab">Title' + spark('title') + '</label>'
+          +   '<input class="dcct-in" data-ct="title" value="' + esc(clip.title || '') + '" placeholder="Untitled clip">'
+          + '</div>'
+          + '<div class="dcct-grp dcct-grow">'
+          +   '<label class="dcct-lab">Description' + spark('description') + '</label>'
+          +   '<textarea class="dcct-in dcct-area" data-ct="description" rows="3" placeholder="No description yet">'
+          +     esc(clip.description || '') + '</textarea>'
+          + '</div>'
+          + '<div class="dcct-grp dcct-ask">'
+          +   '<label class="dcct-lab">Ask for a change</label>'
+          +   '<div class="dcct-seg">'
+          +     '<button type="button" data-ct="target-title" class="' + (CLIPTOOLS.target === 'title' ? 'on' : '') + '">Title</button>'
+          +     '<button type="button" data-ct="target-description" class="' + (CLIPTOOLS.target === 'description' ? 'on' : '') + '">Description</button>'
+          +   '</div>'
+          +   '<input class="dcct-in" data-ct="ask" value="' + esc(CLIPTOOLS.ask) + '" placeholder="'
+          +     (CLIPTOOLS.target === 'description' ? 'Make it shorter and warmer' : 'Make the title Arabic') + '">'
+          +   '<button type="button" data-ct="apply" class="dcct-btn dcct-primary"' + (busy ? ' disabled' : '') + '>'
+          +     (busy === 'ask' ? 'Writing...' : 'Rewrite') + '</button>'
+          + '</div>'
+          + (CLIPTOOLS.note ? '<p class="dcct-note">' + esc(CLIPTOOLS.note) + '</p>' : '')
+          + '<div class="dcct-grp dcct-row">'
+          +   '<button type="button" data-ct="editor" class="dcct-btn"><i class="ph ph-scissors"></i>Open the editor</button>'
+          +   '<button type="button" data-ct="download" class="dcct-btn"><i class="ph ph-download-simple"></i>Download</button>'
+          + '</div>'
+          + '<p class="dcct-foot">Titles and descriptions are metadata. Changing them never re-renders the clip.</p>';
+      }
+
+      /* Wired on EVERY paint rather than behind a dataset.wired guard: the
+         innerHTML above rebuilds these nodes, so a wired flag would leave the
+         new buttons dead -- the trap the promo-bar duration chips paid for. */
+      clipToolsNode.onclick = e => {
+        const btn = e.target.closest && e.target.closest('button[data-ct]');
+        if (!btn) return;
+        e.preventDefault(); e.stopPropagation();
+        const what = btn.getAttribute('data-ct');
+        const askField = clipToolsNode.querySelector('[data-ct="ask"]');
+        if (what === 'ai-title') return clipToolsAsk('title', '');
+        if (what === 'ai-description') return clipToolsAsk('description', '');
+        if (what === 'apply'){
+          const asked = String((askField && askField.value) || '').trim();
+          if (!asked) return toast('Say what you would like changed.', 'info');
+          CLIPTOOLS.ask = asked;
+          return clipToolsAsk(CLIPTOOLS.target, asked);
+        }
+        if (what === 'target-title' || what === 'target-description'){
+          CLIPTOOLS.ask = String((askField && askField.value) || CLIPTOOLS.ask);
+          CLIPTOOLS.target = what === 'target-title' ? 'title' : 'description';
+          return paintStudio();
+        }
+        if (what === 'editor'){
+          const id = clip.id;
+          StudioAdapter.ui.playerClip = null;
+          StudioAdapter.ui.screen = 'editor';
+          StudioAdapter.ui.edClipId = id;
+          StudioAdapter.ui.edStyleDraft = null; StudioAdapter.ui.edBlockDraft = null;
+          StudioAdapter.ui.edTrim = null; StudioAdapter.ui.edCutOuts = null;
+          StudioAdapter.ui.edCutMark = null; StudioAdapter.ui.edBlock = 0;
+          StudioAdapter.ui.edTime = 0; StudioAdapter.ui.edPlayhead = 0;
+          return paintStudio();
+        }
+        if (what === 'download') return downloadClip(clip.id);
+      };
+      /* A typed title saves on BLUR, never per keystroke: a PATCH per letter
+         is the "waited for the network to look pressed" fault from the other
+         side. Enter commits and leaves. Keys are stopped here so the review
+         deck's one-key verbs cannot fire while somebody is typing a title. */
+      clipToolsNode.onkeydown = e => {
+        e.stopPropagation();
+        if (e.key !== 'Enter') return;
+        if (e.target.matches('[data-ct="title"]')){ e.preventDefault(); e.target.blur(); return; }
+        if (e.target.matches('[data-ct="ask"]')){
+          e.preventDefault();
+          const asked = String(e.target.value || '').trim();
+          if (asked){ CLIPTOOLS.ask = asked; clipToolsAsk(CLIPTOOLS.target, asked); }
+        }
+      };
+      for (const field of clipToolsNode.querySelectorAll('[data-ct="title"],[data-ct="description"]')){
+        field.onblur = async () => {
+          const key = field.getAttribute('data-ct');
+          const value = String(field.value || '').trim();
+          if (value === String(clip[key] || '')) return;
+          try { await clipToolsWrite(clip.id, { [key]: value }); toast('Saved', 'good'); paintStudio(); }
+          catch (err){ toast(String((err && err.message) || err), 'error'); }
+        };
+      }
+    }
+
     function paintPlayerVideo(vals){
       if(!vals.playerOpen){
         if(playerVideoNode){playerVideoNode.pause();playerVideoNode.remove();playerVideoNode=null}
@@ -9186,6 +9447,8 @@ function paintStudio(){
   paintEditorMissing();
   paintEditorBetaNotice();
   paintPreviewPlayer(vals);
+  paintClipTools(vals);
+  paintClipStars();
   paintHighlight(vals);
   paintJobType(vals);
   paintJobBackground(vals);

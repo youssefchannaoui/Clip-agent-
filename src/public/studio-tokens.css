@@ -913,3 +913,197 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
  */
 #studio main > *,
 #studio main section { overflow-anchor: none; }
+
+/* ── the clip preview's configuration column (v3.121.0) ───────────────────
+ * Youssef sent a screenshot of the bare modal -- a title, the video and a
+ * scrub bar -- and asked for "a nice, like, floating new section that has
+ * configuration" on the right, and for the preview itself to look better.
+ *
+ * The card is NOT restructured. Its generated children keep their place and
+ * are given grid areas through `data-host-pp`, stamped by paintClipTools, so
+ * a design re-import cannot renumber this away and the patcher's pairing is
+ * left alone.
+ */
+/* `#studio` prefix, deliberately: the card's generated class `.sku` declares
+ * its own display and columns at the SAME specificity as a bare attribute
+ * selector, and the generated sheet is linked later -- so an unprefixed rule
+ * applied `display:grid` (which .sku does not set) and lost the columns
+ * (which it does), leaving one column and the panel stacked underneath.
+ * Measured before it was noticed: cols "731px". */
+#studio [data-host-pp="card"] {
+  display: grid;
+  /* max-content, not auto: an `auto` track absorbs the card's free width, so
+   * the 360px frame sat centred in a 484px column with 84px of dead space
+   * beside it. The frame carries a definite height and a 9/16 ratio, so its
+   * max-content width IS the picture. `width: max-content` on the card then
+   * hugs the two tracks instead of stretching to .sku's `width: 100%`. */
+  grid-template-columns: minmax(0, max-content) minmax(260px, 320px);
+  grid-template-areas: "head head" "stage tools" "bar tools";
+  align-items: start;
+  column-gap: 22px;
+  width: max-content;
+  max-width: min(94vw, 860px);
+}
+#studio [data-host-pp="head"]  { grid-area: head; }
+#studio [data-host-pp="stage"] { grid-area: stage; }
+#studio [data-host-pp="bar"]   { grid-area: bar; }
+#studio [data-host-pp="tools"] { grid-area: tools; align-self: stretch; }
+
+/* The picture reads as the thing being judged: a real edge and a shadow
+ * rather than a flat rectangle sitting on the card. */
+#studio [data-host-pp="stage"] {
+  border: 1px solid var(--dc-line, #26262A);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, .5);
+}
+
+#dcClipTools {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 2px 0 0;
+}
+.dcct-grp { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dcct-row { flex-direction: row; gap: 8px; }
+/* The column stands beside a 640px-tall frame and its controls come to ~450,
+ * so ~200px was dead. Anchoring the last row to the foot only moved the void
+ * into the MIDDLE, which reads as something missing. The room goes to the
+ * field that can use it instead: the description IS the posted caption and
+ * runs to 2200 characters, so a taller box is the feature, not filler. */
+.dcct-grow { flex: 1; min-height: 0; }
+.dcct-grow .dcct-area { flex: 1; }
+.dcct-row .dcct-btn { flex: 1; }
+
+.dcct-lab {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  /* Whole-pixel leading: 11px at 1.45 is 15.95 and the fractions accumulate
+   * down a column until a row lands on a half pixel. */
+  font: 600 10.5px/16px Outfit, Inter, system-ui, sans-serif;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--dc-ink-dim, #8B8B93);
+}
+
+/* The sparkle is DeenAI's own mark, which is what Youssef asked for
+ * ("you know how the DeenAI star looks like? Just like that"). It is the one
+ * gold thing in the column, because it is the one thing that writes for you. */
+.dcct-spark {
+  display: grid; place-items: center;
+  width: 24px; height: 24px; flex: none;
+  border: 1px solid rgba(217, 180, 120, .34); border-radius: 7px;
+  background: rgba(217, 180, 120, .08);
+  color: var(--dc-gold-lit, #F0D6A6);
+  font-size: 12px; cursor: pointer;
+  transition: background .14s ease, border-color .14s ease, transform .14s ease;
+}
+.dcct-spark:hover:not(:disabled) { background: rgba(217, 180, 120, .18); border-color: rgba(217, 180, 120, .55); }
+.dcct-spark:active:not(:disabled) { transform: scale(.94); }
+.dcct-spark:disabled { opacity: .5; cursor: default; }
+.dcct-spin { animation: dcSpin 1.1s linear infinite; }
+
+.dcct-in {
+  width: 100%; box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--dc-line, #26262A); border-radius: 9px;
+  background: var(--dc-bg-alt, #121214);
+  color: var(--dc-ink, #E9E9ED);
+  font: 500 12.5px/1.5 Outfit, Inter, system-ui, sans-serif;
+  transition: border-color .14s ease;
+}
+.dcct-in:focus { outline: none; border-color: rgba(217, 180, 120, .5); }
+.dcct-area { resize: vertical; min-height: 62px; }
+
+/* A hairline, not a box. A card inside the card inset its own children by
+ * 13px and broke the one left edge every label and field shares -- measured
+ * lefts 751 / 764 before, one value after. The Owner screen made the same
+ * call: divide with a rule, spend a border only where it means "object". */
+.dcct-ask { padding-top: 13px; border-top: 1px solid var(--dc-line-soft, #1E1E22); }
+.dcct-seg { display: flex; gap: 6px; }
+.dcct-seg button {
+  flex: 1; padding: 6px 8px;
+  border: 1px solid var(--dc-line, #26262A); border-radius: 7px;
+  background: transparent; color: var(--dc-ink-dim, #8B8B93);
+  font: 600 11px/16px Outfit, Inter, system-ui, sans-serif; cursor: pointer;
+  transition: color .14s ease, border-color .14s ease, background .14s ease;
+}
+.dcct-seg button.on {
+  border-color: rgba(217, 180, 120, .45);
+  background: rgba(217, 180, 120, .1);
+  color: var(--dc-gold-lit, #F0D6A6);
+}
+
+.dcct-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 9px 12px;
+  border: 1px solid var(--dc-line, #26262A); border-radius: 9px;
+  background: transparent; color: var(--dc-ink, #E9E9ED);
+  font: 600 12px/16px Outfit, Inter, system-ui, sans-serif; cursor: pointer;
+  transition: border-color .14s ease, background .14s ease;
+}
+.dcct-btn:hover:not(:disabled) { border-color: var(--dc-line-hover, #34343A); background: var(--dc-bg-alt, #121214); }
+.dcct-btn:disabled { opacity: .55; cursor: default; }
+.dcct-primary {
+  border-color: rgba(217, 180, 120, .45);
+  background: rgba(217, 180, 120, .12);
+  color: var(--dc-gold-lit, #F0D6A6);
+}
+.dcct-primary:hover:not(:disabled) { background: rgba(217, 180, 120, .2); border-color: rgba(217, 180, 120, .6); }
+
+.dcct-note {
+  margin: 0; padding: 8px 10px;
+  border-left: 2px solid rgba(217, 180, 120, .4); border-radius: 0 7px 7px 0;
+  background: rgba(217, 180, 120, .06);
+  font: 500 11.5px/17px Outfit, Inter, system-ui, sans-serif;
+  color: var(--dc-ink-dim, #8B8B93);
+}
+/* Dim, not faint. This sentence carries the promise the whole panel rests on
+ * -- that a new title costs no render -- and `--dc-ink-faint` measured 2.92:1
+ * on paper, under AA. Dim reads 4.89 light / 5.62 dark. */
+.dcct-foot {
+  margin: 0; font: 500 11px/16px Outfit, Inter, system-ui, sans-serif;
+  color: var(--dc-ink-dim, #8B8B93);
+}
+
+/* Below the two-column seam the panel goes UNDER the video rather than
+ * beside it, and the card scrolls -- a 9:16 frame plus a column of controls
+ * cannot both fit a phone, and clipping the controls is worse than scrolling
+ * to them. The phone's own shell has its own review sheet; this is the
+ * narrow-desktop and tablet case. */
+@media (max-width: 900px) {
+  #studio [data-host-pp="card"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "head" "stage" "bar" "tools";
+    max-height: 90vh; overflow: auto; row-gap: 14px;
+  }
+  #studio [data-host-pp="tools"] { align-self: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dcct-spark, .dcct-in, .dcct-btn, .dcct-seg button { transition: none; }
+  /* The spinner is deliberately left running: a frozen one reads as a hang,
+   * and status motion is essential motion. */
+}
+
+/* The AI star on a clip card. Hidden until the card is under the pointer, so
+ * a grid of clips is not a grid of buttons -- with :focus-visible for the
+ * keyboard and a permanent state where there is no hover at all, because a
+ * control reachable only by hovering is no control on a touch screen. */
+#studio article[data-clip] > [data-dc-star] {
+  position: absolute; top: 8px; right: 8px; z-index: 3;
+  display: grid; place-items: center;
+  width: 26px; height: 26px;
+  border: 1px solid rgba(217, 180, 120, .4); border-radius: 8px;
+  background: rgba(14, 14, 17, .82);
+  color: var(--dc-gold-lit, #F0D6A6);
+  font-size: 12px; cursor: pointer;
+  opacity: 0; transition: opacity .14s ease, background .14s ease, transform .14s ease;
+}
+#studio article[data-clip]:hover > [data-dc-star],
+#studio article[data-clip] > [data-dc-star]:focus-visible,
+#studio article[data-clip] > [data-dc-star][aria-busy="true"] { opacity: 1; }
+#studio article[data-clip] > [data-dc-star]:hover { background: rgba(217, 180, 120, .2); transform: scale(1.06); }
+@media (hover: none) {
+  #studio article[data-clip] > [data-dc-star] { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #studio article[data-clip] > [data-dc-star] { transition: none; }
+}

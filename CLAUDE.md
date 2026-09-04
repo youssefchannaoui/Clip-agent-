@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1368 JS + 633 Python**
+- `npm test` and `npm run check` must pass. Currently **1378 JS + 633 Python**
   (8 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -5161,6 +5161,105 @@ does its own `await readBody(req)`), and the worker's base URL is
 `WORKER_BASE_URL`, not `WORKER_URL` -- the test refused with "this deployment
 does not have the clip AI configured" until that was right, which reads exactly
 like the guard working.
+
+## The clip preview grew a configuration column (v3.121.0, 4 Sept 2026)
+
+Youssef sent a screenshot of the bare modal -- a title, a 9:16 video and a
+scrub bar -- and said: "it should give you buttons on, let's say, on the right
+side ... a nice, like, floating new section that has configuration. So you can
+use the editor. You can click editor. You can use AI titles ... AI, the
+description ... And then it should give you a text box where you can tell the
+AI ... make the title Arabic, and it makes the title Arabic, or improve the
+title ... no rerendering needs to be done with titlings, of course."
+
+- **The card is never restructured.** Its generated children keep their place
+  and are given grid areas through `data-host-pp`, stamped every paint --
+  moving a generated node into a wrapper of mine is what would confuse the
+  patcher's pairing. `data-host-*` is the one attribute family the patcher
+  never strips, so this costs no design re-import and a re-import cannot
+  renumber it away. The mount is found by the export's own inline
+  `aspect-ratio: 9 / 16`, never by a hashed class.
+- **Everything the column writes is METADATA, so nothing re-renders.** Proven
+  by driving it rather than by reading: after a title save the server's clip
+  carries the new title with `stylePending` null and `renderVersion` unmoved.
+  That is Youssef's own condition, and the test asserts the save path is a
+  PATCH that mentions no render at all.
+- **A typed title saves on BLUR, never per keystroke** -- a PATCH per letter is
+  the "waited for the network to look pressed" fault from the other side. Keys
+  are stopped inside the panel so the review deck's one-key verbs (A approve,
+  X reject) cannot fire while somebody types a title.
+- **With no worker the AI refuses in 716ms with a sentence** and re-enables the
+  button, rather than hanging -- measured on this dev server, which has none.
+- **The AI star on the cards is a shortcut, not a second control.** Injected on
+  the article the design already tags with `data-clip` (added for the
+  waveform), on the queue, the library and a lecture's detail screen and
+  nowhere else. It is a `role="button"` span because a nested `<button>` is
+  invalid and swallows the card's own click, and it stops `pointerdown` as well
+  as `click` -- the card starts its gestures on pointerdown, so stopping click
+  alone still selects the clip underneath. Verified: pressing it does not open
+  the preview behind it.
+
+### The measurement was wrong for an hour, and the layout was right all along
+
+**`--window-size` is ignored by headless Chrome when the profile is reused.**
+The harness asked for 1440x950 and the page laid out at **innerWidth 780** --
+under the panel's own 900px seam AND under studio-responsive.css's 820px phone
+seam. So the diagnostic reported one column, `max-width: none` and a stacked
+panel, and every explanation for it was wrong: the CSS was correct, the
+viewport was not. `Emulation.setDeviceMetricsOverride` is the fix. Anything
+measured in an agent browser should print `innerWidth` beside the result.
+
+**The same reused profile kept the THEME**, so a run asking for dark got the
+light one: the harness only ever ADDED `dc-light` and never removed it. A
+capture that says "dark" in its filename is not evidence it was dark -- read
+the body class back.
+
+### Three composition faults, each found by looking rather than by reasoning
+
+1. **An `auto` grid track absorbs the card's free width.** The 360px frame sat
+   centred in a 484px column with 84px of dead space beside it. `minmax(0,
+   max-content)` plus `width: max-content` on the card hugs the picture: cols
+   `360px 320px`, gap exactly 22.
+2. **Anchoring the last row to the foot moved the void into the MIDDLE**, which
+   reads as something missing rather than as a column that ended. The room goes
+   to the field that can use it instead -- the description IS the posted
+   caption and runs to 2200 characters, so `flex: 1` on it is the feature, not
+   filler.
+3. **A card inside the card broke the one left edge.** The "Ask for a change"
+   box inset its own children by 13px; measured lefts 751 / 764 before, one
+   value after. It is a hairline now -- the Owner screen's own call.
+
+Measured at 1440x950 after: gap 22, the scrub bar exactly the video's width,
+both sparkles 0px off the centre of their label TEXT, the column bottom flush
+with the bar, one left edge, 0 elements overflowing and 0 page scroll -- at
+1280, 1100 and 940 too, stacked-and-scrolling at 860, 390 and 375.
+
+**`--dc-ink-faint` measured 2.92:1 on paper**, under AA, and it was carrying
+the sentence the whole panel rests on ("Changing them never re-renders the
+clip"). Dim reads 4.89 light / 5.62 dark. The gold-on-tint buttons sit at
+4.35-4.46 in daylight, which is exactly where the task ladder's gold already
+lives -- left alone rather than making this one panel differ.
+
+**Run `scripts/build-light-theme.mjs` after adding rules to a hand-written
+studio sheet.** It re-emits every rule that sets a colour under `body.dc-light`
+and it is NOT run by anything automatic. Doing so here also produced the
+daylight twin for two v3.119.0 rules that had shipped without one.
+
+### Two red probes came back GREEN, and both assertions read fine
+
+- The un-tokenised-colour probe passed because the filter excluded any hex
+  appearing as a `var()` fallback ANYWHERE in the block, so a bare `#E9E9ED`
+  was excused by an unrelated fallback three rules down. Strip each var()'s own
+  fallback instead.
+- The unmount probe passed because `clipToolsNode.remove()` also appears in the
+  RE-MOUNT path, and the slice meant to isolate the closed branch searched for
+  `return;` at a guessed indentation -- `indexOf` returned -1, `slice(at, -1)`
+  handed back the whole function. Brace-match the branch.
+
+Ten probes, all red now. **The CSP inline-script hash is computed at server
+start, so the preview server must be restarted after every index.html edit** --
+the app renders its shell and never boots otherwise, with no console error.
+Fourth time this file has recorded it.
 
 ## Open items
 
