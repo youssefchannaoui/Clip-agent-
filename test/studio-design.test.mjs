@@ -5,6 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import * as billing from '../src/billing.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -3845,54 +3846,68 @@ test('the mobile rules never widen a column container into a second column', () 
 });
 
 test('the DeenAI screen never sells a plan that would not unlock it', () => {
-  // The two halves of DeenAI sit behind different gates -- insights are
-  // `deenai` (Pro), asking is `deenaiAsk` (Studio) -- and ONE binding served
-  // both call-to-action buttons, so the Ask box told a free account to buy Pro
-  // for the one half Pro does not include. A billing button naming the wrong
-  // plan is the worst copy fault this product can ship: the customer pays and
-  // the thing they paid for is still locked.
+  // A billing button naming the wrong plan is the worst copy fault this product
+  // can ship: the customer pays and the thing they paid for is still locked.
+  // v3.72.10 shipped exactly that, because the plan name was a LITERAL beside a
+  // gate that had moved under it.
   //
-  // Youssef, 1 Sept 2026: "it should be unlock with studio."
+  // So the button no longer names a plan at all -- it names whatever
+  // `current.locked` says would unlock DeenAI, and the server builds that from
+  // the same FEATURES table the gates read. This test asserts the button
+  // against the TABLE rather than against a word, so it stays true through the
+  // next tier change instead of failing and being edited to match.
+  //
+  // Youssef, 4 Sept 2026: "DeenAI should be for pro users and up, not to
+  // studio." Both halves sit at one tier now.
+  const tierName = { pro: 'Pro', studio: 'Studio' };
+  const wants = tierName[billing.FEATURES.deenai.tier];
+  const asks = tierName[billing.FEATURES.deenaiAsk.tier];
+  assert.equal(wants, asks, 'the two halves of DeenAI must sit at one tier, or a button must choose');
+
   const deenai = (features) => {
     Object.assign(StudioAdapter.ui, { screen: 'deenai', bellOpen: false, menuOpen: false, railOpen: true });
     const vals = StudioAdapter.bindings({
       ...SAMPLE_STATE,
-      billing: { current: { plan: 'free', remaining: 0, unlimited: false, features } },
+      billing: { current: {
+        plan: 'free', remaining: 0, unlimited: false, features,
+        // What the real server sends: every locked feature with the tier that
+        // would unlock it, straight from FEATURES.
+        locked: Object.fromEntries(Object.entries(billing.FEATURES)
+          .filter(([key]) => !features[key])
+          .map(([key, f]) => [key, { label: f.label, tier: f.tier, tierName: tierName[f.tier] }])),
+      } },
     });
     return { ...render(STUDIO_TEMPLATE, vals), vals };
   };
 
-  // A free account sees both gates. Neither may name Pro as the way through.
+  // A free account sees both gates, and every way through names the tier that
+  // actually opens them.
   const basic = deenai({});
   assert.equal(basic.vals.aiLocked, true, 'the demo banner is up');
   assert.equal(basic.vals.aiAskGate, true, 'the ask is gated');
-  assert.equal(basic.vals.aiGateCta, 'Unlock with Studio');
-  assert.ok(!/Unlock with Pro/.test(basic.html), 'no button offers Pro as the way in');
-  // The banner sentence used to promise that Pro "answers your questions",
-  // which is exactly what Pro does not do.
-  assert.ok(!/On Pro, DeenAI[^.]*answers your questions/.test(basic.html));
-  // Pro is still mentioned -- it genuinely turns the figures real -- just not
-  // on a button. Saying nothing about it would oversell Studio.
-  assert.match(basic.vals.aiDemoNote, /Pro turns the figures real/);
-  assert.match(basic.html, /Pro turns the figures/, 'and it reaches the screen');
+  assert.equal(basic.vals.aiGateCta, `Unlock with ${wants}`);
+  assert.equal(basic.vals.aiPlanName, wants, 'the panel and the screen read one name');
+  for (const wrong of Object.values(tierName).filter(t => t !== wants)) {
+    assert.ok(!new RegExp(`Unlock with ${wrong}|Upgrade to ${wrong}`).test(basic.html),
+      `no control offers ${wrong}, which would not unlock this screen`);
+  }
+  // And no sentence may promise something the named plan does not include.
+  assert.ok(!/answers your questions/.test(basic.html) || basic.vals.aiDemoNote.includes(wants),
+    'a promise about answering must name the plan that answers');
 
-  // A Pro account has real insights and is pointed at Studio for the asking.
-  const pro = deenai({ deenai: true });
-  assert.equal(pro.vals.aiLocked, false, 'no demo banner once the figures are real');
-  assert.equal(pro.vals.aiAskGate, true, 'asking is still shut');
-  assert.equal(pro.vals.aiGateCta, 'Upgrade to Studio');
-
-  // Studio has both, so no gate is drawn at all.
-  const studio = deenai({ deenai: true, deenaiAsk: true });
-  assert.equal(studio.vals.aiLocked, false);
-  assert.equal(studio.vals.aiAskGate, false);
-  assert.ok(!/Unlock with|Upgrade to Studio/.test(studio.html), 'nothing is sold to someone who already bought it');
+  // The tier that buys it has the whole screen: nothing is sold to them.
+  const paid = deenai({ deenai: true, deenaiAsk: true });
+  assert.equal(paid.vals.aiLocked, false);
+  assert.equal(paid.vals.aiAskGate, false);
+  assert.ok(!/Unlock with|Upgrade to/.test(paid.html), 'nothing is sold to someone who already bought it');
 
   // The banner's button was a LITERAL in the design export, which is how it
   // drifted from the binding beside it. It is a text override now
   // (design/text-overrides.json), so the plan name has one source.
   const tpl = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
-  assert.ok(!tpl.includes('Unlock with Pro'), 'no hardcoded plan name survives in the export');
+  for (const t of Object.values(tierName)) {
+    assert.ok(!tpl.includes(`Unlock with ${t}`), 'no hardcoded plan name survives in the export');
+  }
 });
 
 test('switching screens does not animate', () => {

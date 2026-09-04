@@ -972,7 +972,35 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
  * runs to 2200 characters, so a taller box is the feature, not filler. */
 .dcct-grow { flex: 1; min-height: 0; }
 .dcct-grow .dcct-area { flex: 1; }
-.dcct-row .dcct-btn { flex: 1; }
+.dcct-row /* The DeenAI mark on the section that IS DeenAI. Gold, because it is the one
+ * thing on this panel that writes for you -- the same reasoning as the sparkle. */
+.dcct-ai { display: inline-flex; align-items: center; gap: 6px; color: var(--dc-gold-lit, #F0D6A6); }
+.dcct-ai i { font-size: 12px; }
+
+/* The named shapes. They wrap, because four chips do not fit a 320px column on
+ * one line and a row that scrolls sideways inside a panel is worse than one
+ * that wraps. */
+.dcct-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dcct-chip {
+  padding: 5px 9px;
+  border: 1px solid var(--dc-line, #26262A); border-radius: 999px;
+  background: transparent; color: var(--dc-ink-dim, #8B8B93);
+  font: 600 11px/16px Outfit, Inter, system-ui, sans-serif; cursor: pointer;
+  transition: color .14s ease, border-color .14s ease, background .14s ease;
+}
+.dcct-chip:hover:not(:disabled) {
+  border-color: rgba(217, 180, 120, .45);
+  background: rgba(217, 180, 120, .1);
+  color: var(--dc-gold-lit, #F0D6A6);
+}
+.dcct-chip:disabled { opacity: .5; cursor: default; }
+
+.dcct-lock {
+  margin: 0; font: 500 11.5px/17px Outfit, Inter, system-ui, sans-serif;
+  color: var(--dc-ink-dim, #8B8B93);
+}
+
+.dcct-btn { flex: 1; }
 
 .dcct-lab {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;

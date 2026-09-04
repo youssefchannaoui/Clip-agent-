@@ -168,3 +168,41 @@ test('the panel unmounts with the preview', () => {
   })();
   assert.match(branch, /clipToolsNode\.remove\(\)/, 'the closed branch leaves the panel mounted');
 });
+
+test('the panel and the star answer to ONE gate, and it is not typed here', () => {
+  // DeenAI is one feature at one tier (v3.122.0). The panel must not carry its
+  // own idea of which plan that is -- v3.72.10 shipped a button naming the
+  // wrong plan exactly because the name was a literal beside a gate that moved.
+  const tools = fn('paintClipTools');
+  const stars = fn('paintClipStars');
+  assert.match(tools, /vals\.aiLocked/, 'the panel reads the gate binding');
+  assert.match(tools, /vals\.aiPlanName/, 'and the plan name comes with it');
+  assert.match(stars, /vals && vals\.aiLocked/,
+    'the star calls the same route, so it must answer to the same gate');
+  // No tier name may be written into the panel by hand.
+  for (const tier of ['Pro', 'Studio', 'Basic']) {
+    assert.ok(!new RegExp(`Unlock with ${tier}'|Unlock with ${tier}"`).test(tools),
+      `the panel hardcodes ${tier}`);
+  }
+});
+
+test('the shapes differ by target, and a description never offers a question', () => {
+  // A description is a caption: hashtags belong in it and a question does not.
+  const body = fn('paintClipTools');
+  const shapes = body.slice(body.indexOf('const shapes ='), body.indexOf('const spark ='));
+  assert.match(shapes, /CLIPTOOLS\.target === 'description'/, 'the row changes with the target');
+  const [forDesc, forTitle] = shapes.split('    : [');
+  assert.match(forDesc, /hashtags/, 'a description can ask for hashtags');
+  assert.ok(!/question/.test(forDesc), 'a description is not phrased as a question');
+  assert.match(forTitle, /question/, 'a title can be');
+  assert.ok(!/hashtags/.test(forTitle), 'a title never carries hashtags');
+});
+
+test('a shape is sent as `style`, never as the typed instruction', () => {
+  // The whole reason the two are separate: a style must not override the
+  // recitation reference, and typed text must.
+  const body = fn('paintClipTools');
+  assert.match(body, /what\.indexOf\('style-'\) === 0/, 'the chips are handled');
+  assert.match(body, /clipToolsAsk\(CLIPTOOLS\.target, '', what\.slice\(6\)\)/,
+    'the shape goes in the style slot with an EMPTY instruction');
+});

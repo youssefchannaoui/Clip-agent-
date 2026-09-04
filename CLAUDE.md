@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1378 JS + 633 Python**
+- `npm test` and `npm run check` must pass. Currently **1384 JS + 638 Python**
   (8 Python skipped). These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -5260,6 +5260,94 @@ Ten probes, all red now. **The CSP inline-script hash is computed at server
 start, so the preview server must be restarted after every index.html edit** --
 the app renders its shell and never boots otherwise, with no console error.
 Fourth time this file has recorded it.
+
+## DeenAI is one feature at one tier, and it writes your titles (v3.122.0, 4 Sept 2026)
+
+Youssef: "integrate DeenAI to everything. And DeenAI should be for pro users
+and up, not to studio ... do AI changes and etcetera, like with the titling
+and all that and the description as well."
+
+### The clip AI had NO gate at all
+
+`POST /api/clips/:id/retitle` shipped in v3.120.0 with no plan check on it, so
+every free account could spend the box's Ollama -- a paid feature given away,
+and an unmetered queue on a single-slot worker. It is `deenai.deenaiAccess`
+now, the same gate the insights use, and the star that calls it stands down
+for an account that may not press it (invariant 9: a control that always
+refuses is worse than no control).
+
+### One tier, so a button cannot sell the wrong plan again
+
+`deenaiAsk` moved from **studio to pro**. The two halves of DeenAI sitting at
+two tiers is exactly what let v3.72.10 ship a button telling a free account to
+buy Pro for the one half Pro did not include -- the worst copy fault this
+product can have.
+
+**The fix is not a corrected word, it is a derived one.** `aiGateCta` reads
+`current.locked[...].tierName`, which the server builds from the same FEATURES
+table the gates themselves read, so the button and the gate cannot disagree
+whatever the table says next. `test/studio-design.test.mjs` asserts the button
+against `billing.FEATURES` rather than against the string "Pro", so it stays
+true through the next tier change instead of failing and being edited to match
+-- which is what a test pinning a word does.
+
+`aiPlanName` is a binding, so the preview panel and the DeenAI screen read ONE
+name rather than two that can drift.
+
+### The shapes are the automatic titler's own
+
+Researched first, as asked. OpusClip regenerates a title "in various styles
+including interesting, catchy, serious, and question formats", and writes
+titles, descriptions and hashtags per platform. What was taken and what was
+not:
+
+- **Named shapes: taken**, but the four are `clip_worker`'s OWN ("Four shapes
+  that work" in its prompt), so a chip in the studio and a title written during
+  a render mean the same thing rather than two vocabularies drifting apart.
+  Title: Promise / Question / Subject: payoff / Shorter. Description: Shorter /
+  Warmer / + Hashtags.
+- **The counted list is deliberately NOT offered.** It is only right when the
+  clip genuinely enumerates, and a chip that quietly does something else on
+  most clips is worse than no chip. A test pins its absence.
+- **Hashtags: taken, as part of the description** rather than a field of their
+  own -- they belong in the caption on every platform this app posts to, and a
+  new field would mean a data-model change for nothing. The rule carries the
+  same register ban the titler has: nothing about scrolling, going viral or
+  the algorithm.
+- **Per-platform titles: NOT taken.** A clip has one title and one description
+  that go to every destination; making them per-platform is a real data-model
+  change, and the value is available without it by asking in the free-text box.
+  B-roll, stock footage and a virality score were also declined -- this product
+  already scores clips and explains itself, which is better than a number.
+
+### `style` and `instruction` are separate, and that is load-bearing
+
+A shape travels as `style`; only text a customer TYPED travels as
+`instruction`. The recitation override is `if kind == "title" and rows and not
+instruction` -- deliberately not `and not style` -- so **a shape chip on a
+recitation still returns the verse reference.** A verse reference is the right
+title for a recitation whatever shape is asked for, and pushing scripture
+through a 1.7B model to make it punchy is the one thing this product must
+never do. "Make the title Arabic" typed by hand is the customer choosing, and
+still overrides. Both halves have a test, and the probe that adds `and not
+style` goes red.
+
+### Verified
+
+Driven in a browser at 1440x950 in both themes: the chips render and press,
+the request goes out as `{kind:'title', instruction:'', style:'question'}`, the
+description target swaps to its own three, the star returns for Pro and is
+absent for Basic, the lock reads "It is on Pro" with an Unlock button that
+lands on Tokens, and the title and description stay hand-editable for a free
+account -- the gate is on ASKING DeenAI, not on naming your own clip. 0
+overflowing, 0 page scroll.
+
+**All nine probes proven red**, including the two that matter most: the gate
+removed from the route, and a shape overriding the recitation reference.
+
+**Worker change, so `deploy-worker.yml` deploys it on push.** The shapes reach
+the model only from the box; nothing here has been seen against the real
+Ollama yet.
 
 ## Open items
 

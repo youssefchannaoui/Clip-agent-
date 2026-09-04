@@ -2859,6 +2859,20 @@ async function route(req, res, url) {
       const asked = await readBody(req);
       const kind = String(asked?.kind || 'title').toLowerCase() === 'description' ? 'description' : 'title';
       const instruction = String(asked?.instruction || '').trim().slice(0, 300);
+      // A named shape from the automatic titler's own four, never free text --
+      // see CLIP_STYLES in the worker. It travels apart from `instruction`
+      // because a style must NOT override the recitation reference: a verse
+      // reference is the right title for a recitation whatever shape is asked
+      // for, and pushing scripture through a 1.7B model to make it punchy is
+      // the one thing this product must never do.
+      const style = String(asked?.style || '').trim().slice(0, 40);
+      // DeenAI is one feature behind one tier, and this is the half that spends
+      // the box's Ollama. It shipped in v3.120.0 with NO gate at all -- every
+      // free account could ask -- which is both a paid feature given away and
+      // an unmetered queue on a single-slot worker.
+      if (!deenai.deenaiAccess(currentUser)) {
+        return json(res, 403, { error: 'Writing titles with DeenAI is on Pro and Studio.', upgrade: true });
+      }
       if (config.processingMode !== 'remote' || !workerClient.configured()) {
         return json(res, 503, { error: 'Rewriting a title needs the clip AI, which this deployment does not have configured.' });
       }
@@ -2866,6 +2880,7 @@ async function route(req, res, url) {
       const result = await workerClient.retitle({
         kind,
         instruction,
+        style,
         title: kind === 'description' ? String(clip.description || '') : String(clip.title || ''),
         text: String(clip.transcript || '').slice(0, 4000),
         lectureTitle: String(project?.title || ''),

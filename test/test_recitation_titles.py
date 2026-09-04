@@ -119,3 +119,70 @@ class RecitationTitleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClipStyleTests(unittest.TestCase):
+    """The named shapes a customer can press in the clip preview.
+
+    Youssef, 4 Sept 2026: "integrate DeenAI to everything ... do AI changes and
+    etcetera, like with the titling and all that and the description as well."
+    Researched against what the other clippers offer -- OpusClip regenerates a
+    title "in various styles including interesting, catchy, serious, and
+    question formats" -- but the shapes here are the ones clip_worker's OWN
+    prompt already names, so a chip in the studio and a title written during a
+    render mean the same thing rather than two vocabularies drifting apart.
+    """
+
+    def setUp(self):
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "worker"))
+        import service
+        self.service = service
+
+    def test_the_shapes_are_the_automatic_titler_s_own(self):
+        # If clip_worker stops naming a shape, the chip offering it is selling
+        # something the model is no longer told how to write.
+        worker = (pathlib.Path(__file__).resolve().parent.parent
+                  / "worker" / "clip_worker.py").read_text(encoding="utf-8")
+        self.assertIn("The plain promise", worker)
+        self.assertIn("The question the clip answers", worker)
+        self.assertIn("Subject, colon, payoff", worker)
+        for key in ("promise", "question", "subject"):
+            self.assertIn(key, self.service.CLIP_STYLES)
+
+    def test_the_counted_list_is_deliberately_not_offered(self):
+        # It is only right when the clip genuinely enumerates. A chip that
+        # quietly does something else on most clips is worse than no chip.
+        self.assertNotIn("counted", self.service.CLIP_STYLES)
+
+    def test_a_shape_never_overrides_the_recitation_reference(self):
+        """THE LOAD-BEARING ONE.
+
+        A verse reference is the right title for a recitation whatever shape is
+        asked for, and pushing scripture through a 1.7B model to make it punchy
+        is the one thing this product must never do. So a style must NOT count
+        as "the customer asked for something specific" -- only typed text does.
+        """
+        rows = [{"surah": 112, "surahName": "Al-Ikhlas", "ayah": 1,
+                 "arabic": "قُلْ هُوَ ٱللَّهُ أَحَدٌ", "translation": "Say, He is Allah, who is One"}]
+        # No OLLAMA_URL is set here, so reaching the model raises. Coming back
+        # with a reference proves it never tried.
+        out = self.service.retitle_clip({"kind": "title", "ayahs": rows, "style": "question",
+                                         "text": "قل هو الله أحد"})
+        self.assertEqual(out["source"], "reference")
+        self.assertIn("Al-Ikhlas", out["title"])
+
+    def test_typed_text_still_overrides_it(self):
+        # "make the title Arabic" is the customer choosing, and that is the one
+        # thing that may take a recitation to the model.
+        rows = [{"surah": 112, "surahName": "Al-Ikhlas", "ayah": 1,
+                 "arabic": "قُلْ هُوَ ٱللَّهُ أَحَدٌ", "translation": "Say, He is Allah, who is One"}]
+        with self.assertRaises(RuntimeError):
+            self.service.retitle_clip({"kind": "title", "ayahs": rows,
+                                       "instruction": "make it Arabic", "text": "قل هو الله أحد"})
+
+    def test_hashtags_are_for_descriptions_and_say_where_they_come_from(self):
+        rule = self.service.CLIP_STYLES["hashtags"]
+        self.assertIn("what this clip", rule)
+        # The register this content must not borrow -- the same rule the titler
+        # already carries.
+        self.assertIn("viral", rule)

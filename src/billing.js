@@ -565,7 +565,12 @@ export const FEATURES = Object.freeze({
   watermark: Object.freeze({ tier: 'pro', label: 'Remove the DeenClipped watermark' }),
   templates: Object.freeze({ tier: 'pro', label: 'Every template in the catalogue, not only the default style' }),
   deenai: Object.freeze({ tier: 'pro', label: 'DeenAI insights — growth advice counted from your own clips' }),
-  deenaiAsk: Object.freeze({ tier: 'studio', label: 'Ask DeenAI anything, answered on our own server' }),
+  // PRO, not Studio, since 4 Sept 2026. Youssef: "DeenAI should be for pro
+  // users and up, not to studio." So the whole assistant sits behind one tier
+  // -- the insights, the asking, and the clip AI that writes titles and
+  // descriptions. Two gates at two tiers is what let a button sell the wrong
+  // plan in v3.72.10; one tier cannot.
+  deenaiAsk: Object.freeze({ tier: 'pro', label: 'Ask DeenAI anything, answered on our own server' }),
   // NOT auto-approve: automation with a minimum score has always been free for
   // every account (`automationSettings`, up to 20 clips a lecture), and putting
   // a fence around a feature people already have takes something away rather

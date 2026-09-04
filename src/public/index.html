@@ -3995,7 +3995,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        children stay exactly where they are and are given grid areas through
        a data attribute; moving a generated node into a wrapper of mine is
        what would confuse the patcher's pairing. */
-    const CLIPTOOLS = { ask: '', target: 'title', busy: '', note: '' };
+    const CLIPTOOLS = { ask: '', target: 'title', busy: '', note: '', locked: false };
     let clipToolsNode = null;
 
     function clipToolsClip(){
@@ -4014,15 +4014,15 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       return r;
     }
 
-    async function clipToolsAsk(kind, instruction){
+    async function clipToolsAsk(kind, instruction, style){
       const clip = clipToolsClip();
       if (!clip || CLIPTOOLS.busy) return;
-      CLIPTOOLS.busy = instruction ? 'ask' : kind;
+      CLIPTOOLS.busy = style ? ('style-' + style) : (instruction ? 'ask' : kind);
       CLIPTOOLS.note = '';
       paintStudio();
       try {
         const r = await api('/api/clips/' + encodeURIComponent(clip.id) + '/retitle', {
-          method: 'POST', body: JSON.stringify({ kind: kind, instruction: instruction || '' }),
+          method: 'POST', body: JSON.stringify({ kind: kind, instruction: instruction || '', style: style || '' }),
         });
         if (!r || r.error) throw new Error((r && r.error) || 'The clip AI did not answer.');
         const field = kind === 'description' ? 'description' : 'title';
@@ -4057,9 +4057,13 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        re-import and a re-import cannot renumber it away. */
     const CLIPSTAR = { busy: '' };
 
-    function paintClipStars(){
+    function paintClipStars(vals){
       const screen = StudioAdapter.ui.screen;
-      const wanted = screen === 'queue' || screen === 'library' || screen === 'detail';
+      /* The star calls the same route the panel does, so it answers to the same
+         gate. Drawing it for an account that cannot use it would be a control
+         that always refuses -- invariant 9 by another door. */
+      const allowed = !(vals && vals.aiLocked);
+      const wanted = allowed && (screen === 'queue' || screen === 'library' || screen === 'detail');
       for (const card of document.querySelectorAll('#studio article[data-clip]')){
         const id = card.getAttribute('data-clip');
         let star = card.querySelector(':scope > [data-dc-star]');
@@ -4142,12 +4146,28 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
 
       const busy = CLIPTOOLS.busy;
+      /* DeenAI is ONE feature behind ONE tier, so the panel asks the same
+         binding the DeenAI screen asks. `aiPlanName` is derived server-side
+         from the FEATURES table, never typed here. */
+      const locked = Boolean(vals.aiLocked);
+      const planName = String(vals.aiPlanName || 'Pro');
+      CLIPTOOLS.locked = locked;
+      /* Titles and descriptions want different shapes: a description is a
+         caption, so it takes hashtags and never a question. */
+      const shapes = CLIPTOOLS.target === 'description'
+        ? [{ id: 'shorter', label: 'Shorter', tip: 'Tighter, keeping what it promises' },
+           { id: 'promise', label: 'Warmer', tip: 'A plain, warm statement of what the clip gives' },
+           { id: 'hashtags', label: '+ Hashtags', tip: 'End with hashtags drawn from what the clip says' }]
+        : [{ id: 'promise', label: 'Promise', tip: 'A warm, direct statement of what the clip gives — the strongest shape in this niche' },
+           { id: 'question', label: 'Question', tip: 'The question this clip answers, in the viewer\'s own words' },
+           { id: 'subject', label: 'Subject: payoff', tip: 'Name the thing, then what the clip says about it' },
+           { id: 'shorter', label: 'Shorter', tip: 'Tighter, keeping what it promises' }];
       const spark = kind => '<button type="button" data-ct="ai-' + kind + '" class="dcct-spark"'
         + ' title="Write a new ' + kind + ' with AI"' + (busy ? ' disabled' : '') + '>'
         + '<i class="ph' + (busy === kind ? '' : '-fill') + ' '
         + (busy === kind ? 'ph-circle-notch dcct-spin' : 'ph-sparkle') + '"></i></button>';
 
-      const sig = [clip.id, clip.title, clip.description, busy, CLIPTOOLS.target, CLIPTOOLS.note].join('|');
+      const sig = [clip.id, clip.title, clip.description, busy, CLIPTOOLS.target, CLIPTOOLS.note, locked, planName].join('|');
       if (clipToolsNode.dataset.sig !== sig){
         clipToolsNode.dataset.sig = sig;
         clipToolsNode.innerHTML = ''
@@ -4161,15 +4181,29 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           +     esc(clip.description || '') + '</textarea>'
           + '</div>'
           + '<div class="dcct-grp dcct-ask">'
-          +   '<label class="dcct-lab">Ask for a change</label>'
-          +   '<div class="dcct-seg">'
-          +     '<button type="button" data-ct="target-title" class="' + (CLIPTOOLS.target === 'title' ? 'on' : '') + '">Title</button>'
-          +     '<button type="button" data-ct="target-description" class="' + (CLIPTOOLS.target === 'description' ? 'on' : '') + '">Description</button>'
-          +   '</div>'
-          +   '<input class="dcct-in" data-ct="ask" value="' + esc(CLIPTOOLS.ask) + '" placeholder="'
-          +     (CLIPTOOLS.target === 'description' ? 'Make it shorter and warmer' : 'Make the title Arabic') + '">'
-          +   '<button type="button" data-ct="apply" class="dcct-btn dcct-primary"' + (busy ? ' disabled' : '') + '>'
-          +     (busy === 'ask' ? 'Writing...' : 'Rewrite') + '</button>'
+          +   '<label class="dcct-lab"><span class="dcct-ai"><i class="ph-fill ph-sparkle"></i>Ask DeenAI</span></label>'
+          + (locked
+              ? '<p class="dcct-lock">DeenAI writes titles and descriptions for you, and answers '
+                + 'questions about your own clips. It is on ' + esc(planName) + '.</p>'
+                + '<button type="button" data-ct="upgrade" class="dcct-btn dcct-primary">Unlock with ' + esc(planName) + '</button>'
+              : '<div class="dcct-seg">'
+                +   '<button type="button" data-ct="target-title" class="' + (CLIPTOOLS.target === 'title' ? 'on' : '') + '">Title</button>'
+                +   '<button type="button" data-ct="target-description" class="' + (CLIPTOOLS.target === 'description' ? 'on' : '') + '">Description</button>'
+                + '</div>'
+                /* The SHAPES the automatic titler already names, so a chip here
+                   and a title written during a render mean the same thing. One
+                   press runs it -- a chip that only fills a box and waits for a
+                   second press is a control that half-works. */
+                + '<div class="dcct-chips">' + shapes.map(function (sh) {
+                    return '<button type="button" data-ct="style-' + sh.id + '" class="dcct-chip"'
+                      + (busy ? ' disabled' : '') + ' title="' + esc(sh.tip) + '">'
+                      + (busy === 'style-' + sh.id ? '<i class="ph ph-circle-notch dcct-spin"></i>' : esc(sh.label))
+                      + '</button>';
+                  }).join('') + '</div>'
+                + '<input class="dcct-in" data-ct="ask" value="' + esc(CLIPTOOLS.ask) + '" placeholder="'
+                +   (CLIPTOOLS.target === 'description' ? 'Make it shorter and warmer' : 'Make the title Arabic') + '">'
+                + '<button type="button" data-ct="apply" class="dcct-btn dcct-primary"' + (busy ? ' disabled' : '') + '>'
+                +   (busy === 'ask' ? 'Writing...' : 'Rewrite') + '</button>')
           + '</div>'
           + (CLIPTOOLS.note ? '<p class="dcct-note">' + esc(CLIPTOOLS.note) + '</p>' : '')
           + '<div class="dcct-grp dcct-row">'
@@ -4190,6 +4224,21 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         const askField = clipToolsNode.querySelector('[data-ct="ask"]');
         if (what === 'ai-title') return clipToolsAsk('title', '');
         if (what === 'ai-description') return clipToolsAsk('description', '');
+        if (what === 'upgrade'){
+          /* The host sets StudioAdapter.ui directly and repaints -- setUI lives
+             in the adapter's scope, not this one. Same road the editor button
+             above takes. */
+          StudioAdapter.ui.playerClip = null;
+          StudioAdapter.ui.screen = 'tokens';
+          StudioAdapter.ui.tokensAnimAt = Date.now();
+          return paintStudio();
+        }
+        if (what.indexOf('style-') === 0){
+          /* One press runs it. The shape travels as `style`, never as typed
+             text, so the worker can still answer a recitation from its verse
+             reference rather than asking a 1.7B model to restyle scripture. */
+          return clipToolsAsk(CLIPTOOLS.target, '', what.slice(6));
+        }
         if (what === 'apply'){
           const asked = String((askField && askField.value) || '').trim();
           if (!asked) return toast('Say what you would like changed.', 'info');
@@ -9448,7 +9497,7 @@ function paintStudio(){
   paintEditorBetaNotice();
   paintPreviewPlayer(vals);
   paintClipTools(vals);
-  paintClipStars();
+  paintClipStars(vals);
   paintHighlight(vals);
   paintJobType(vals);
   paintJobBackground(vals);

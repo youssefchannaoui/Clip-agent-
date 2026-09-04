@@ -4512,6 +4512,11 @@
     // the ask held back, Studio sees everything. Collapsing Pro into either
     // neighbour is what would make the middle tier feel like a mistake.
     var aiAskOn = Boolean(current.features && current.features.deenaiAsk);
+    // The tier that would unlock DeenAI, named by the server from the FEATURES
+    // table. Falls back to Pro only if the payload carries no locked entry --
+    // which happens exactly when nothing is locked, where the name is unused.
+    var aiLockedEntry = (current.locked && (current.locked.deenai || current.locked.deenaiAsk)) || null;
+    var aiPlanName = (aiLockedEntry && aiLockedEntry.tierName) || 'Pro';
     var aiData = DATA.deenai || null;
     var aiAllCards = (aiData && aiData.insights) || [];
     // The first card is the headline and gets the room; the rest are rows. The
@@ -4833,33 +4838,32 @@
 
       // ── DeenAI ──
       aiLocked: !aiOn,
+      // Read by the clip preview's own panel, so the studio has ONE answer to
+      // "which plan buys DeenAI" rather than two that can drift.
+      aiPlanName: aiPlanName,
       aiUnlocked: aiAskOn,
       aiAskGate: !aiAskOn,
-      // Both CTAs on this screen name STUDIO, never Pro. Youssef, 1 Sept 2026:
-      // "it should be unlock with studio."
-      //
-      // It is also the only truthful answer for the button under Ask. The two
-      // halves of DeenAI sit behind different gates -- insights are `deenai`
-      // (Pro), asking is `deenaiAsk` (Studio) -- and one binding was serving
-      // both buttons, so the Ask box told a free account to buy Pro for the one
-      // thing Pro does not include. Studio is the plan that unlocks the whole
-      // screen, so Studio is what both buttons say; the note below is where Pro
-      // is mentioned, rather than on a button that would be selling the wrong
-      // plan.
-      aiGateCta: aiOn ? 'Upgrade to Studio' : 'Unlock with Studio',
+      // THE PLAN NAME IS DERIVED, NEVER TYPED. v3.72.10 shipped a button that
+      // told a free account to buy Pro for the one half of this screen Pro did
+      // not include -- the worst copy fault this product can have -- because
+      // the name was a literal beside a gate that had moved. `current.locked`
+      // carries the tier that WOULD unlock each feature, straight from the
+      // FEATURES table the gates themselves read, so the button and the gate
+      // cannot disagree again whatever the table says tomorrow.
+      aiGateCta: aiOn ? ('Upgrade to ' + aiPlanName) : ('Unlock with ' + aiPlanName),
       // Shown under the locked banner. Free accounts only -- `aiLocked` is
-      // !aiOn -- so it never has to speak to a Pro account.
-      aiDemoNote: 'These numbers are sample output. Studio reads your own clips, '
-        + 'scores and posting record and answers your questions. Pro turns the '
-        + 'figures real without the asking.',
+      // !aiOn -- so it never has to speak to a paid account.
+      aiDemoNote: 'These numbers are sample output. On ' + aiPlanName + ', DeenAI reads your own '
+        + 'clips, scores and posting record, answers your questions, and writes titles '
+        + 'and descriptions for any clip.',
       aiGateNote: aiOn
-        ? 'Your insights above are real. Asking DeenAI questions runs on our own render box, and that is what Studio buys.'
-        : 'Studio answers your questions. Pro turns the figures above into your own numbers.',
+        ? 'Your insights are real, and DeenAI writes titles and descriptions on any clip from its preview.'
+        : aiPlanName + ' turns the figures above into your own numbers and lets you ask.',
       aiSub: aiAskOn
         ? 'Reads your own clips, scores and posting record — and answers back.'
         : aiOn
-          ? 'Reads your own clips, scores and posting record. Asking is a Studio feature.'
-          : 'A Studio feature — free accounts can look, not use',
+          ? 'Reads your own clips, scores and posting record.'
+          : 'A ' + aiPlanName + ' feature — free accounts can look, not use',
       aiCount: aiData ? plural(aiAllCards.length, 'insight').toUpperCase() : '',
       aiNote: aiData ? (aiOn ? 'from your own records' : 'sample output') : '',
       aiFootnote: aiOn

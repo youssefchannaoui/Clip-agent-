@@ -79,6 +79,20 @@ assert.ok(cookie.startsWith('dc_session='), 'signed up');
 
 const userId = store.state.authUsers.find(u => u.email === 'retitle@deenclipped.test').id;
 
+/** DeenAI's tier, so the four behaviour tests below exercise the route rather
+ *  than the gate. The gate has its own test at the end of this file, and a free
+ *  account is asserted there -- without that pair, moving this fixture to Pro
+ *  would have quietly deleted the only proof the gate exists. */
+function setPlan(plan) {
+  // The billing record lives ON the user, not in a side table keyed by id.
+  const user = store.state.authUsers.find(u => u.id === userId);
+  user.billing = plan
+    ? { plan, status: 'active', currentPeriodEnd: Date.now() + 86400000 }
+    : {};
+  store.save();
+}
+setPlan('pro_monthly');
+
 function seed(over = {}) {
   store.state.projects = [{ id: 'p1', userId, title: 'Never Lose Hope - Muhammad Hoblos', status: 'done' }];
   store.state.clips = [Object.assign({
@@ -185,4 +199,46 @@ test('the route never touches the transcript or the render', async () => {
     assert.deepEqual(after[key], before[key], `${key} must not move`);
   }
   assert.notEqual(after.transcriptEdited, true, 'and the clip is not marked edited');
+});
+
+
+test('the clip AI is DeenAI, so a free account is refused and told which plan', async () => {
+  // It shipped in v3.120.0 with NO gate: every free account could spend the
+  // box's Ollama. Youssef, 4 Sept 2026: "DeenAI should be for pro users and
+  // up." Proven RED by removing the deenaiAccess check from the route.
+  setPlan('');
+  try {
+    seed();
+    const res = await send('/api/clips/c1/retitle', {});
+    const out = await res.json();
+    assert.equal(res.status, 403, 'a free account may not spend the clip AI');
+    assert.match(out.error, /Pro/, 'and is told which plan buys it');
+    assert.equal(store.state.clips[0].title, 'At the difference', 'nothing was written');
+  } finally {
+    setPlan('pro_monthly');
+  }
+});
+
+test('Studio gets it too -- the tiers are cumulative', async () => {
+  setPlan('studio_monthly');
+  try {
+    seed();
+    const res = await send('/api/clips/c1/retitle', {});
+    assert.equal(res.status, 200, 'Studio has everything Pro has');
+  } finally {
+    setPlan('pro_monthly');
+  }
+});
+
+test('a named shape travels as `style`, never as the customer\'s free text', async () => {
+  // The distinction is load-bearing: `instruction` is what a customer typed and
+  // overrides the recitation reference; `style` is one of OUR OWN named shapes
+  // and must not, or a shape chip would push scripture through a 1.7B model.
+  seed();
+  seen.length = 0;
+  const res = await send('/api/clips/c1/retitle', { kind: 'title', style: 'question' });
+  assert.equal(res.status, 200);
+  const sent = seen.at(-1).body;
+  assert.equal(sent.style, 'question');
+  assert.equal(sent.instruction, '', 'a shape is not free text');
 });
