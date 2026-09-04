@@ -2822,6 +2822,26 @@ const box=$('#toasts');if(!box)return;const text=String(message);
 const seen=[...box.children].find(n=>n.textContent===text);
 if(seen){clearTimeout(Number(seen.dataset.toastTimer)||0);seen.dataset.toastTimer=String(setTimeout(()=>seen.remove(),3600));return}
 const n=document.createElement('div');n.className=`toast ${type}`;n.textContent=text;box.append(n);n.dataset.toastTimer=String(setTimeout(()=>n.remove(),3600))}
+/* ── One place that decides a host panel needs redrawing ──────────────────
+   data-host-owned stops the PATCHER destroying a panel the host injected into
+   the design's tree. It does nothing about the PAINTER, which assigned
+   innerHTML on every call -- so every host panel rebuilt its own controls on
+   every state poll, roughly every two seconds. Measured before this: focus on
+   the Templates watermark switch, on the tour button and on a Lecture-library
+   row all fell to <body> on an idle repaint. That is the paste-box symptom by
+   another route, and it is what a keyboard user actually feels.
+
+   The signature lives on a JS PROPERTY, not an attribute: nothing in the
+   patcher can strip it, and it dies with the node -- which is exactly right,
+   because a node that was rebuilt does need redrawing. Returns true when it
+   actually wrote, so a caller can skip work that only matters after a redraw. */
+window.dcSetHtml=function(node,html){
+  if(!node)return false;
+  if(node.__dcHtml===html)return false;
+  node.__dcHtml=html;
+  node.innerHTML=html;
+  return true;
+};
 let API_SEQUENCE=0;
 /* The global activity bar: a 2px gold shimmer at the very top whenever any
    request has been in flight longer than 250ms. One honest signal for every
@@ -3666,6 +3686,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(!note){
         note=document.createElement('div');
         note.setAttribute('data-host-video-loading','');
+        note.setAttribute('data-host-owned','');
         note.style.cssText='position:absolute;inset:0;z-index:4;display:none;align-items:center;justify-content:center;gap:9px;'
           +'background:rgba(9,9,10,.35);color:var(--dc-n-c9b896, #C9B896);font:500 12px Outfit,Inter,sans-serif;pointer-events:none';
         note.innerHTML='<span style="width:14px;height:14px;border:2px solid rgba(217,180,120,.35);border-top-color:var(--dc-gold-lit, #F0D6A6);border-radius:50%;display:inline-block;animation:dcSpin .8s linear infinite"></span>Loading video…';
@@ -3856,6 +3877,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         if(!tag){
           tag=document.createElement('span');
           tag.setAttribute('data-host-approx','');
+          tag.setAttribute('data-host-owned','');
           tag.style.cssText='position:absolute;top:-17px;right:0;font:700 8.5px Outfit,Inter,sans-serif;'
             +'letter-spacing:.1em;text-transform:uppercase;color:rgba(240,214,166,.75);pointer-events:none';
           tag.textContent='approximate \u00b7 Save renders';
@@ -6798,17 +6820,16 @@ window.paintEmailNotifRow=function(data){
   const on=window.__dcEmailPending!==undefined?window.__dcEmailPending:server;
   window.__dcEmailOn=on;
   let row=old;
-  if(!row){row=document.createElement('div');row.id='dcEmailNotifRow'}
+  if(!row){row=document.createElement('div');row.id='dcEmailNotifRow';row.setAttribute('data-host-owned','')}
   row.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--dc-line-soft, #1E1E22);';
-  row.innerHTML=
-    '<i class="ph ph-envelope-simple" style="flex:none;font-size:16px;color:var(--dc-ink-dim, #8B8B93)"></i>'
+  window.dcSetHtml(row,'<i class="ph ph-envelope-simple" style="flex:none;font-size:16px;color:var(--dc-ink-dim, #8B8B93)"></i>'
     +'<span style="display:flex;flex-direction:column;min-width:0;flex:1">'
     +'<span style="font-size:12.5px;font-weight:600;color:var(--dc-ink-bright, #E9E9ED)">Email notifications</span>'
     +'<span style="font-size:11px;color:var(--dc-ink-dim, #8B8B93)">'+(on?'On — clip ready, posted and failure emails':'Off — no product emails will be sent')+'</span>'
     +'</span>'
     +'<button type="button" aria-label="'+(on?'Turn email notifications off':'Turn email notifications on')+'" style="position:relative;width:34px;height:19px;flex:none;border-radius:20px;cursor:pointer;border:1px solid '
     +(on?'rgba(127,209,166,.5);background:rgba(127,209,166,.16);':'var(--dc-line, #26262A);background:var(--dc-bg-raised, #17171A);')+'">'
-    +'<i style="position:absolute;top:2px;left:'+(on?'17px':'2px')+';width:13px;height:13px;border-radius:50%;background:'+(on?'var(--dc-n-7fd1a6, #7FD1A6)':'var(--dc-ink-faint, #6E6E76)')+'"></i></button>';
+    +'<i style="position:absolute;top:2px;left:'+(on?'17px':'2px')+';width:13px;height:13px;border-radius:50%;background:'+(on?'var(--dc-n-7fd1a6, #7FD1A6)':'var(--dc-ink-faint, #6E6E76)')+'"></i></button>');
   row.querySelector('button').onclick=e=>{e.preventDefault();e.stopPropagation();StudioAdapter.onToggleEmailNotifs()};
   if(row.previousElementSibling!==deskRow)deskRow.insertAdjacentElement('afterend',row);
 };
@@ -7380,6 +7401,7 @@ StudioAdapter.onProbeSource=async url=>{try{
           if(!box){
             box=document.createElement('div');
             box.id='dcowEarn';
+            box.setAttribute('data-host-owned','');
             parent.insertBefore(box,anchorSec.nextSibling);
           }
           const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -7395,7 +7417,7 @@ StudioAdapter.onProbeSource=async url=>{try{
           const pct=v=>(v===null||v===undefined)?'\u2014':(v+'%');
           const cash=r=>r.initialRevenueMinor?((r.initialRevenueMinor/100).toFixed(2)+' '+String(r.currency||'').toUpperCase()):'\u2014';
           const mix=r=>{const m=r.planMix||{};const k=Object.keys(m);return k.length?k.map(p=>p.replace(/_/g,' ')+' \u00d7'+m[p]).join(', '):'\u2014'};
-          box.innerHTML='<div class="'+esc(cls)+'">'
+          window.dcSetHtml(box,'<div class="'+esc(cls)+'">'
             +'<div class="scl"><span class="s97">Pages that earn subscriptions</span></div>'
             +'<div class="sdk"><table class="sh1">'
             +'<tr><th class="sgh">Landing page</th><th class="sgi">Arrivals</th>'
@@ -7418,7 +7440,7 @@ StudioAdapter.onProbeSource=async url=>{try{
             +'Initial revenue is each customer\u2019s first payment, counted once \u2014 renewals are in Money in, not here. '
             +'Rankings, impressions and search queries are NOT shown: they come from Google Search Console, '
             +'which this app has no connection to, and a zero here would be a lie rather than a measurement.</p>'
-            +'</div>';
+            +'</div>');
         }catch(e){/* a reporting table must never take the screen down */}
       };
 
@@ -7438,7 +7460,7 @@ StudioAdapter.onProbeSource=async url=>{try{
           const parent=anchorSec&&anchorSec.parentNode;
           let box=document.getElementById('dcowFirst100');
           if(!parent||!g){ if(box)box.remove(); return; }
-          if(!box){ box=document.createElement('div'); box.id='dcowFirst100'; parent.insertBefore(box,anchorSec); }
+          if(!box){ box=document.createElement('div'); box.id='dcowFirst100'; box.setAttribute('data-host-owned',''); parent.insertBefore(box,anchorSec); }
           const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
           /* A rate with no denominator is an em dash. "Nobody has arrived yet"
              and "nobody converted" are different answers, and 0% reads as the
@@ -7521,7 +7543,7 @@ StudioAdapter.onProbeSource=async url=>{try{
           const drop=g.biggestDropOff;
           box.className='dcow-s';
           box.style.cssText='flex-shrink:0;margin-bottom:20px';
-          box.innerHTML='<div class="scl"><span class="s97">First 100</span></div>'
+          window.dcSetHtml(box,'<div class="scl"><span class="s97">First 100</span></div>'
             +'<div class="sgw" style="margin-bottom:14px"><div class="sdk"><table class="sh1">'
             +'<tr><th class="sgh">Paid subscribers</th><th class="sgi">New this month</th>'
             +'<th class="sgi">MRR</th><th class="sgi">Activated</th>'
@@ -7565,7 +7587,7 @@ StudioAdapter.onProbeSource=async url=>{try{
             +'<p style="margin:10px 2px 0;font-size:11px;color:var(--dc-ink-muted, #75717b);line-height:1.5">'
             +'An account is not a referral. A referral counts once the invited person has processed a video '
             +'and approved a clip. '+esc((g.unavailable||[])[0]||'')+'</p></div>'
-            +nudgeTable(g.nudges);
+            +nudgeTable(g.nudges));
         }catch(e){/* a reporting panel must never take the screen down */}
       };
 
@@ -7614,7 +7636,7 @@ StudioAdapter.onProbeSource=async url=>{try{
           const host=grid.parentNode;
           if(!host) return;
           let box=document.getElementById('dcInvite');
-          if(!box){ box=document.createElement('div'); box.id='dcInvite'; host.insertBefore(box, grid.nextSibling); }
+          if(!box){ box=document.createElement('div'); box.id='dcInvite'; box.setAttribute('data-host-owned',''); host.insertBefore(box, grid.nextSibling); }
           const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
           /* Rewards are config-driven and default to zero. The panel must not
              imply one that is switched off. */
@@ -7646,7 +7668,7 @@ StudioAdapter.onProbeSource=async url=>{try{
             || 'No reward is attached to this yet — it is simply a clean link to share.';
           box.style.cssText='flex:none;margin-top:22px;padding:22px;border-radius:18px;'
             +'border:1px solid rgba(217,180,120,.28);background:rgba(217,180,120,.045)';
-          box.innerHTML='<div style="font:600 11px/1 Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--dc-gold, #D9B478)">Invite a creator</div>'
+          window.dcSetHtml(box,'<div style="font:600 11px/1 Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--dc-gold, #D9B478)">Invite a creator</div>'
             +'<h3 style="margin:10px 0 6px;font:600 20px/1.2 Outfit,Inter,sans-serif;letter-spacing:-.02em">Know another creator sitting on hours of lectures?</h3>'
             /* promise is built from escaped pieces above and carries its own
                <b>, so it is inserted rather than escaped a second time. */
@@ -7663,7 +7685,7 @@ StudioAdapter.onProbeSource=async url=>{try{
                 +'<div style="margin-top:3px;font-size:11.5px;color:var(--dc-ink-muted, #75717b)">'+esc(l)+'</div></div>'}).join('')
             +'</div>'
             +'<p style="margin:14px 0 0;font-size:11.5px;color:var(--dc-ink-muted, #75717b);line-height:1.5">'
-            +'Activated means they processed a lecture and kept a clip — not that they made an account.</p>';
+            +'Activated means they processed a lecture and kept a clip — not that they made an account.</p>');
           const btn=document.getElementById('dcInviteCopy');
           if(btn&&!btn.dataset.wired){
             btn.dataset.wired='1';
@@ -7736,7 +7758,7 @@ StudioAdapter.onProbeSource=async url=>{try{
              the design export regenerates on every re-import. */
           const mount=host.parentNode.querySelector('section')||host.parentNode;
           let box=document.getElementById('dcWatermark');
-          if(!box){ box=document.createElement('div'); box.id='dcWatermark'; }
+          if(!box){ box=document.createElement('div'); box.id='dcWatermark'; box.setAttribute('data-host-owned',''); }
           // Idempotent and self-correcting: a render that replaced the column
           // leaves the old node orphaned, so re-seat it rather than trusting
           // that it is still in the right place.
@@ -7773,7 +7795,7 @@ StudioAdapter.onProbeSource=async url=>{try{
             +'display:block;border:0;background:none';
           /* Same shape as the Style and Brand groups above it: a grey
              letter-spaced section label, then rows whose value sits right. */
-          box.innerHTML='<div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;'
+          window.dcSetHtml(box,'<div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;'
             +'text-transform:uppercase;color:var(--dc-n-7e7a82, #7E7A82);margin:0 0 10px">Watermark</div>'
             +'<label style="display:flex;align-items:center;justify-content:space-between;gap:12px;'
             +'min-height:34px;padding:0 2px;cursor:'+(paid?'pointer':'not-allowed')+'">'
@@ -7819,7 +7841,7 @@ StudioAdapter.onProbeSource=async url=>{try{
                     +'background:'+(sel?'rgba(217,180,120,.14)':'var(--dc-n-131315, #131315)')+';'
                     +'color:'+(sel?'var(--dc-gold-lit, #F0D6A6)':'var(--dc-ink-dim, #8B8B93)')+'">'+n+'s</button>';
                 }).join('')
-              +'</div></div>'):'');
+              +'</div></div>'):''));
 
           const bar=document.getElementById('dcPbOn');
           if(bar&&!bar.dataset.wired){
@@ -8309,6 +8331,7 @@ function paintClipDestinations(vals, data){
     if(!row){
       row=document.createElement('div');
       row.setAttribute('data-dc-dest','');
+      row.setAttribute('data-host-owned','');
       /* Label ALWAYS on its own line. Channel names differ in length, so a
          single wrapping row broke after the label on some cards and after the
          first channel on others -- four cards side by side, four different
@@ -8349,8 +8372,20 @@ function paintClipWaveforms(vals){
     const clip=card?byId[card.dataset.clip]:null;
     const peaks=clip&&Array.isArray(clip.waveform)&&clip.waveform.length?clip.waveform:null;
     const signature=peaks?card.dataset.clip+':'+peaks.length+':'+peaks[0]+':'+peaks[peaks.length-1]:'flat';
-    if(strip.dataset.wave===signature)return;
-    strip.dataset.wave=signature;
+    /* THE STRIP IS THE DESIGN'S OWN NODE; only its contents are ours. Two
+       things the patcher does to it had to be turned off, and the guard above
+       was useless without both -- it never once matched, so every card's bars
+       were rebuilt on every state poll.
+
+       data-host-style keeps the inline styles below (the generated span
+       carries a static gradient and nothing binds it, so nothing is lost),
+       and the signature moved onto a data-host-* name because syncAttributes
+       strips any attribute the render does not carry -- data-wave included.
+       The bars themselves are marked host-owned or patch() removes them as
+       children the render does not have. */
+    strip.setAttribute('data-host-style','');
+    if(strip.getAttribute('data-host-wave')===signature)return;
+    strip.setAttribute('data-host-wave',signature);
     if(!peaks){
       /* Not measured: a quiet baseline, and the decorative gradient REMOVED.
          Leaving it would put evenly spaced bars back on the card -- the same
@@ -8358,7 +8393,7 @@ function paintClipWaveforms(vals){
          about. */
       strip.style.background='none';
       strip.style.opacity='1';
-      strip.innerHTML='<span style="position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(240,214,166,.22)"></span>';
+      strip.innerHTML='<span data-host-owned style="position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(240,214,166,.22)"></span>';
       return;
     }
     /* The gradient is replaced outright, or it shows through between bars. */
@@ -8369,7 +8404,7 @@ function paintClipWaveforms(vals){
     strip.style.gap='1px';
     strip.innerHTML=peaks.map(v=>{
       const h=Math.max(6,Math.min(100,Number(v)||0));
-      return '<i style="flex:1 1 0;height:'+h+'%;min-width:1px;border-radius:1px;'
+      return '<i data-host-owned style="flex:1 1 0;height:'+h+'%;min-width:1px;border-radius:1px;'
         +'background:rgba(240,214,166,'+(0.35+0.45*(h/100)).toFixed(2)+')"></i>';
     }).join('');
   });
@@ -8432,17 +8467,30 @@ function paintPlanChip(cur){
 function taskLadder(){ return (DATA&&DATA.tasks)||null; }
 
 function railFooterSlot(){
-  const rail=document.getElementById('dcRail');
-  if(!rail)return null;
-  const mine=document.getElementById('dcTaskCard');
-  if(mine&&mine.parentNode&&rail.contains(mine))return mine.parentNode;
-  /* The one direct child that paints a card around nothing. Found by being
-     EMPTY rather than by a class name -- every class in the rail is generated
-     and renumbers on a design re-import. */
-  for(const kid of rail.children){
-    if(kid.tagName==='DIV'&&!kid.children.length&&!String(kid.textContent||'').trim())return kid;
+  /* THE CARD GETS ITS OWN CONTAINER. It used to be painted into the rail's
+     generated empty footer div and then MOVED into the nav -- and a generated
+     node moved out of its place is one the patcher puts back, every state
+     poll: the nav group's remaining children were then paired one across,
+     which replaced a nav link with the slot and deleted the last one, and the
+     card was destroyed and rebuilt each time. Measured at 8 DOM operations a
+     paint on every screen in the app.
+
+     A host-owned div of our own, inserted where the card belongs, moves
+     nothing. The generated footer div stays empty at the rail's foot, where
+     `#dcRail > div:empty` has always hidden it. */
+  const nav=document.getElementById('dcRailNav');
+  if(!nav)return null;
+  let slot=document.getElementById('dcTaskSlot');
+  if(slot&&nav.contains(slot))return slot;
+  const tail=nav.querySelector('.dc-nav-tail');
+  if(!tail||!tail.parentNode)return null;
+  if(!slot){
+    slot=document.createElement('div');
+    slot.id='dcTaskSlot';
+    slot.setAttribute('data-host-owned','');
   }
-  return null;
+  tail.parentNode.insertBefore(slot,tail);
+  return slot;
 }
 
 /* Youssef, 3 Sept 2026: "move perctnage taks thing up and deen ai help and
@@ -8456,14 +8504,6 @@ function railFooterSlot(){
    Moved rather than re-created, so the node, its listeners and any running
    animation survive -- and only when it is not already in place, or every
    paint would reinsert it. */
-function seatTaskCard(slot){
-  const nav=document.getElementById('dcRailNav');
-  if(!nav||!slot)return;
-  const tail=nav.querySelector('.dc-nav-tail');
-  if(!tail||!tail.parentNode)return;
-  if(slot.nextElementSibling===tail&&slot.parentNode===tail.parentNode)return;
-  tail.parentNode.insertBefore(slot,tail);
-}
 
 function paintTaskCard(){
   const rows=taskLadder();
@@ -8504,7 +8544,6 @@ function paintTaskCard(){
   const card=document.getElementById('dcTaskCard');
   const open=StudioAdapter.ui.railOpen&&(window.innerWidth||1280)>820;
   if(card)card.classList.toggle('is-tight',!open);
-  seatTaskCard(slot);
 }
 
 /* Which group's tab is open. Host state, not adapter UI: the panel is
@@ -8640,27 +8679,34 @@ function paintBrandSeal(){
 
      Host-injected rather than added to the design, for the usual reason: the
      mark is drawn inside the generated template, so a sibling there costs a
-     re-import and every hashed class name in the app. Rebuilt on every paint
-     like every other host panel -- the studio renders through innerHTML, so an
-     injected node does not survive on its own. */
+     re-import and every hashed class name in the app.
+
+     IT USED TO WRAP THE ARCH IN A span.dc-seal, AND THE RING THEREFORE NEVER
+     ROTATED. A wrapper around a generated node is a node the patcher cannot be
+     told to skip: marked host-owned it is left out of the pairing and the
+     generated child it holds is inserted a second time; unmarked -- which is
+     what shipped -- it is paired against the arch's own span, given its class,
+     and then patched, which replaced the arch and deleted the ring. So the
+     seal was torn down and rebuilt on every state poll and its 28s rotation
+     restarted every couple of seconds, which is to say it never visibly
+     turned at all.
+
+     The ring is now a host-owned SIBLING of the arch inside the design's own
+     span. Nothing generated moves, patch() skips the ring, and the rotation
+     runs. The 42px box and the .86 scale moved to that span in
+     studio-tokens.css. */
   const row=document.getElementById('dcRailBrand');
   if(!row)return;
-  /* Find the arch itself, never "the first svg in the row" -- once the ring is
-     in, that would find the ring and wrap the wrapper on every paint. */
+  /* The arch itself, never "the first svg in the row" -- once the ring is in,
+     that finds the ring. */
   const mark=row.querySelector('svg[viewBox="0 0 40 52"]');
   if(!mark)return;
   const holder=mark.parentElement;
   if(!holder||holder===row)return;
-  let seal=holder.parentElement;
-  if(!seal||!seal.classList.contains('dc-seal')){
-    seal=document.createElement('span');
-    seal.className='dc-seal';
-    holder.parentNode.insertBefore(seal,holder);
-    seal.appendChild(holder);
-  }
-  if(seal.querySelector('.dc-seal-ring'))return;
+  if(holder.querySelector(':scope > .dc-seal-ring'))return;
   const ring=document.createElementNS('http://www.w3.org/2000/svg','svg');
   ring.setAttribute('class','dc-seal-ring');
+  ring.setAttribute('data-host-owned','');
   ring.setAttribute('viewBox','0 0 64 64');
   ring.setAttribute('aria-hidden','true');
   /* Its own path id, not the marketing page's: two elements sharing an id is
@@ -8668,7 +8714,7 @@ function paintBrandSeal(){
   ring.innerHTML='<defs><path id="dcRailSealPath" fill="none" d="M32,32 m-25,0 a25,25 0 1,1 50,0 a25,25 0 1,1 -50,0"/></defs>'
     +'<text textLength="156" lengthAdjust="spacingAndGlyphs">'
     +'<textPath href="#dcRailSealPath">IMPORT \u00b7 FIND \u00b7 REVIEW \u00b7 PUBLISH \u00b7</textPath></text>';
-  seal.insertBefore(ring,seal.firstChild);
+  holder.insertBefore(ring,holder.firstChild);
 }
 /* Section cuts on the editor timeline.
    The trim handles are generated markup; the removed sections and the button
@@ -8791,12 +8837,11 @@ function paintFirstRun(vals){
   let head=document.getElementById('dcFirstRunHead');
   if(!head){head=document.createElement('div');head.id='dcFirstRunHead';head.setAttribute('data-host-owned','');h1.parentNode.insertBefore(head,h1)}
   head.setAttribute('style','flex:none;display:flex;flex-direction:column;gap:9px;margin:2px 0 4px;max-width:620px');
-  head.innerHTML=
-    '<h2 style="margin:0;font-family:Outfit,Inter,sans-serif;font-size:34px;line-height:1.12;font-weight:600;'
+  window.dcSetHtml(head,'<h2 style="margin:0;font-family:Outfit,Inter,sans-serif;font-size:34px;line-height:1.12;font-weight:600;'
       +'letter-spacing:-.01em;color:var(--dc-n-f2f2f4, #F2F2F4)">Let\u2019s make your first clips.</h2>'
     +'<p style="margin:0;font-size:14px;line-height:1.6;color:var(--dc-n-8b8b93, #8B8B93)">'
       +'Paste a lecture below and pick the minutes worth clipping. You do not need the whole talk \u2014 '
-      +'a five-minute stretch is plenty for a first run.</p>';
+      +'a five-minute stretch is plenty for a first run.</p>');
 
   /* WHAT HAPPENS AFTER YOU PRESS IT, with the real number in it. Somebody who
      knows it takes twenty minutes comes back; somebody who does not, leaves. */
@@ -8810,9 +8855,9 @@ function paintFirstRun(vals){
       +'border:1px solid rgba(217,180,120,.45);color:var(--dc-n-f0d6a6, #F0D6A6);font-size:10px;font-weight:700">'+n+'</span>'
       +'<b style="font-size:12.5px;font-weight:600;color:var(--dc-n-e9e9ed, #E9E9ED)">'+t+'</b></span>'
     +'<span style="font-size:11.5px;line-height:1.5;color:var(--dc-n-6e6e76, #6E6E76)">'+note+'</span></span>';
-  steps.innerHTML=beat('1','You pick the minutes','Paste a link, drag the range. Only that stretch is fetched.')
+  window.dcSetHtml(steps,beat('1','You pick the minutes','Paste a link, drag the range. Only that stretch is fetched.')
     +beat('2','We do the work','Transcribed, scored, rendered with your Clip Style and a nasheed. About 20 minutes.')
-    +beat('3','You keep the good ones','They land in your review queue. Nothing posts until you approve it.');
+    +beat('3','You keep the good ones','They land in your review queue. Nothing posts until you approve it.'));
   const row=paste.parentElement;
   if(row.previousElementSibling!==steps)row.parentNode.insertBefore(steps,row);
 
@@ -8820,9 +8865,9 @@ function paintFirstRun(vals){
   let cost=document.getElementById('dcFirstRunCost');
   if(!cost){cost=document.createElement('p');cost.id='dcFirstRunCost';cost.setAttribute('data-host-owned','')}
   cost.setAttribute('style','flex:none;margin:9px 0 0;font-size:11.5px;line-height:1.55;color:var(--dc-n-6e6e76, #6E6E76)');
-  cost.innerHTML='A lecture costs about one token a minute of the stretch you pick, so a five-minute run is '
+  window.dcSetHtml(cost,'A lecture costs about one token a minute of the stretch you pick, so a five-minute run is '
     +'roughly five tokens'+(ob.tokensLeft!=null?' of your '+obEsc(String(ob.tokensLeft)):'')+'. '
-    +'You can watch it run on this screen, and we will tell you when it is done.';
+    +'You can watch it run on this screen, and we will tell you when it is done.');
   if(row.nextElementSibling!==cost)row.parentNode.insertBefore(cost,row.nextSibling);
   paintFirstRunShowcase(hero,vals);
 }
@@ -8854,8 +8899,7 @@ function paintFirstRunShowcase(hero,vals){
   const line=(icon,t)=>'<span style="display:flex;align-items:flex-start;gap:9px">'
     +'<i class="ph '+icon+'" style="flex:none;margin-top:1px;font-size:14px;color:var(--dc-n-f0d6a6, #F0D6A6)"></i>'
     +'<span style="font-size:12px;line-height:1.5;color:var(--dc-n-8b8b93, #8B8B93)">'+t+'</span></span>';
-  show.innerHTML=
-    '<span style="font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;'
+  window.dcSetHtml(show,'<span style="font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;'
       +'color:var(--dc-n-f0d6a6, #F0D6A6)">New here?</span>'
     +'<strong style="font-family:Outfit,Inter,sans-serif;font-size:15px;font-weight:600;line-height:1.35;'
       +'color:var(--dc-n-f2f2f4, #F2F2F4)">Let us walk you through it.</strong>'
@@ -8864,7 +8908,7 @@ function paintFirstRunShowcase(hero,vals){
     +line('ph-x','Stop it whenever you like \u2014 press Escape.')
     +'<button type="button" id="dcFirstRunTour" style="margin-top:2px;padding:10px 14px;border-radius:10px;cursor:pointer;'
       +'border:1px solid rgba(217,180,120,.55);background:transparent;color:var(--dc-n-f0d6a6, #F0D6A6);'
-      +'font-family:inherit;font-size:12.5px;font-weight:600">Take the tour</button>';
+      +'font-family:inherit;font-size:12.5px;font-weight:600">Take the tour</button>');
   /* The tour is a BINDING, not a method on StudioAdapter -- calling it off the
      adapter throws at click time rather than at load, which is the trap this
      file has now paid for three times. */
@@ -8900,7 +8944,7 @@ function paintOnboarding(vals){
   const panelUp=Boolean(ob&&ob.at==='create'&&!ob.imported);
   if(!ob||!ob.show||!screen||panelUp||StudioAdapter.ui.screen!=='home'){if(old)old.remove();return}
   const row=old||document.createElement('div');
-  if(!old){row.id='dcOnboard'}
+  if(!old){row.id='dcOnboard';row.setAttribute('data-host-owned','')}
   row.setAttribute('style','flex:none;display:flex;flex-direction:column;gap:12px;margin:0 0 16px;padding:16px 18px;'
     +'border:1px solid rgba(217,180,120,.34);border-radius:14px;'
     +'background:linear-gradient(180deg,rgba(217,180,120,.075),rgba(217,180,120,.022));');
@@ -8941,8 +8985,7 @@ function paintOnboarding(vals){
       +'</button>';
   };
   const bar='<span style="flex:1 1 18px;min-width:14px;height:1px;background:var(--dc-n-2a2a2f, #2A2A2F)"></span>';
-  row.innerHTML=
-    '<span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+  window.dcSetHtml(row,'<span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
       +'<span style="font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--dc-n-d9b478, #D9B478)">Getting started</span>'
       +'<span style="flex:1"></span>'
       /* Replaces the retired "1 of 5 done" chip, and sits ON the thing it
@@ -8957,7 +9000,7 @@ function paintOnboarding(vals){
       +(ob.actionLabel?'<button type="button" id="dcOnboardGo" style="flex:none;padding:9px 16px;border-radius:9px;cursor:pointer;'
         +'border:1px solid var(--dc-n-d9b478, #D9B478);background:var(--dc-n-d9b478, #D9B478);color:var(--dc-n-0e0e11, #0E0E11);font-size:12.5px;font-weight:600">'
         +obEsc(ob.actionLabel)+'</button>':'')
-    +'</span>';
+    +'</span>');
   const go=row.querySelector('#dcOnboardGo');
   if(go)go.onclick=e=>{e.preventDefault();ob.action(e)};
   /* A passed step is still somewhere to go back to -- every row of the list
@@ -9061,14 +9104,23 @@ function paintLibraryAside(vals){
   const aside=add&&add.parentElement;
   if(!aside)return;
   /* The warnings card is a literal section in the design, so it cannot be
-     removed there without a re-import. Found by its own heading text. */
+     removed there without a re-import. Found by its own heading text.
+
+     HIDDEN, NOT REMOVED. Taking a generated node out shortens the live child
+     list against the rendered one, so the patcher pairs everything after it
+     one place across -- which is how #dcLibStats used to be handed the
+     warnings card's markup and lose its own id, on every state poll. Setting
+     display:none under data-host-style (the one attribute pair syncAttributes
+     leaves alone) keeps the pairing straight and touches nothing per paint. */
   for(const sec of aside.querySelectorAll('section')){
-    if(/^Before you import/.test(sec.textContent||''))sec.remove();
+    if(!/^Before you import/.test(sec.textContent||''))continue;
+    sec.setAttribute('data-host-style','');
+    if(sec.style.display!=='none')sec.style.display='none';
   }
   const st=(vals||{}).libStats;
   if(!st)return;
   let box=document.getElementById('dcLibStats');
-  if(!box){box=document.createElement('section');box.id='dcLibStats'}
+  if(!box){box=document.createElement('section');box.id='dcLibStats';box.setAttribute('data-host-owned','')}
   if(box.parentNode!==aside)aside.appendChild(box);
 
   const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -9135,7 +9187,7 @@ function paintLibraryAside(vals){
   }
 
   if(!out.length){box.remove();return}
-  box.innerHTML=out.join('');
+  window.dcSetHtml(box,out.join(''));
   box.onclick=e=>{
     const go=e.target.closest('[data-go]');
     const scr=e.target.closest('[data-screen]');
@@ -9200,6 +9252,7 @@ function paintScheduleDrag(){
     if(on&&!has){
       const g=document.createElement('span');
       g.className='dc-grip';
+      g.setAttribute('data-host-owned','');
       g.setAttribute('aria-hidden','true');
       g.title='Drag to move this post';
       cell.appendChild(g);
@@ -9235,6 +9288,7 @@ function paintScheduleDrag(){
     if(more>0&&!badge){
       const m=document.createElement('span');
       m.className='dc-slot-more';
+      m.setAttribute('data-host-owned','');
       m.textContent='+'+more;
       m.title=more===1?'One more clip on this slot, going to another channel'
         :more+' more clips on this slot, going to other channels';
@@ -9246,6 +9300,7 @@ function paintScheduleDrag(){
     if(removable&&!isDay&&!kill){
       const x=document.createElement('span');
       x.className='dc-unsched';
+      x.setAttribute('data-host-owned','');
       x.setAttribute('role','button');
       x.setAttribute('tabindex','0');
       x.title='Remove from the schedule';
@@ -9395,7 +9450,7 @@ function paintSchedChannels(vals){
   const on=Boolean(header)&&Boolean(vals.schedHasLanes);
   let box=document.getElementById('dcSchedChannels');
   if(!on||!header){ if(box)box.remove(); return }
-  if(!box){ box=document.createElement('div'); box.id='dcSchedChannels'; }
+  if(!box){ box=document.createElement('div'); box.id='dcSchedChannels'; box.setAttribute('data-host-owned',''); }
   if(box.parentElement!==header.parentElement||box.previousElementSibling!==header){
     header.parentElement.insertBefore(box,header.nextSibling);
   }
@@ -9547,10 +9602,10 @@ function paintHelp(){
   const on=StudioAdapter.ui.screen==='help';
   let el=document.getElementById('dcHelp');
   if(!on){if(el)el.remove();return}
-  if(!el){el=document.createElement('section');el.id='dcHelp';main.appendChild(el)}
+  if(!el){el=document.createElement('section');el.id='dcHelp';el.setAttribute('data-host-owned','');main.appendChild(el)}
   else if(el.parentElement!==main)main.appendChild(el);
   if(!helpData){
-    el.innerHTML='<p class="dch-empty">Loading help…</p>';
+    window.dcSetHtml(el,'<p class="dch-empty">Loading help…</p>');
     StudioAdapter.onLoadHelp();
     return;
   }
@@ -9570,19 +9625,19 @@ function paintHelp(){
     const q=helpQuery.trim().toLowerCase();
     const hits=cats.flatMap(c=>(c.articles||[]).map(a=>({...a,cat:c.title})))
       .filter(a=>(a.title+' '+(a.summary||'')+' '+(a.steps||[]).join(' ')+' '+(a.notes||[]).join(' ')+' '+a.cat).toLowerCase().includes(q));
-    el.innerHTML=`<div class="dch-head"><h2>Help</h2><p>${hits.length} result${hits.length===1?'':'s'} for “${esc(helpQuery.trim())}”.</p></div>
+    window.dcSetHtml(el,`<div class="dch-head"><h2>Help</h2><p>${hits.length} result${hits.length===1?'':'s'} for “${esc(helpQuery.trim())}”.</p></div>
       <div class="dch-find"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="Search help" value="${esc(helpQuery)}" data-help-q></div>
       ${hits.length?hits.map(a=>helpArticle(a,base)).join(''):'<p class="dch-empty">Nothing matched. Try a word you would see on the screen.</p>'}
-      ${contact}`;
+      ${contact}`);
   } else if(helpCat){
     const cat=cats.find(c=>c.id===helpCat);
     if(!cat){helpCat='';paintHelp();return}
-    el.innerHTML=`<button type="button" class="dch-back" data-help-back><i class="ph ph-arrow-left"></i>All topics</button>
+    window.dcSetHtml(el,`<button type="button" class="dch-back" data-help-back><i class="ph ph-arrow-left"></i>All topics</button>
       <div class="dch-head"><h2>${esc(cat.title)}</h2><p>${esc(cat.blurb||'')}</p></div>
       ${(cat.articles||[]).map(a=>helpArticle(a,base)).join('')}
-      ${contact}`;
+      ${contact}`);
   } else {
-    el.innerHTML=`<div class="dch-head"><h2>Help</h2><p>How to use DeenClipped, one thing at a time. Every screenshot is the real app.</p></div>
+    window.dcSetHtml(el,`<div class="dch-head"><h2>Help</h2><p>How to use DeenClipped, one thing at a time. Every screenshot is the real app.</p></div>
       <div class="dch-find"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="Search help" value="" data-help-q></div>
       <div class="dch-grid">${cats.map(c=>`<button type="button" class="dch-cat" data-help-cat="${esc(c.id)}">
         <i class="${esc(c.icon||'ph ph-book-open')}"></i>
@@ -9590,7 +9645,7 @@ function paintHelp(){
         <span>${esc(c.blurb||'')}</span>
         <em>${(c.articles||[]).length} article${(c.articles||[]).length===1?'':'s'}</em>
       </button>`).join('')}</div>
-      ${contact}`;
+      ${contact}`);
   }
   /* A screenshot at 320px teaches nothing -- the text inside it is the point.
      The full 1280px capture opens over the screen on click. */

@@ -409,29 +409,35 @@ test('the card is painted with the other host panels, never on an observer', () 
   assert.match(body, /paintTasksPanel\(\);/, 'and so is the panel, while it is open');
 });
 
-test('the card mounts by being EMPTY, never by a generated class name', () => {
+test('the card gets its OWN container and moves nothing generated', () => {
+  // It shipped painted into the rail's generated empty footer div and then
+  // MOVED into the nav -- and a generated node moved out of its place is one
+  // the patcher puts back, on every state poll: the nav group's remaining
+  // children then paired one across, replacing a nav link with the slot and
+  // deleting the last one. Measured at 8 DOM operations a paint, on every
+  // screen. A host-owned div of our own moves nothing.
   const page = read('src/public/index.html');
   const at = page.indexOf('function railFooterSlot(){');
   const body = page.slice(at, page.indexOf('function paintTaskCard'));
-  assert.match(body, /!kid\.children\.length/, 'found by being the empty footer card');
+  assert.match(body, /slot\.id\s*=\s*'dcTaskSlot'/, 'the host makes its own slot');
+  assert.match(body, /setAttribute\('data-host-owned'/,
+    'and marks it, or the patcher pairs it against a generated sibling');
   assert.ok(!/\.s[0-9a-z]{1,3}\b/.test(body),
     'a hashed class here would break on the next design re-import');
+  assert.ok(!/seatTaskCard/.test(page),
+    'nothing generated is moved into the nav any more');
 });
 
 test('the card sits ABOVE DeenAI, Help and Owner', () => {
   // Youssef: "move perctnage taks thing up and deen ai help and owner down."
-  // The rail's empty footer card is below the nav, so the card sat under the
-  // tail. It is moved into the nav, immediately before the first tail item --
-  // whose `margin-top: auto` goes on holding the tail at the foot, so nothing
-  // about those three moves.
+  // The slot goes into the nav immediately before the first tail item -- whose
+  // `margin-top: auto` goes on holding the tail at the foot, so nothing about
+  // those three moves.
   const page = read('src/public/index.html');
-  const at = page.indexOf('function seatTaskCard(slot){');
-  assert.ok(at > -1, 'the card is seated rather than left in the footer');
+  const at = page.indexOf('function railFooterSlot(){');
   const body = page.slice(at, page.indexOf('function paintTaskCard'));
   assert.match(body, /querySelector\('\.dc-nav-tail'\)/, 'found by the tail class the rail already uses');
   assert.match(body, /insertBefore\(slot, ?tail\)/, 'and inserted before it');
-  assert.match(body, /if\(slot\.nextElementSibling===tail/,
-    'and only when it is not already there, or every paint would reinsert it');
 });
 
 test('the collapsed rail is read from the adapter, not from a class or a width', () => {

@@ -398,8 +398,18 @@ body.dc-light {
 
    42px, not the site's 46: the collapsed rail is 68px wide with 12px of
    padding, so 44px is all the room there is. */
-#dcRailBrand .dc-seal { position: relative; width: 42px; height: 42px; display: grid; place-items: center; flex: none; }
-#dcRailBrand .dc-seal > * { position: relative; z-index: 1; transform: scale(.86); }
+/* THE DESIGN'S OWN SPAN carries the seal now -- there is no wrapper. One went
+   in at v3.72.11 and the patcher spent every state poll undoing it, so the
+   ring was rebuilt and its rotation restarted before a single degree of it
+   was ever seen (paintBrandSeal in index.html has the full account). Addressed
+   through the arch it holds rather than through its hashed class, which a
+   design re-import renumbers. */
+#dcRailBrand > span:has(> svg[viewBox="0 0 40 52"]) {
+  position: relative; width: 42px; height: 42px; display: grid; place-items: center; flex: none;
+}
+#dcRailBrand > span:has(> svg[viewBox="0 0 40 52"]) > svg:not(.dc-seal-ring) {
+  position: relative; z-index: 1; transform: scale(.86);
+}
 /* The ring is LARGER than the box it sits in, deliberately, and the clearance
    is measured to the arch's CORNERS rather than its height -- which is what
    the first attempt got wrong. The mark is 26 wide by 34 tall, so its corners
@@ -648,27 +658,23 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
    then add tasks like upload your first 3 clips finish 1 week finish 1 month
    and etc and they can earn tokens with it as well."
 
-   It fills the rail's OWN empty footer card rather than adding an element.
-   That div has always been in the design export, painting its border and
-   padding around nothing, and `#dcRail > div:empty` above hides it for exactly
-   that reason -- "the card returns the moment it has something to say". This
-   is the something. So the card costs no design re-import and cannot be
-   renumbered away by one. */
+   It shipped painted into the rail's own empty footer div and then MOVED into
+   the nav, above the DeenAI / Help / Owner tail. Moving a generated node is
+   what the patcher exists to undo, and it undid it on every state poll: the
+   nav group's remaining children paired one across, a nav link was replaced by
+   the slot and the last one deleted, and the card was rebuilt every couple of
+   seconds. It has its own host-owned #dcTaskSlot now (railFooterSlot in
+   index.html), inserted where it belongs; nothing generated moves, and the
+   design's footer div stays empty at the rail's foot where `#dcRail >
+   div:empty` above has always hidden it.
 
-/* THE COLLAPSE CONTROL IS ABSOLUTELY POSITIONED OVER THIS SLOT, and that is
-   the collision that killed the plan badge in v3.73.1. Measured at 1440x950:
-   the footer slot occupies y 873..934 and the collapse row y 906..938, so a
-   card dropped straight in lands underneath it. The nav above has slack and
-   does not scroll, so reserving the row's height below the slot pulls the
-   whole thing up clear of it. Scoped with :has() so it applies only while the
-   card is actually in there -- an empty slot is hidden and must not push the
-   rail around. */
-/* The slot lives INSIDE the nav now (seatTaskCard), above the DeenAI / Help /
-   Owner tail, so it no longer collides with the collapse control at the rail's
-   foot and no longer needs to reserve its height. It keeps a little air under
-   it so it does not sit flush against the tail's hairline. */
+   Sitting inside the nav it also clears the collapse control, which is
+   absolutely positioned over that footer slot -- the collision that killed the
+   plan badge in v3.73.1. It keeps a little air under it so it does not sit
+   flush against the tail's hairline. */
 #dcRailNav div:has(> #dcTaskCard) { margin-bottom: 14px; }
-#dcRail > div:has(> #dcTaskCard) { margin-bottom: 46px; }
+/* Empty while the ladder has nothing to say, and then it must take no room. */
+#dcTaskSlot:empty { display: none; }
 
 #dcTaskCard {
   display: flex; align-items: center; gap: 11px; width: 100%;
