@@ -5547,6 +5547,40 @@ line you think it does.
 
 Fifteen tests on executed output -- the prompt bytes and the returned dict.
 
+### Measured again after the fix, on the same box, same transcript
+
+**The real case -- a clip that already has a title**, which is every clip the
+star is pressed on:
+
+| shape | v3.122.0 | v3.123.2 |
+|---|---|---|
+| (no shape) | "The door that never closes" *claimed as new* | **unchanged**, said so |
+| Promise / Warmer | "The door that never closes" *claimed as new* | **unchanged**, said so |
+| Question | "The door that never closes" | **"The turning point that doesn't fade"** |
+| Subject: payoff | "...: The promise of turning around" | **"The door that never closes: a call to turn around and face the opportunity before it slips away."** |
+| Shorter | "The door that never closes" | **unchanged**, said so |
+
+**With no current title**, where it had invented a scholar: nothing invented,
+nothing leaked, no transcript copied through. Question wrote *"What does
+turning around mean in the context of Allah's mercy?"*; the other four fell
+back to `title_from_text` and the screen says so.
+
+**THE LYING IS GONE; THE MODEL'S CEILING IS NOT.** Two shapes of five write a
+genuinely different title and three admit they cannot -- which is strictly
+better than four of five silently handing back what was already there, and it
+is not the feature working well. That ceiling is qwen3:1.7b, and this file
+already records what raises it: the CPX41 rescale (open item 5) is what makes
+`qwen3:4b` fit under the 2G cap. More prompt work is not the lever.
+
+**"Shorter" returning unchanged on a five-word title is arguably right**, and
+worth not mistaking for a fault: there is very little to shorten in "The door
+that never closes".
+
+**The retry costs a second generation**, so a rejected first answer roughly
+doubles the wait -- 6-8s warm on the box, and the route's own Ollama timeout is
+90s per generation. Watch that if the box is ever loaded; it is the reason the
+retry fires only on an actual rejection rather than on every ask.
+
 
 ## The box can be ASKED what the model writes (4 Sept 2026)
 
