@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1458 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1460 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -6804,6 +6804,64 @@ know. Now it can:
   prevent, shipped one release after writing that warning into this module.**
   A monitor's first alert is worth checking against the code before it is
   checked against the box.
+
+## Two more alerts that could never be cleared (v3.129.4, 5 Sept 2026)
+
+Working the rest of the same alert feed. Neither of these was a fault in the
+thing being monitored.
+
+### The billing alert overstated, and the second net is why
+
+*"A payment may have completed without the customer receiving tokens."* That
+stopped being true on 30 Aug: `confirmCheckoutSession` (v3.39.0) is the SECOND
+NET, and the return from Stripe calls `/api/billing/confirm` -- verified live
+in index.html, which reads `session_id` off the query and posts it -- granting
+through the same two functions the webhook would, from the SECRET KEY, a
+different credential that is demonstrably working.
+
+What is genuinely not landing with a bad signing secret: **renewals**
+(`invoice.paid`, so revenue goes unrecorded), cancellations and plan changes,
+and anyone who pays and closes the tab before returning. The alert says that
+now, plus the thing that makes it bearable -- Stripe retries for ~3 days, so
+fixing the secret inside that window redelivers all of it.
+
+`billing-webhook-alert.test.mjs` asserted the old sentence and now asserts the
+new one PLUS the two things that make it true: the route exists and the page
+calls it. The claim and its precondition move together, or the alert quietly
+starts lying again.
+
+### The currency drift had a false floor built into its arithmetic
+
+`pro_weekly` alerted on EUR, GBP and USD for ~49 hours at +11-13%, and
+**re-running the repricer would have written the identical numbers.**
+`scripts/stripe-currency-options.mjs` rounds UP to the local .99 so no currency
+is ever cheaper than the Australian price -- and on a small price that rounding
+is worth more than the 10% threshold by itself: EUR 6.18 becomes EUR 6.99,
+permanently +13%. Monthly and yearly are large enough that .99 disappears under
+the threshold, which is why only the weeklies fired.
+
+`conventionPrice(minor, code)` is ONE definition of what a correct price looks
+like -- round up to .99 below 100, a whole unit at or above it, untouched in a
+currency with no minor units -- and the drift check compares against THAT
+rather than the raw conversion. A genuine rate move still alerts; a test drives
+both directions.
+
+### AND EVERY currencyDrift TEST HAD ALWAYS RETURNED EARLY
+
+Found because the red probe came back GREEN. Those tests open
+`if (!monthly) return;`, and **nothing anywhere sets `STRIPE_PRICE_*`** -- not
+the test file, not `ci.yml`, not the environment. So three tests have passed
+for free since they were written, locally and on the runner, on the exact code
+that then produced a 49-hour alert.
+
+**A static `import` is HOISTED**, so setting the variables at the top of the
+file was not enough either: `config.js` reads the environment once, at first
+import, and had already run. The imports that pull in config are `await
+import(...)` now, below the assignments -- the same rule this file already
+records for `PORT`. Only after that did the probe go red.
+
+**A test that opens with `if (!x) return;` is a test that can be silently
+absent.** Two of those in this file were guarding money.
 
 ## Open items
 

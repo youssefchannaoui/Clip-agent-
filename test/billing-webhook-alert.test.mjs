@@ -84,10 +84,29 @@ test('a request that carries a signature and fails verification raises the alarm
   assert.ok(sent.length >= 1, 'a signed-but-invalid delivery is Stripe with the wrong secret');
   const alert = sent.find(item => /billing/i.test(item.title));
   assert.ok(alert, `expected a billing alert, got ${JSON.stringify(sent.map(s => s.title))}`);
-  assert.match(alert.body, /without the customer receiving tokens/,
-    'the alert must say what it costs, not just that something failed');
+  // It must say what it COSTS -- and cost it accurately. This asserted
+  // "without the customer receiving tokens" until v3.129.4, which the SECOND
+  // NET has made untrue for the common path since v3.39.0: the return from
+  // checkout calls /api/billing/confirm, reading the session with the SECRET
+  // key -- a different credential, demonstrably working -- and granting
+  // through the same two functions the webhook would. An alert that overstates
+  // gets discounted, and then the real one is missed too.
+  assert.match(alert.body, /renewals/i,
+    'the alert must name what is genuinely not landing');
+  assert.match(alert.body, /billing\/confirm/,
+    'and say that checkout itself still lands, by the second net');
+  assert.ok(!/without the customer receiving tokens/i.test(alert.body),
+    'the second net makes that claim false; overstating is how an alert gets ignored');
   assert.match(alert.body, /STRIPE_WEBHOOK_SECRET/,
     'the playbook must name the fix');
+
+  // The claim above is only true while the second net exists and is CALLED.
+  const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  assert.match(server, /pathname === '\/api\/billing\/confirm'/,
+    'the alert promises this route; if it goes, the alert is lying again');
+  const page = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  assert.match(page, /\/api\/billing\/confirm/,
+    'and the return from checkout must actually call it');
 });
 
 test('the alarm is raised once, not on every retry Stripe sends', async () => {

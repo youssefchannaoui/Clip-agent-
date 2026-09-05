@@ -158,6 +158,22 @@ export async function priceCurrencies(priceId) {
  * Returns [] when there is nothing to say: no key, no configured currencies,
  * or no rate source. Silence is correct for all three.
  */
+/**
+ * The price scripts/stripe-currency-options.mjs would actually set for this
+ * amount: rounded UP to the local .99 below 100, to a whole unit at or above
+ * it, and left alone in a currency with no minor units. ONE definition of the
+ * convention, so the monitor and the repricer cannot disagree about what a
+ * correct price looks like -- two answers to that question is what made the
+ * alert permanent.
+ */
+export function conventionPrice(minor, code) {
+  if (!Number.isFinite(minor) || minor <= 0) return 0;
+  if (geo.isZeroDecimal?.(code)) return Math.ceil(minor);
+  const major = minor / 100;
+  if (major >= 100) return Math.ceil(major) * 100;
+  return Math.round((Math.ceil(major - 0.99) + 0.99) * 100);
+}
+
 export async function currencyDrift(rates = null) {
   const grid = plans();
   const live = rates || await fetchRates();
@@ -172,7 +188,15 @@ export async function currencyDrift(rates = null) {
       if (code === geo.DEFAULT_CURRENCY) continue;
       const rate = Number(live[code]);
       if (!Number.isFinite(rate) || rate <= 0) continue;
-      const expected = base * rate;
+      // COMPARE AGAINST THE PRICE THE SCRIPT WOULD SET, NOT THE RAW
+      // CONVERSION. scripts/stripe-currency-options.mjs rounds UP to the local
+      // .99 convention so no currency is ever cheaper than the Australian
+      // price -- and on a SMALL price that rounding is itself worth more than
+      // the 10% threshold: EUR 6.18 becomes EUR 6.99, permanently +13%. So the
+      // weekly plans alerted for ever, and re-running the script would have
+      // produced the identical numbers. That is a monitor with a false floor
+      // built into it, which is the crying-wolf failure by arithmetic.
+      const expected = conventionPrice(base * rate, code);
       if (expected <= 0) continue;
       const off = (Number(minor) - expected) / expected;
       if (Math.abs(off) >= DRIFT_THRESHOLD) {

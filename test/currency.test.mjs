@@ -11,7 +11,19 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as geo from '../src/geo.js';
+
+/* EVERY currencyDrift TEST IN THIS FILE USED TO RETURN EARLY AND NEVER RUN.
+   They open `if (!monthly) return;`, nothing anywhere set STRIPE_PRICE_*, and
+   config reads the environment ONCE at first import -- so three tests passed
+   for free, in CI and locally, on the exact code that then alerted for 49
+   hours about a drift that could never be cleared. Set before the first import
+   that pulls in config.js, which is the same rule this repo already has for
+   PORT. */
+process.env.STRIPE_PRICE_WEEKLY ||= 'price_test_weekly';
+process.env.STRIPE_PRICE_MONTHLY ||= 'price_test_monthly';
+process.env.STRIPE_PRICE_YEARLY ||= 'price_test_yearly';
+
+const geo = await import('../src/geo.js');
 
 test('the country comes from the edge, not from anything a caller can set', () => {
   // Cloudflare sits in front of Render for this domain and overwrites
@@ -102,8 +114,12 @@ test('a currency Intl has never heard of still prints something honest', () => {
    about. These pin the rule that makes that safe: an amount is shown only when
    Stripe holds it, and the checkout is then told to charge that same currency. */
 
-import { config } from '../src/config.js';
-import * as billing from '../src/billing.js';
+/* Dynamic, and that is the whole point: a static `import` is HOISTED and runs
+   before any module body code, so the STRIPE_PRICE_* assignments at the top of
+   this file would land after config.js had already read the environment -- and
+   every drift test would go on returning early exactly as it always has. */
+const { config } = await import('../src/config.js');
+const billing = await import('../src/billing.js');
 
 function withStripe(prices, run) {
   const key = config.stripeSecretKey;
@@ -306,6 +322,42 @@ test('drift is reported, never repriced', async () => {
     // daily movement is one nobody reads.
     assert.deepEqual(await billing.currencyDrift({ gbp: 0.53 }), []);
   });
+});
+
+test('rounding a small price up to .99 is not drift', async () => {
+  // THE ALERT THAT COULD NEVER BE CLEARED. The repricer rounds UP to the local
+  // .99 so no currency is ever cheaper than the Australian price -- and on a
+  // weekly price that rounding is worth more than the 10% threshold by itself:
+  // EUR 6.18 becomes EUR 6.99, permanently +13%. pro_weekly alerted on EUR,
+  // GBP and USD for ~49 hours, and re-running the script would have written
+  // the identical numbers. Compared against what the script WOULD set, it is
+  // silent -- and a genuine rate move still is not.
+  const weekly = config.stripePriceWeekly;
+  if (!weekly) return;
+  await withStripe({
+    [weekly]: {
+      id: weekly, currency: 'aud', unit_amount: 999,
+      currency_options: { eur: { unit_amount: 699 } },
+    },
+  }, async () => {
+    // 9.99 AUD at 0.619 is 6.18 EUR, which the convention writes as 6.99.
+    assert.deepEqual(await billing.currencyDrift({ eur: 0.619 }), [],
+      'the .99 convention is not drift, however small the price');
+
+    // The euro strengthening far enough that even after rounding the charge is
+    // short IS drift, and must still be reported.
+    const moved = await billing.currencyDrift({ eur: 0.95 });
+    assert.ok(moved.find(item => item.currency === 'eur'), 'a real rate move still alerts');
+  });
+});
+
+test('the convention is one function, and it is stable', () => {
+  // Applying it twice must not climb: a monitor that disagrees with the
+  // repricer about what a correct price looks like is the whole bug.
+  assert.equal(billing.conventionPrice(618, 'eur'), 699);
+  assert.equal(billing.conventionPrice(699, 'eur'), 699, 'a price already on the convention does not move');
+  assert.equal(billing.conventionPrice(35620, 'usd'), 35700, 'three figures round to a whole unit');
+  assert.equal(billing.conventionPrice(1000, 'jpy'), 1000, 'the yen has no .99');
 });
 
 test('no rates means no alert, never a false one', async () => {

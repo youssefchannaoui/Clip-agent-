@@ -992,7 +992,21 @@ async function route(req, res, url) {
       if (req.headers['stripe-signature']) {
         alerts.report('billing', true,
           `A Stripe webhook was refused: ${error.message}\n` +
-          'A payment may have completed without the customer receiving tokens.\n' +
+          // WHAT IS ACTUALLY AT RISK, rather than the worst thing imaginable.
+          // This used to say "a payment may have completed without the
+          // customer receiving tokens", which the SECOND NET has made untrue
+          // for the common path since v3.39.0: the return from checkout calls
+          // /api/billing/confirm, which reads the session with the SECRET key
+          // -- a different credential that is demonstrably working -- and
+          // grants through the same two functions the webhook would. An alert
+          // that overstates gets discounted, and then the real one is missed.
+          'Checkout itself still lands: the return from Stripe grants the plan ' +
+          'through /api/billing/confirm, which uses the secret key rather than ' +
+          'this one. What is NOT landing is everything with no return path -- ' +
+          'renewals (invoice.paid, so revenue goes unrecorded), cancellations ' +
+          'and plan changes, and anyone who pays and closes the tab.\n' +
+          'Stripe retries for ~3 days, so fixing the secret inside that window ' +
+          'redelivers all of it and nothing is lost.\n' +
           billing.webhookSecretNote()).catch(() => {});
       }
       return json(res, 400, { error: error.message });

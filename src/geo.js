@@ -127,6 +127,15 @@ const ZERO_DECIMAL = new Set([
 ]);
 
 /**
+ * Whether this currency's smallest unit IS its whole unit -- the yen has no
+ * sen. Exported because a price convention (round up to .99) is nonsense in
+ * one of these, and the drift monitor and the repricer both have to know.
+ */
+export function isZeroDecimal(currency) {
+  return ZERO_DECIMAL.has(String(currency || '').toLowerCase());
+}
+
+/**
  * A Stripe amount, written the way that currency is written.
  *
  * Intl does the symbol and the placement, which differ by more than a prefix:
