@@ -521,6 +521,109 @@ class FasterWhisperBackend(TranscriptionBackend):
         return _transcribe_with_faster_whisper(job, audio_file, duration_sec)
 
 
+# A FIRST LISTEN THAT STOPS EARLY IS NOT THE TRANSCRIPT.
+#
+# Youssef, 5 Sept 2026: a 568-second recitation of Surah An-Nisa came back
+# as TWO segments covering its first 28.4 seconds, and the job then failed
+# with "No complete clip candidates fit the selected duration range" -- the
+# candidate builder had been handed 28 seconds of speech and asked for a
+# 45-second window. Read off the box with the diagnose workflow: the cached
+# transcript, not a guess. Whisper had simply gone quiet on the recording,
+# and nothing downstream could tell that from a lecture that really was that
+# short. Recitation is closer to singing than to speech, and a reverberant
+# mosque recording is exactly what a voice detector or the model's own
+# no-speech gate reads as music.
+#
+# So a transcript that stops before half the audio is listened to AGAIN,
+# with the two things that can silence a recording switched off one at a
+# time: the voice-activity filter, then the no-speech gate. Each pass keeps
+# the OTHER guard, on purpose -- with the VAD off the gate still refuses real
+# silence, and with the gate off the VAD still removes it -- because a pass
+# with neither hallucinates captions onto silence, which is worse than the
+# fault being fixed. The fullest transcript wins, and the run says so in a
+# warning that reaches the customer's activity feed. A recording shorter
+# than a minute is never retried: a 40-second clip that transcribes in 20 is
+# ambiguous, and a whole second pass over a long lecture costs minutes, so
+# the trigger is deliberately "plainly stopped", not "a bit short".
+SECOND_LISTEN_MIN_SEC = 60.0
+SECOND_LISTEN_SHARE = 0.5
+SECOND_LISTEN_PASSES: tuple[tuple[str, dict[str, Any]], ...] = (
+    ("voice detection off", {"vad_filter": False}),
+    ("no-speech gate off", {"no_speech_threshold": None}),
+)
+
+
+def transcript_reach(segments: list[dict[str, Any]], duration_sec: float) -> float:
+    """How far into the audio the transcript reaches, as a share of it."""
+    if not segments or duration_sec <= 0:
+        return 0.0
+    last = max(float(item.get("end") or 0.0) for item in segments)
+    return max(0.0, min(1.0, last / duration_sec))
+
+
+def stopped_early(segments: list[dict[str, Any]], duration_sec: float) -> bool:
+    return duration_sec >= SECOND_LISTEN_MIN_SEC and transcript_reach(segments, duration_sec) < SECOND_LISTEN_SHARE
+
+
+def second_listen(
+    run_pass: Any,
+    first: list[dict[str, Any]],
+    duration_sec: float,
+    options: dict[str, Any],
+) -> tuple[list[dict[str, Any]], str | None]:
+    """The fullest transcript of the first pass and the retries it earns.
+
+    `run_pass(options)` performs one transcription and returns its segments.
+    Returns (segments, label) -- label names the pass that won, or None when
+    the first pass stood (it did not stop early, or nothing beat it).
+    """
+    if not stopped_early(first, duration_sec):
+        return first, None
+    best, best_reach, winner = first, transcript_reach(first, duration_sec), None
+    first_reach = best_reach
+    for label, changes in SECOND_LISTEN_PASSES:
+        retry = dict(options)
+        retry.update(changes)
+        if not retry.get("vad_filter"):
+            retry.pop("vad_parameters", None)
+        try:
+            candidate = run_pass(retry)
+        except TypeError:
+            # An older faster-whisper without the option. Not a failed job.
+            continue
+        reach = transcript_reach(candidate, duration_sec)
+        if reach > best_reach + 0.05:
+            best, best_reach, winner = candidate, reach, label
+        if best_reach >= 0.9:
+            break
+    if winner:
+        emit("warning", code="transcription_second_pass",
+             warning=(f"The first listen stopped at {first_reach * 100:.0f}% of the audio; "
+                      f"a second pass with {winner} reached {best_reach * 100:.0f}%."))
+    else:
+        emit("warning", code="transcription_stopped_early",
+             warning=(f"The speech recogniser stopped at {first_reach * 100:.0f}% of the audio "
+                      "and listening again did not reach further."))
+    return best, winner
+
+
+def no_clip_reason(segments: list[dict[str, Any]], duration_sec: float, settings: dict[str, Any]) -> str:
+    """Why a run produced nothing, said about the transcript when that is why.
+
+    The old sentence blamed the duration range on every zero-clip run, so a
+    transcription that stopped at 28 seconds of 568 was reported as a length
+    problem and sent the customer to the wrong control.
+    """
+    minimum = float(settings.get("clipMinSeconds", 20) or 20)
+    maximum = max(minimum, float(settings.get("clipMaxSeconds", 90) or 90))
+    if segments and duration_sec >= SECOND_LISTEN_MIN_SEC and transcript_reach(segments, duration_sec) < SECOND_LISTEN_SHARE:
+        heard = max(float(item.get("end") or 0.0) for item in segments)
+        return (f"Only {heard:.0f}s of the {duration_sec:.0f}s source could be transcribed, so no "
+                f"{minimum:.0f}-{maximum:.0f} second clip could be cut. The speech recogniser stopped "
+                "early on this recording, even after a second listen.")
+    return f"No complete clip candidates fit the selected duration range ({minimum:.0f}-{maximum:.0f}s)."
+
+
 def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, duration_sec: float) -> list[dict[str, Any]]:
     supplied = job.get("transcriptSegments")
     if isinstance(supplied, list) and supplied:
@@ -587,48 +690,63 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
         # then it was not. `multilingual` detects per segment instead.
         kwargs["multilingual"] = True
 
-    try:
-        segments, info = model.transcribe(str(audio_file), **kwargs)
-    except TypeError:
-        # An older faster-whisper without per-segment detection. One language
-        # for the file is worse, but it is not a failed job.
-        kwargs.pop("multilingual", None)
-        segments, info = model.transcribe(str(audio_file), **kwargs)
-    output: list[dict[str, Any]] = []
-    transcription_started = time.time()
-    last_percent = 15
-    for segment in segments:
-        processed_sec = max(0.0, min(duration_sec, float(segment.end or 0.0)))
-        fraction = processed_sec / max(duration_sec, 1.0)
-        current_percent = 16 + int(fraction * 44)
-        current_percent = max(last_percent, min(60, current_percent))
-        elapsed = max(0.1, time.time() - transcription_started)
-        speed = processed_sec / elapsed
-        eta = ((duration_sec - processed_sec) / speed) if speed > 0.01 and processed_sec > 15 else None
-        if current_percent > last_percent or time.time() - float(_progress_state.get("lastDetailAt", 0)) >= 8:
-            progress(
-                "Transcribing speech", current_percent,
-                model=model_name, device=device, computeType=compute_type,
-                sourceDurationSec=round(duration_sec, 2),
-                processedSec=round(processed_sec, 2),
-                transcriptionSpeed=round(speed, 3),
-                etaSec=round(eta, 1) if eta is not None else None,
-                lastDetailAt=time.time(),
-            )
-            last_percent = current_percent
-        text = str(segment.text or "").strip()
-        if not text:
-            continue
-        output.append({
-            "start": float(segment.start),
-            "end": float(segment.end),
-            "text": text,
-            "words": [
-                {"start": float(word.start), "end": float(word.end), "word": str(word.word)}
-                for word in (segment.words or [])
-                if word.start is not None and word.end is not None
-            ],
-        })
+    info: Any = None
+
+    def run_pass(options: dict[str, Any], stage: str = "Transcribing speech") -> list[dict[str, Any]]:
+        nonlocal info
+        try:
+            segments, info = model.transcribe(str(audio_file), **options)
+        except TypeError:
+            if "multilingual" not in options:
+                raise
+            # An older faster-whisper without per-segment detection. One
+            # language for the file is worse, but it is not a failed job.
+            options = dict(options)
+            options.pop("multilingual", None)
+            kwargs.pop("multilingual", None)
+            segments, info = model.transcribe(str(audio_file), **options)
+        rows: list[dict[str, Any]] = []
+        transcription_started = time.time()
+        last_percent = 15
+        for segment in segments:
+            processed_sec = max(0.0, min(duration_sec, float(segment.end or 0.0)))
+            fraction = processed_sec / max(duration_sec, 1.0)
+            current_percent = 16 + int(fraction * 44)
+            current_percent = max(last_percent, min(60, current_percent))
+            elapsed = max(0.1, time.time() - transcription_started)
+            speed = processed_sec / elapsed
+            eta = ((duration_sec - processed_sec) / speed) if speed > 0.01 and processed_sec > 15 else None
+            if current_percent > last_percent or time.time() - float(_progress_state.get("lastDetailAt", 0)) >= 8:
+                progress(
+                    stage, current_percent,
+                    model=model_name, device=device, computeType=compute_type,
+                    sourceDurationSec=round(duration_sec, 2),
+                    processedSec=round(processed_sec, 2),
+                    transcriptionSpeed=round(speed, 3),
+                    etaSec=round(eta, 1) if eta is not None else None,
+                    lastDetailAt=time.time(),
+                )
+                last_percent = current_percent
+            text = str(segment.text or "").strip()
+            if not text:
+                continue
+            rows.append({
+                "start": float(segment.start),
+                "end": float(segment.end),
+                "text": text,
+                "words": [
+                    {"start": float(word.start), "end": float(word.end), "word": str(word.word)}
+                    for word in (segment.words or [])
+                    if word.start is not None and word.end is not None
+                ],
+            })
+        return rows
+
+    output = run_pass(kwargs)
+    # A transcript that stops before half the audio is listened to again --
+    # see SECOND_LISTEN_PASSES for why, and why each retry keeps one guard.
+    output, _won = second_listen(
+        lambda options: run_pass(options, "Listening again"), output, duration_sec, kwargs)
     if not output:
         raise RuntimeError("The transcription model did not find any speech in the source.")
 
@@ -5962,7 +6080,7 @@ def process(job_file: Path) -> None:
     selected = title_selected_clips(selected, settings, str(job.get("title") or ""))
     clock.lap("score")
     if not selected:
-        raise RuntimeError("No complete clip candidates fit the selected duration range.")
+        raise RuntimeError(no_clip_reason(segments, duration, settings))
 
     # Deterministic shuffle per project: variety without random changes on retry.
     seed = int(hashlib.sha256(str(job["id"]).encode()).hexdigest()[:12], 16)

@@ -2630,8 +2630,22 @@ test('Home gets the docked section and every other screen gets the bar', () => {
     'the floating bar is for other screens, and only when something is running');
   assert.match(paint, /bar\.classList\.toggle\('hide',!\(!onHome&&any\)\)|barUp=!onHome&&any;[\s\S]{0,80}bar\.classList\.toggle\('hide',!barUp\)/,
     'and the hide toggle is driven by exactly that');
-  assert.match(paint, /if\(!any\)\{liveEls\.home\.classList\.add\('hide'\);return\}/,
-    'the section never shows off Home');
+  // OFF HOME THE SECTION IS PUT AWAY WHETHER OR NOT ANYTHING RUNS. This used
+  // to assert `if(!any){...add('hide');return}` under the words "the section
+  // never shows off Home" -- and passed while the section showed off Home
+  // whenever a job RAN, stranded by the patcher in whatever column inherited
+  // its slot (the Templates settings column, 5 Sept 2026). The put-away must
+  // come BEFORE the idle early-return, so it does not depend on `any`.
+  const away = paint.indexOf('undockLiveHome(liveEls.home);');
+  const idle = paint.indexOf('if(!any)return;');
+  assert.ok(away > 0 && idle > away, 'off Home the section is undocked and hidden before anything asks whether a job runs');
+  assert.match(paint, /if\(onHome\)\{[\s\S]*return;\s*\}\s*\/\*[\s\S]*?\*\/\s*undockLiveHome/,
+    'and that happens on the off-Home path, after the Home branch has returned');
+  const undock = /function undockLiveHome\([\s\S]*?\n    }\n/.exec(html)[0];
+  assert.match(undock, /classList\.add\('hide'\)/, 'undocking hides it');
+  assert.match(undock, /classList\.remove\('slh-docked'\)/);
+  assert.match(undock, /document\.body\.appendChild\(el\)/,
+    'and moves it back to the root, so no other screen can inherit it from a generated column');
   assert.match(paint, /vals\.liveAll\.map/, 'the section lists everything, not a slice');
 });
 

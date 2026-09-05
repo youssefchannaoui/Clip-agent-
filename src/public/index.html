@@ -3107,6 +3107,19 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(col&&col.firstElementChild!==el)col.insertBefore(el,col.firstElementChild);
       el.classList.toggle('slh-docked',Boolean(col));
     }
+    /* The reverse, for every screen but Home. The section is docked INSIDE a
+       generated column, and the patcher pairs a screen's children by index
+       while skipping host-owned nodes -- so on leaving Home it stayed exactly
+       where it was, in whichever column inherited that slot on the next
+       screen. Measured 5 Sept 2026: on Templates it sat inside the settings
+       column between the promo bar and STYLE, with the floating bar also up,
+       for as long as a job ran (it was only ever hidden when nothing ran).
+       Put back at the root and hidden, so no other screen can inherit it. */
+    function undockLiveHome(el){
+      el.classList.add('hide');
+      el.classList.remove('slh-docked');
+      if(el.parentElement&&el.parentElement!==document.body)document.body.appendChild(el);
+    }
     /* Rewriting innerHTML on every paint destroyed and rebuilt each row, which
        restarted the spinner's CSS animation from frame zero two seconds later,
        every time — so it never visibly turned. The structure is only rebuilt
@@ -4905,6 +4918,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        patcher may strip them, so they are re-applied on each paint and torn down
        explicitly when leaving the screen. */
     let tplLayout=null;
+    /* A 9:16 frame under this is a thumbnail, not a preview; past it the
+       preview column scrolls itself rather than shrinking further. */
+    const FRAME_MIN_HEIGHT=300;
     function clearTemplatesLayout(){
       if(!tplLayout)return;
       for(const [node,props] of tplLayout){
@@ -4972,14 +4988,37 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          into. Otherwise stand down and let the screen's own `overflow: auto`
          scroll as one -- the honest fallback, and what this did before v3.53. */
       const sideBySide=Math.abs(previewCol.getBoundingClientRect().top-settings.getBoundingClientRect().top)<4;
-      const fits=row.scrollHeight<=scroller.clientHeight+1;
-      if(!sideBySide||!fits){clearTemplatesLayout();return}
+      if(!sideBySide){clearTemplatesLayout();return}
       set(scroller,{'overflow-y':'hidden','display':'flex','flex-direction':'column'});
       for(const child of scroller.children){
         if(child!==row)set(child,{'flex':'0 0 auto'});
       }
       set(row,{'flex':'1 1 auto','min-height':'0','align-items':'flex-start'});
       set(settings,{'max-height':'100%','overflow-y':'auto','min-height':'0'});
+      /* THE PREVIEW COLUMN IS MADE TO FIT; THE PAGE NEVER SCROLLS AS ONE.
+         v3.126.0 gated the lock on `row.scrollHeight <= scroller.clientHeight`
+         -- measured BEFORE the lock, when the settings column stands at its
+         full 1800px, so the gate was false on every desktop size and the lock
+         never applied again: the whole page scrolled for a day (Youssef,
+         5 Sept 2026: "LEFT SIDE ONLY SHOULD BE SCROLLABLE NOT WHOLE PAGE").
+         The column that has to be whole is the PREVIEW one, and it is the
+         frame, not the page, that gives way: measured after the lock, any
+         overflow past the scroller's foot comes off the frame's height, the
+         width following through its own aspect-ratio. Below FRAME_MIN_HEIGHT
+         the column scrolls on its own instead -- still never the page. */
+      const limit=scroller.getBoundingClientRect().bottom-(parseFloat(getComputedStyle(scroller).paddingBottom)||0);
+      const over=previewCol.getBoundingClientRect().bottom-limit;
+      if(over>0.5){
+        const fr=frame.getBoundingClientRect();
+        const ratio=fr.height>0?fr.width/fr.height:9/16;
+        const height=fr.height-over;
+        if(height>=FRAME_MIN_HEIGHT){
+          set(frame,{'width':Math.floor(height*ratio)+'px'});
+        }else{
+          set(frame,{'width':Math.floor(FRAME_MIN_HEIGHT*ratio)+'px'});
+          set(previewCol,{'max-height':'100%','overflow-y':'auto','min-height':'0'});
+        }
+      }
       /* A resize changes both answers and does not repaint the studio, so the
          lock would survive into a viewport that cannot hold it. */
       if(!window.__dcTplResize){
@@ -6310,7 +6349,12 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         if(n&&n.textContent!==want)n.textContent=want;
         return;
       }
-      if(!any){liveEls.home.classList.add('hide');return}
+      /* OFF HOME THE SECTION IS PUT AWAY WHETHER OR NOT ANYTHING RUNS. It
+         used to be hidden only when idle, so a running job left it visible
+         wherever the patcher had stranded it -- see undockLiveHome. The bar
+         below is the only live surface on every other screen. */
+      undockLiveHome(liveEls.home);
+      if(!any)return;
       const first=vals.liveAll[0];
       /* Keyed on what changes the structure — which jobs, and whether the queue
          is open — so a numbers-only update leaves the nodes, and the spinner

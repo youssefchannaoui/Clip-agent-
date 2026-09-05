@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1476 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1481 JS + 668 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9916,6 +9916,136 @@ field, the heading and the video frame all leave it open; typing keeps focus;
 the × and the backdrop still close. **Proven the other way too** -- removing the
 card's `data-dc-h` in the live DOM and repeating the same click closes it, which
 is the old behaviour exactly.
+
+## Templates: the stray card, and a lock that had never held (v3.131.0, 5 Sept 2026)
+
+Youssef, with a screenshot of Templates while a recitation imported: "LEFT
+SIDE ONLY SHOULD BE SCROLLABLE NOT WHOLE PAGE AND HAPPENING NOW BAR ON THE
+LEFT SIDE MUST BE REMOVEED". Two faults, and the second had been live for a
+day on every desktop size.
+
+- **The "Happening now" card was in the Templates settings column.** It is
+  docked INSIDE a generated column on Home, and `patch()` pairs a screen's
+  children by index while skipping host-owned nodes -- so on leaving Home it
+  stayed exactly where it was, in whichever column inherited that slot on the
+  next screen. `paintLiveWork` only ever hid it when NOTHING ran, so for the
+  length of a job it sat between the promo bar and STYLE with the floating
+  bar also up. Reproduced at 1520x855 with a fake running project on every
+  `/api/state`: `SECTION.s96`, y=384. `undockLiveHome` now hides it, drops
+  `slh-docked` and moves it back to the body on every screen but Home,
+  BEFORE the idle early-return, so it does not depend on whether a job runs.
+  The design test that claimed "the section never shows off Home" asserted
+  the idle branch and passed against this for three weeks -- the seventh
+  source-string test in this file to pass against the behaviour it named.
+- **The Templates lock had not applied since v3.126.0.** That release gated
+  it on `row.scrollHeight <= scroller.clientHeight`, measured BEFORE the lock
+  -- when the settings column stands at its full ~1800px -- so the gate was
+  false at every desktop size and the page scrolled as one everywhere.
+  Measured with nothing running: 1440x900 row 1872 against a scroller of
+  832, 1920x1080 1872 against 1012, `fits` false both times. v3.126.0's
+  "reachable at 1024..1440 after" was measured on the page-scroll fallback,
+  and this entry corrects it. The column that has to stay whole is the
+  PREVIEW column, so it is the FRAME that gives way now: after the lock, any
+  overflow past the scroller's foot comes off the frame's height, the width
+  following through its own aspect-ratio (264px stays at 1520x855; 231 at
+  1366x768 and 204 at 1280x720 with the live bar's 92px reserved); below
+  `FRAME_MIN_HEIGHT` (300) the preview column scrolls itself. The page never
+  scrolls as one while the columns sit side by side; stacked columns keep
+  the fallback. Measured after at 1280x720, 1366x768, 1440x900, 1520x855
+  and 1920x1080, with and without the bar: page scroll 0, the settings
+  column the only scroller, the CTA row inside the viewport every time.
+- **The harness for this is `scratchpad/tpl/probe.mjs`** (gitignored): a
+  Playwright route on `/api/state` that prepends a `processing` project is
+  how a running job is faked without a worker -- the scoped `DATA` cannot
+  be reached from `page.evaluate`, and the poll overwrites a client-side
+  seed. Note the global Playwright is only reachable through
+  `createRequire` from an ESM script; `NODE_PATH` does nothing for `import`.
+
+## The box can be asked why a run produced no clips (5 Sept 2026)
+
+A failed import says one sentence ("No complete clip candidates fit the
+selected duration range") and the evidence behind it lives ONLY on the box:
+the job's `payload.json` and `status.json` under `WORKER_DATA_DIR/jobs`, and
+the transcript the run cached a moment before it gave up. The job's working
+directory is removed on failure and the service does not echo the child's
+progress events, so `docker logs` cannot answer either.
+
+`deploy-worker.yml` dispatched with `diagnose: true` SKIPS the deploy and the
+version proof (a question must never restart a worker mid-job) and runs
+`.github/scripts/worker-diagnose.py` inside the container: the newest jobs'
+status, error and whitelisted settings, then every transcript cached in the
+last N hours measured and the candidate pipeline REPLAYED over it at the
+job's own settings. `diagnose_audio: N` adds Whisper over the first N seconds
+of the cached source in four variants (as shipped, VAD off, no-speech gate
+off, both), printing `duration_after_vad` and `no_speech_prob` -- the two
+numbers that tell the VAD from the gate. Counts and timings only; never a
+word of transcript. Dispatch it on the SESSION branch, so a question costs
+no Render deploy. Same seam and base64 carriage as the clip-AI probe.
+
+**Its first answer, on the recitation Youssef reported:** the job ran with
+Arabic pinned and a 45-60s band on a 568s source, and the cached transcript
+holds **two segments covering the first 28.4 seconds** -- the candidate
+builder was handed 28 seconds of speech and asked for a 45-second window.
+The message blamed the range; the transcription had stopped. See the entry
+that follows for what was done about it.
+
+## A first listen that stops early is listened to again (v3.131.0, 5 Sept 2026)
+
+Youssef, with the failed import on screen: "nononono this cant be an issue we
+had zero issues, FIX THIS AND WE CANT HAVE ANY ISSUES EVER." A 9.5-minute
+recitation of Surah An-Nisa, Quran Recitation template, Arabic pinned, a
+45-60s band, six clips asked for -- and "Processing engine failed: No
+complete clip candidates fit the selected duration range."
+
+**The message was wrong about the cause, and the diagnose workflow proved it
+in one dispatch.** The candidate builder was innocent: the box's cached
+transcript for that job holds TWO segments covering the first 28.4 seconds
+of a 568-second source, and no 45-second window can exist inside 28 seconds
+of speech. The empty-transcript guard did not fire because the transcript
+was not empty. Whisper had gone quiet on the recording after its opening --
+recitation is closer to singing than to speech, and a reverberant mosque
+recording is exactly what a voice detector or the model's own no-speech gate
+reads as music -- and nothing downstream could tell that from a lecture that
+really was that short.
+
+- **`second_listen`**: a transcript that reaches less than half of a source
+  longer than a minute is transcribed again, with the two things that can
+  silence a recording switched off ONE AT A TIME -- the voice-activity filter
+  first, then the no-speech gate. Each retry keeps the OTHER guard on
+  purpose: with the VAD off the gate still refuses real silence, and with the
+  gate off the VAD still removes it. A pass with neither hallucinates
+  captions onto silence, which is worse than the fault being fixed. The
+  fullest transcript wins (by how far into the audio it reaches, not by
+  word count), a warning naming the pass that won reaches the activity feed
+  through the service's existing `lastWarning`, and a run that still cannot
+  reach further says so with its own code.
+- **Never on a short recording, never on a full one.** A 40-second clip
+  transcribed to 20 is ambiguous and a whole second pass over a long lecture
+  costs minutes, so the trigger is "plainly stopped" -- under
+  `SECOND_LISTEN_SHARE` (0.5) of a source over `SECOND_LISTEN_MIN_SEC` (60s).
+  A test drives both refusals.
+- **The zero-clip sentence says what happened.** `no_clip_reason` reports
+  "Only 28s of the 568s source could be transcribed, so no 45-60 second clip
+  could be cut" when the transcript is the reason, and keeps the duration
+  wording (now with the range in it) when it is not. The activity feed's
+  guidance answers both: the old sentence had NO entry and fell to the
+  generic "something stopped" card, which is what Youssef was reading.
+- **The transcription loop is one function now** (`run_pass`), so the retry
+  reports progress under "Listening again" through the same stage reporter
+  rather than a copy of it.
+
+Six tests drive the real `_transcribe_with_faster_whisper` with a fake
+faster-whisper whose answer depends on the options it is handed -- the
+transcript the pipeline would have used, the options each retry carried, the
+warning emitted -- and were proven red against the unpatched worker (three
+failures and an import error).
+
+**What this does not yet say:** WHICH guard silenced this recording. The
+diagnose workflow's `diagnose_audio` input runs Whisper over the cached bytes
+in both variants and prints `duration_after_vad` and `no_speech_prob`; it
+loads the model on the box, so it waits for the box to be idle. The retry
+order above is the safer guess until then, and the entry below records the
+answer once it is in.
 
 ## The product audit: used, not read (v3.130.0 / v3.130.1, 5 Sept 2026)
 

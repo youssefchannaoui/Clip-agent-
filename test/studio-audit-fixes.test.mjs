@@ -363,20 +363,35 @@ test('a confirmation that leaves by itself does not swallow a click', () => {
 
 // ── Overflow: five faults where content was drawn and then hidden ─────────
 
-test('the Templates layout is locked only when it can hold its content', () => {
-  // `overflow-y: hidden` on the scroller keeps the preview pinned while the
-  // columns fit -- and hides everything below the cut with nothing able to
-  // scroll it when they do not. Measured at 1366x768, the commonest desktop
-  // viewport: 105px lost, the "Preview on a real clip" button drawn at y 751
-  // while the panel clipped at 676, and twelve wheel gestures totalling 4800px
-  // leaving scrollTop at 0. The preview IS the screen.
+test('the Templates lock always holds side by side, and the FRAME gives way, never the page', () => {
+  // v3.126.0 gated the lock on `row.scrollHeight <= scroller.clientHeight`,
+  // measured BEFORE the lock -- when the settings column stands at its full
+  // ~1800px -- so the gate was false at every desktop size and the lock never
+  // applied again. Measured 5 Sept 2026 at 1440x900 and 1920x1080 with nothing
+  // running: row 1872px against a scroller of 832 / 1012, `fits` false, the
+  // whole page scrolling. Youssef: "LEFT SIDE ONLY SHOULD BE SCROLLABLE NOT
+  // WHOLE PAGE." The column that has to stay whole is the PREVIEW column, and
+  // it is the frame that shrinks to make it fit; below FRAME_MIN_HEIGHT the
+  // preview column scrolls itself. The page never scrolls as one while the
+  // columns sit side by side.
   const fn = page.slice(page.indexOf('function paintTemplatesLayout()'));
   const body = fn.slice(0, fn.indexOf('\n    }\n'));
   assert.match(body, /const sideBySide=/, 'nothing checks the columns are still side by side');
-  assert.match(body, /const fits=row\.scrollHeight<=scroller\.clientHeight/, 'nothing checks the row fits');
-  assert.match(body, /if\(!sideBySide\|\|!fits\)\{clearTemplatesLayout\(\);return\}/,
-    'the lock is applied without either check');
-  // A resize changes both answers and does not repaint the studio.
+  assert.match(body, /if\(!sideBySide\)\{clearTemplatesLayout\(\);return\}/, 'stacked columns still let the page scroll');
+  assert.ok(!/row\.scrollHeight<=scroller\.clientHeight/.test(body),
+    'the pre-lock row-height gate is back, and it is false on every desktop size');
+  // Measured AFTER the lock is applied: the preview column against the
+  // scroller's foot.
+  const lock = body.indexOf("set(settings,{'max-height':'100%','overflow-y':'auto','min-height':'0'})");
+  const fit = body.indexOf('const over=previewCol.getBoundingClientRect().bottom-limit');
+  assert.ok(lock > 0 && fit > lock, 'the preview column is measured after the lock, not before');
+  assert.match(body, /set\(frame,\{'width':Math\.floor\(height\*ratio\)\+'px'\}\)/,
+    'the frame gives way in height, through its own aspect-ratio');
+  assert.match(body, /if\(height>=FRAME_MIN_HEIGHT\)/, 'down to a floor');
+  assert.match(body, /set\(previewCol,\{'max-height':'100%','overflow-y':'auto','min-height':'0'\}\)/,
+    'and past the floor the preview column scrolls itself rather than the page');
+  assert.match(page, /const FRAME_MIN_HEIGHT=300;/);
+  // A resize changes the answer and does not repaint the studio.
   assert.match(page, /addEventListener\('resize',\(\)=>\{ if\(window\.paintTemplatesLayoutNow\)/,
     'the lock is not re-evaluated on resize');
 });
