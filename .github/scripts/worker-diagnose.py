@@ -37,6 +37,13 @@ PARAMS = {}
 
 HOURS = float(PARAMS.get("hours") or 12)
 JOBS = int(PARAMS.get("jobs") or 4)
+# Seconds of the newest cached SOURCE to run Whisper over, in the variants
+# below; 0 skips it. It loads the model on the box, so only ask when the box
+# is idle -- the workflow input says so.
+AUDIO = float(PARAMS.get("audio") or 0)
+# Which cached source: the one whose length is nearest this many seconds, or
+# the newest when 0.
+DURATION_HINT = float(PARAMS.get("duration") or 0)
 DATA = Path(os.getenv("WORKER_DATA_DIR", "/var/lib/deenclipped")).resolve()
 # The container keeps the code under /app/worker; a local dry run points this
 # at a checkout instead.
@@ -178,6 +185,110 @@ def analyse(path: Path, cw, replays: list[tuple[str, dict]]) -> None:
         out(f"  ayah walk failed: {type(exc).__name__}: {redact(str(exc))[:200]}")
 
 
+def run(args: list[str], timeout: float = 600) -> tuple[int, str, str]:
+    import subprocess  # noqa: PLC0415
+    done = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    return done.returncode, done.stdout, done.stderr
+
+
+def probe_source(path: Path) -> dict:
+    """Length and audio shape of a cached download, from ffprobe."""
+    code, stdout, _ = run(["ffprobe", "-v", "error", "-show_entries",
+                           "format=duration:stream=codec_type,codec_name,sample_rate,channels",
+                           "-of", "json", str(path)], timeout=60)
+    info = read_json_text(stdout) if code == 0 else None
+    duration = float((info or {}).get("format", {}).get("duration") or 0)
+    audio = [s for s in (info or {}).get("streams", []) if s.get("codec_type") == "audio"]
+    return {"duration": duration, "audio": audio}
+
+
+def read_json_text(text: str):
+    try:
+        return json.loads(text)
+    except ValueError:
+        return None
+
+
+def probe_audio(cw, settings: dict) -> None:
+    """Run Whisper over the first AUDIO seconds of the chosen cached source, in
+    the variants that tell VAD apart from the no-speech gate. Counts only."""
+    folder = DATA / "cache" / "sources"
+    sources = [p for p in folder.glob("*.mp4") if not p.name.startswith(".")] if folder.is_dir() else []
+    cutoff = time.time() - HOURS * 3600
+    sources = [p for p in sources if p.stat().st_mtime >= cutoff]
+    if not sources:
+        out("  no cached source in the window")
+        return
+    probed = []
+    for path in sorted(sources, key=lambda p: -p.stat().st_mtime):
+        meta = probe_source(path)
+        out(f"  source {path.name[:16]}...  written {age(path.stat().st_mtime)} ago  {path.stat().st_size // 1024 // 1024} MB"
+            f"  duration={meta['duration']:.1f}s  audio={json.dumps(meta['audio'])}")
+        probed.append((path, meta))
+    if DURATION_HINT > 0:
+        path, meta = min(probed, key=lambda item: abs(item[1]["duration"] - DURATION_HINT))
+    else:
+        path, meta = probed[0]
+    out(f"  probing {path.name[:16]}... ({meta['duration']:.1f}s), first {AUDIO:g}s")
+    wav = Path("/tmp/dc-probe-audio.wav")
+    try:
+        code, _, err = run(["ffmpeg", "-y", "-v", "error", "-i", str(path), "-t", str(AUDIO),
+                            "-vn", "-ac", "1", "-ar", "16000", str(wav)], timeout=300)
+        if code != 0:
+            out("  ffmpeg could not extract the audio: " + redact(err)[-300:])
+            return
+        code, _, err = run(["ffmpeg", "-v", "info", "-i", str(wav), "-af", "volumedetect", "-f", "null", "-"], timeout=300)
+        levels = re.findall(r"(mean_volume|max_volume): ([-\d.]+) dB", err)
+        out("  levels: " + ", ".join(f"{k}={v} dB" for k, v in levels))
+        try:
+            from faster_whisper import WhisperModel  # noqa: PLC0415
+        except ImportError:
+            out("  faster-whisper is not importable here")
+            return
+        model_name = os.getenv("WHISPER_MODEL") or settings.get("model") or "small"
+        model = WhisperModel(model_name, device=os.getenv("WHISPER_DEVICE") or "cpu",
+                             compute_type=os.getenv("WHISPER_COMPUTE_TYPE") or "int8")
+        language = str(settings.get("language") or "").strip() or None
+        base = {"beam_size": 1, "word_timestamps": True, "condition_on_previous_text": False, "task": "transcribe"}
+        lang = {"language": language} if language else {"multilingual": True}
+        variants = [
+            ("as shipped (vad on, min_silence 450)", {**base, **lang, "vad_filter": True, "vad_parameters": {"min_silence_duration_ms": 450}}),
+            ("vad off", {**base, **lang, "vad_filter": False}),
+            ("vad on, no-speech gate off", {**base, **lang, "vad_filter": True, "vad_parameters": {"min_silence_duration_ms": 450}, "no_speech_threshold": None}),
+            ("vad off, no-speech gate off", {**base, **lang, "vad_filter": False, "no_speech_threshold": None}),
+        ]
+        if language:
+            variants.append(("language auto, multilingual, vad on", {**base, "multilingual": True, "vad_filter": True, "vad_parameters": {"min_silence_duration_ms": 450}}))
+        for label, options in variants:
+            started = time.time()
+            try:
+                segments, info = model.transcribe(str(wav), **options)
+                rows = list(segments)
+            except TypeError as exc:
+                out(f"  variant [{label}]: unsupported here ({redact(str(exc))[:120]})")
+                continue
+            except Exception as exc:  # noqa: BLE001
+                out(f"  variant [{label}] failed: {type(exc).__name__}: {redact(str(exc))[:160]}")
+                continue
+            spoken = [r for r in rows if str(r.text or "").strip()]
+            speech = sum(float(r.end) - float(r.start) for r in spoken)
+            nsp = [float(getattr(r, "no_speech_prob", 0) or 0) for r in spoken]
+            lp = [float(getattr(r, "avg_logprob", 0) or 0) for r in spoken]
+            after_vad = getattr(info, "duration_after_vad", None)
+            out(f"  variant [{label}]: segments={len(spoken)} span={(float(spoken[0].start) if spoken else 0):.1f}.."
+                f"{(float(spoken[-1].end) if spoken else 0):.1f}s speech={speech:.1f}s"
+                f" of {float(getattr(info, 'duration', 0) or 0):.1f}s"
+                + (f" (after vad {float(after_vad):.1f}s)" if after_vad is not None else "")
+                + f" lang={getattr(info, 'language', '?')}@{float(getattr(info, 'language_probability', 0) or 0):.2f}"
+                + (f" no_speech mean/max={statistics.mean(nsp):.2f}/{max(nsp):.2f} logprob mean={statistics.mean(lp):.2f}" if nsp else "")
+                + f" took {time.time() - started:.0f}s")
+    finally:
+        try:
+            wav.unlink()
+        except OSError:
+            pass
+
+
 def main() -> int:
     out(f"python {sys.version.split()[0]}  data={DATA} ({'present' if DATA.is_dir() else 'MISSING'})  code={CODE}")
     version_file = CODE.parent / "package.json"
@@ -213,6 +324,10 @@ def main() -> int:
         out("  none under " + str(DATA / "cache" / "transcripts"))
     for path in transcripts[:6]:
         analyse(path, cw, replays)
+    if AUDIO > 0:
+        out()
+        out(f"== whisper over the first {AUDIO:g}s of a cached source ==")
+        probe_audio(cw, replays[0][1] if replays else {})
     return 0
 
 
