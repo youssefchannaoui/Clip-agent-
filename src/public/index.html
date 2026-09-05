@@ -5685,7 +5685,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         const picked=LENGTH_BANDS.filter(([lo,hi])=>bandOn(lo,hi));
         const text=picked.length
           ? `Cut between ${Math.min(...picked.map(x=>x[0]))}s and ${Math.max(...picked.map(x=>x[1]))}s \u2014 anything shorter or longer is skipped.`
-          : 'Nothing can be cut until at least one length is allowed.';
+          : `Any length \u2014 moments are cut between ${(DATA&&DATA.clipSettings&&DATA.clipSettings.clipMinSeconds)||20}s and ${(DATA&&DATA.clipSettings&&DATA.clipSettings.clipMaxSeconds)||90}s, whatever fits best. Pick lengths above to narrow it.`;
         if(note.textContent!==text)note.textContent=text;
       }
     }
@@ -6052,9 +6052,20 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         jobMusicEl.querySelector('button').onclick=e=>StudioAdapter.bindings(DATA).toggleJobMusic(e);
       }
       const text=jobMusicEl.querySelector('span');
-            const want=vals.jobMusicOn?'Mixed in':'Off \u2014 voice only';
+      /* With an empty library this read "Mixed in" over nothing, and the
+         refusal ("Music is required on every clip. Upload at least one
+         nasheed first") only arrived after the seventh step. Said here, with
+         the way out beside it. */
+      const want=vals.jobNoNasheed?'No nasheed uploaded yet':vals.jobMusicOn?'Mixed in':'Off \u2014 voice only';
       if(text.textContent!==want)text.textContent=want;
       jobMusicEl.querySelector('button').setAttribute('aria-checked',String(vals.jobMusicOn));
+      let add=jobMusicEl.querySelector('.dc-job-add-nasheed');
+      if(vals.jobNoNasheed&&!add){
+        add=document.createElement('button');add.type='button';add.className='dc-job-add-nasheed';add.textContent='Add a nasheed';
+        add.onclick=e=>StudioAdapter.bindings(DATA).jobGoNasheed(e);
+        jobMusicEl.appendChild(add);
+      }
+      if(add)add.hidden=!vals.jobNoNasheed;
     }
 
     /* TikTok's posting options, attached to the connections modal.
@@ -6486,7 +6497,7 @@ function renderStudio(){
     function paintConnections(){
       if(!DATA)return;
       const rows=StudioAdapter.bindings(DATA).connections;
-      const live=rows.filter(r=>/^Active$/.test(r.note)).length;
+      const live=rows.filter(r=>/^Active$/.test(r.note)&&!r.needsReconnect).length;
       connEls.summary.textContent=`${live} of ${rows.length} ready to publish`;
       connEls.list.innerHTML=rows.map((r,i)=>{
         const colour=(r.heroDotStyle.match(/background: (#[0-9A-Fa-f]{6})/)||[])[1]||'var(--dc-ink-faint, #6E6E76)';
@@ -6496,11 +6507,15 @@ function renderStudio(){
            under it is just the account. It used to repeat the state as words
            as well, and the two together truncated mid-sentence. */
         const detail=off?'Not set up on the server yet':linked?r.handle:'No account linked';
-        const on=/^Active$/.test(r.note);
-        /* Three states worth telling apart at a glance: publishing, connected
-           but switched off, and not connected at all. */
+        /* A credential that cannot be renewed (expired with no refresh token,
+           or a failed test) read "Publishing" here until a post failed on it.
+           It is its own state now, and it never counts as ready. */
+        const stale=Boolean(r.needsReconnect)&&linked;
+        const on=/^Active$/.test(r.note)&&!stale;
+        /* Four states worth telling apart at a glance: publishing, needing a
+           reconnect, connected but switched off, and not connected at all. */
         const stateClass=on?'on':linked?'idle':'';
-        const stateWord=off?'Unavailable':on?'Publishing':linked?'Paused':'Not connected';
+        const stateWord=off?'Unavailable':stale?'Needs reconnecting':on?'Publishing':linked?'Paused':'Not connected';
         return `<div class="studio-conn-row">
           <span class="studio-conn-mark"><i class="${esc(r.icon)}" style="color:${esc(colour)}"></i></span>
           <span class="who"><b>${esc(r.name)}</b><span>${esc(detail)}</span></span>
@@ -7189,7 +7204,7 @@ StudioAdapter.onProbeSource=async url=>{try{
       if(!Number.isFinite(n)||!n)return '';
       return new Date(n).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'});
     }
-    const PROVIDER_NAMES={google:'Google',apple:'Apple',email:'a sign-in link',password:'a password'};
+    const PROVIDER_NAMES={google:'Google',apple:'Apple',email:'your email and password',password:'a password'};
 
     /* ── Report a bug ────────────────────────────────────────────────────
        Youssef, 3 Sept 2026: "add report a bug here" -- pointing at the account
@@ -8417,12 +8432,19 @@ function paintSetupCelebration(vals){
      being shown (v3.95.0) this would have congratulated somebody for finishing
      a checklist they never saw. The strip disappears at the same moment, so
      the two halves of one story agree. */
-  const done=(DATA&&DATA.onboarding&&DATA.onboarding.at==='done');
+  /* The SERVER says whether this is the moment (onboarding.celebrate: once per
+     account, and only while the first publish is fresh). Reading `at === 'done'`
+     here is what raised this over every screen of every established account
+     on every new device -- the localStorage guard travels with the browser,
+     not with the person. It stays as a fast path against a double paint. */
+  const done=Boolean(DATA&&DATA.onboarding&&DATA.onboarding.celebrate===true);
   if(!done||setupCelebrated()||document.getElementById('dcWin'))return;
   /* Marked before the node exists, not after: paints are coalesced per frame
      but not serialised, and a second one arriving mid-animation would otherwise
      stack a second dialog on top of the first. */
   markSetupCelebrated();
+  /* Stamped on the account, so the next device is not shown it again. */
+  api('/api/onboarding/celebrated',{method:'POST',body:'{}'}).catch(()=>{});
   const veil=document.createElement('div');
   veil.id='dcWin';
   veil.className='dcw-veil';
@@ -9404,6 +9426,21 @@ function paintLibraryAside(vals){
     if(!/^Before you import/.test(sec.textContent||''))continue;
     sec.setAttribute('data-host-style','');
     if(sec.style.display!=='none')sec.style.display='none';
+  }
+  /* The Storage card's bar was a design literal at 59% -- a number the app
+     never computed, drawn under real counts, on every account. There is no
+     quota for it to be a fraction of, so the bar goes and the figures stay.
+     Hidden in place for the reason given above. The bar is the block after the
+     heading row that holds no figure of its own. */
+  for(const sec of aside.querySelectorAll('section')){
+    const head=sec.firstElementChild;
+    /* textContent runs the heading into the summary ("Storage12 lectures"),
+       so no word boundary: anchored on the start alone. */
+    if(!head||!/^Storage/.test((head.textContent||'').trim()))continue;
+    const bar=head.nextElementSibling;
+    if(!bar||bar.querySelector('strong'))continue;
+    bar.setAttribute('data-host-style','');
+    if(bar.style.display!=='none')bar.style.display='none';
   }
   const st=(vals||{}).libStats;
   if(!st)return;

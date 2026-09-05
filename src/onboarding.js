@@ -71,6 +71,17 @@ export const STEPS = [
  * A step is `done`, `now` (exactly one, ever) or `todo`. `now` is what the
  * strip highlights and what the copy speaks to.
  */
+/**
+ * How long after the first publish the "one all the way through" moment is
+ * still a moment. Past this it is history: an account that posted its first
+ * clip three weeks ago is not being congratulated, it is being interrupted.
+ */
+const CELEBRATE_WINDOW_MS = 3 * 86400000;
+function isRecent(t, now) {
+  const n = Number(t) || 0;
+  return n > 0 && ((Number(now) || Date.now()) - n) <= CELEBRATE_WINDOW_MS;
+}
+
 export function journey(state, userId, ctx = {}) {
   const a = activationOf(state, userId);
   const times = milestones(state, userId);
@@ -133,6 +144,13 @@ export function journey(state, userId, ctx = {}) {
   return {
     show: at !== 'done',
     at,
+    // The "one all the way through" dialog, decided HERE rather than in the
+    // browser. It used to fire on `at === 'done'` alone behind a localStorage
+    // guard -- so every established account met it again on every new device,
+    // over every screen, congratulated for a run finished weeks earlier. Once
+    // per account (ctx.celebratedAt is stamped by the route the dialog calls
+    // when it shows) and only while the first publish is fresh.
+    celebrate: at === 'done' && !ctx.celebratedAt && isRecent(times.publishedAt, ctx.now),
     stepIndex,
     // Replaces the old list's "1 of 5 done" chip, which counted a different
     // five things and lived in the header away from anything it described.

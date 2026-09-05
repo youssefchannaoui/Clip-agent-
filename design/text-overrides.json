@@ -48,6 +48,7 @@
     "≈ 20 hours of lecture processing, or about 62 rendered clips at your current settings.": "balanceMeans",
     "These numbers are sample output. On Pro, DeenAI reads your own clips, scores and posting record, and answers your questions — nothing here acts until then.": "aiDemoNote",
     "Unlock with Pro": "aiGateCta",
+    "STUDIO": "aiTierTag",
     "Desktop notifications": "notifsLabel"
   },
   "styleOverrides": {

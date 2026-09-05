@@ -1766,7 +1766,7 @@ test('a subscriber is told how to change or cancel, on the screen', () => {
   // 'monthly' is the pre-tier id this subscriber still carries; it has to
   // resolve to the plan they are actually paying for, not fall through to Basic.
   assert.equal(b.planTitle, 'Pro Monthly');
-  assert.match(b.planPriceLine, /£14 per monthly/);
+  assert.match(b.planPriceLine, /£14 per month$/);
   assert.equal(b.planState, 'Active');
   assert.match(b.manageLabel, /cancel/i, 'the word someone is looking for has to appear');
   assert.equal(typeof b.manageBilling, 'function');

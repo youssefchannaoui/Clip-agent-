@@ -495,8 +495,11 @@
     }
     var settings = (DATA && DATA.clipSettings) || {};
     var chosen = Array.isArray(settings.clipLengthBands) ? settings.clipLengthBands.length : 0;
+    // No band chosen means ANY length -- that is what the worker does with an
+    // empty list -- so it is stated, not flagged. The old "Pick at least one"
+    // blocked every new account on a requirement the pipeline never had.
     rows.push(Object.assign({ label: 'Clip lengths' },
-      chosen ? value(chosen + ' of 4 chosen', '', 3) : value('Pick at least one', 'warn', 3)));
+      chosen ? value(chosen + ' of 4 chosen', '', 3) : value('Any length', '', 3)));
     if (current && !current.unlimited && isFinite(Number(current.totalAvailable))) {
       var left = Number(current.totalAvailable);
       rows.push(Object.assign({ label: 'Balance afterwards' }, left >= cost
@@ -518,8 +521,15 @@
       var jobLangPick = UI.jobLang || (tpl.captionMode === 'quran' ? 'ar' : 'en');
       rows.push(Object.assign({ label: 'Spoken language' },
         value(jobLangNames[jobLangPick] || 'Auto-detect', '', 1)));
+      // "Nasheed, ducked" over an empty library was the last step's lie: the
+      // refusal ("Music is required on every clip") arrived only on Generate.
+      var musicWanted = tpl.captionMode !== 'quran' && UI.jobMusic !== false;
+      var haveTracks = ((DATA && DATA.tracks) || []).length > 0;
       rows.push(Object.assign({ label: 'Underneath' },
-        value(tpl.captionMode === 'quran' ? 'Nothing \u2014 recitation' : 'Nasheed, ducked', '', 6)));
+        tpl.captionMode === 'quran' ? value('Nothing \u2014 recitation', '', 6)
+          : !musicWanted ? value('Nothing \u2014 switched off', '', 6)
+          : !haveTracks ? value('No nasheed uploaded yet', 'warn', 6)
+          : value('Nasheed, ducked', '', 6)));
     }
     // Where this job would land, from the queue as it stands right now.
     var waiting = ((DATA && DATA.projects) || []).filter(function (project) {
@@ -578,11 +588,6 @@
     var id = jobStepId();
     if (id === 'trim' && job && job.durationKnown && job.end - job.start < 20) {
       return 'Select at least 20 seconds';
-    }
-    if (id === 'lengths') {
-      var settings = (DATA && DATA.clipSettings) || {};
-      var bands = settings.clipLengthBands;
-      if (Array.isArray(bands) && !bands.length) return 'Pick at least one length';
     }
     if (id === 'style') {
       var tpl = activeJobTemplate(DATA);
@@ -1891,6 +1896,9 @@
       // An absent provider counts as configured, matching the server's shape.
       configured: status.configured !== false,
       enabled: Boolean(setting.enabled),
+      // The server's answer to "can this credential still post" -- expired
+      // with no refresh token, or a failed test. Never inferred here.
+      needsReconnect: Boolean(status.needsReconnect),
     };
   }
 
@@ -2014,12 +2022,17 @@
     return item;
   }
 
-  function deenaiNavItem() {
+  function deenaiNavItem(DATA) {
     // Everyone sees the tab — the demo is the shop window — so it is not
     // gated here. What IS gated is the data: the host fetch behind
     // onLoadDeenai returns demo cards for a free account, and the server
     // refuses /api/deenai/ask outright. Presentation never guards anything.
-    var item = navItem('deenai', 'DeenAI', 'ph ph-sparkle', 'STUDIO');
+    // The tier that unlocks DeenAI, named by the server from the FEATURES
+    // table (current.locked). This was a literal 'STUDIO' for two releases
+    // after the feature moved to Pro -- a rail badge selling the wrong plan.
+    var lockedAi = (((DATA || {}).billing || {}).current || {}).locked || {};
+    var aiTierBadge = String((lockedAi.deenai && lockedAi.deenai.tierName) || 'Pro').toUpperCase();
+    var item = navItem('deenai', 'DeenAI', 'ph ph-sparkle', aiTierBadge);
     // First of the rail's bottom cluster. The class attribute is already bound
     // to mobileClass, so marking it here costs no template change; the phone
     // hides every dc-nav-secondary item anyway, and the CSS that acts on this
@@ -2326,6 +2339,7 @@
       case 'detail': {
         var dc = ctx.detailClips || [];
         if (!ctx.detailOpen) return 'Open a lecture from the library';
+        if (ctx.detailWhy) return 'Import failed \u2014 ' + ctx.detailWhy.title;
         if (!dc.length) return 'No clips from this lecture yet';
         var waiting = 0, kept = 0;
         dc.forEach(function (c) {
@@ -2673,8 +2687,18 @@
     // "Processing now".
     function lecState(p) {
       if (FINISHED_PROJECT[p.status]) return 'ready';
-      if (p.status === 'cancelled' || p.status === 'failed') return 'archived';
+      // A failed import used to be filed as "Archived" with "no clips yet" --
+      // the failure was invisible everywhere but the bell, and the detail
+      // screen offered "Approve all remaining" on a lecture that never came
+      // down. It is its own state, carrying the reason and the fix.
+      if (p.status === 'failed') return 'failed';
+      if (p.status === 'cancelled') return 'archived';
       return 'processing';
+    }
+    // Why an import failed and what to do, from the same table the activity
+    // feed answers with -- one explanation, wherever the lecture is shown.
+    function importWhy(p) {
+      return explainFailure({ text: p.error || 'Import failed', full: p.error || '' });
     }
     function clipsOf(projectId) {
       return clips.filter(function (c) { return c.projectId === projectId; });
@@ -2705,12 +2729,14 @@
             ? ' background-image: linear-gradient(to bottom, rgba(8,8,10,0) 40%, rgba(8,8,10,.82) 100%), url("' + cssUrl(p.sourceThumbUrl) + '");'
               + ' background-size: cover, cover; background-position: center, center 30%; --dc-on-photo: 1;'
             : ''),
-        stateChip: state === 'processing' ? 'Processing' : state === 'ready' ? 'Ready' : 'Archived',
+        stateChip: state === 'processing' ? 'Processing' : state === 'ready' ? 'Ready' : state === 'failed' ? 'Failed' : 'Archived',
+        isFailed: state === 'failed',
         chipStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; border: 1px solid ' +
           (state === 'processing' ? 'rgba(217,180,120,.4); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-f0d6a6, var(--dc-n-f0d6a6, #F0D6A6));'
             : state === 'ready' ? 'rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));'
+            : state === 'failed' ? 'rgba(227,146,140,.4); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-e3928c, var(--dc-n-e3928c, #E3928C));'
             : 'var(--dc-n-33333a, #33333A); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-a2a2aa, var(--dc-n-a2a2aa, #A2A2AA));'),
-        chipIcon: state === 'processing' ? 'ph ph-circle-notch' : state === 'ready' ? 'ph-fill ph-check-circle' : 'ph ph-archive',
+        chipIcon: state === 'processing' ? 'ph ph-circle-notch' : state === 'ready' ? 'ph-fill ph-check-circle' : state === 'failed' ? 'ph-fill ph-warning-circle' : 'ph ph-archive',
         chipIconStyle: 'font-size: 11px;' + (state === 'processing' ? ' animation: dcSpin 1.1s linear infinite;' : ''),
         isProcessing: state === 'processing',
         barStyle: 'position: absolute; left: 0; bottom: 0; height: 3px; width: ' + Math.round(p.progress || 0) + '%; background: linear-gradient(90deg, var(--dc-gold, #D9B478), var(--dc-gold-lit, #F0D6A6)); transition: width .5s ease;',
@@ -2718,6 +2744,7 @@
         // lecture has fewer distinct moments -- but saying nothing reads as
         // clips having gone missing.
         metric: state === 'processing' ? (p.stage || 'working…')
+          : state === 'failed' ? importWhy(p).title
           : (p.clipsRequested && mine.length && mine.length < p.clipsRequested)
             ? mine.length + ' of ' + p.clipsRequested + ' asked for · the rest overlapped'
             : median ? 'median score ' + median : 'no clips yet',
@@ -2757,12 +2784,16 @@
     var detail = projects.filter(function (p) { return p.id === UI.openProject; })[0] || projects[0] || null;
     var detailRaw = detail ? clipsOf(detail.id) : [];
     var detailClips = detail ? detailRaw.slice().sort(function (a, b) { return (b.score || 0) - (a.score || 0); }).map(clipCard) : [];
+    // The reason and the fix, when the open lecture never imported. Null
+    // otherwise, so every reader below can branch on it.
+    var detailWhy = detail && lecState(detail) === 'failed' ? importWhy(detail) : null;
     // The header's subline is built by sublineFor, which is module-level and
     // cannot see these locals -- so they travel on ctx like everything else it
     // reads. The RAW clips, not the cards: decision() is the one place that
     // says what state a clip is in, and it reads the server's own status.
     ctx.detailOpen = Boolean(detail);
     ctx.detailClips = detailRaw;
+    ctx.detailWhy = detailWhy;
 
     // Schedule: the next seven days, filled from clips that already hold a slot.
     var DAY_MS = 86400000;
@@ -3964,8 +3995,12 @@
 
     // Where the caption sits in the preview, as a percentage of frame height.
     var firstName = String((DATA.user && DATA.user.name) || '').trim().split(/\s+/)[0] || '';
+    // A platform that was never connected does not "need reconnecting" -- this
+    // used to list every configured-but-unconnected platform, so every
+    // customer with one channel read "TikTok, Instagram, Facebook needs
+    // reconnecting" while the channel that had actually expired said nothing.
     var needsReconnect = providers.filter(function (p) {
-      return p.configured && !p.connected;
+      return p.connected && p.needsReconnect;
     }).map(function (p) { return PLATFORM_NAMES[p.key] || p.key; });
 
     // One picture, always, at Youssef's instruction (1 Sept 2026): "that's the
@@ -4096,6 +4131,14 @@
     var jobMusicOn = UI.jobMusicTouched
       ? UI.jobMusic !== false
       : (jobTemplateMode === 'quran' ? false : UI.jobMusic !== false);
+    // What would refuse this job at its last step, known before it is pressed:
+    // a nasheed wanted with none uploaded, or an account that cannot spend
+    // (the free window closed, a card declined -- the notices billing marks
+    // blocking). The Generate button says so and leads there instead of
+    // refusing after seven steps.
+    var jobGate = ((DATA.billing && DATA.billing.notices) || []).some(function (n) { return n && n.blocking; }) ? 'plan'
+      : (jobMusicOn && !tracks.length) ? 'nasheed'
+      : '';
     // What kind of content this job is. Two kinds, one template each: the
     // picker on the token page chooses the kind, and the kind chooses the
     // template -- when more templates exist they will be added per kind, so
@@ -4483,7 +4526,13 @@
     // Billing comes first because it is the only gap that stops the account
     // rather than the workflow.
     var notices = (DATA.billing && DATA.billing.notices) || [];
-    var moneyNotice = notices.filter(function (n) { return n && n.blocking; })[0] || notices[0] || null;
+    // Only a notice that actually STOPS the account (the free window closed, a
+    // card declined) outranks the two setup blockers. A countdown -- "7 free
+    // days left" -- used to win this chain as well, so a brand-new account was
+    // never told it had no nasheed and no channel until the seventh step of
+    // the job panel refused it. The countdown is a note now, drawn beneath.
+    var moneyNotice = notices.filter(function (n) { return n && n.blocking; })[0] || null;
+    var moneyNote = moneyNotice ? null : (notices[0] || null);
     if (moneyNotice) {
       blocker = moneyNotice.title + ' — ' + moneyNotice.message;
       blockerCta = moneyNotice.action || 'See plans';
@@ -4520,7 +4569,11 @@
      * otherwise mixes in the same one -- which is worth saying and is not a
      * reason to stop.
      */
-    if (!blocker && tracks.length === 1) {
+    if (!blocker && moneyNote) {
+      note = moneyNote.title + ' — ' + moneyNote.message;
+      blockerCta = moneyNote.action || 'See plans';
+      blockerScreen = 'tokens';
+    } else if (!blocker && tracks.length === 1) {
       note = 'Only one nasheed — every clip mixes in the same one. Add another and they rotate.';
       blockerScreen = 'music';
       blockerCta = 'Add another';
@@ -4855,7 +4908,7 @@
       navSetup: [
         navItem('templates', 'Templates', 'ph ph-text-aa', ''),
         navItem('music', 'Nasheed library', 'ph ph-music-notes', ''),
-        deenaiNavItem(),
+        deenaiNavItem(DATA),
         helpNavItem(),
       ].concat(isOperator(DATA) ? [ownerNavItem()] : []),
 
@@ -5000,6 +5053,8 @@
       // carries the tier that WOULD unlock each feature, straight from the
       // FEATURES table the gates themselves read, so the button and the gate
       // cannot disagree again whatever the table says tomorrow.
+      // The screen's own tier pill, from the same name as the rail badge.
+      aiTierTag: aiPlanName.toUpperCase(),
       aiGateCta: aiOn ? ('Upgrade to ' + aiPlanName) : ('Unlock with ' + aiPlanName),
       // Shown under the locked banner. Free accounts only -- `aiLocked` is
       // !aiOn -- so it never has to speak to a paid account.
@@ -5393,6 +5448,7 @@
         { key: 'all', label: 'All' },
         { key: 'ready', label: 'Ready' },
         { key: 'processing', label: 'Processing' },
+        { key: 'failed', label: 'Failed' },
         { key: 'archived', label: 'Archived' },
       ].map(function (t) {
         return {
@@ -5413,7 +5469,13 @@
       detailThumbStyle: 'width: 168px; flex: none; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px solid var(--dc-line, #26262A); background: ' + thumb(detail && detail.sourceThumbUrl) + ';',
       detailCount: plural(detailClips.length, 'clip'),
       detailClips: detailClips,
-      detailHint: detail && lecState(detail) === 'processing'
+      // The cause, the first fix, and the worker's own words after them: the
+      // generic entry says "the original message is below", and this screen
+      // has nowhere else to put it.
+      detailHint: detailWhy
+        ? detailWhy.cause + (detailWhy.fixes && detailWhy.fixes[0] ? ' ' + detailWhy.fixes[0] : '')
+          + (detail.error ? ' \u2014 \u201c' + String(detail.error).slice(0, 220) + '\u201d' : '')
+        : detail && lecState(detail) === 'processing'
         ? 'Still processing — clips appear here as the worker finishes them.'
         : 'Every clip cut from this lecture. Approving one queues it for the next open slot.',
       detailFromLibrary: true,
@@ -5424,10 +5486,14 @@
         // Only follow a source URL the record actually carries.
         if (detail && detail.url) global.open(detail.url, '_blank', 'noopener');
       },
-      bulkLabel: 'Approve all remaining',
-      bulkIcon: 'ph ph-check',
+      // On a lecture that never imported the only honest primary action is to
+      // try the import again; "Approve all remaining" there was a button over
+      // nothing.
+      bulkLabel: detailWhy ? 'Retry this lecture' : 'Approve all remaining',
+      bulkIcon: detailWhy ? 'ph ph-arrow-counter-clockwise' : 'ph ph-check',
       bulkAction: function (e) {
         stop(e);
+        if (detailWhy) { global.StudioAdapter.onRetryProject(detail.id, detail.title || 'this lecture'); return; }
         detailClips.forEach(function (c) { if (c.stateChip === '') c.approve(e); });
       },
 
@@ -5585,13 +5651,14 @@
       // Every card on this screen said "No channel on" and the rail never
       // explained why. A schedule with nowhere to post is a list of intentions.
       schedOutlets: providers.map(function (p) {
-        var live = p.connected && p.enabled;
+        var live = p.connected && p.enabled && !p.needsReconnect;
         return {
           name: PLATFORM_NAMES[p.key],
           // "Posting" has to mean it, and now it can: with the master switch
           // retired there is one thing left to read, and it is the one the
-          // connections dialog shows a tick for.
-          note: !p.configured ? 'Not set up' : !p.connected ? 'Not connected' : !p.enabled ? 'Switched off' : 'Posting',
+          // connections dialog shows a tick for -- unless the credential can
+          // no longer be renewed, which is a reconnect, not a post.
+          note: !p.configured ? 'Not set up' : !p.connected ? 'Not connected' : p.needsReconnect ? 'Needs reconnecting' : !p.enabled ? 'Switched off' : 'Posting',
           dotStyle: 'display: block; width: 7px; height: 7px; flex: none; border-radius: 50%; background: '
             + (live ? 'var(--dc-n-7fd1a6, #7FD1A6)' : p.connected ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-n-4a4a54, #4A4A54)') + ';',
           noteStyle: 'margin-left: auto; font-size: 11px; color: ' + (live ? 'var(--dc-ink-dim, #8B8B93)' : 'var(--dc-n-e0a188, #E0A188)') + ';',
@@ -6513,6 +6580,8 @@
       runGenerate: function (e) {
         stop(e);
         if (!job || UI.generating) return;
+        if (jobGate === 'nasheed') { setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, volumeDraft: null, screen: 'music' }); return; }
+        if (jobGate === 'plan') { setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, volumeDraft: null, screen: 'tokens' }); return; }
         UI.jobError = null;
         setUI({ generating: true });
         global.StudioAdapter.onGenerate(job.url, job.durationKnown
@@ -6531,7 +6600,11 @@
       // bound to a node that had already unmounted, and the comment claiming it
       // "sits next to the button" described something nobody could ever see.
       genBusy: UI.generating || Boolean(UI.jobError) || UI.uploadPct !== null,
-      genLabel: UI.generating ? 'Starting…' : 'Generate clips',
+      genLabel: UI.generating ? 'Starting…' : jobGate === 'nasheed' ? 'Add a nasheed first' : jobGate === 'plan' ? 'Choose a plan to continue' : 'Generate clips',
+      genGate: jobGate,
+      // The sound step's own statement of the same fact, with its way out.
+      jobNoNasheed: jobMusicOn && !tracks.length,
+      jobGoNasheed: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, volumeDraft: null, screen: 'music' }); },
       genIcon: UI.generating ? 'ph ph-circle-notch' : 'ph-fill ph-sparkle',
       genIconStyle: 'font-size: 15px;' + (UI.generating ? ' animation: dcSpin 1.1s linear infinite;' : ''),
       // A real percentage while bytes move, a sweep while the server thinks.
@@ -7663,6 +7736,9 @@
       recutClips: function (e) {
         stop(e);
         if (!detail) return;
+        // Nothing to re-cut from a lecture that never came down: the same
+        // press retries the import instead of opening a menu of dead options.
+        if (detailWhy) { global.StudioAdapter.onRetryProject(detail.id, detail.title || 'this lecture'); return; }
         global.StudioAdapter.onPickOption('More clips from this lecture',
           ['Cut 4 more clips', 'Cut 8 more clips', 'Cancel'], function (choice) {
             var n = choice === 'Cut 4 more clips' ? 4 : choice === 'Cut 8 more clips' ? 8 : 0;
@@ -8346,7 +8422,7 @@
         if (current.unlimited) return 'no limit, no renewal';
         var named = currentPlanRecord();
         if (!named || named.id === 'free') return 'no charge';
-        return (named.priceLabel || '') + (named.interval ? ' per ' + named.interval : '');
+        return (named.priceLabel || '') + (named.interval ? ' per ' + ({ weekly: 'week', monthly: 'month', yearly: 'year' }[named.interval] || named.interval) : '');
       })(),
       planState: planStateWord,
       planStateStyle: 'padding: 2px 9px; border-radius: 20px; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; border: 1px solid ' +
@@ -8507,6 +8583,7 @@
           (!p.configured ? 'var(--dc-n-e3928c, #E3928C)' : p.enabled ? 'var(--dc-n-7fd1a6, #7FD1A6)' : p.connected ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-ink-faint, #6E6E76)') + ';';
         return {
           name: PLATFORM_NAMES[p.key],
+          needsReconnect: Boolean(p.needsReconnect),
           handle: p.account ? p.account.name : (p.configured ? 'No account linked' : 'Needs API keys'),
           note: !p.configured ? 'Not configured on the server'
             : !p.connected ? 'Connect to publish'

@@ -677,8 +677,25 @@ function connectionFo(userId, provider, accountId) {
 function youtubeSummary(userId) {
   return connections(userId, 'youtube').flatMap(c => youtubeEntry(c));
 }
+/**
+ * Whether a stored credential can still be used without the person coming
+ * back through OAuth. An access token past its expiry with no refresh token,
+ * or one sealed with a key this server no longer holds, cannot be renewed by
+ * any code path -- youtubeToken() and tiktokToken() throw at exactly that
+ * point. Answered here so the Home row, the connections dialog and the
+ * Schedule can say "needs reconnecting" BEFORE a publish fails on it, and
+ * about the connection that actually expired rather than about platforms that
+ * were never connected (which is what the Home row used to list).
+ */
+function needsReconnect(c) {
+  if (!c?.token || !config.socialTokenKey) return false;
+  let token;
+  try { token = decrypt(c.token); } catch { return true; }
+  const expired = Number(token?.expiresAt || 0) <= Date.now();
+  return expired && !token?.refresh_token;
+}
 function youtubeEntry(c) {
-  return c ? [{ id: c.accountId, name: c.name, avatar: c.avatar || '' }] : [];
+  return c ? [{ id: c.accountId, name: c.name, avatar: c.avatar || '', needsReconnect: needsReconnect(c) }] : [];
 }
 function metaSummaries(kind, userId) {
   return (connection(userId, 'meta')?.accounts || []).filter(item => kind === 'facebook' ? item.pageId : item.instagramId).map(item => kind === 'facebook'
@@ -687,7 +704,7 @@ function metaSummaries(kind, userId) {
 }
 function tiktokSummary(userId) {
   return connections(userId, 'tiktok').map(c => ({
-    id: c.accountId, name: c.name, avatar: c.avatar || '', creatorInfo: c.creatorInfo || null,
+    id: c.accountId, name: c.name, avatar: c.avatar || '', creatorInfo: c.creatorInfo || null, needsReconnect: needsReconnect(c),
   }));
 }
 
@@ -706,10 +723,13 @@ export function connectionStatus(user) {
       ...(!publicBaseUrlReady ? ['PUBLIC_BASE_URL or RENDER_EXTERNAL_URL is missing.'] : []),
     ],
     providers: {
-      youtube: { configured: providerConfigured('youtube'), connected: youtubeSummary(userId).length > 0, accounts: youtubeSummary(userId), lastTestAt: youtube?.lastTestAt || null, lastTestError: youtube?.lastTestError || null },
-      instagram: { configured: providerConfigured('meta'), connected: metaSummaries('instagram', userId).length > 0, accounts: metaSummaries('instagram', userId), lastTestAt: meta?.lastTestAt || null, lastTestError: meta?.lastTestError || null },
-      facebook: { configured: providerConfigured('meta'), connected: metaSummaries('facebook', userId).length > 0, accounts: metaSummaries('facebook', userId), lastTestAt: meta?.lastTestAt || null, lastTestError: meta?.lastTestError || null },
-      tiktok: { configured: providerConfigured('tiktok'), connected: tiktokSummary(userId).length > 0, accounts: tiktokSummary(userId), requiresManualApproval: true, lastTestAt: tiktok?.lastTestAt || null, lastTestError: tiktok?.lastTestError || null },
+      // `needsReconnect` is the one flag the browser reads to say "reconnect":
+      // a credential that cannot be renewed, or a connection whose last test
+      // failed. Never derived from "configured but not connected".
+      youtube: { configured: providerConfigured('youtube'), connected: youtubeSummary(userId).length > 0, accounts: youtubeSummary(userId), lastTestAt: youtube?.lastTestAt || null, lastTestError: youtube?.lastTestError || null, needsReconnect: youtubeSummary(userId).some(a => a.needsReconnect) || Boolean(youtube?.lastTestError) },
+      instagram: { configured: providerConfigured('meta'), connected: metaSummaries('instagram', userId).length > 0, accounts: metaSummaries('instagram', userId), lastTestAt: meta?.lastTestAt || null, lastTestError: meta?.lastTestError || null, needsReconnect: Boolean(meta?.lastTestError) },
+      facebook: { configured: providerConfigured('meta'), connected: metaSummaries('facebook', userId).length > 0, accounts: metaSummaries('facebook', userId), lastTestAt: meta?.lastTestAt || null, lastTestError: meta?.lastTestError || null, needsReconnect: Boolean(meta?.lastTestError) },
+      tiktok: { configured: providerConfigured('tiktok'), connected: tiktokSummary(userId).length > 0, accounts: tiktokSummary(userId), requiresManualApproval: true, lastTestAt: tiktok?.lastTestAt || null, lastTestError: tiktok?.lastTestError || null, needsReconnect: tiktokSummary(userId).some(a => a.needsReconnect) || Boolean(tiktok?.lastTestError) },
     },
   };
 }

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1461 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1472 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9916,3 +9916,115 @@ field, the heading and the video frame all leave it open; typing keeps focus;
 the × and the backdrop still close. **Proven the other way too** -- removing the
 card's `data-dc-h` in the live DOM and repeating the same click closes it, which
 is the old behaviour exactly.
+
+## The product audit: used, not read (v3.130.0, 5 Sept 2026)
+
+Youssef's brief: "perform the deepest possible audit of the entire product,
+then improve everything that genuinely needs improving ... DON'T TRUST THE UI
+... Test behaviour." So the app was USED, on the exact HEAD build, through the
+real `/login` form: a brand-new account, an established one seeded SERVER-side
+(twelve lectures in every state, fifty-four clips, two nasheeds, a YouTube
+token past its expiry with no refresh token) and one whose free window had
+closed with nothing left to spend. Thirteen screens and six overlays at
+390/768/1024/1440/1920 in both themes, and eleven journeys driven through the
+real controls with every dialog and notification recorded. The evidence is
+under `scratchpad/audit2/` (gitignored); the classification is
+`findings.md` there. **Nothing P0 was found** -- payments, auth, imports,
+render, OAuth, scheduling and account state all held. What was wrong was
+honesty and clarity, and every one of these had passed a green suite:
+
+- **The "one all the way through" dialog rose over every screen of the
+  established account, on desktop and phone, in every fresh browser -- nine
+  times in one run.** `paintSetupCelebration` fired on `onboarding.at ===
+  'done'` behind a localStorage guard, so the guard travelled with the
+  browser, not the person. The SERVER decides now (`journey().celebrate`):
+  once per account (`POST /api/onboarding/celebrated` stamps it) and only
+  while the first publish is under three days old. Past that it is history.
+- **Home told every customer with one channel "TikTok, Instagram, Facebook
+  needs reconnecting"** -- `needsReconnect` listed platforms that were
+  CONFIGURED BUT NEVER CONNECTED -- while the YouTube that had actually
+  expired read "Posting" on the Schedule and "PUBLISHING" in the dialog.
+  `connectionStatus` now flags a credential that cannot be renewed (expired,
+  no refresh token, or sealed with a key the server no longer holds -- the
+  exact point `youtubeToken()` throws) and a failed test; the three surfaces
+  read that one flag and say "Needs reconnecting" about the channel it is
+  true of.
+- **A failed import was invisible everywhere but the bell.** Its library card
+  read "Archived · no clips yet · Open clips"; its detail screen offered
+  "Play source / Re-cut clips / Approve all remaining" on a lecture that never
+  came down. `lecState` has a `failed` state now, with its own tab; the card's
+  metric is the reason from the same table the activity feed answers with
+  (`explainFailure`), the detail's subline says "Import failed -- ...", its
+  hint carries the cause and the fix, and its primary action is "Retry this
+  lecture". Home's card already said FAILED -- two screens disagreeing about
+  one lecture is the shape this repo keeps paying for.
+- **The trial countdown outranked the setup blockers.** `moneyNotice` won the
+  banner's else-if chain whether or not it was blocking, so a new account was
+  never told it had no nasheed and no channel until the seventh step of the
+  job panel refused it. Only a BLOCKING notice (free window closed, card
+  declined) outranks them now; a countdown is a note beneath. Same fault as
+  v3.119.0's nasheed nag, one line higher.
+- **The job panel lied at both ends.** Step 3 blocked on "Pick at least one
+  length -- nothing can be cut until at least one length is allowed", and the
+  worker treats an empty list as ANY length (`if not bands: return
+  candidates`); every new account was forced through a false gate. Step 6 said
+  "Nasheed, ducked" over an empty library and the refusal ("Music is required
+  on every clip") arrived only on Generate; the spent account walked all seven
+  steps to an enabled "Generate clips" with "short by 1" in small red. The gate
+  is gone; the sound step says "No nasheed uploaded yet" with an "Add a
+  nasheed" button beside it; the last step's button reads "Add a nasheed
+  first" or "Choose a plan to continue" and leads there (`jobGate`, plan
+  first -- the account-level wall before the setup one).
+- **"Save as new style" did nothing and toasted "Saved as ... and selected."**
+  `POST /api/templates` resolves onto the selected template and never writes
+  the name; the names before and after were identical (driven, J7). One
+  template per content type is the law, so the control is hidden by id.
+- **The rail sold DeenAI as STUDIO** two releases after it moved to Pro; the
+  screen beside it said "A Pro feature". Both read the locking tier from
+  `current.locked` now (`aiTierTag`; the design's literal pill became a
+  binding through `text-overrides.json`, re-import proven byte-stable).
+- **The Library's storage bar was a design literal at 59%** (`.s8d`), drawn
+  under real counts on every account. There is no quota for it to be a
+  fraction of; the host hides it and the figures stay.
+- Smaller: "You sign in with a sign-in link" (there is no link sign-in; email
+  accounts have passwords) and "A$29 per monthly".
+
+**What the harness had to be taught, so the next audit does not pay for it
+again:**
+
+- **Three sign-ups per IP per day** (`signup:${ip}` in server.js). A capture
+  matrix that mints an account per run burns them in three runs and every run
+  after reads "Too many new accounts from this connection today" -- which is
+  the throttle working, not the product failing. Sign IN to accounts that
+  exist (`scratchpad/audit2/accounts.json`).
+- **A client-side seed is not an established account.** Planting clips into
+  `DATA` leaves the server saying "no lectures", so Home still draws the
+  first-run hero and every server-derived surface (onboarding, tasks, the
+  library sidebar) describes an empty account. Seed `state.json` with the
+  server stopped (`scratchpad/audit2/seed-server.mjs`) and sign in.
+- **A dialog's `Escape` is not a dismissal in the harness.** The celebration
+  ate every click for eleven journeys until the driver pressed its own Close;
+  `show()` (setting `ui.screen`) also bypasses the rail click that triggers
+  `onLoadDeenai`, which is how the DeenAI demo first read as empty when it
+  was not.
+- **A screenshot taken before an image decodes is a black box**, not a
+  missing preview: the phone's Templates frame measured 116x206 with the
+  picture's URL loaded 200 and still photographed black once.
+- **The public site's "overflow" is clipped, not scrollable** (`body
+  {overflow-x: clip}`; `scrollX` stays 0 at 768-1280). `scrollWidth >
+  clientWidth` alone is a false alarm there.
+
+Measured clean and left alone: zero horizontal overflow on every studio
+screen at all five widths in both themes; the review queue, deck, drag,
+remove, connections test, account delete's two gates, every toggle. Eleven
+tests in `test/audit-fixes.test.mjs`, on executed output (the journey's own
+return value, `connectionStatus`, the adapter's bindings), all proven red
+against the unpatched source.
+
+**Still open from the audit (P2, not shipped here):** the check chips read
+"Captions rendered missing" beside a green tick (the design appends the word
+to every chip); the Nasheed screen's literal "a single track blocks automatic
+posting"; the Tokens screen offering Payment method and Invoices to a free
+account; "Approv" clipped in the phone's two-up grid at 390; posting windows
+and timezone being deployment-wide ("Set on the server · Australia/Perth") for
+a global product -- a feature, not a fix.

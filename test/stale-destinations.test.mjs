@@ -187,7 +187,10 @@ test('the surfaces read the platform tick, and nothing else', () => {
   // is the property the two-switch version existed to protect.
   const at = source.indexOf('schedOutlets: providers.map');
   const outlets = source.slice(at, at + 900);
-  assert.match(outlets, /var live = p\.connected && p\.enabled;/, 'the dot needs the channel on');
+  // The third clause arrived with the audit of 5 Sept 2026: a credential that
+  // can no longer be renewed is not "Posting" whatever the tick says. It is
+  // still the platform's own state, not the retired master switch.
+  assert.match(outlets, /var live = p\.connected && p\.enabled && !p\.needsReconnect;/, 'the dot needs the channel on');
   assert.match(outlets, /Switched off/, 'and says so when it is not');
 
   const rowAt = source.indexOf('dests: destinations(c).length');

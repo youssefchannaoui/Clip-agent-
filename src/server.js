@@ -814,6 +814,9 @@ function appState(user = null) {
       // Stated beside the field that spends it. Null for an operator, whose
       // balance is unlimited and for whom a number would be a lie.
       tokensLeft: billing.publicBilling(user)?.current?.totalAvailable ?? null,
+      // Whether this account has already been shown its "all the way through"
+      // moment. Kept on the ACCOUNT so a second device does not raise it again.
+      celebratedAt: Number(state.userSettings?.[user.id]?.celebratedAt) || 0,
     }),
     /*
      * The task ladder, and the rail card that draws it. Its first three rungs
@@ -1619,6 +1622,17 @@ async function route(req, res, url) {
   }
   // The Privacy Policy has always promised erasure within 30 days by email --
   // a promise resting on one person's inbox. It is a button now.
+  // The browser reports that the "one all the way through" moment was shown.
+  // First write wins; the journey reads the stamp and never offers it again.
+  if (method === 'POST' && pathname === '/api/onboarding/celebrated') {
+    if (!currentUser?.id) return json(res, 401, { error: 'Sign in first.' });
+    state.userSettings[currentUser.id] = state.userSettings[currentUser.id] || {};
+    if (!state.userSettings[currentUser.id].celebratedAt) {
+      state.userSettings[currentUser.id].celebratedAt = Date.now();
+      save();
+    }
+    return json(res, 200, { ok: true });
+  }
   if (method === 'POST' && pathname === '/api/notifications/email') {
     if (!currentUser?.id) return json(res, 401, { error: 'Sign in first.' });
     const body = await readBody(req);
