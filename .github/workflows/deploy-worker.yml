@@ -231,6 +231,11 @@ jobs:
           REMOTE
 
       - name: Prove the running container holds this commit
+        # A diagnose-only dispatch deployed nothing, so there is nothing to
+        # prove -- and the box legitimately holds whatever it last built,
+        # which is behind any commit that touched only src/. The diagnostics
+        # step prints the running version instead.
+        if: inputs.diagnose != true
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}

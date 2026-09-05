@@ -35,6 +35,10 @@ test('a diagnose dispatch never deploys, and a push never diagnoses', () => {
   const rebuild = workflow.indexOf('- name: Pull and rebuild on the box');
   const rebuildBlock = workflow.slice(rebuild, workflow.indexOf('- name:', rebuild + 10));
   assert.match(rebuildBlock, /if: inputs\.diagnose != true/, 'the rebuild stands down for a question');
+  const prove = workflow.indexOf('- name: Prove the running container holds this commit');
+  const proveBlock = workflow.slice(prove, workflow.indexOf('- name:', prove + 10));
+  assert.match(proveBlock, /if: inputs\.diagnose != true/,
+    'and so does the version proof -- a box that deployed nothing cannot be expected to hold this commit');
   const ask = workflow.indexOf('- name: Ask the box what happened to its recent jobs');
   assert.ok(ask > 0, 'the step exists');
   const askBlock = workflow.slice(ask, workflow.indexOf('- name:', ask + 10));
