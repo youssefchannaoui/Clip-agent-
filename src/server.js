@@ -1804,7 +1804,7 @@ async function route(req, res, url) {
       // this project weeks twice, and nothing on any screen could say so. A
       // worker that reports no version at all is itself the answer: it predates
       // the build that started reporting one.
-      const workerVersion = String(worker?.capabilities?.version || '');
+      const workerVersion = workerVersionOf(worker);
       const deploy = {
         appVersion: config.appVersion,
         workerVersion: workerVersion || null,
@@ -3074,10 +3074,17 @@ const INLINE_SCRIPT_HASHES = (() => {
  * Owner -> Health route that SHOWS. Two copies of this object would be two
  * answers to one question, which is how every drift in this file started.
  *
- * `workerVersion` is passed in rather than fetched here: the two callers
- * already have it, by different routes (readiness() and health()), and a third
- * round trip to the box on every owner page load would be waste.
+ * `workerVersion` is passed in rather than fetched here -- the owner route
+ * already has the payload -- but it is READ by one function, `workerVersionOf`,
+ * because passing it in is exactly what let the two callers disagree: the sweep
+ * read a top-level `version` off /readiness, which has never carried one, so it
+ * alerted "no version at all" every fifteen minutes whatever the box was
+ * running. An alert channel that cries wolf is one nobody reads.
  */
+function workerVersionOf(payload) {
+  return String(payload?.capabilities?.version || '');
+}
+
 function selfCheckInputs({ workerVersion = '', workerReachable = false } = {}) {
   return {
     assets: Object.fromEntries(Object.entries(STUDIO_ASSETS).map(([route, entry]) => [route, entry.file])),
@@ -3305,7 +3312,9 @@ server.listen(config.port, () => {
     let workerVersion = '';
     let workerReachable = false;
     if (config.processingMode === 'remote') {
-      try { workerVersion = (await workerClient.readiness())?.version || ''; workerReachable = true; }
+      /* health(), not readiness(): only /health carries capabilities.version,
+         and it is read through the same workerVersionOf the owner screen uses. */
+      try { workerVersion = workerVersionOf(await workerClient.health()); workerReachable = true; }
       catch { workerReachable = false; }
     }
     await selfcheck.run(selfCheckInputs({ workerVersion, workerReachable }), alerts.report);

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1456 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1457 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -6733,6 +6733,40 @@ rather than markup. The check extracts with the SAME regex `INLINE_SCRIPT_HASHES
 uses, which is what makes the comparison meaningful; the "multiple inline
 script scopes" this file warns about are function scopes inside that one
 525KB block.
+
+### The break detector's first alert was its own (v3.129.2, 5 Sept 2026)
+
+`selfcheck:worker-version` fired at 02:00 saying *"the app is 3.129.0 and the
+worker reports no version at all"*. It was wrong, and it was mine.
+
+- **`/readiness` has never carried a top-level `version`.** worker/service.py
+  answers it with `ready`, `freeBytes`, the queue depths and `capabilities` --
+  and `capabilities.version` is where the release lives. Only `/health` was
+  ever read correctly, by the Owner -> Health route. The sweep read
+  `(await workerClient.readiness())?.version`, which is `undefined` every time,
+  so the check reported "no version at all" every fifteen minutes whatever the
+  box was running. **It would also have MASKED a genuinely stale worker**: an
+  alert that is always failing says nothing when it starts being right.
+- **The module's own comment predicted this and I wrote past it.**
+  `selfCheckInputs()` is documented as "ONE description ... two copies would be
+  two answers to one question" -- and the paragraph directly under it said
+  `workerVersion` is passed in because "the two callers already have it, BY
+  DIFFERENT ROUTES (readiness() and health())". Two routes IS two answers. The
+  justification was the bug.
+- **`workerVersionOf(payload)` is the one reader now** and the sweep calls
+  `health()` like the route does. Passing the value in is still right -- the
+  owner route already has the payload and a third round trip per page load is
+  waste -- but READING it is one function.
+- The test is a source test on purpose: CI has no worker to call, and this is
+  the shape that is invisible when it breaks -- the app runs, the suite stays
+  green, and the alert simply lies. It also reads worker/service.py's own
+  `/readiness` block and fails if that ever grows a `version` field, so the
+  next person decides which one wins rather than discovering it at 2am.
+  Proven red against the restored `readiness()?.version`.
+- **This is the "alert channel that cries wolf" failure v3.27.0 exists to
+  prevent, shipped one release after writing that warning into this module.**
+  A monitor's first alert is worth checking against the code before it is
+  checked against the box.
 
 ## Open items
 

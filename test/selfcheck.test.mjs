@@ -158,3 +158,30 @@ test('the external prober exists and fixes nothing', () => {
   const code = probe.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   assert.doesNotMatch(code, /execSync|spawn|git |curl -X (POST|PUT|DELETE)/, 'the prober must not act on anything');
 });
+
+/* The sweep and the Owner screen must read the worker's version from ONE
+   place. They did not: the sweep read a top-level `version` off /readiness,
+   which has never carried one (worker/service.py answers readiness with
+   `capabilities`), so `selfcheck:worker-version` alerted "no version at all"
+   every fifteen minutes whatever the box was running -- and would have masked
+   a genuinely stale worker afterwards. A source test, deliberately: CI has no
+   worker to call, and this is exactly the rule that is invisible when it goes
+   missing -- the app runs, the suite stays green, the alert just lies. */
+test('the worker version is read by one function, from /health', () => {
+  const src = fs.readFileSync(fileURLToPath(new URL('../src/server.js', import.meta.url)), 'utf8');
+
+  assert.match(src, /function workerVersionOf\(payload\)\s*{\s*return String\(payload\?\.capabilities\?\.version/,
+    'workerVersionOf must read capabilities.version');
+
+  const callers = src.match(/workerVersionOf\(/g) || [];
+  assert.ok(callers.length >= 3, 'both callers must go through workerVersionOf');
+
+  assert.ok(!/readiness\(\)\)?\?\.version/.test(src),
+    '/readiness carries no top-level version -- reading one alerts for ever');
+
+  const worker = fs.readFileSync(fileURLToPath(new URL('../worker/service.py', import.meta.url)), 'utf8');
+  const readiness = worker.slice(worker.indexOf('path == "/readiness"'));
+  const block = readiness.slice(0, readiness.indexOf('if self.command == "POST"'));
+  assert.ok(!/"version"/.test(block),
+    'if /readiness ever grows its own version field, this test is the place to decide which one wins');
+});
