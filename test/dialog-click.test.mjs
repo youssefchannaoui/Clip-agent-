@@ -34,6 +34,10 @@ import { fileURLToPath } from 'node:url';
 
 await import('../src/public/studio-runtime.js');
 await import('../src/public/studio-template.generated.js');
+// The safe-zone table, before the adapter: the adapter reads it at load
+// time and deliberately keeps no fallback numbers, exactly as the browser
+// loads the two in that order.
+await import('../src/public/safe-zones.js');
 await import('../src/public/studio-adapter.js');
 const { STUDIO_TEMPLATE, StudioAdapter } = globalThis;
 

@@ -230,6 +230,9 @@ test('a source without an <x-dc> block is rejected with a usable message', () =>
 // re-import that changes a binding name fails here rather than in the browser.
 
 await import('../src/public/studio-template.generated.js');
+// Before the adapter, as the browser loads it: the adapter reads the table at
+// load time and deliberately keeps no fallback numbers of its own.
+await import('../src/public/safe-zones.js');
 await import('../src/public/studio-adapter.js');
 const templatesModule = await import('../src/templates.js');
 const { StudioAdapter, STUDIO_TEMPLATE, STUDIO_BINDINGS } = globalThis;
@@ -2076,31 +2079,50 @@ test('the preview caption is drawn in the font and case it will render in', () =
   assert.match(style({ captionPrimary: '#D9B478' }), /color: #D9B478/);
 });
 
-test('the snap lines are the safe box the design actually draws', () => {
-  // They were 10% and 90%, matching nothing on screen. The safe box is
-  // top 8% / bottom 14% (.s8n), and a caption outside it is covered by the
-  // platform's own chrome.
+test('the snap lines come from the safe-zone table, not from a literal', () => {
+  // They were 10% and 90%, then a hardcoded top-8% / bottom-14% box in the
+  // design that matched no platform. Both are gone: the box is computed from
+  // safe-zones.js for the account's own destinations and the template's own
+  // shape, so this asserts the DERIVATION rather than a pair of numbers that
+  // would then have to be edited whenever a platform moves.
   const adapter = fs.readFileSync(path.join(ROOT, 'src/public/studio-adapter.js'), 'utf8');
-  assert.match(adapter, /var SAFE_TOP = 0\.08;/);
-  assert.match(adapter, /var SAFE_BOTTOM = 0\.86;/);
+  assert.match(adapter, /var SAFE_BOX = SAFE\.safeArea\(SAFE_PLATFORMS, tpl\.width, tpl\.height\)/);
+  assert.match(adapter, /var SAFE_TOP = SAFE_BOX\.top;/);
+  assert.match(adapter, /var SAFE_BOTTOM = SAFE_BOX\.bottom;/);
+  // And the adapter must keep NO numbers of its own: a second copy of the
+  // insets here is how the three disagreeing answers came about.
+  const code = adapter.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(!/DCSafeZones \|\|[\s\S]{0,400}top: 1[0-9]{2}/.test(code),
+    'the fallback must not restate platform insets');
+
+  // The design no longer bakes the box in as four literals.
   const css = fs.readFileSync(path.join(ROOT, 'src/public/studio-styles.generated.css'), 'utf8');
-  // Found by its geometry, not by a hoisted class name -- the importer
-  // renumbers classes whenever the design gains or loses a node, and pinning
-  // .s8n broke on an unrelated section being removed.
-  const box = /\.[a-z0-9]+\{[^}]*top: 8%[^}]*bottom: 14%[^}]*\}/.exec(css);
-  assert.ok(box, 'a class drawing the top-8% / bottom-14% safe box exists');
+  assert.ok(!/top: 8%[^}]*bottom: 14%/.test(css), 'the hardcoded safe box is gone from the export');
+  const design = fs.readFileSync(path.join(ROOT, 'design/studio-dashboard.dc.html'), 'utf8');
+  assert.equal((design.match(/\{\{ safeBoxStyle \}\}/g) || []).length, 2,
+    'both previews -- Templates and the editor -- take the bound box');
 });
 
 test('the caption cannot be dragged outside the safe box', () => {
+  // The fixture connects nothing, so the box is the union of all four
+  // platforms -- the safe direction for an account whose destinations are not
+  // known yet. Expectations are COMPUTED from the same table the adapter
+  // reads, so this test cannot drift from it when a platform moves its
+  // interface; what it pins is that the clamp honours the box.
+  const box = globalThis.DCSafeZones.safeArea([], 1080, 1920);
   const height = 533;
   const at = f => dragOn({ clientX: 150, clientY: f * height });
   // Dropped below the frame entirely, it stops at the safe edge.
   const low = at(0.99);
   assert.equal(low.captionPosition, 'bottom');
-  assert.equal(low.captionMarginV, Math.round(1920 * (1 - 0.86)), 'clamped to the safe bottom');
+  assert.equal(low.captionMarginV, Math.round(1920 * (1 - box.bottom)), 'clamped to the safe bottom');
   const high = at(0.01);
   assert.equal(high.captionPosition, 'top');
-  assert.equal(high.captionMarginV, Math.round(1920 * 0.08), 'clamped to the safe top');
+  assert.equal(high.captionMarginV, Math.round(1920 * box.top), 'clamped to the safe top');
+  // The bottom clamp is the one that matters and the one that was wrong: the
+  // old box called the lowest 14% safe while Meta covers 35% of the frame.
+  assert.ok(low.captionMarginV > Math.round(1920 * 0.14),
+    'a caption may no longer sit where the platform draws its own caption');
 });
 
 test('each snap point has a name the preview can show', () => {
@@ -2793,35 +2815,50 @@ test('the drag finds the frame through a class, not only an inline style', () =>
 });
 
 test('the caption snaps to the lines the label promises', () => {
-  // "Drag freely — it snaps to thirds, halves and the safe-zone edges."
+  // The label used to promise "thirds, halves and the safe-zone edges" and is
+  // now written by the adapter, because a third can fall OUTSIDE the safe box
+  // and is then not offered -- a snap point that drops the caption somewhere
+  // the platform covers is worse than no snap point at all.
+  const box = globalThis.DCSafeZones.safeArea([], 1080, 1920);
   const height = 533;
   const at = fraction => dragOn({ clientX: 150, clientY: fraction * height });
   // The upper third, snapped from just below it, measured down from the top.
+  assert.ok(1 / 3 < box.bottom, 'fixture check: the upper third is inside the box');
   assert.equal(at(0.34).captionPosition, 'top');
   assert.equal(at(0.34).captionMarginV, Math.round(1920 / 3), 'the upper third');
-  // The safe box's own top edge, which is 8% — not the 10% this once guessed.
-  assert.equal(at(0.095).captionMarginV, Math.round(1920 * 0.08), 'the safe-zone edge');
-  // The lower third, measured up from the bottom.
-  assert.equal(at(0.65).captionPosition, 'bottom');
-  assert.equal(at(0.65).captionMarginV, Math.round(1920 * (1 - 2 / 3)), 'the lower third');
+  // The safe box's own top edge, wherever the table now puts it.
+  assert.equal(at(box.top + 0.01).captionMarginV, Math.round(1920 * box.top), 'the safe-zone edge');
   // Well away from a line it stays where it was put, so it is still free.
-  const free = at(0.78).captionMarginV;
-  assert.equal(at(0.78).captionPosition, 'bottom');
-  assert.ok(Math.abs(free - 1920 * 0.22) < 12, 'lands where it was dropped');
-  assert.notEqual(free, Math.round(1920 * 0.1));
+  const loose = box.top + (box.bottom - box.top) * 0.78;
+  const free = at(loose);
+  assert.equal(free.captionPosition, 'bottom');
+  assert.ok(Math.abs(free.captionMarginV - 1920 * (1 - loose)) < 12, 'lands where it was dropped');
+
+  // THE LOWER THIRD IS THE ONE THAT MOVED. With every platform connected the
+  // safe band ends above 2/3, so it is dropped rather than offered as a place
+  // that is quietly covered by Instagram's own caption block.
+  const label = StudioAdapter.bindings({
+    projects: [], clips: [], tracks: [],
+    templates: [{ id: 'x', name: 'X', height: 1920 }],
+    selectedTemplate: { id: 'x', name: 'X', height: 1920 },
+  }).safeHint;
+  assert.equal(/lower third/.test(label), 2 / 3 <= box.bottom,
+    'the label offers a third only when it is genuinely inside the box');
 });
 
 test('the caption margin is measured from the edge it is anchored to', () => {
   // ASS MarginV is relative to the alignment's own edge (alignment_for in
   // clip_worker.py). Measuring always from the bottom put a top-aligned caption
   // at the wrong height in the export while looking right in the preview.
+  // Both drops are INSIDE the safe box, or the clamp would be what is being
+  // measured rather than the anchoring.
   const height = 533;
-  const top = dragOn({ clientX: 150, clientY: 0.15 * height });
+  const top = dragOn({ clientX: 150, clientY: 0.25 * height });
   assert.equal(top.captionPosition, 'top');
-  assert.ok(Math.abs(top.captionMarginV - 1920 * 0.15) < 30, 'measured down from the top');
-  const bottom = dragOn({ clientX: 150, clientY: 0.85 * height });
+  assert.ok(Math.abs(top.captionMarginV - 1920 * 0.25) < 30, 'measured down from the top');
+  const bottom = dragOn({ clientX: 150, clientY: 0.60 * height });
   assert.equal(bottom.captionPosition, 'bottom');
-  assert.ok(Math.abs(bottom.captionMarginV - 1920 * 0.15) < 30, 'measured up from the bottom');
+  assert.ok(Math.abs(bottom.captionMarginV - 1920 * 0.40) < 30, 'measured up from the bottom');
 });
 
 test('dead centre snaps to middle, which is the one place it belongs', () => {
@@ -2838,8 +2875,9 @@ test('the caption follows the cursor across the whole frame', () => {
   const height = 533;
   const at = f => dragOn({ clientX: 150, clientY: f * height });
   const seen = [];
-  // Inside the safe box, since the drag is clamped to it.
-  for (const f of [0.12, 0.18, 0.25, 0.4, 0.45, 0.55, 0.6, 0.72, 0.78, 0.83]) {
+  // Inside the safe box, since the drag is clamped to it -- and clear of every
+  // snap zone, or two drops would land on one line and read as a repeat.
+  for (const f of [0.18, 0.22, 0.26, 0.30, 0.38, 0.42, 0.46, 0.56, 0.60, 0.62]) {
     const d = at(f);
     seen.push(`${d.captionPosition}:${d.captionMarginV}`);
   }

@@ -9,6 +9,16 @@ import * as billing from './billing.js';
 
 import { SEO_PAGES, KIND, indexablePages, pageFor, breadcrumbFor, alternatesFor, langOf, isRtl } from './seo-pages.js';
 import { SEO_COPY } from './seo-copy.js';
+/*
+ * Where each platform covers the frame. Imported for its side effect -- it is
+ * a plain script so the studio and the tool pages can load it with a <script>
+ * tag -- and read off globalThis, which is the same arrangement the tests use
+ * for studio-runtime.js. It is here so the checker's legend, its toggles and
+ * its drawing all quote ONE table; they used to quote three, and none of the
+ * three agreed with the app.
+ */
+import './public/safe-zones.js';
+const SAFE = globalThis.DCSafeZones;
 
 /**
  * Cache-buster for the stylesheet, taken from the stylesheet.
@@ -175,7 +185,10 @@ function layout({ base, currentUser, title, description, canonicalPath = '/', bo
   // Only the two free-tool pages pull the widget script; every other page
   // would be fetching a bundle for a control it does not have.
   const toolScript = /^\/tools\/(safe-zone-checker|clip-calculator)$/.test(canonicalPath)
-    ? '\n  <script src="/tool-widgets.js" defer></script>' : '';
+    // The safe-zone table first: the checker reads it and, like the studio
+    // adapter, deliberately keeps no fallback copy of the numbers.
+    ? (canonicalPath === '/tools/safe-zone-checker' ? '\n  <script src="/safe-zones.js" defer></script>' : '')
+      + '\n  <script src="/tool-widgets.js" defer></script>' : '';
 
   const hreflang = alternates.length ? '\n  ' + [
     ...alternates.map(alt =>
@@ -1061,14 +1074,22 @@ function toolFollowUp(headline, body) {
  */
 function toolWidget(path) {
   if (path === '/tools/safe-zone-checker') {
-    const zones = [
-      ['universal', 'Safe on all three', true],
-      ['tiktok', 'TikTok', true],
-      ['reels', 'Instagram Reels', false],
-      ['shorts', 'YouTube Shorts', false],
-    ].map(([key, label, on]) =>
-      `<label class="sz-toggle"><input type="checkbox" data-sz-zone="${key}"${on ? ' checked' : ''}> ${escapeHtml(label)}</label>`
-    ).join('');
+    // Every toggle, every legend row and every rectangle the canvas draws comes
+    // from SAFE.ZONES. The legend used to be a hand-typed table beside a
+    // hand-typed drawing routine, which is how it came to state numbers the
+    // drawing did not use.
+    const ins = SAFE.unionInsets();
+    const safeW = SAFE.REF_WIDTH - ins.left - ins.right;
+    const safeH = SAFE.REF_HEIGHT - ins.top - ins.bottom;
+    const zones = [['universal', 'Safe on all four', true]]
+      .concat(SAFE.ORDER.map((key, i) => [key, SAFE.ZONES[key].label, i === 0]))
+      .map(([key, label, on]) =>
+        `<label class="sz-toggle"><input type="checkbox" data-sz-zone="${key}"${on ? ' checked' : ''}> ${escapeHtml(label)}</label>`
+      ).join('');
+    const legend = SAFE.ORDER.map(key => {
+      const z = SAFE.ZONES[key];
+      return `<tr><td>${escapeHtml(z.label)}</td><td>${z.top}</td><td>${z.right}</td><td>${z.bottom}</td><td>${z.left}</td></tr>`;
+    }).join('');
     return `<section class="tool-widget" data-tool="safe-zones">
       <div class="tool-widget-body">
         <div class="sz-stage">
@@ -1083,13 +1104,11 @@ function toolWidget(path) {
           <div class="sz-toggles">${zones}</div>
           <p class="tool-status" data-sz-status role="status"></p>
           <table class="sz-legend">
-            <tr><th>Covered area</th><th>Top</th><th>Right</th><th>Bottom</th></tr>
-            <tr><td>TikTok</td><td>100</td><td>140</td><td>320</td></tr>
-            <tr><td>Instagram Reels</td><td>220</td><td>130</td><td>430</td></tr>
-            <tr><td>YouTube Shorts</td><td>90</td><td>60</td><td>250</td></tr>
-            <tr class="sz-legend-safe"><td>Safe on all three</td><td colspan="3">900 &times; 1400, centred</td></tr>
+            <tr><th>Covered area</th><th>Top</th><th>Right</th><th>Bottom</th><th>Left</th></tr>
+            ${legend}
+            <tr class="sz-legend-safe"><td>Safe on all four</td><td colspan="4">${safeW} &times; ${safeH}, and NOT centred — the right-hand button column is wider than the left margin, and the bottom band is deeper than the top</td></tr>
           </table>
-          <p class="tool-foot">Pixels inside a 1080 &times; 1920 frame, checked August 2026. Platforms move their interface without announcing it, which is why looking at a real frame beats trusting a number.</p>
+          <p class="tool-foot">Pixels inside a ${SAFE.REF_WIDTH} &times; ${SAFE.REF_HEIGHT} frame, checked ${escapeHtml(SAFE.CHECKED)}. Platforms move their interface without announcing it, which is why looking at a real frame beats trusting a number.</p>
         </div>
       </div>
       ${toolFollowUp('You have seen where each platform covers the frame.',
