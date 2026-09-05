@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1494 JS + 669 Python**
+- `npm test` and `npm run check` must pass. Currently **1499 JS + 670 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10046,12 +10046,73 @@ transcript the pipeline would have used, the options each retry carried, the
 warning emitted -- and were proven red against the unpatched worker (three
 failures and an import error).
 
-**What this does not yet say:** WHICH guard silenced this recording. The
-diagnose workflow's `diagnose_audio` input runs Whisper over the cached bytes
-in both variants and prints `duration_after_vad` and `no_speech_prob`; it
-loads the model on the box, so it waits for the box to be idle. The retry
-order above is the safer guess until then, and the entry below records the
-answer once it is in.
+**Which guard it was, measured on the box the same hour (v3.132.0).** The
+diagnose workflow's `diagnose_audio` input ran Whisper over the first 120s of
+the cached source (567s, AAC stereo, mean -18.6 dB, peak -2.8 dB -- a healthy
+file, so the download was never the fault):
+
+    as shipped (VAD on)          2 segments   0.0-28.4s   after vad 26.0s of 120
+    VAD off                     10 segments   0.0-119.8s  after vad 120.0s
+    VAD on, no-speech gate off   2 segments   0.0-28.4s
+    VAD off, gate off           10 segments   0.0-119.8s
+    language auto, VAD on        2 segments   0.0-28.4s
+
+**The voice-activity filter is what silences a recitation**: Silero handed the
+model 26 seconds of the first two minutes. The no-speech gate changed nothing
+in either direction and neither did the language (ar at 1.00 either way). So
+the retry order above was the right one, and the first retry is the one that
+lands -- and a recitation no longer pays for the wasted pass at all: a
+Quran-template job starts WITHOUT the filter (`vad_filter: False` from the
+first pass), keeping the no-speech gate so real silence is still refused.
+Both driven by the fake-Whisper tests and proven red first.
+
+**Youssef's retry never reached it.** Two worker deploys four minutes apart --
+this session's at 17:09 and the other session's v3.131.2 at 17:13 -- each
+restarted the container, and a restart sends a running job back to its start,
+so his khutbah render restarted twice and the queued recitation retry never
+ran before he cancelled both ("it was paused maybe cause the update"). That is
+the deploy, not the box: `deploy-worker.yml` has no drain. **A worker deploy
+while a customer's job runs costs them that job's progress**, and two sessions
+shipping worker/ changes in the same quarter-hour is how it happened twice.
+Check the box's queue (a diagnose dispatch) before pushing anything under
+worker/ when someone is importing.
+
+## The safe zone is drawn as what covers the frame, and the card is page length (v3.132.0, 5 Sept 2026)
+
+Youssef, on v3.131.2: "left side bar should be pae length, safe zone is
+horrible and its all broken now."
+
+- **The safe-zone NUMBERS are untouched.** `safe-zones.js` is the one table,
+  its tests hold it, and Clean Line's caption moved on his own instruction the
+  same day (the entry above). What was horrible was the DRAWING: a lone
+  dashed rectangle in the upper part of the frame, the caption glued to its
+  edge and a third of the picture open beneath it, which reads as a fault
+  rather than a rule. Every clip tool shows it the other way round, and so
+  does this one now: the parts of the frame the platform's OWN interface
+  covers are shaded, with the tab pill, the username and caption lines and
+  the like/comment/share stack ghosted in, and what is left is plainly where
+  text goes. `paintSafeChrome` in index.html draws four bands from the
+  adapter's new `safeBox` fractions -- the same box the design's dashed edge
+  is bound to, so the shade and the edge cannot disagree -- host-owned,
+  APPENDED to the frame (a host node at the front shifts every generated
+  sibling), z-index 1 under the dashed edge (2), the guides (6) and the
+  caption (8), pointer-events none. The colours are rgba(9,9,10) and
+  rgba(255,255,255) on purpose: the light-theme generator remaps hex and
+  rgba(0,0,0), and the stage is night in both themes. Measured in both.
+- **The hint is one line about the shade.** It listed the snap points and ran
+  to two lines under the preview, reading as a warning label; the snap points
+  announce themselves while dragging. "Your caption sits Npx into the shade"
+  stays -- that is the one thing the line exists to say -- and the other
+  session's test follows the wording rather than the old sentence.
+- **The settings card stretches to the row.** It was capped at the row's
+  height but not stretched, so it ended at its cap while the preview column
+  ran 20-60px past it and the two columns ended on different lines; the
+  preview column was also fitted against the SCROLLER's foot rather than the
+  row's content foot, so it was allowed into the row's 44px bottom padding.
+  `align-self: stretch`, the limit measured from the row, and the row's foot
+  padding evened to its head's 22px under the lock. Measured at 1440x900 and
+  1520x855 with the live bar up: both columns end at the same y, the card
+  runs to the row's foot in both themes.
 
 ## The product audit: used, not read (v3.130.0 / v3.130.1, 5 Sept 2026)
 

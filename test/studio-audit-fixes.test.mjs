@@ -382,9 +382,17 @@ test('the Templates lock always holds side by side, and the FRAME gives way, nev
     'the pre-lock row-height gate is back, and it is false on every desktop size');
   // Measured AFTER the lock is applied: the preview column against the
   // scroller's foot.
-  const lock = body.indexOf("set(settings,{'max-height':'100%','overflow-y':'auto','min-height':'0'})");
+  const lock = body.indexOf("set(settings,{'align-self':'stretch','max-height':'100%','overflow-y':'auto','min-height':'0'})");
   const fit = body.indexOf('const over=previewCol.getBoundingClientRect().bottom-limit');
   assert.ok(lock > 0 && fit > lock, 'the preview column is measured after the lock, not before');
+  // Stretched, not merely capped: the card fills the row, and the preview
+  // column is fitted to the ROW's content foot rather than the scroller's, so
+  // the two columns end on one line (Youssef, 5 Sept 2026: "left side bar
+  // should be page length").
+  assert.match(body, /set\(settings,\{'align-self':'stretch','max-height':'100%','overflow-y':'auto','min-height':'0'\}\)/,
+    'the settings card stretches to the row');
+  assert.match(body, /const limit=row\.getBoundingClientRect\(\)\.bottom-\(parseFloat\(getComputedStyle\(row\)\.paddingBottom\)\|\|0\)/,
+    'the preview column is fitted to the row, not the scroller');
   assert.match(body, /set\(frame,\{'width':Math\.floor\(height\*ratio\)\+'px'\}\)/,
     'the frame gives way in height, through its own aspect-ratio');
   assert.match(body, /if\(height>=FRAME_MIN_HEIGHT\)/, 'down to a floor');

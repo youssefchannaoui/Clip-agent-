@@ -206,16 +206,16 @@ test('a caption anchored inside the covered band is called out, not moved', () =
 
   const covered = StudioAdapter.bindings(state(
     { ...base, captionPosition: 'bottom', captionMarginV: 464 })).safeHint;
-  assert.match(covered, /sits \d+px outside it/, 'the shipped default is called out');
+  assert.match(covered, /sits \d+px into the shade/, 'the shipped default is called out');
 
   const clear = StudioAdapter.bindings(state(
     { ...base, captionPosition: 'bottom', captionMarginV: 700 })).safeHint;
-  assert.ok(!/outside it/.test(clear), 'a caption inside the box is not nagged');
+  assert.ok(!/sits \d+px/.test(clear), 'a caption inside the box is not nagged');
 
   // A centred caption is always inside, and must never be warned about.
   const middle = StudioAdapter.bindings(state(
     { ...base, captionPosition: 'middle', captionMarginV: 0 })).safeHint;
-  assert.ok(!/outside it/.test(middle));
+  assert.ok(!/sits \d+px/.test(middle));
 
   // And it is a WARNING, never a correction: nothing about the drawn box may
   // rewrite a saved caption position, because that changes how every clip from

@@ -3292,6 +3292,43 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(snap&&snap.textContent!==vals.pvSnapName)snap.textContent=vals.pvSnapName;
     }
 
+    /* THE COVERED AREAS OF THE FRAME, DRAWN AS WHAT THEY ARE.
+
+       Youssef, 5 Sept 2026, on the accurate safe box: "safe zone is horrible
+       and its all broken now." The NUMBERS were right (safe-zones.js, one
+       table, tested) and the drawing was a lone dashed rectangle in the upper
+       part of the frame with the caption glued to its edge and a third of the
+       picture open beneath it -- which reads as a fault, not a rule. Every clip
+       tool shows the same thing the other way round: the parts of the frame
+       the platform's OWN interface covers are shaded, with the buttons and
+       caption lines ghosted in, and what is left is plainly where text goes.
+
+       Host-drawn inside the preview frame, so no design re-import: four
+       shaded bands positioned from the adapter's `safeBox` fractions (the
+       same box the design's dashed edge is drawn from, so the two cannot
+       disagree), a ghosted tab pill in the top band, a username pill and two
+       caption lines in the bottom band, the like/comment/share stack down the
+       right rail. All pointer-events: none, all under the caption (z-index 1
+       against the caption's 8), and APPENDED -- a host-owned node inserted at
+       the front shifts every generated sibling by one (v3.124.2). */
+    const safeChromeEl=document.createElement('div');
+    safeChromeEl.id='dcSafeChrome';safeChromeEl.setAttribute('data-host-owned','');safeChromeEl.setAttribute('aria-hidden','true');
+    function paintSafeChrome(vals){
+      const box=vals&&vals.safeBox;
+      const frame=StudioAdapter.ui.screen==='templates'&&vals.edSafe&&box&&!box.degenerate
+        &&!document.body.classList.contains('dcm-on')&&pvEl.parentElement&&!pvEl.classList.contains('hide')
+        ?pvEl.parentElement:null;
+      if(!frame){if(safeChromeEl.parentElement)safeChromeEl.remove();return}
+      if(safeChromeEl.parentElement!==frame)frame.appendChild(safeChromeEl);
+      const pct=v=>(Math.max(0,Math.min(1,v))*100).toFixed(2)+'%';
+      const L=pct(box.left),R=pct(1-box.right),T=pct(box.top),B=pct(1-box.bottom);
+      dcSetHtml(safeChromeEl,
+        `<span class="dc-safe-band dc-safe-top" style="left:0;right:0;top:0;height:${T}"><i class="dc-safe-tabs"></i></span>`
+        +`<span class="dc-safe-band dc-safe-bottom" style="left:0;right:0;bottom:0;height:${B}"><i class="dc-safe-user"></i><i class="dc-safe-line-a"></i><i class="dc-safe-line-b"></i></span>`
+        +`<span class="dc-safe-band dc-safe-left" style="left:0;width:${L};top:${T};bottom:${B}"></span>`
+        +`<span class="dc-safe-band dc-safe-rail" style="right:0;width:${R};top:${T};bottom:${B}"><i></i><i></i><i></i><i></i></span>`);
+    }
+
     /* The sample caption, drawn word by word so the live word can carry its own
        colour, face, slant and glow -- which the renderer has always done and
        nothing could configure.
@@ -4994,8 +5031,18 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       for(const child of scroller.children){
         if(child!==row)set(child,{'flex':'0 0 auto'});
       }
-      set(row,{'flex':'1 1 auto','min-height':'0','align-items':'flex-start'});
-      set(settings,{'max-height':'100%','overflow-y':'auto','min-height':'0'});
+      /* The row pads 22px above and 44px below. Under the lock the extra
+         22px at the foot is dead space between the stretched card and the
+         page's edge, so the foot takes the same 22px as the head. */
+      set(row,{'flex':'1 1 auto','min-height':'0','align-items':'flex-start','padding-bottom':'22px'});
+      /* STRETCHED, not merely capped. With the row's align-items: flex-start
+         the card ended at its content or the cap, whichever came first -- and
+         the cap left it 44px short of the row's foot while the preview column
+         ran past it, so the two columns ended at different heights and the
+         card read as cut off (Youssef, 5 Sept 2026: "left side bar should be
+         page length"). Stretch fills the row exactly; the cap and min-height
+         keep the overflow engaging inside it. */
+      set(settings,{'align-self':'stretch','max-height':'100%','overflow-y':'auto','min-height':'0'});
       /* THE PREVIEW COLUMN IS MADE TO FIT; THE PAGE NEVER SCROLLS AS ONE.
          v3.126.0 gated the lock on `row.scrollHeight <= scroller.clientHeight`
          -- measured BEFORE the lock, when the settings column stands at its
@@ -5007,7 +5054,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          overflow past the scroller's foot comes off the frame's height, the
          width following through its own aspect-ratio. Below FRAME_MIN_HEIGHT
          the column scrolls on its own instead -- still never the page. */
-      const limit=scroller.getBoundingClientRect().bottom-(parseFloat(getComputedStyle(scroller).paddingBottom)||0);
+      /* The ROW's content foot, not the scroller's: the row pads its bottom,
+         and a preview column measured against the scroller was allowed to run
+         into that padding while the stretched card beside it stopped at the
+         content edge -- 22px of mismatch that read as the card being short. */
+      const limit=row.getBoundingClientRect().bottom-(parseFloat(getComputedStyle(row).paddingBottom)||0);
       const over=previewCol.getBoundingClientRect().bottom-limit;
       if(over>0.5){
         const fr=frame.getBoundingClientRect();
@@ -9966,6 +10017,7 @@ function paintStudio(){
   paintLiveWork(vals);
   paintApplyLecture(vals);
   paintPreviewPic(vals);
+  paintSafeChrome(vals);
   paintCaptionWords(vals);
   paintGlobalSearch(vals);
   paintEditorRuler(vals);

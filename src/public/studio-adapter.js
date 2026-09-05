@@ -1420,22 +1420,21 @@
     return margin < need ? Math.round(need - margin) : 0;
   }
 
+  // One line, about what is DRAWN. The covered areas are shaded on the frame
+  // now (paintSafeChrome in index.html), so the sentence names them and
+  // stops; the snap points announce themselves while dragging (pv-snap) and
+  // no longer need listing here -- the list ran to two lines under the
+  // preview and read as a warning label. The warning stays, because a caption
+  // sitting in the shade is the one thing this line exists to say.
   function safeHintText(platforms, points, over) {
     var names = SAFE.describe(platforms);
-    var lines = points.map(function (p) { return p.name.toLowerCase(); });
-    var snaps = lines.length
-      ? ' Drag snaps to ' + (lines.length > 1
-        ? lines.slice(0, -1).join(', ') + ' and ' + lines[lines.length - 1]
-        : lines[0]) + '.'
-      : '';
     var warn = over
-      ? ' Your caption sits ' + over + 'px outside it — drag it inside, or it is covered where it posts.'
+      ? ' Your caption sits ' + over + 'px into the shade — drag it up into the clear, or it is covered where it posts.'
       : '';
-    if (!platforms.length) {
-      return 'Keep captions inside the box — it clears every platform, because none is connected yet.'
-        + warn + snaps;
-    }
-    return 'Keep captions inside the box — it clears ' + names + '.' + warn + snaps;
+    var whose = platforms.length
+      ? names + '\u2019s own buttons and captions sit on screen'
+      : 'every platform\u2019s buttons and captions sit on screen, until one is connected';
+    return 'The shaded parts are where ' + whose + '. Keep text in the clear.' + warn;
   }
 
   // Grab, then grabbing. Without it the overlay gives no sign it can be moved.
@@ -7749,6 +7748,12 @@
       // is actually clearing instead, because a rectangle nobody can account
       // for is the thing that made this feel arbitrary.
       safeHint: safeHintText(SAFE_PLATFORMS, SNAP_POINTS, captionOutsideBox(tpl, SAFE_BOX)),
+      // The same box as fractions of the picture, for the host-drawn covered
+      // areas (paintSafeChrome). One source: the dashed edge the design draws
+      // and the shade the host draws cannot disagree about where the clear
+      // area is.
+      safeBox: { left: SAFE_BOX.left, right: SAFE_BOX.right, top: SAFE_BOX.top, bottom: SAFE_BOX.bottom, degenerate: Boolean(SAFE_BOX.degenerate) },
+      safePlatforms: SAFE_PLATFORMS,
       edSafe: true,
       // Output shape. The render pipeline has always been generic here -- every
       // fit mode scales to {width}:{height} and the subtitle canvas follows --

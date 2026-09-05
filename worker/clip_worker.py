@@ -677,6 +677,18 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
         "condition_on_previous_text": False,
         "task": settings.get("task") or DEFAULT_WHISPER_TASK,
     }
+    # RECITATION SKIPS THE VOICE FILTER FROM THE START. Measured on the box on
+    # 5 Sept 2026 over the first 120 seconds of the recitation that failed
+    # (567s, AAC, mean -18.6 dB -- a healthy recording): with the filter on,
+    # Whisper was handed 26 seconds and wrote two segments; with it off, 119
+    # seconds and ten. The no-speech gate changed nothing either way, and
+    # neither did the language. Silero hears elongated tajweed as something
+    # other than speech, so a recitation would pay for a whole first pass
+    # only to have second_listen throw it away. The no-speech gate stays, so
+    # real silence is still refused.
+    if str((job.get("template") or {}).get("captionMode") or "") == "quran":
+        kwargs["vad_filter"] = False
+        kwargs.pop("vad_parameters", None)
     language = str(settings.get("language") or "").strip()
     if language:
         kwargs["language"] = language
