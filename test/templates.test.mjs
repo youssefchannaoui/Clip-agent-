@@ -77,7 +77,24 @@ test('Clean Line keeps the values measured off its reference, and is the default
   assert.equal(tpl.captionPrimary, tpl.captionHighlight, 'no word is emphasised in this style');
   assert.equal(tpl.captionPosition, 'bottom');
   assert.equal(tpl.captionHorizontal, 'center');
-  assert.equal(tpl.captionMarginV, 464, 'the baseline sat at y=1429 of 1920');
+  /*
+   * 680, and this is the ONE value on this template that is not the
+   * reference's own.
+   *
+   * The reference measured 464 -- its baseline sat at y=1429 of 1920 -- and
+   * that is kept here as the record of where it came from. It was moved on
+   * 6 Sept 2026 because correcting the platform safe zones showed 464 puts the
+   * line inside TikTok's caption block (which covers 484) and 206px inside
+   * Meta's (670). Youssef, seeing it drawn: "move clean line caption up so its
+   * inside the box."
+   *
+   * So the reference was matched faithfully and the reference was wrong for
+   * where these clips actually go. `test/safe-zones.test.mjs` owns the floor
+   * and will fail if this drops back under it; this assertion exists to make
+   * the change deliberate rather than something a later edit can undo by
+   * accident while thinking it is restoring the reference.
+   */
+  assert.equal(tpl.captionMarginV, 680, 'moved off the reference to clear the platform chrome');
   assert.equal(tpl.captionMaxWords, 5);
   assert.equal(tpl.captionFadeMs, 0, 'the reference cuts between cards, it does not fade');
   assert.equal(tpl.captionBehindSubject, false);

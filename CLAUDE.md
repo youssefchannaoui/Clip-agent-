@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1488 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1489 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10107,11 +10107,37 @@ bottom, and TikTok covers 484.** So the shipped default has been landing
 inside TikTok's own caption block, and 206px inside Meta's. Bold Stack is 10px
 inside Meta's top band.
 
-It is **SAID, never silently corrected**: the hint under the preview now reads
+It was **SAID, not silently corrected**: the hint under the preview reads
 "Your caption sits 206px outside it — drag it inside, or it is covered where
 it posts." Moving a saved caption position changes how every clip from that
 template renders, which is the account's decision and not a side effect of a
-release. A test asserts that drawing the box saves nothing.
+release. A test asserts that drawing the box saves nothing, and that stands.
+
+**Youssef then made the decision, the same day: "move clean line caption up so
+its inside the box."** So the two SHIPPED templates moved (v3.131.1) —
+Clean Line 464 → 680, Bold Stack 260 → 290 — and `test/safe-zones.test.mjs`
+now holds the floor for every template in `src/templates/`, so a new one
+cannot ship with its caption under a platform's own interface.
+
+**Clean Line's 464 was MEASURED off a reference edit** ("the baseline sat at
+y=1429 of 1920"), which is why `templates.test.mjs` records where it came from
+rather than just carrying the new number: the reference was matched faithfully
+and the reference was wrong for where these clips actually go. Anyone
+"restoring" it to the reference value will fail the safe-zone law.
+
+Bold Stack was not asked about and moved anyway, because it is the same defect
+(10px inside Meta's top band) and leaving one of two known-covered templates
+would make the new law unenforceable. Its stack builds DOWNWARD from MarginV
+(`baseline = margin_v + ink_top`), so moving the anchor down moves the whole
+stack; four lines at font 187 come to roughly 700px, which still clears the
+bottom edge.
+
+**Verified in the ASS the renderer actually writes**, not only in the preview:
+Clean Line comes out Alignment 2 with MarginV 680, putting the text's bottom
+at y=1240 of 1920 (64.6%) against a box bottom of 65.1%; Bold Stack comes out
+Alignment 7 with MarginV 290, text top at 15.1% against a box top of 14.1%.
+A rendered FRAME was not possible here — the local ffmpeg has no libass — so
+that is one step short of the gold standard and is stated as such.
 
 The ANCHOR is what is compared, not the whole caption box, because the box's
 height depends on the text and the face and is only known at render time. That

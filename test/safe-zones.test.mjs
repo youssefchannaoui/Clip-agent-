@@ -225,3 +225,43 @@ test('a caption anchored inside the covered band is called out, not moved', () =
   StudioAdapter.bindings(state({ ...base, captionPosition: 'bottom', captionMarginV: 464 }));
   assert.deepEqual(writes, [], 'drawing the box saves nothing');
 });
+
+test('no shipped template anchors its caption in the covered band', () => {
+  /*
+   * THE LAW THIS WHOLE CHANGE EXISTS TO MAKE ENFORCEABLE.
+   *
+   * Correcting the box showed that the SHIPPED DEFAULTS were outside it: Clean
+   * Line anchored 464px from the bottom against TikTok's 484 and Meta's 670,
+   * and Bold Stack sat 10px inside Meta's top band. Both moved (Youssef,
+   * 6 Sept 2026: "move clean line caption up so its inside the box").
+   *
+   * Checked against the union of ALL FOUR rather than against whatever this
+   * deployment happens to have connected: a shipped template is used by every
+   * account, so it has to clear every platform any of them might post to.
+   *
+   * ASS semantics, and they differ by anchor: for a bottom alignment MarginV
+   * is the gap from the frame's bottom edge to the text's bottom, and for a
+   * top alignment it is from the top edge to the text's top (alignment_for and
+   * the stack builder's `baseline = margin_v + ink_top` in clip_worker.py). A
+   * middle alignment ignores MarginV entirely and is always inside.
+   */
+  const box = SAFE.safeArea([], 1080, 1920);
+  const dir = path.join(ROOT, 'src/templates');
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+  assert.ok(files.length >= 5, 'the shipped templates are being read');
+
+  const covered = [];
+  for (const file of files) {
+    const t = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+    const pos = t.captionPosition;
+    if (pos !== 'top' && pos !== 'bottom') continue;
+    const height = Number(t.height) || 1920;
+    const margin = Number(t.captionMarginV) || 0;
+    // The shadow is drawn OUTSIDE the text box, so it is part of what a
+    // platform would cover.
+    const ink = Number(t.captionShadow) || 0;
+    const need = (pos === 'top' ? box.top : 1 - box.bottom) * height + ink;
+    if (margin < need) covered.push(`${file}: ${pos} margin ${margin} needs ${Math.ceil(need)}`);
+  }
+  assert.deepEqual(covered, [], `these ship with captions under the platform's own interface:\n  ${covered.join('\n  ')}`);
+});
