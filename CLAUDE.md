@@ -6673,7 +6673,8 @@ same inputs, so the two cannot disagree.
 
 It runs INSIDE the process, so **it cannot detect the app being down.**
 `.github/workflows/watch-live.yml` + `scripts/watch-live.mjs` probe the live
-site from outside every two hours: the homepage, `HEAD /` (routed on
+site from outside on an HOURLY cron that delivers roughly two-hourly (see
+below): the homepage, `HEAD /` (routed on
 `method === 'GET'` alone until v3.44.0, so every HEAD 404'd and link
 validators were being told the site did not exist), `/app`, a `script-src`
 hash actually present in the CSP, ten studio assets, and every page in the
@@ -6698,9 +6699,23 @@ goes stale the first time a page is added.
   and the CSP hash, every one HTTP 200, "Every check passed", in five
   seconds.** Before putting a verification on somebody else, check whether the
   workflow you just built reaches it.
-- Five seconds against a healthy origin is what makes the two-hourly schedule
-  cheap. A local instance was used to drive the FAILING paths, which
+- **THE CRON ASKS HOURLY BECAUSE GITHUB DELIVERS ABOUT HALF OF WHAT IS ASKED.**
+  It was written `17 */2 * * *` and the runs did not arrive on that cadence:
+  measured over this workflow's first ~15 hours (5 Sept 2026), **7 slots
+  requested and THREE delivered**, with real gaps of 3h22m, 4h23m and 5h13m.
+  GitHub's scheduled workflows are best-effort -- delayed, and dropped
+  outright, under load. So the file said "every two hours" while an outage
+  could sit unseen for five, which is this repo's own stale-claim failure
+  pointed at its own monitor. The ask is hourly now and the promise is made
+  against the DELIVERED rate; do not tidy it back to `*/2` without
+  re-measuring. Five seconds against a healthy origin is what makes asking
+  more often free. A local instance was used to drive the FAILING paths, which
   production cannot be asked to demonstrate.
+- **Production was probed again on 5 Sept 2026 at v3.129.5** (run 5,
+  dispatched): every check passed. Worth noting HOW that came up -- the last
+  scheduled run had been 5h13m earlier against v3.129.4, so the two most
+  recent deploys had never been externally checked. That gap is what found
+  the cron fault above.
 - **It reports and fixes nothing**, and a test asserts it contains no
   `execSync`, `spawn`, `git` or mutating `curl`. A failed run is the
   notification — GitHub mails the repo owner, with nothing to configure and no

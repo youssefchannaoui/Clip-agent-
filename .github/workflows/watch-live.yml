@@ -24,9 +24,20 @@ name: Watch the live site
 
 on:
   schedule:
-    # Every two hours. Often enough that an outage is caught within one posting
-    # window; rare enough that it is not a load of its own.
-    - cron: '17 */2 * * *'
+    # HOURLY, TO DELIVER TWO-HOURLY. This asked for '17 */2 * * *' and did not
+    # get it: GitHub's scheduled workflows are best-effort and are delayed or
+    # dropped outright under load. Measured over the first ~15 hours of this
+    # workflow's life, 5 Sept 2026 -- 7 slots requested, THREE delivered, with
+    # real gaps of 3h22m, 4h23m and 5h13m. A prober that claims to catch an
+    # outage within one posting window and actually runs every four hours is
+    # the stale-claim failure this repo keeps paying for, told about itself.
+    #
+    # So the ask is now hourly and the DELIVERED rate is what the promise is
+    # made against: at the observed rate that lands near two hours, which is
+    # the cadence the paragraph above always meant. It costs nothing to ask
+    # more often -- a healthy origin is five seconds and the run is read-only.
+    # Do not "tidy" this back to */2 without re-measuring the delivery rate.
+    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       base:
