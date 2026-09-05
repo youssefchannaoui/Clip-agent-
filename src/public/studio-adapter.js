@@ -2813,11 +2813,14 @@
             var checks = [
               // A clip rendered deliberately without a nasheed passes this: it
               // is not a failed check, it is a choice the job recorded.
-              { label: c.musicEnabled === false ? 'No nasheed (chosen)' : 'Nasheed mixed in',
+              // `missing` is the chip's wording when the check fails -- the
+              // design used to append the word "missing" to EVERY label, so a
+              // passing check read "Captions rendered missing" beside a tick.
+              { label: c.musicEnabled === false ? 'No nasheed (chosen)' : 'Nasheed mixed in', missing: 'Nasheed missing',
                 ok: c.musicEnabled === false || Boolean(c.musicVerified) },
-              { label: 'Captions rendered', ok: Boolean(c.transcript) },
-              { label: 'Clip Style applied', ok: Boolean(c.templateId) },
-              { label: 'Render verified', ok: Boolean(c.renderVerified) },
+              { label: 'Captions rendered', missing: 'Captions missing', ok: Boolean(c.transcript) },
+              { label: 'Clip Style applied', missing: 'Clip Style missing', ok: Boolean(c.templateId) },
+              { label: 'Render verified', missing: 'Render not verified', ok: Boolean(c.renderVerified) },
             ];
             var failing = checks.filter(function (k) { return !k.ok; });
             var ready = failing.length === 0;
@@ -2868,11 +2871,14 @@
               duration: secsToClock((c.durationMs || 0) / 1000),
               thumbStyle: 'width: 42px; height: 58px; flex: none; border-radius: 7px; border: 1px solid var(--dc-line, #26262A);'
                 + ' box-shadow: inset 0 0 0 1px rgba(0,0,0,.4); background: ' + thumb(c.thumbUrl) + ';',
-              checks: checks.map(function (k) {
+              // Only the checks that FAIL are chips -- the row is drawn under
+              // `hasFailing` and exists to say what is missing, not to list
+              // what passed. The phone reads the same list.
+              checks: failing.map(function (k) {
                 return {
-                  label: k.label,
-                  icon: k.ok ? 'ph-fill ph-check-circle' : 'ph-fill ph-warning-circle',
-                  style: 'font-size: 12px; color: ' + (k.ok ? 'var(--dc-n-7fd1a6, #7FD1A6)' : 'var(--dc-n-e6b770, #E6B770)'),
+                  label: k.missing,
+                  icon: 'ph-fill ph-warning-circle',
+                  style: 'font-size: 12px; color: var(--dc-n-e6b770, #E6B770)',
                 };
               }),
               hasFailing: !ready,
@@ -8438,6 +8444,10 @@
           ? '100%'
           : Math.max(2, Math.min(100, Math.round((Number(current.remaining) || 0) / Number(current.allowance) * 100))) + '%'),
       manageLabel: current.stripeSubscriptionId ? 'Change or cancel plan' : 'Manage billing',
+      // Payment method and Invoices open the Stripe portal, which holds nothing
+      // for an account that has never subscribed -- the Account panel already
+      // draws them only with a subscription, and this screen now agrees.
+      hasSubscription: Boolean(current.stripeSubscriptionId),
       manageStyle: 'display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 9px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid rgba(217,180,120,.42); background: rgba(217,180,120,.14); color: var(--dc-gold-lit, #F0D6A6);',
       billingGhostStyle: 'display: inline-flex; align-items: center; gap: 7px; padding: 9px 13px; border-radius: 9px; font-family: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; border: 1px solid var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-body, #BCBCC3);',
       cardLabel: 'Payment method',

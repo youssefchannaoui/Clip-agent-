@@ -1050,7 +1050,7 @@
                     <sc-if value="{{ post.hasFailing }}" hint-placeholder-val="{{ false }}">
                       <div style="display: flex; flex-wrap: wrap; gap: 10px;">
                         <sc-for list="{{ post.checks }}" as="chk" hint-placeholder-count="1">
-                          <span style="{{ chk.style }}"><i class="{{ chk.icon }}" style="font-size: 12px;"></i>{{ chk.label }} missing</span>
+                          <span style="{{ chk.style }}"><i class="{{ chk.icon }}" style="font-size: 12px;"></i>{{ chk.label }}</span>
                         </sc-for>
                       </div>
                     </sc-if>
@@ -1153,7 +1153,7 @@
                     <sc-if value="{{ post.hasFailing }}" hint-placeholder-val="{{ false }}">
                       <div style="display: flex; flex-wrap: wrap; gap: 10px;">
                         <sc-for list="{{ post.checks }}" as="chk" hint-placeholder-count="1">
-                          <span style="{{ chk.style }}"><i class="{{ chk.icon }}" style="font-size: 12px;"></i>{{ chk.label }} missing</span>
+                          <span style="{{ chk.style }}"><i class="{{ chk.icon }}" style="font-size: 12px;"></i>{{ chk.label }}</span>
                         </sc-for>
                       </div>
                     </sc-if>
@@ -1302,7 +1302,7 @@
 
           <section style="display: flex; flex-direction: column; gap: 9px; padding: 15px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214;">
             <span style="font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600;">Rotation</span>
-            <span style="font-size: 11.5px; color: #BCBCC3; line-height: 1.55;">{{ rotCount }} nasheeds in rotation. Two or more keeps consecutive clips from sounding identical — a single track blocks automatic posting.</span>
+            <span style="font-size: 11.5px; color: #BCBCC3; line-height: 1.55;">{{ rotCount }} nasheeds in rotation. Two or more keeps consecutive clips from sounding identical — one is enough to post with.</span>
           </section>
         </aside>
       </div>
@@ -1852,8 +1852,10 @@
           <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px;">
             <button onClick="{{ manageBilling }}" style="{{ manageStyle }}" style-hover="background: rgba(217,180,120,.2);"><i class="ph ph-sliders-horizontal" style="font-size: 14px;"></i>{{ manageLabel }}</button>
               <button onClick="{{ resumeSub }}" style="{{ resumeSubStyle }}" style-hover="background: rgba(127,209,166,.16);"><i class="ph ph-arrow-counter-clockwise" style="font-size: 14px;"></i>Resume subscription</button>
+            <sc-if value="{{ hasSubscription }}" hint-placeholder-val="{{ true }}">
             <button onClick="{{ changeCard }}" style="{{ billingGhostStyle }}" style-hover="border-color: #34343A; color: #F2F2F4;"><i class="ph ph-credit-card" style="font-size: 14px;"></i>{{ cardLabel }}</button>
             <button onClick="{{ openInvoices }}" style="{{ billingGhostStyle }}" style-hover="border-color: #34343A; color: #F2F2F4;"><i class="ph ph-receipt" style="font-size: 14px;"></i>Invoices</button>
+            </sc-if>
           </div>
           <span style="font-size: 11px; color: #6E6E76; line-height: 1.5;">{{ manageHint }}</span>
         </section>

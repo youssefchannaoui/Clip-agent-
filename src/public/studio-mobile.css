@@ -710,10 +710,16 @@
      at 375 they are not. The primary action takes its own row instead. The
      month's cells fail the same way by a fraction, so its padding and gaps are
      tightened rather than its columns being dropped. */
-  @media (max-width: 389px) {
+  /* The clip card's primary action takes its own row wherever the two-up grid
+     leaves it no room for its word. 389 was the first seam; measured again on
+     5 Sept 2026 the button clipped "Approve" at exactly 390 (45px for a 51px
+     word) while 375 wrapped and 412 fitted, so the seam is 409. */
+  @media (max-width: 409px) {
     .dcm-clip-a { flex-wrap: wrap; gap: 6px; }
     .dcm-clip-a .dcm-btn:first-child { flex: 1 1 100%; }
     .dcm-clip-a .dcm-btn { min-width: 44px; }
+  }
+  @media (max-width: 389px) {
     /* 1px, not 4: seven cells plus six 2px gaps inside a 324px card came to
        43.43px each at 360 -- a pixel short, in a band the round widths miss
        entirely (320, 375, 390 and 430 all measured clean). Swept every

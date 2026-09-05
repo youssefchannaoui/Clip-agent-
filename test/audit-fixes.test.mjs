@@ -221,6 +221,46 @@ test('"Save as new style" is gone, the fake storage bar is hidden, and the accou
   assert.match(html, /email:'your email and password'/);
 });
 
+/* ── 8. Group 2: the chips, the nasheed claim, the free account's portal buttons, the phone's Approve ── */
+test('a schedule card lists only the checks that FAIL, worded as what is missing', () => {
+  const clip = { id: 'c1', title: 'A clip', status: 'approved', approvedAt: 1, scheduledAt: Date.now() + 3600000, transcript: 'words', templateId: 'clean-line', musicVerified: true, renderVerified: false, targets: [] };
+  const { v } = bindings({ clips: [clip], tracks: nasheeds(1), music: nasheeds(1) }, { screen: 'schedule', schedView: 'day' });
+  // Wherever the schedule filed it (today, overdue, a week cell): the first
+  // card carrying a checks list.
+  const findCard = (o, depth = 0) => {
+    if (!o || typeof o !== 'object' || depth > 4) return null;
+    if (Array.isArray(o.checks) && 'hasFailing' in o) return o;
+    for (const k of Object.keys(o)) { const hit = findCard(o[k], depth + 1); if (hit) return hit; }
+    return null;
+  };
+  const card = findCard({ day: v.schedDayItems, overdue: v.schedOverdueItems, week: v.schedWeekRows || v.schedWeek });
+  assert.ok(card, 'a day card was drawn for the scheduled clip');
+  assert.equal(card.hasFailing, true);
+  // Array.from: the adapter's arrays belong to the vm realm and strict deepEqual rejects them on the prototype.
+  assert.deepEqual(Array.from(card.checks, k => k.label), ['Render not verified'], 'one failing check, one chip -- the three that passed are not listed');
+  assert.doesNotMatch(read('src/public/studio-template.generated.js'), /" missing"/, 'the design no longer appends "missing" to every chip');
+});
+
+test('the Nasheed screen no longer claims one track blocks posting', () => {
+  assert.doesNotMatch(read('src/public/studio-template.generated.js'), /blocks automatic posting/);
+  assert.match(read('src/public/studio-template.generated.js'), /one is enough to post with/);
+});
+
+test('Payment method and Invoices are drawn only with a subscription', () => {
+  assert.match(read('src/public/studio-template.generated.js'), /"hasSubscription"/, 'the buttons sit under a binding');
+  const free = bindings({ billing: { notices: [], current: { plan: 'free' } } }).v;
+  assert.equal(free.hasSubscription, false);
+  const pro = bindings({ billing: { notices: [], current: { plan: 'pro_monthly', stripeSubscriptionId: 'sub_1' } } }).v;
+  assert.equal(pro.hasSubscription, true);
+});
+
+test('the phone clip card\'s primary action wraps to its own row up to 409px', () => {
+  const css = read('src/public/studio-mobile.css');
+  const at = css.indexOf('@media (max-width: 409px)');
+  assert.ok(at > 0, 'the seam moved up from 389: "Approve" clipped at exactly 390');
+  assert.match(css.slice(at, at + 300), /\.dcm-clip-a \.dcm-btn:first-child \{ flex: 1 1 100%; \}/);
+});
+
 test('a plan\'s price line says "per month", not "per monthly"', () => {
   const current = { plan: 'pro_monthly', totalAvailable: 10, allowance: 650, remaining: 10 };
   const plans = { pro_monthly: { id: 'pro_monthly', name: 'Pro Monthly', priceLabel: 'A$29', interval: 'monthly', tokens: 650 } };

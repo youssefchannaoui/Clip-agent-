@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1472 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1476 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9917,7 +9917,7 @@ the × and the backdrop still close. **Proven the other way too** -- removing th
 card's `data-dc-h` in the live DOM and repeating the same click closes it, which
 is the old behaviour exactly.
 
-## The product audit: used, not read (v3.130.0, 5 Sept 2026)
+## The product audit: used, not read (v3.130.0 / v3.130.1, 5 Sept 2026)
 
 Youssef's brief: "perform the deepest possible audit of the entire product,
 then improve everything that genuinely needs improving ... DON'T TRUST THE UI
@@ -10021,10 +10021,22 @@ tests in `test/audit-fixes.test.mjs`, on executed output (the journey's own
 return value, `connectionStatus`, the adapter's bindings), all proven red
 against the unpatched source.
 
-**Still open from the audit (P2, not shipped here):** the check chips read
-"Captions rendered missing" beside a green tick (the design appends the word
-to every chip); the Nasheed screen's literal "a single track blocks automatic
-posting"; the Tokens screen offering Payment method and Invoices to a free
-account; "Approv" clipped in the phone's two-up grid at 390; posting windows
-and timezone being deployment-wide ("Set on the server · Australia/Perth") for
-a global product -- a feature, not a fix.
+**The second group (v3.130.1), each a design TEXT edit proven byte-stable
+through `npm run design:import`:** the schedule card's check chips read
+"Captions rendered missing" beside a green tick -- the design appended the
+word to EVERY chip and the adapter sent the passing ones too; only the failing
+checks are chips now, each worded as what is missing, and the phone reads the
+same list. The Nasheed screen's "a single track blocks automatic posting" (the
+claim v3.119.0 took off the banner, left on the screen) says "one is enough to
+post with". Payment method and Invoices sit under `hasSubscription` -- the
+Stripe portal holds nothing for an account that never subscribed, and the
+Account panel already drew them that way. The phone's two-up clip grid clipped
+"Approve" at exactly 390 (45px for a 51px word; 375 wrapped, 412 fitted) so the
+wrap seam moved from 389 to 409 -- measured at 360/375/390/412/430 after.
+
+**Still open from the audit, and named rather than assumed:** posting windows
+and timezone are deployment-wide ("Set on the server · Australia/Perth") for a
+global product -- a feature, not a fix; the tablet Templates screen at 1024
+puts the preview below the fold; "Re-cut clips" still shows on a failed
+lecture's detail (it retries the import now, but the label is the design's);
+the trial countdown sits at second zero of every screen (dismissible, left).
