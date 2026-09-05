@@ -6911,6 +6911,75 @@ one channel that works with nothing configured did not exist.
    owner fetch -- so deleting the paintStudio call broke nothing. It slices
    paintStudio's own body now. Re-proven red.
 
+## The lenses that never ran, run (5 Sept 2026)
+
+*Docs only -- a sweep, four probe fixes and no `src/` change, so no release.*
+
+v3.126.0 closed with five finder lenses and the whole verification pass having
+DIED on a session limit, and the warning not to treat a dead pass as a clean
+one. They were run here, by hand, across all thirteen screens in both themes.
+
+    DOM churn on an unchanged repaint     0 operations, every screen
+    controls covered by another element   0
+    page-level horizontal overflow        0
+    text under 3:1                        dark 5, light 4
+
+and those nine are **exactly the three deliberate exceptions this file already
+names** -- the unlit future stations in the pipeline strip (2.6-2.69), the
+DeenAI kicker (1.76 / 1.94) and an out-of-month calendar day (2.98). No new
+fault. The v3.124.5 patcher fix and the v3.125.0 live-bar fix both hold.
+
+**THE FINDING IS THE PROBES, NOT THE APP.** All four first drafts reported
+confidently and wrongly, and every one of these is a way to make a sweep lie:
+
+- **A sweep that reports zero has to be shown failing.** An opaque box planted
+  over an Approve button was detected on exactly 1 control -- without that the
+  clean result is worth nothing.
+- **CLIPPED IS NOT COVERED, and the ancestor walk is where it is decided.**
+  Five month cells reported "covered by the live bar": measured, they sit at
+  y 839..928 against a scroller ending at 858, and scrolling 274px puts them at
+  y 565 with `elementFromPoint` returning the cell itself. The probe now walks
+  up to the nearest scrolling ancestor and skips anything extending past it.
+  The app was right; this file has recorded that trap twice before.
+- **ALPHA MUST BE COMPOSITED.** `rgba(217,180,120,.08)` read as an opaque gold
+  ground, so the rail's "Home" was reported at 1.38:1 against #D9B478 -- white
+  on charcoal. The walk now collects every layer down to the first opaque one
+  and blends them, and the text colour is composited over the result too.
+- **`backgroundImage` COVERS GRADIENTS, and skipping them skipped the screen.**
+  Treating any background image as an unmeasurable photograph dropped **59 of
+  75 text nodes on Home** -- a sweep calling a screen clean having measured a
+  fifth of it, and hiding three real readings behind the skip. Only a `url(...)`
+  is a picture the DOM cannot speak for. Coverage went 16 -> 71 on Home and
+  the skipped total across all screens 528 -> 50.
+- **Print the population, not only the findings.** Every one of these was found
+  by making the probe report `measured` and `skipped` beside its results. A
+  bare "0 faults" cannot be told from "0 measured".
+
+**None of this can go in CI**, and that is a deliberate limit rather than an
+omission: the runner has no browser, and adding one costs the no-dependency
+property that lets a phone session run the whole suite. The sweep is a thing
+somebody runs, and this entry is what makes running it repeatable.
+
+### And the Stripe signature is the SECRET, now measured rather than inferred
+
+This file has asserted since 29 Aug that "the signing secret on Render is not
+the one belonging to that endpoint". That was an INFERENCE. The other ordinary
+cause -- the raw body being mutated before verification, by a parser or a
+proxy -- would fail identically forever however many times the right secret is
+pasted in, so it had to be ruled out before putting this on anybody.
+
+It is ruled out. `readRawBody` concatenates the chunks and never parses;
+`verifyStripeSignature` builds `${timestamp}.${rawBody}`, HMACs it with
+sha256, and compares hex with `timingSafeEqual` -- textbook, and already proven
+against a REAL signature by execution in `test/stripe-secret-trim.test.mjs`.
+The alert also reported no whitespace and a `whsec_` prefix at 38 characters,
+which is the correct shape.
+
+So the code is right and the value is wrong. The likeliest specific cause,
+worth checking first because nothing distinguishes it by shape: a **`stripe
+listen` CLI secret**, which is also `whsec_` + 32 and never validates a
+dashboard endpoint's deliveries. The second is a second endpoint's secret.
+
 ## Open items
 
 ### Google verification: branding VERIFIED and PUBLISHED (4 Sept 2026)
