@@ -16,6 +16,23 @@
 (function (global) {
   'use strict';
 
+  /*
+   * The platform safe areas, from the one table that defines them
+   * (src/public/safe-zones.js, loaded by index.html before this file).
+   *
+   * DELIBERATELY NO FALLBACK NUMBERS. A second copy of the insets living here
+   * is exactly how the three disagreeing answers this replaced came about; if
+   * the table is missing the honest answer is "the whole frame is safe",
+   * which draws no box and clamps nothing, rather than a box built on figures
+   * nobody maintains.
+   */
+  var SAFE = global.DCSafeZones || {
+    safeArea: function () { return { top: 0, right: 1, bottom: 1, left: 0, degenerate: false }; },
+    platformsFor: function () { return []; },
+    describe: function () { return ''; },
+    unionInsets: function () { return { top: 0, right: 0, bottom: 0, left: 0 }; },
+  };
+
   var UI = {
     screen: 'home',
     lastScreen: 'home',
@@ -1363,6 +1380,62 @@
       + ' background-size: ' + sizes.join(', ') + ';'
       + ' background-position: ' + positions.join(', ') + ';'
       + ' background-repeat: no-repeat;';
+  }
+
+  /*
+   * What the safe box is clearing, said in the line under the preview.
+   *
+   * It names the PLATFORMS rather than the pixels, because the pixels are a
+   * working rule that moves and the platforms are the reason the box is that
+   * shape. With nothing connected it says so and names the union, or an empty
+   * account would read the tightest box this app can draw with no explanation
+   * for it.
+   */
+  /*
+   * Whether the caption's own anchor sits in the band the platform covers.
+   *
+   * Making the box accurate immediately showed that it is: Clean Line -- the
+   * default template -- anchors its caption 464px from the bottom, and TikTok
+   * covers 484. So the shipped default has been landing inside TikTok's own
+   * caption block, and further inside Meta's. That is the fault the customer
+   * actually feels, and drawing a correct box without saying so would leave
+   * them looking at a rectangle their caption is plainly outside with no
+   * explanation.
+   *
+   * It is SAID, never silently corrected: moving a saved caption position
+   * changes how every clip from that template renders, which is the account's
+   * decision and not a side effect of a release.
+   *
+   * The ANCHOR is what is compared, not the whole caption box, because the
+   * box's height depends on the text and the face and is only known at render
+   * time. That errs towards staying quiet: a caption whose anchor is inside
+   * the box can still have its top line poke out, and this will not say so.
+   */
+  function captionOutsideBox(tpl, box) {
+    var pos = tpl.captionPosition;
+    if (pos !== 'top' && pos !== 'bottom') return 0;
+    var height = Math.max(1, Number(tpl.height) || 1920);
+    var margin = Number(tpl.captionMarginV) || 0;
+    var need = pos === 'top' ? box.top * height : (1 - box.bottom) * height;
+    return margin < need ? Math.round(need - margin) : 0;
+  }
+
+  function safeHintText(platforms, points, over) {
+    var names = SAFE.describe(platforms);
+    var lines = points.map(function (p) { return p.name.toLowerCase(); });
+    var snaps = lines.length
+      ? ' Drag snaps to ' + (lines.length > 1
+        ? lines.slice(0, -1).join(', ') + ' and ' + lines[lines.length - 1]
+        : lines[0]) + '.'
+      : '';
+    var warn = over
+      ? ' Your caption sits ' + over + 'px outside it — drag it inside, or it is covered where it posts.'
+      : '';
+    if (!platforms.length) {
+      return 'Keep captions inside the box — it clears every platform, because none is connected yet.'
+        + warn + snaps;
+    }
+    return 'Keep captions inside the box — it clears ' + names + '.' + warn + snaps;
   }
 
   // Grab, then grabbing. Without it the overlay gives no sign it can be moved.
@@ -3742,22 +3815,42 @@
       };
     }
 
-    // The lines the caption snaps to, as fractions from the top: the safe-zone
-    // edges, the thirds and the half. The label under the preview promises
-    // exactly these, so they are listed once rather than implied by arithmetic.
-    // The safe box the design draws (.s8n: top 8%, bottom 14%). Captions live
-    // inside it because platform chrome covers the strips outside, so the drag
-    // is clamped to it and its edges are snap points rather than arbitrary
-    // percentages. These were 10% and 90%, which matched nothing on screen.
-    var SAFE_TOP = 0.08;
-    var SAFE_BOTTOM = 0.86;
+    /*
+     * WHERE THE PLATFORMS LEAVE ROOM, for THIS account and THIS output shape.
+     *
+     * It used to be two literals -- 8% and 86% -- matching a hardcoded box in
+     * the design and nothing on any real platform. Youssef, 6 Sept 2026: "make
+     * social media safe zone more actirate for all videos cause its not." The
+     * bottom was the bad one: it called the lowest 14% of the frame safe while
+     * Meta's unified 2026 Reels chrome covers 35% of it, so "Safe bottom" put
+     * a caption squarely under the caption block on Instagram and Facebook.
+     *
+     * Both arguments matter and neither is cosmetic. The PLATFORMS narrow it
+     * to where this account actually posts -- fencing a YouTube-only account
+     * into Meta's bottom band costs it a third of the picture for a platform
+     * it does not use. The SHAPE matters because the insets describe a 9:16
+     * player, not the file: a square export is letterboxed into that player
+     * and the top and bottom chrome falls on the black bars rather than on the
+     * picture. safe-zones.js does that arithmetic; see it for the numbers and
+     * their sources.
+     */
+    var SAFE_PLATFORMS = SAFE.platformsFor(DATA.publishingSettings, DATA.social);
+    var SAFE_BOX = SAFE.safeArea(SAFE_PLATFORMS, tpl.width, tpl.height);
+    var SAFE_TOP = SAFE_BOX.top;
+    var SAFE_BOTTOM = SAFE_BOX.bottom;
+    // The thirds and the half are only worth offering where they are actually
+    // inside the box. On a 9:16 clip going everywhere the safe band runs 14% to
+    // 65%, so "Lower third" sits under the platform's own caption -- a snap
+    // point that lands somewhere covered is worse than no snap point.
     var SNAP_POINTS = [
       { at: SAFE_TOP, name: 'Safe top' },
       { at: 1 / 3, name: 'Upper third' },
       { at: 0.5, name: 'Middle' },
       { at: 2 / 3, name: 'Lower third' },
       { at: SAFE_BOTTOM, name: 'Safe bottom' },
-    ];
+    ].filter(function (p) {
+      return p.at >= SAFE_TOP - 1e-9 && p.at <= SAFE_BOTTOM + 1e-9;
+    });
     var SNAP_LINES = SNAP_POINTS.map(function (p) { return p.at; });
     // 2% of the frame: a magnet you feel only when genuinely close to a
     // line. At 3.5% a release could relocate the caption ~67px on the render
@@ -7634,6 +7727,28 @@
       guideVStyle: 'position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; pointer-events: none; background: '
         + (UI.dragKind ? 'repeating-linear-gradient(to bottom, rgba(240,214,166,.5) 0 6px, transparent 6px 12px)' : 'rgba(217,180,120,.18)') + ';',
       guideHStyle: guideOverlayStyle(Boolean(UI.dragKind), UI.dragAt, UI.dragSnapped, SNAP_LINES),
+      /*
+       * The dashed rectangle over the preview. It was FOUR LITERALS in the
+       * design export -- left 8%, right 8%, top 8%, bottom 14% -- so it drew
+       * the same box for every account, every platform and every output shape,
+       * and none of the four numbers came from a platform. Now it is where
+       * this account's own destinations actually leave room, at this
+       * template's own dimensions.
+       *
+       * Only the GEOMETRY is bound: the border, the radius and the z-index
+       * stay in the export, because how it looks is the design's and where it
+       * sits is the product's.
+       */
+      safeBoxStyle: 'left: ' + (SAFE_BOX.left * 100).toFixed(2) + '%;'
+        + ' right: ' + ((1 - SAFE_BOX.right) * 100).toFixed(2) + '%;'
+        + ' top: ' + (SAFE_BOX.top * 100).toFixed(2) + '%;'
+        + ' bottom: ' + ((1 - SAFE_BOX.bottom) * 100).toFixed(2) + '%;',
+      // The line under the preview used to promise "thirds, halves and the
+      // safe-zone edges" -- which stopped being true the moment a third could
+      // fall outside the box and be dropped. It says which platforms the box
+      // is actually clearing instead, because a rectangle nobody can account
+      // for is the thing that made this feel arbitrary.
+      safeHint: safeHintText(SAFE_PLATFORMS, SNAP_POINTS, captionOutsideBox(tpl, SAFE_BOX)),
       edSafe: true,
       // Output shape. The render pipeline has always been generic here -- every
       // fit mode scales to {width}:{height} and the subtitle canvas follows --

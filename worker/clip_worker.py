@@ -6053,6 +6053,15 @@ def process(job_file: Path) -> None:
 
     progress("Preparing transcription", 12, sourceDurationSec=round(duration, 2), etaSec=None)
     cached_transcript = transcript_cache_lookup(job, selected_start, selected_end)
+    # A CACHED TRANSCRIPT THAT STOPPED EARLY IS THE FAULT, NOT A SAVING. The
+    # recitation that failed on 5 Sept 2026 had its 28-second transcript of a
+    # 568-second source cached by the run that failed, so Youssef's Retry
+    # would have reused it and failed again in seconds without ever reaching
+    # the second listen. Treated as a miss; the fuller transcript replaces it.
+    if cached_transcript is not None and stopped_early(cached_transcript, duration):
+        progress("The stored transcript stopped early; listening again", 12,
+                 sourceDurationSec=round(duration, 2), etaSec=None)
+        cached_transcript = None
     if cached_transcript is not None:
         progress("Reusing the stored transcript", 58, sourceDurationSec=round(duration, 2),
                  reusedTranscript=True, etaSec=None)

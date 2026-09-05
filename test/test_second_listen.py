@@ -128,6 +128,20 @@ class SecondListenTests(unittest.TestCase):
         codes = [e["code"] for e in events if e.get("type") == "warning"]
         self.assertEqual(codes, ["transcription_stopped_early"])
 
+    def test_a_cached_transcript_that_stopped_early_is_not_reused(self):
+        # The failed run CACHED its 28-second transcript, so a Retry would
+        # have reused it and failed again without ever listening twice.
+        src = Path(cw.__file__).read_text(encoding="utf-8")
+        at = src.index("cached_transcript = transcript_cache_lookup(job, selected_start, selected_end)")
+        block = src[at:at + 900]
+        self.assertIn("stopped_early(cached_transcript, duration)", block)
+        self.assertLess(block.index("stopped_early(cached_transcript, duration)"),
+                        block.index('progress("Reusing the stored transcript"'),
+                        "the early-stop check runs before the cache is honoured")
+        short = [{"start": 0.0, "end": 16.4, "text": "x"}, {"start": 17.2, "end": 28.4, "text": "y"}]
+        self.assertTrue(cw.stopped_early(short, 568.0))
+        self.assertFalse(cw.stopped_early(short, 50.0), "a short recording is never second-guessed")
+
     def test_a_zero_clip_run_names_the_transcript_when_that_is_why(self):
         short = [{"start": 0.0, "end": 16.4, "text": "x"}, {"start": 17.2, "end": 28.4, "text": "y"}]
         settings = {"clipMinSeconds": 45, "clipMaxSeconds": 60}

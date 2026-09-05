@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1481 JS + 668 Python**
+- `npm test` and `npm run check` must pass. Currently **1493 JS + 669 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9917,7 +9917,7 @@ the × and the backdrop still close. **Proven the other way too** -- removing th
 card's `data-dc-h` in the live DOM and repeating the same click closes it, which
 is the old behaviour exactly.
 
-## Templates: the stray card, and a lock that had never held (v3.131.0, 5 Sept 2026)
+## Templates: the stray card, and a lock that had never held (v3.131.1, 5 Sept 2026)
 
 Youssef, with a screenshot of Templates while a recitation imported: "LEFT
 SIDE ONLY SHOULD BE SCROLLABLE NOT WHOLE PAGE AND HAPPENING NOW BAR ON THE
@@ -9989,7 +9989,7 @@ builder was handed 28 seconds of speech and asked for a 45-second window.
 The message blamed the range; the transcription had stopped. See the entry
 that follows for what was done about it.
 
-## A first listen that stops early is listened to again (v3.131.0, 5 Sept 2026)
+## A first listen that stops early is listened to again (v3.131.1, 5 Sept 2026)
 
 Youssef, with the failed import on screen: "nononono this cant be an issue we
 had zero issues, FIX THIS AND WE CANT HAVE ANY ISSUES EVER." A 9.5-minute
@@ -10033,6 +10033,12 @@ really was that short.
 - **The transcription loop is one function now** (`run_pass`), so the retry
   reports progress under "Listening again" through the same stage reporter
   rather than a copy of it.
+- **A cached transcript that stopped early is a miss, not a saving.** The
+  failed run had CACHED its 28-second transcript, so Youssef's Retry --
+  already queued behind the next job when this shipped -- would have reused
+  it and failed again in seconds without ever reaching the second listen.
+  `process_job` now refuses a stored transcript that `stopped_early`, says so
+  in the stage line, and the fuller transcript replaces it in the cache.
 
 Six tests drive the real `_transcribe_with_faster_whisper` with a fake
 faster-whisper whose answer depends on the options it is handed -- the
@@ -10170,3 +10176,110 @@ global product -- a feature, not a fix; the tablet Templates screen at 1024
 puts the preview below the fold; "Re-cut clips" still shows on a failed
 lecture's detail (it retries the import now, but the label is the design's);
 the trial countdown sits at second zero of every screen (dismissible, left).
+
+## The safe zone was wrong in six places at once (v3.131.0, 6 Sept 2026)
+
+Youssef, on the Templates preview: "make social media safe zone more actirate
+for all videos cause its not."
+
+It was not, and the reason it could stay wrong is that the answer was written
+down in SIX places and no two agreed:
+
+| where | what it said |
+|---|---|
+| the design export | a hardcoded `left/right 8%, top 8%, bottom 14%` box |
+| the adapter | `SAFE_TOP`/`SAFE_BOTTOM` literals matching that box |
+| the free checker | per-platform pixel insets |
+| ...two lines below them | a "union of all three" rectangle **130px taller than that union** |
+| the checker's legend | a hand-typed copy of the same numbers |
+| the guide prose | "a centred 900 x 1400 rectangle", in four sentences |
+
+`src/public/safe-zones.js` is now the only one. A number quoted anywhere about
+safe zones comes from there or it is wrong, and `test/safe-zones.test.mjs`
+fails if the adapter, the checker or the prose restates one.
+
+### What was actually wrong with the numbers
+
+- **The bottom, by a mile.** The preview called the lowest 14% of the frame
+  safe. **Meta unified the Stories and Reels safe areas in March 2026 and the
+  unified figure covers 35% of the height** — the bottom stacks the caption,
+  likes, comments, share, save, audio and CTA. The repo's Reels numbers
+  (220/430) predate that change and were the single biggest error here.
+- **There was no left or right at all in the adapter**, and the design's 8/8
+  was symmetric. The right-hand action column is more than twice the left
+  margin on every platform, so the box was wrong on both sides in opposite
+  directions.
+- **The checker's union rectangle was not the union**, though its own comment
+  said it was — 1400 tall against a real 1270. And it was drawn CENTRED, which
+  it never was: the safe area sits high and to the left.
+
+### Two things make it right "for all videos", and both were missing
+
+- **It follows the account's own destinations.** Fencing a YouTube-only
+  account into Meta's bottom 35% costs it a third of the picture for a
+  platform it does not use. A platform counts only when it is switched on AND
+  connected — switched on with nothing connected posts nowhere.
+- **It follows the output shape.** The insets describe a 9:16 PLAYER, not the
+  file. A square or widescreen export is letterboxed into that player, so the
+  top and bottom chrome falls on the black bars rather than on the picture.
+  Measured: a 1:1 export loses nothing at the top and keeps to 77% of its own
+  height, where a 9:16 one stops at 65%. Treating them alike would fence the
+  caption into a strip for no reason.
+
+### The one judgement call, written down so it can be undone knowingly
+
+Meta publishes 6% (65px) side margins, and **that figure is for ADS**, where
+the profile block and CTA sit along the bottom. This product posts
+ORGANICALLY, and an organic Reel carries the like/comment/share/save column
+down the right — which every independent measurement puts at 130–150px and
+which 65 plainly does not clear. So the left takes Meta's own number and the
+right takes the measured organic rail. If DeenClipped ever posts as an ad,
+revisit it.
+
+### Making it accurate immediately found a real fault
+
+**Clean Line — the default template — anchors its caption 464px from the
+bottom, and TikTok covers 484.** So the shipped default has been landing
+inside TikTok's own caption block, and 206px inside Meta's. Bold Stack is 10px
+inside Meta's top band.
+
+It is **SAID, never silently corrected**: the hint under the preview now reads
+"Your caption sits 206px outside it — drag it inside, or it is covered where
+it posts." Moving a saved caption position changes how every clip from that
+template renders, which is the account's decision and not a side effect of a
+release. A test asserts that drawing the box saves nothing.
+
+The ANCHOR is what is compared, not the whole caption box, because the box's
+height depends on the text and the face and is only known at render time. That
+errs towards staying quiet.
+
+### A snap point that lands somewhere covered is worse than no snap point
+
+The label promised "thirds, halves and the safe-zone edges". With every
+platform connected the safe band runs 14%–65%, so the LOWER THIRD is outside
+it — offering it would drop the caption under Instagram's own caption block.
+The thirds are filtered to those actually inside the box, and the label is a
+binding now that says which platforms the box is clearing.
+
+### The re-import renumbered every hashed class, and that was checked not assumed
+
+Binding the box defeats the style hoist, so the export lost a class and 891
+lines of generated CSS renumbered. Proven safe rather than hoped: the only
+RULE that changed is the hardcoded box being removed (compared as a multiset
+of rule bodies with the class names stripped), and nothing in the repo names
+an `.sNN` class outside two comments that say never to.
+
+**One consequence to know about:** the box's dashed border was a hoisted class,
+so `build-light-theme` used to emit a darkened daylight variant of it. Inline,
+it no longer does — it is one gold in both themes. That is arguably more
+correct, because the box is drawn over the VIDEO and the video is not themed;
+the border was strengthened and given a dark halo so it reads on a bright frame
+and a dark one alike.
+
+### Verified by measuring, not by looking
+
+The drawn box matches the table to within the 1px border, at 9:16, 1:1 and
+16:9, and across five different sets of connected platforms. On the public
+checker the union rectangle's own edges were read out of the canvas pixels:
+they sit at the union's insets, and nowhere near where a centred box would be.
+All seven probes proven red first.

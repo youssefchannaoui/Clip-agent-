@@ -968,7 +968,7 @@
             <span style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.4), transparent 34%, rgba(9,9,10,.6));"></span>
             <span style="position: absolute; top: 10px; left: 10px; padding: 2px 8px; border-radius: 20px; border: 1px solid #33333A; background: rgba(10,10,12,.75); color: #BCBCC3; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase;">Preview</span>
             <sc-if value="{{ edSafe }}" hint-placeholder-val="{{ true }}">
-              <span style="position: absolute; left: 8%; right: 8%; top: 8%; bottom: 14%; z-index: 2; pointer-events: none; border: 1px dashed rgba(240,214,166,.35); border-radius: 6px;"></span>
+              <span style="position: absolute; z-index: 2; pointer-events: none; border: 1px dashed rgba(240,214,166,.55); border-radius: 6px; box-shadow: 0 0 0 1px rgba(9,9,10,.35); {{ safeBoxStyle }}"></span>
             </sc-if>
             <span style="{{ guideVStyle }}"></span>
             <span style="{{ guideHStyle }}"></span>
@@ -1341,7 +1341,7 @@
           <div ref="{{ edRef }}" style="{{ edThumbStyle }}">
             <span style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.35), transparent 38%, rgba(9,9,10,.6));"></span>
             <sc-if value="{{ edSafe }}" hint-placeholder-val="{{ true }}">
-              <span style="position: absolute; left: 8%; right: 8%; top: 8%; bottom: 14%; z-index: 2; pointer-events: none; border: 1px dashed rgba(240,214,166,.35); border-radius: 6px;"></span>
+              <span style="position: absolute; z-index: 2; pointer-events: none; border: 1px dashed rgba(240,214,166,.55); border-radius: 6px; box-shadow: 0 0 0 1px rgba(9,9,10,.35); {{ safeBoxStyle }}"></span>
             </sc-if>
             <span style="{{ edGuideV }}"></span>
             <span style="{{ edGuideH }}"></span>

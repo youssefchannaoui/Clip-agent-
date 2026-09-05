@@ -50,14 +50,16 @@
      without announcing it, which is exactly why seeing it on a real frame is
      worth more than the numbers are. */
 
-  // Insets from each edge of a 1080x1920 frame, as of August 2026.
-  var ZONES = {
-    tiktok: { label: 'TikTok', top: 100, right: 140, bottom: 320, left: 40, colour: '#ff4d6d' },
-    reels: { label: 'Instagram Reels', top: 220, right: 130, bottom: 430, left: 40, colour: '#c86bff' },
-    shorts: { label: 'YouTube Shorts', top: 90, right: 60, bottom: 250, left: 40, colour: '#ff8a3d' },
-  };
-  // The union of all three, rounded outward: one export that works everywhere.
-  var UNIVERSAL = { label: 'Safe on all three', width: 900, height: 1400, colour: '#79d6a0' };
+  /*
+   * The zones come from /safe-zones.js -- ONE table, shared with the studio.
+   *
+   * They used to be declared here, and the "union of all three" rectangle
+   * declared beside them was 1400 tall when the union of its own three zones
+   * is 1270: the tool told people a 130px strip was safe that Reels covers.
+   * A table and a rectangle that are supposed to agree, maintained by hand,
+   * two lines apart. Nothing here restates a number now.
+   */
+  var SAFE = (typeof globalThis !== 'undefined' && globalThis.DCSafeZones) || null;
 
   function initSafeZones(root) {
     var canvas = root.querySelector('[data-sz-canvas]');
@@ -65,12 +67,20 @@
     var drop = root.querySelector('[data-sz-drop]');
     var status = root.querySelector('[data-sz-status]');
     if (!canvas || !input) return;
+    // The table is a separate script. Without it there is nothing honest to
+    // draw -- and inventing a rectangle here is what this whole change is
+    // removing -- so the tool says so rather than drawing a wrong one.
+    if (!SAFE) {
+      if (status) status.textContent = 'The safe-zone table did not load. Reload the page to try again.';
+      return;
+    }
 
     var ctx = canvas.getContext('2d');
     var image = null;
     // The canvas is a scaled 1080x1920: every number below is in frame pixels
     // and divided by this, so the guide and the drawing cannot disagree.
-    var SCALE = canvas.width / 1080;
+    var SCALE = canvas.width / SAFE.REF_WIDTH;
+    var UNIVERSAL_COLOUR = '#79d6a0';
 
     function activeZones() {
       return Array.prototype.filter.call(
@@ -100,21 +110,28 @@
       var chosen = activeZones();
       chosen.forEach(function (key) {
         if (key === 'universal') {
-          var uw = UNIVERSAL.width * SCALE, uh = UNIVERSAL.height * SCALE;
-          var ux = (canvas.width - uw) / 2, uy = (canvas.height - uh) / 2;
+          // Drawn from the union's own insets, so the rectangle is where the
+          // platforms actually leave room. It was drawn CENTRED, which is
+          // wrong quite apart from its size: the right-hand button column is
+          // wider than the left margin and the bottom band is deeper than the
+          // top, so the safe area sits high and to the left of centre.
+          var ins = SAFE.unionInsets();
+          var ux = ins.left * SCALE, uy = ins.top * SCALE;
+          var uw = (SAFE.REF_WIDTH - ins.left - ins.right) * SCALE;
+          var uh = (SAFE.REF_HEIGHT - ins.top - ins.bottom) * SCALE;
           ctx.save();
-          ctx.strokeStyle = UNIVERSAL.colour;
+          ctx.strokeStyle = UNIVERSAL_COLOUR;
           ctx.lineWidth = 2;
           ctx.setLineDash([7, 5]);
           ctx.strokeRect(ux, uy, uw, uh);
           ctx.setLineDash([]);
-          ctx.fillStyle = UNIVERSAL.colour;
+          ctx.fillStyle = UNIVERSAL_COLOUR;
           ctx.font = '600 11px Inter, system-ui, sans-serif';
-          ctx.fillText(UNIVERSAL.label, ux + 6, uy - 6);
+          ctx.fillText('Safe on all four', ux + 6, uy - 6);
           ctx.restore();
           return;
         }
-        var z = ZONES[key];
+        var z = SAFE.ZONES[key];
         if (!z) return;
         ctx.save();
         ctx.fillStyle = z.colour;

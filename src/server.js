@@ -57,6 +57,14 @@ const STUDIO_ASSETS = {
   '/studio-template.generated.js': { file: studioAsset('studio-template.generated.js'), type: JS_TYPE },
   '/studio-runtime.js': { file: studioAsset('studio-runtime.js'), type: JS_TYPE },
   '/studio-adapter.js': { file: studioAsset('studio-adapter.js'), type: JS_TYPE },
+  /*
+   * Where each platform covers the frame. ONE table, read by the studio
+   * preview AND by the public safe-zone checker, because the three separate
+   * answers this replaced disagreed with each other. Loaded before
+   * studio-adapter.js, which reads it and deliberately carries no fallback
+   * numbers of its own.
+   */
+  '/safe-zones.js': { file: studioAsset('safe-zones.js'), type: JS_TYPE },
   '/studio-styles.generated.css': { file: studioAsset('studio-styles.generated.css'), type: 'text/css; charset=utf-8' },
   // Hand-written, and kept out of the generated bundle so a design re-import
   // cannot silently delete the app's only mobile layout.
