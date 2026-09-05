@@ -33,7 +33,7 @@ function healthy(over = {}) {
     mediaPublicBase: 'https://media.deenclipped.online',
     storedSample: [],
     remote: true,
-    appVersion: '3.128.0',
+    workerRelease: '3.128.0',
     workerVersion: '3.128.0',
   }, over);
 }
@@ -78,17 +78,43 @@ test('r2.dev with no MEDIA_PUBLIC_BASE is caught, and with one is not', () => {
   assert.equal(fine.ok, true);
 });
 
-test('a worker behind the app is caught; an unreachable one is left to its own alert', () => {
+test('behind is measured against worker/RELEASE, never against the app version', () => {
   const behind = one(checks(healthy({ workerVersion: '3.100.0' })), 'worker-version');
   assert.equal(behind.ok, false);
   assert.match(behind.detail, /3\.100\.0/);
+
+  // THE CASE THAT MADE THIS ALERT LIE. The web service ships several times a
+  // day without touching worker/, so the box routinely reports a version LATER
+  // than the worker release -- and against appVersion that read as behind on
+  // nearly every deploy. It is current.
+  const ahead = one(checks(healthy({ workerVersion: '3.129.9' })), 'worker-version');
+  assert.equal(ahead.ok, true, 'a box past the worker release is current, not behind');
+
   const silent = one(checks(healthy({ workerVersion: '' })), 'worker-version');
   assert.equal(silent.ok, false, 'a worker too old to report a version reads as behind');
+
+  // No stamp, no verdict: inventing one from the app's own version is the bug.
+  const unstamped = one(checks(healthy({ workerRelease: '', workerVersion: '3.1.0' })), 'worker-version');
+  assert.equal(unstamped.ok, true);
+
   // `remote: false` is how the server says the worker did not answer at all --
   // that is checkWorker's condition, and alerting twice for one fault is the
   // duplication this repo keeps paying for.
   const unreachable = one(checks(healthy({ remote: false, workerVersion: '' })), 'worker-version');
   assert.equal(unreachable.ok, true);
+});
+
+/* The stamp is only worth anything if it moves. scripts/check-version-bump.mjs
+   fails a commit that touches worker/ without updating it -- without that, a
+   stamp nobody maintains reports a current box for ever, which is strictly
+   worse than the alert this replaced. */
+test('a worker/ change must restamp worker/RELEASE', () => {
+  const guard = fs.readFileSync(fileURLToPath(new URL('../scripts/check-version-bump.mjs', import.meta.url)), 'utf8');
+  assert.match(guard, /worker\/RELEASE/);
+  assert.match(guard, /startsWith\('worker\/'\)/);
+
+  const stamp = fs.readFileSync(fileURLToPath(new URL('../worker/RELEASE', import.meta.url)), 'utf8').trim();
+  assert.match(stamp, /^\d+\.\d+\.\d+$/, 'worker/RELEASE must hold a bare version');
 });
 
 test('every check reports on recovery too, not only on failure', async () => {

@@ -31,8 +31,20 @@ try {
   appVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version || appVersion;
 } catch { /* a missing manifest must not stop boot; the announcement just goes unversioned */ }
 
+// The version at which worker/ LAST CHANGED, stamped by whoever changed it and
+// enforced by scripts/check-version-bump.mjs. It is what decides whether a box
+// is genuinely behind: appVersion moves several times a day without worker/
+// moving at all, so comparing the box against THAT reports a stale worker on
+// nearly every web deploy -- an alert nobody reads, and then the real one is
+// missed too.
+let workerRelease = '';
+try {
+  workerRelease = fs.readFileSync(path.join(root, 'worker', 'RELEASE'), 'utf8').trim();
+} catch { /* absent means "unknown", which the checks read as nothing to say */ }
+
 export const config = {
   appVersion,
+  workerRelease,
   root,
   dataDir: process.env.DATA_DIR || path.join(root, 'data'),
   port: number(process.env.PORT, 3000),

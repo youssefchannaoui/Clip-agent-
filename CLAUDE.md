@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1457 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1458 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -6757,6 +6757,43 @@ worker reports no version at all"*. It was wrong, and it was mine.
   `health()` like the route does. Passing the value in is still right -- the
   owner route already has the payload and a third round trip per page load is
   waste -- but READING it is one function.
+### And even read correctly it would still have cried wolf
+
+Fixing the read was half of it. The check then compared the box's version
+against **`config.appVersion`** -- and the web service ships several times a
+day without touching `worker/`, so a version gap is the NORMAL state of a
+perfectly current box. Measured on the day: the newest successful
+`deploy-worker.yml` run (54) verified **v3.127.1** in the running container,
+and `git log 243bd40..HEAD -- worker/` is EMPTY. The box is running every line
+of worker code there is, and the alert would have fired on it every fifteen
+minutes anyway.
+
+**Owner -> Health already had this exact fault and was already fixed for it**
+(v3.49.x: "the box read v3.42.0 against an app on v3.49.1 and was completely
+current"). That fix hedged -- it told the reader to run
+`git log v<worker>..HEAD -- worker/` -- because the app genuinely could not
+know. Now it can:
+
+- **`worker/RELEASE` is the version at which `worker/` last changed**, and it
+  is the only comparison that answers the question being asked. The box is
+  current whenever it reports that version OR ANYTHING LATER -- a plain
+  equality test fails on exactly the normal case, since the box builds whatever
+  HEAD it pulled.
+- **`scripts/check-version-bump.mjs` enforces it**: a commit touching `worker/`
+  must restamp it. A stamp nobody maintains reports a current box for ever,
+  which is strictly worse than the alert it replaced.
+- **The screen and the alert now read ONE verdict** -- Owner -> Health takes
+  `behind` from the self-check's own answer rather than comparing again beside
+  it. With one exception, stated in the code: an UNREACHABLE worker is `behind`
+  on the screen (it is not "nothing outstanding" to an operator) and SILENT in
+  the alert (that is `checkWorker`'s alarm, and alerting twice for one fault is
+  the duplication this repo keeps paying for). Deriving both from one flag got
+  that wrong and a test that predates this caught it.
+- **`deploy-drift.test.mjs` BANNED the words "not live"** and required the
+  `git log` hedge. That ban was correct while the app could not know, and is
+  reversed here with the reason written into the test -- hedging now would be
+  telling an operator to derive an answer the app is already holding.
+
 - The test is a source test on purpose: CI has no worker to call, and this is
   the shape that is invisible when it breaks -- the app runs, the suite stays
   green, and the alert simply lies. It also reads worker/service.py's own

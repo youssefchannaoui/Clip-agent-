@@ -106,20 +106,45 @@ function mediaDomain({ mediaPublicBase, storedSample }) {
  * The box has sat on old code for weeks with every change pushed, green and
  * not running. Owner -> Health has shown this since v3.26.0 and nothing has
  * ever ALERTED on it, so it is only ever seen by somebody who goes looking.
- * A worker too old to report a version reads as behind, which is the honest
- * answer -- that is exactly what a box predating that build is.
+ *
+ * THE COMPARISON IS AGAINST `workerRelease`, NOT `appVersion`, and that is the
+ * whole correctness of this check. The web service ships several times a day
+ * without touching worker/, so a bare version mismatch is the normal state of
+ * a perfectly current box -- comparing against appVersion made this alert fire
+ * on nearly every web deploy (v3.129.1), which is the crying-wolf failure
+ * v3.27.0 exists to prevent and would have MASKED a genuinely stale box.
+ * `worker/RELEASE` is the version at which worker/ last changed; the box is
+ * current whenever it reports that version or anything later.
+ *
+ * A worker too old to report a version at all still reads as behind, which is
+ * the honest answer -- that is exactly what a box predating v3.26.0 is.
  */
-function workerCurrent({ appVersion, workerVersion, remote }) {
+function newerOrSame(have, need) {
+  const parts = value => String(value).split('.').map(n => Number(n) || 0);
+  const a = parts(have);
+  const b = parts(need);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  }
+  return true;
+}
+
+function workerCurrent({ workerRelease, workerVersion, remote }) {
   if (!remote) return { key: 'worker-version', ok: true, detail: 'not a remote deployment' };
-  const ok = Boolean(workerVersion) && workerVersion === appVersion;
+  // No stamp means no question can be asked. Saying nothing beats inventing a
+  // verdict from the app's own version, which is what this used to do.
+  if (!workerRelease) {
+    return { key: 'worker-version', ok: true, detail: 'worker/RELEASE is missing, so nothing can be compared' };
+  }
+  const ok = Boolean(workerVersion) && newerOrSame(workerVersion, workerRelease);
   return {
     key: 'worker-version',
     ok,
     detail: ok
-      ? `the running worker is ${workerVersion}`
-      : `the app is ${appVersion} and the worker reports ${workerVersion || 'no version at all'}. `
-        + 'Worker changes since then are not live. `deploy-worker.yml` deploys the box; '
-        + 'its newest successful run names the commit that is on it.',
+      ? `the running worker is ${workerVersion}, at or past the ${workerRelease} worker release`
+      : `worker/ last changed at ${workerRelease} and the box reports `
+        + `${workerVersion || 'no version at all'}, so worker changes are NOT live. `
+        + '`deploy-worker.yml` deploys it; its newest successful run names the commit on the box.',
   };
 }
 

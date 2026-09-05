@@ -1805,23 +1805,6 @@ async function route(req, res, url) {
       // worker that reports no version at all is itself the answer: it predates
       // the build that started reporting one.
       const workerVersion = workerVersionOf(worker);
-      const deploy = {
-        appVersion: config.appVersion,
-        workerVersion: workerVersion || null,
-        behind: Boolean(config.appVersion) && workerVersion !== config.appVersion,
-        note: !worker || worker.error ? 'The worker could not be reached, so its version is unknown.'
-          : !workerVersion ? 'This worker predates version reporting, so it is running code older than v3.26.0. Deploy the box.'
-            : workerVersion === config.appVersion ? 'The box is running this release.'
-              // Says what it KNOWS rather than what it assumes. Most releases
-              // touch src/ only, so a version gap usually means nothing: on
-              // 30 Aug the box read v3.42.0 against an app on v3.49.1 and was
-              // completely current, because no worker/ change had shipped in
-              // between. The old wording read as "deploy the box now" and
-              // would have bought a pointless rebuild.
-              : `The box reports v${workerVersion} and this app is v${config.appVersion}. `
-                + `That only matters if worker code changed in between, which most releases do not. `
-                + `Check with: git log v${workerVersion}..HEAD -- worker/`,
-      };
       /* THE BREAK DETECTOR, ON THE SCREEN AN OPERATOR ACTUALLY OPENS.
          It alerts by email through the same ledger as the billing checks --
          and no email goes out at all until EMAIL_API_KEY is set on Render, at
@@ -1832,6 +1815,34 @@ async function route(req, res, url) {
         workerVersion,
         workerReachable: Boolean(worker) && !worker.error,
       }));
+      /* `behind` is the SELF-CHECK's answer, not a second comparison beside
+         it. Two of those is how this screen and the alert came to say
+         different things about one box, and the alert then cried wolf on
+         nearly every web deploy. */
+      const versionCheck = selfChecks.find(check => check.key === 'worker-version');
+      const reachable = Boolean(worker) && !worker.error;
+      const deploy = {
+        appVersion: config.appVersion,
+        workerRelease: config.workerRelease || null,
+        workerVersion: workerVersion || null,
+        /* Unreachable is `behind` on the SCREEN and silent in the ALERT, and
+           those are deliberately different: a box nobody can reach is not
+           "nothing outstanding" to an operator reading Health, while alerting
+           on it would duplicate checkWorker's own alarm. */
+        behind: !reachable || (Boolean(versionCheck) && !versionCheck.ok),
+        note: !reachable ? 'The worker could not be reached, so its version is unknown.'
+          : !config.workerRelease ? 'worker/RELEASE is missing, so nothing can say whether the box is behind.'
+            : !workerVersion ? 'This worker predates version reporting, so it is running code older than v3.26.0. Deploy the box.'
+              // The version GAP means nothing on its own. Most releases touch
+              // src/ only: on 30 Aug the box read v3.42.0 against an app on
+              // v3.49.1 and was completely current. worker/RELEASE is the
+              // version at which worker/ last changed, so it is the only
+              // comparison that answers the question being asked.
+              : versionCheck?.ok
+                ? `The box reports v${workerVersion}, at or past the v${config.workerRelease} worker release. Nothing is outstanding.`
+                : `worker/ last changed at v${config.workerRelease} and the box reports v${workerVersion}. `
+                  + 'Those changes are NOT live -- run deploy-worker.yml.',
+      };
       return json(res, 200, { ...health, worker, deploy, selfChecks });
     } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
@@ -3101,7 +3112,7 @@ function selfCheckInputs({ workerVersion = '', workerReachable = false } = {}) {
     // one -- alerting twice for one fault is the duplication this repo keeps
     // paying for, and on a cold start it would fire on every deploy.
     remote: config.processingMode === 'remote' && workerReachable,
-    appVersion: config.appVersion,
+    workerRelease: config.workerRelease,
     workerVersion,
   };
 }

@@ -61,7 +61,7 @@ test('a box running this release says so', async () => {
   const state = await deploy();
   assert.equal(state.workerVersion, config.appVersion);
   assert.equal(state.behind, false);
-  assert.match(state.note, /running this release/i);
+  assert.match(state.note, /Nothing is outstanding/i);
 });
 
 test('a box running an older release is named as behind, with both versions', async () => {
@@ -69,13 +69,15 @@ test('a box running an older release is named as behind, with both versions', as
   const state = await deploy();
   assert.equal(state.behind, true);
   assert.match(state.note, /3\.12\.0/, 'says what the box is on');
-  assert.match(state.note, new RegExp(config.appVersion.replace(/\./g, '\\.')), 'and what it should be on');
-  // Not "not live" any more, and that wording was the problem: most releases
-  // touch src/ only, so a version gap usually means nothing. On 30 Aug the box
-  // read v3.42.0 against an app on v3.49.1 and was completely current. The
-  // note must tell the reader how to CHECK rather than assert a stale box.
-  assert.match(state.note, /git log/i, 'says how to check whether it actually matters');
-  assert.ok(!/not live/i.test(state.note), 'must not assert staleness it cannot know');
+  assert.match(state.note, new RegExp(config.workerRelease.replace(/\./g, '\\.')), 'and what it should be on');
+  // "not live" was BANNED here until v3.129.2, and the ban was right at the
+  // time: the app compared the box against its OWN version, which moves on
+  // every web deploy, so it could not know. worker/RELEASE is the version at
+  // which worker/ last changed, so now it can -- and hedging with "check with
+  // git log" would be telling an operator to go and derive an answer the app
+  // is already holding.
+  assert.match(state.note, /not live/i, 'the stamp makes this knowable, so say it');
+  assert.equal(state.workerRelease, config.workerRelease);
 });
 
 test('a box too old to report a version is still caught', async () => {

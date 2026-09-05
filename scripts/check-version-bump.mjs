@@ -23,6 +23,7 @@
  *    31 Aug 2026 — two different trees both called 3.54.1 — and "3.54.1 is
  *    live" then meant nothing.
  */
+import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
@@ -72,6 +73,28 @@ if (shallow && !shipping.length && depth < LOOKBACK) {
 if (!shipping.length) {
   console.log('check-version-bump: no src/ or worker/ changes in this commit.');
   process.exit(0);
+}
+
+/* worker/RELEASE is the version at which worker/ last changed, and it is the
+   ONLY thing the running app can compare the box against. `config.appVersion`
+   cannot do it: the web service ships several times a day without touching
+   worker/, so a bare version mismatch says nothing -- which is exactly how
+   Owner -> Health cried wolf in v3.49.x and how selfcheck:worker-version did
+   again in v3.129.1. Enforced here rather than trusted: a stamp nobody updates
+   is worse than no stamp, because the monitor then reports a current box for
+   ever. */
+if (shipping.some(file => file.startsWith('worker/') && file !== 'worker/RELEASE')) {
+  const stamped = (tryGit('show', 'HEAD:worker/RELEASE') || '').trim();
+  const now = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+  if (stamped !== now) {
+    fail(
+      'this commit changes worker/ but worker/RELEASE does not name its version.',
+      `worker/RELEASE says ${stamped || '(missing)'} and package.json says ${now}.`,
+      'The running app compares the box against worker/RELEASE to decide whether',
+      'a deploy is genuinely outstanding, so a stale stamp makes that monitor lie.',
+      `Fix with: echo ${now} > worker/RELEASE`,
+    );
+  }
 }
 
 const versionAt = ref => {
