@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1460 JS + 662 Python**
+- `npm test` and `npm run check` must pass. Currently **1461 JS + 662 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -6862,6 +6862,54 @@ records for `PORT`. Only after that did the probe go red.
 
 **A test that opens with `if (!x) return;` is a test that can be silently
 absent.** Two of those in this file were guarding money.
+
+## The break detector had no screen, and a screenshot found it (v3.129.5, 5 Sept 2026)
+
+Youssef asked for screenshots of the update. Trying to capture the detector is
+what found this: **v3.129.0 shipped the ROUTE half and not the SCREEN half.**
+`/api/owner/health` has carried `selfChecks` since then and *nothing in the
+browser drew it* -- so the note above claiming it was "on Owner -> Health,
+because email may not be configured at all" was false for two releases, and the
+one channel that works with nothing configured did not exist.
+
+- **Host-rendered**, like the landing table and the First 100 panel beside it: a
+  new section in the design export regenerates every hashed class name in the
+  app. `data-host-owned`, `window.dcSetHtml`, and in **paintStudio's list** --
+  the tab switch that reveals it changes no data and triggers no fetch, so a
+  panel painted only on the owner fetch would never appear.
+- **`owPill` is exposed on StudioAdapter** rather than copied. Two palettes for
+  one meaning is how every drift in this file started.
+- **The card class is read off the anchor's own first child, never named.**
+  The first cut copied `querySelector('#dcOwnerScreen .sgw')` from
+  paintLandingTable -- and `.sgw` is HASHED. The test caught it, which is the
+  test finding a real fault in the code it shipped with. paintLandingTable
+  still names it with a literal fallback; that fallback is wrong the day the
+  export moves.
+- **Alignment measured, not eyeballed**: the state and detail cells were `.sgm`
+  (the RIGHT-aligned numeric cell) under left-aligned headers -- **85px ragged**.
+  `.sgl` for both; measured after, one content-box left edge per column
+  (288 / 620 / 740) and the pill's box flush with its header.
+- Verified in both themes: four rows, the same node across three consecutive
+  `paintStudio()` calls, and gone the moment the tab changes.
+
+**THREE TRAPS PAID FOR AGAIN IN ONE SITTING, and two are already in this file:**
+
+1. **`pkill -f 'PORT=4173'` does not kill a server started with that as an
+   ENVIRONMENT variable** -- it is not in the command line. The old process kept
+   the port, the new one died with EADDRINUSE, and the harness then timed out on
+   a page served by the STALE CSP hash. That reads exactly like a syntax error
+   in the edit; the inline block parsed fine. Scan `/proc/*/environ` and kill by
+   pid. (This file already records the *other* half of that trap -- a pkill
+   pattern matching its own shell.)
+2. **The CSP inline-script hash is computed at server start.** Sixth recorded
+   occurrence. `window.StudioAdapter` is true while `window.paintStudio` is
+   false, because the adapter is a separate `<script src>` and only the INLINE
+   block is blocked -- that pair is the fingerprint, and it is faster to read
+   than any console.
+3. **A red probe came back GREEN for the seventh time.** The assertion matched
+   `dcPaintSelfChecks` anywhere in the file, and the call also exists on the
+   owner fetch -- so deleting the paintStudio call broke nothing. It slices
+   paintStudio's own body now. Re-proven red.
 
 ## Open items
 

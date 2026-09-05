@@ -7623,6 +7623,80 @@ StudioAdapter.onProbeSource=async url=>{try{
         }catch(e){/* a reporting table must never take the screen down */}
       };
 
+      /* ── THE BREAK DETECTOR, ON THE SCREEN ────────────────────────────────
+         src/selfcheck.js runs every fifteen minutes and alerts through the
+         same ledger as the billing checks. But `alerts.js` sends NOTHING until
+         EMAIL_API_KEY is set, and even then the only other record is a line in
+         a server log nobody opens -- so Health is the channel that works with
+         nothing configured, and it is the screen an operator actually visits.
+
+         v3.129.0 shipped the ROUTE half and this half was missed: the payload
+         has carried `selfChecks` since then and nothing drew it, so the note
+         in CLAUDE.md claiming it was "on Owner -> Health" was false. Found by
+         trying to screenshot it, which is the rule this repo keeps restating.
+
+         Host-rendered for the usual reason -- a new section in the design
+         export regenerates every hashed class name in the app -- and it reuses
+         the export's own classes so it is indistinguishable from the sections
+         beside it. The pill comes from StudioAdapter.owPill, the one the KPI
+         tiles use, rather than a second copy of those colours. */
+      const paintSelfChecks=()=>{
+        try{
+          const onHealth=StudioAdapter.ui.screen==='owner'&&(StudioAdapter.ui.ownerTab||'overview')==='health';
+          let box=document.getElementById('dcowChecks');
+          const h=(window.DC_OWNER&&window.DC_OWNER.health)||null;
+          const rows=(h&&Array.isArray(h.selfChecks))?h.selfChecks:[];
+          // The anchor is the PIPELINE section: these belong with the health
+          // tiles, not below two tables of failures.
+          const anchorSec=document.querySelector('#dcOwnerScreen .dcow-s.dcow-d1');
+          const parent=anchorSec&&anchorSec.parentNode;
+          if(!onHealth||!parent||!rows.length){ if(box)box.remove(); return; }
+          if(!box||box.parentNode!==parent){
+            if(box)box.remove();
+            box=document.createElement('div');
+            box.id='dcowChecks';
+            box.setAttribute('data-host-owned','');
+            parent.insertBefore(box,anchorSec.nextSibling);
+          }
+          const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+          /* The card wrapper's class is HASHED and a design re-import
+             renumbers it, so it is taken from the anchor section's own first
+             child rather than named. paintLandingTable names `.sgw` with a
+             literal fallback; that fallback is wrong the day the export moves,
+             and this reads the live class instead. */
+          const host=anchorSec.firstElementChild;
+          const cls=(host&&host.className)||'';
+          const pill=StudioAdapter.owPill||(()=>'');
+          box.className='dcow-s';
+          box.style.cssText='flex-shrink:0;margin-top:18px';
+          const NAMES={ 'assets':'Served assets', 'inline-script':'Inline script vs CSP',
+            'media-domain':'Media domain', 'worker-version':'Worker release',
+            'selfcheck':'The detector itself' };
+          const failing=rows.filter(r=>!r.ok).length;
+          window.dcSetHtml(box,'<div class="'+esc(cls)+'">'
+            +'<div class="scl"><span class="s97">Break detector</span>'
+              +'<span style="'+esc(pill(failing?'bad':'good'))+'">'
+              +(failing?esc(failing)+' failing':'All clear')+'</span></div>'
+            +'<div class="sdk"><table class="sh1">'
+            +'<tr><th class="sgh">Check</th><th class="sgh">State</th><th class="sgh">What it found</th></tr>'
+            + rows.map(r=>'<tr class="dcow-hov">'
+                +'<td class="sgl">'+esc(NAMES[r.key]||r.key)+'</td>'
+                /* sgl, not sgm: sgm is the RIGHT-aligned numeric cell, and a
+                   pill and a sentence under left-aligned headers measured 85px
+                   ragged against them. Measured, not eyeballed. */
+                +'<td class="sgl"><span style="'+esc(pill(r.ok?'good':'bad'))+'">'
+                  +(r.ok?'OK':'Failing')+'</span></td>'
+                +'<td class="sgl">'+esc(r.detail||'\u2014')+'</td></tr>').join('')
+            +'</table></div>'
+            +'<p style="margin:10px 2px 0;font-size:11px;color:var(--dc-ink-muted, #75717b);line-height:1.5">'
+            +'Four faults that fail SILENTLY \u2014 a routed asset missing from disk, an inline script the '
+            +'CSP does not cover (the app renders its shell and never boots, with no error anywhere), clips '
+            +'left on the rate-limited r2.dev endpoint, and the box running older code than worker/RELEASE. '
+            +'Checked every fifteen minutes; a failure also emails through the same ledger as the billing alerts.</p>'
+            +'</div>');
+        }catch(e){/* a reporting panel must never take the screen down */}
+      };
+
       /* ── FIRST 100 ─────────────────────────────────────────────────────────
          The only screen that answers the question the business is actually
          asking. Everything on it is ranked by PAYING CUSTOMERS, never by
@@ -8151,6 +8225,12 @@ StudioAdapter.onProbeSource=async url=>{try{
 
       window.dcPaintLandingTable=paintLandingTable;
 
+      /* In paintStudio's list, NOT only on the owner fetch: the panel has to
+         appear when somebody SWITCHES to the Health tab, which changes no data
+         and triggers no fetch. That is the rule this file has restated since
+         v3.53.5 -- a host panel belongs in the render, not on a timer. */
+      window.dcPaintSelfChecks=paintSelfChecks;
+
       const hide=()=>{ if(tip)tip.style.opacity='0'; };
       document.addEventListener('mouseover',e=>{
         const el=e.target&&e.target.closest&&e.target.closest('.dcow-col');
@@ -8198,6 +8278,7 @@ StudioAdapter.onProbeSource=async url=>{try{
       try{
         window.DC_OWNER.health=await api('/api/owner/health?days=7');
       }catch(e){window.DC_OWNER.health={error:e.message}}
+      try{window.dcPaintSelfChecks&&window.dcPaintSelfChecks()}catch(e){}
       if(DATA)DATA.ownerData=window.DC_OWNER;
       renderAll();};
     /* DeenAI. The cards come from /api/deenai when the tab opens (cached on
@@ -9836,6 +9917,7 @@ function paintStudio(){
   paintTaskCard();
   paintTasksPanel();
   paintPlanChip((DATA.billing&&DATA.billing.current)||{});
+  try{window.dcPaintSelfChecks&&window.dcPaintSelfChecks()}catch(e){}
   paintClipWaveforms(vals);
   paintClipDestinations(vals,DATA);
   paintLibraryAside(vals);

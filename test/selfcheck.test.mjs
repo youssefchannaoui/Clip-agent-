@@ -211,3 +211,50 @@ test('the worker version is read by one function, from /health', () => {
   assert.ok(!/"version"/.test(block),
     'if /readiness ever grows its own version field, this test is the place to decide which one wins');
 });
+
+/* The ROUTE half shipped in v3.129.0 and the SCREEN half did not: /api/owner/health
+   has carried `selfChecks` since then and nothing in the browser drew it, so the
+   note claiming the detector was "on Owner -> Health" was false for two releases.
+   Found by trying to screenshot it.
+
+   A source test, deliberately, and for the same reason as the sibling above:
+   CI has no browser, and this is precisely the shape that goes missing without
+   a symptom -- the app renders, the suite stays green, and the operator simply
+   has no way to see what the detector found when EMAIL_API_KEY is unset. */
+test('the detector is on the screen, not only in the payload', () => {
+  const page = fs.readFileSync(path.join(root, 'src/public/index.html'), 'utf8');
+
+  assert.match(page, /const paintSelfChecks\s*=/, 'the panel must exist');
+  assert.match(page, /selfChecks/, 'it must read the route\'s own field');
+
+  // Every host panel rule this repo has paid for, in one place.
+  const fn = page.slice(page.indexOf('const paintSelfChecks'));
+  const body = fn.slice(0, fn.indexOf('\n      };'));
+  assert.match(body, /data-host-owned/, 'an unmarked host node is patched into a sibling');
+  assert.match(body, /dcSetHtml/, 'a panel that rewrites itself every poll steals focus');
+  /* The rule is about SELECTORS, never about emitted class attributes: the
+     panel deliberately WEARS the export's own classes so it is
+     indistinguishable from the sections beside it (the paintLandingTable
+     precedent). What it may never do is LOOK ONE UP -- a re-import renumbers
+     every hashed name, and the mount would silently stop being found. */
+  const selectors = [...body.matchAll(/querySelector(?:All)?\(([^)]*)\)/g)].map(m => m[1]);
+  for (const sel of selectors) {
+    assert.ok(!/\.s[0-9a-z]{2,3}['"\s]/.test(sel),
+      `a hashed class is named in a selector and a re-import will renumber it: ${sel}`);
+  }
+  assert.ok(selectors.length, 'the panel must resolve its own mount');
+
+  /* In paintStudio's OWN list, or it never appears when somebody switches to
+     the Health tab -- that changes no data and triggers no fetch. Asserting the
+     call merely EXISTS is not enough: it also exists on the owner fetch, so the
+     first cut of this probe came back green with the render call deleted. */
+  const paint = page.slice(page.indexOf('\n  paintClipStars(vals);'));
+  const list = paint.slice(0, paint.indexOf('\n}'));
+  assert.match(list, /dcPaintSelfChecks/,
+    'it must be called from paintStudio, not only from the owner fetch');
+
+  // ONE pill, shared with the KPI tiles rather than a second copy of the colours.
+  const adapter = fs.readFileSync(path.join(root, 'src/public/studio-adapter.js'), 'utf8');
+  assert.match(adapter, /owPill: owPill,/, 'owPill must be exposed so the panel does not redefine it');
+  assert.match(body, /StudioAdapter\.owPill/, 'the panel must use it');
+});

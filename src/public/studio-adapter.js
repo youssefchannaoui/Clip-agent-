@@ -8545,6 +8545,12 @@
     // that a table contains a regex proves nothing about which entry answers a
     // given error -- and the bug this fixes was exactly a wrong entry winning.
     explainFailure: explainFailure,
+    // ONE definition of a state pill. The break-detector panel on Owner ->
+    // Health is host-rendered (a new section in the design export regenerates
+    // every hashed class name in the app), so without this it would carry a
+    // SECOND copy of these colours -- and two palettes for one meaning is how
+    // every drift in this file started.
+    owPill: owPill,
     // The review deck's keyboard, one verb per key. The host owns the window
     // (and the <video>, so Space stays there), but a decision made by key must
     // travel the same road as the buttons: the optimistic ledger first, then a
