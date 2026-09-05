@@ -70,6 +70,28 @@ on:
         description: 'Probe: the lecture title (the only place a speaker may come from)'
         required: false
         default: ''
+      # Diagnostics. Dispatch-only and OFF by default. When on, the deploy is
+      # SKIPPED -- asking the box a question must never restart a worker
+      # mid-job -- and the box is asked what happened to its recent jobs:
+      # counts, timings and a replay of the candidate pipeline over the cached
+      # transcript at the job's own settings. Never any transcript text.
+      diagnose:
+        description: Only diagnose (no deploy) -- ask the box about its recent jobs
+        type: boolean
+        required: false
+        default: false
+      diagnose_hours:
+        description: 'Diagnose: how many hours of cached transcripts to read back'
+        required: false
+        default: '12'
+      diagnose_audio:
+        description: 'Diagnose: seconds of the newest cached source to run Whisper over (0 = skip; loads the model, so only when the box is idle)'
+        required: false
+        default: '0'
+      diagnose_duration:
+        description: 'Diagnose: pick the cached source whose length is nearest this many seconds (0 = newest)'
+        required: false
+        default: '0'
   # Only worker/ code. Editing this file changes how the deploy runs, not what
   # is running on the box, so it must not trigger a deploy of its own -- an
   # unarmed run going red on every edit to the deploy script is noise, and the
@@ -186,6 +208,9 @@ jobs:
           chmod 700 "$RUNNER_TEMP/rssh"
 
       - name: Pull and rebuild on the box
+        # Skipped for a diagnose-only dispatch: a question must not become a
+        # rebuild. On a push `inputs` is empty, so this runs exactly as before.
+        if: inputs.diagnose != true
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
@@ -214,6 +239,11 @@ jobs:
           REMOTE
 
       - name: Prove the running container holds this commit
+        # A diagnose-only dispatch deployed nothing, so there is nothing to
+        # prove -- and the box legitimately holds whatever it last built,
+        # which is behind any commit that touched only src/. The diagnostics
+        # step prints the running version instead.
+        if: inputs.diagnose != true
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
@@ -295,6 +325,50 @@ jobs:
           # secret is never written to disk, never put on a command line and
           # never crosses the wire. Only the model's answer comes back.
           docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-clip-ai-probe.py
+          REMOTE
+
+      # DISPATCH ONLY, off unless asked for, and it deploys nothing (the
+      # rebuild step above is skipped when this is on). The service removes a
+      # failed job's working directory and never echoes the child's progress
+      # events, so `docker logs` cannot say WHY a run produced no clips; the
+      # payload, the status and the cached transcript on the box can. This
+      # replays the candidate pipeline over that transcript inside the
+      # container and prints counts -- never a word of the transcript.
+      - name: Ask the box what happened to its recent jobs
+        if: inputs.diagnose == true
+        env:
+          HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
+          USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
+          RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
+          DIAG_HOURS: ${{ inputs.diagnose_hours }}
+          DIAG_AUDIO: ${{ inputs.diagnose_audio }}
+          DIAG_DURATION: ${{ inputs.diagnose_duration }}
+        run: |
+          set -euo pipefail
+          export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
+          # Same rule as the probe: no dispatch input is ever interpolated into
+          # a shell command. It becomes a JSON literal in the script, and the
+          # script travels as one base64 blob.
+          node -e '
+            const fs = require("fs");
+            const src = fs.readFileSync(".github/scripts/worker-diagnose.py", "utf8");
+            if (!src.includes("PARAMS = {}")) throw new Error("the diagnostics script lost its PARAMS seam");
+            const num = (name, fallback) => { const v = Number.parseFloat(process.env[name] || ""); return Number.isFinite(v) && v >= 0 ? v : fallback; };
+            const params = { hours: num("DIAG_HOURS", 12) || 12, jobs: 4, audio: Math.min(600, num("DIAG_AUDIO", 0)), duration: num("DIAG_DURATION", 0) };
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/worker-diagnose.py",
+              src.replace("PARAMS = {}", "PARAMS = " + JSON.stringify(params)));
+          '
+          BLOB=$(base64 -w0 < "$RUNNER_TEMP/worker-diagnose.py")
+          "$RUNNER_TEMP/rssh" "DIAG_B64=$BLOB bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f /tmp/dc-worker-diagnose.py' EXIT
+          printf '%s' "$DIAG_B64" | base64 -d > /tmp/dc-worker-diagnose.py
+          echo "--- service log, last 3h, worker lines only ---"
+          docker logs --since 3h worker-deenclipped-worker-1 2>&1 \
+            | grep -E '^\[worker\]|Traceback|Error' \
+            | sed -E 's#://[^@/ ]+@#://***@#g' | tail -n 40 || true
+          echo "--- inside the container ---"
+          docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-worker-diagnose.py
           REMOTE
 
       - name: Clean up the credential

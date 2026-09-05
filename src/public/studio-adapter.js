@@ -974,6 +974,31 @@
   // wins, so the specific patterns are listed before the broad ones.
   var EXPLAIN = [
     {
+      // The worker heard only the opening of the video and then nothing --
+      // the recitation Youssef reported on 5 Sept 2026 came back as two
+      // segments covering 28 seconds of a 568-second source, and the old
+      // message blamed the clip length. The worker says the coverage now,
+      // and this answers it: it is the speech recogniser, not the range.
+      match: /could be transcribed|transcript (covers|stops)|heard only/i,
+      title: 'The speech recogniser gave up part-way through',
+      cause: 'Only the opening of this video was transcribed and the rest came back as silence, so there was not enough speech to cut a clip from. Recitation and reverberant recordings can read as music to the recogniser.',
+      fixes: [
+        'Press Retry once — the worker now makes a second pass that listens to everything when the first stops early.',
+        'Pick Auto for the language rather than pinning one, and try a shorter clip length.',
+        'If it fails the same way twice, send the link to support with the failure text — it is a recognition fault we can look at, not something about your account.',
+      ],
+    },
+    {
+      match: /no complete clip candidates|fit the selected duration range/i,
+      title: 'No stretch of speech fitted the clip length you chose',
+      cause: 'The lecture was transcribed, but no run of complete sentences landed inside the length band picked for this job. Short answers, long pauses or a very tight band can all do it.',
+      fixes: [
+        'Pick a wider length band (or none — any length) on the Start job panel and retry.',
+        'Check the source window: a two-minute selection cannot hold a 60-second clip with room to choose.',
+        'If the video is mostly music or silence, there may be no speech to cut.',
+      ],
+    },
+    {
       // The import service accepting a job and then never delivering it is a
       // different failure from YouTube refusing one, and it needs a different
       // answer: nothing about the video or the link is wrong, retrying the same
