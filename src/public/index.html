@@ -9389,6 +9389,78 @@ function paintTrimTools(vals){
   }
 }
 
+/* ── The editor's Look tab gets the looks and the weather ─────────────────
+   v3.118.0 put twelve graded looks and four atmosphere effects on Templates →
+   Style and never taught the editor about them, so the editor's own Look tab
+   offered grain, warmth, vignette and the watermark -- everything except the
+   controls that actually change how the picture reads. Per clip, the good half
+   was unreachable.
+
+   HOST-RENDERED, so this costs no design re-import: adding four rows to the
+   export regenerates every hashed class name in the app. The rows are the
+   adapter's `edLookControls`, which IS `tplControlsFor().look` -- the same
+   objects the Templates screen renders -- so the two screens cannot drift
+   about what a look is called or which sliders a given effect reveals.
+
+   The mount is found by the panel's own WATERMARK ROW text, never by a class:
+   every class in this markup is hashed and renumbers on re-import. The rows
+   are appended to that row's parent -- the Look panel's flex column -- so they
+   sit under Vignette, in the column's own gap.
+
+   Marked `data-host-owned` (the patcher pairs a container's children by index
+   and would otherwise shift every generated sibling), redrawn only when the
+   markup actually changed (a rebuild on every state poll throws focus out of
+   an open select), and swept the moment the tab is not Look. */
+function paintEditorLook(vals){
+  const ID='dcEdLook';
+  const rows=Array.isArray(vals.edLookControls)?vals.edLookControls:[];
+  const gone=()=>{const n=document.getElementById(ID); if(n) n.remove()};
+  if(!vals.isEditor||!vals.isLook||!rows.length){ gone(); return }
+  /* The watermark row is the Look panel's first child and the only node in it
+     carrying that phrase, so it identifies the column without naming a class. */
+  const editor=document.querySelector('#studio [data-dc-editor]');
+  if(!editor){ gone(); return }
+  const wmLabel=[...editor.querySelectorAll('span')]
+    .find(s=>s.childNodes.length&&s.firstChild.nodeType===3&&s.firstChild.nodeValue.trim()==='DeenClipped watermark');
+  const col=wmLabel?wmLabel.closest('div').parentElement:null;
+  if(!col){ gone(); return }
+  let box=document.getElementById(ID);
+  if(!box||box.parentElement!==col){
+    if(box) box.remove();
+    box=document.createElement('div'); box.id=ID;
+    box.setAttribute('data-host-owned','');
+    box.style.cssText='display:flex;flex-direction:column;gap:13px;';
+    col.appendChild(box);
+  }
+  const esc2=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const lab=(text,readout)=>`<span style="display:flex;align-items:center;font-size:11.5px;color:var(--dc-n-bcbcc3, #BCBCC3)">${esc2(text)}<strong style="margin-left:auto;font-weight:500;color:var(--dc-gold-lit, #F0D6A6)">${esc2(readout)}</strong></span>`;
+  const html=rows.map((c,i)=>{
+    if(c.isSelect){
+      const opts=(c.opts||[]).map(o=>`<option value="${esc2(o.value)}"${o.on?' selected':''}>${esc2(o.label)}</option>`).join('');
+      return `<div style="display:flex;flex-direction:column;gap:5px">${lab(c.label,'')}`
+        +`<select data-edlook="${i}" aria-label="${esc2(c.label)}" style="width:100%;padding:6px 8px;border:1px solid var(--dc-line, #26262A);border-radius:7px;background:var(--dc-bg-raised, #17171A);color:var(--dc-ink, #E9E9ED);font-family:inherit;font-size:11.5px;cursor:pointer">${opts}</select>`
+        +(c.note?`<span style="font-size:10.5px;color:var(--dc-ink-faint, #6E6E76)">${esc2(c.note)}</span>`:'')
+        +`</div>`;
+    }
+    return `<div style="display:flex;flex-direction:column;gap:5px">${lab(c.label,c.readout)}`
+      +`<input type="range" data-edlook="${i}" aria-label="${esc2(c.label)}" min="${esc2(c.min)}" max="${esc2(c.max)}" step="${esc2(c.step)}" value="${esc2(c.value)}" style="width:100%;accent-color:var(--dc-gold, #D9B478);cursor:pointer">`
+      +(c.note?`<span style="font-size:10.5px;color:var(--dc-ink-faint, #6E6E76)">${esc2(c.note)}</span>`:'')
+      +`</div>`;
+  }).join('');
+  /* A `range` is dragged, so its VALUE is written back in place rather than
+     through a rebuild -- re-writing the markup mid-drag drops the thumb. Only a
+     genuine structural change (an effect chosen, revealing or hiding the
+     strength slider) redraws. */
+  if(window.dcSetHtml) window.dcSetHtml(box,html); else if(box.innerHTML!==html) box.innerHTML=html;
+  box.querySelectorAll('[data-edlook]').forEach(el=>{
+    const c=rows[Number(el.getAttribute('data-edlook'))];
+    if(!c) return;
+    if(el.tagName==='SELECT'){ if(el.value!==c.value) el.value=c.value; el.onchange=e=>c.set(e); return }
+    if(document.activeElement!==el&&el.value!==String(c.value)) el.value=String(c.value);
+    el.oninput=e=>c.set(e);
+  });
+}
+
 /* Its own escaper, like paintAccount's: the top-of-file `esc` is in a
    DIFFERENT inline script scope and is not reachable from here. */
 const obEsc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -10251,6 +10323,7 @@ function paintStudio(){
   paintEditorPlayer(vals);
   paintEditorLayout(vals);
   paintTrimTools(vals);
+  paintEditorLook(vals);
   paintEditorScrub();
   stepDirection();
   paintJobStyleRow(vals);

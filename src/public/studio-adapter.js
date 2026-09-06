@@ -4388,7 +4388,14 @@
         // moment you cannot see is the thing that made this editor feel dead.
         select: function (e) {
           stop(e);
-          var next = { edBlock: i, edBlockDraft: null };
+          // ...and it opens the panel that edits it. The timeline's own hint
+          // says "Click a caption block to edit its words", and the words DO
+          // load -- into the Captions panel, which is not on screen unless
+          // that tab already happened to be the one showing. So from Framing,
+          // Audio, Look or Export the promise read as a dead control: the
+          // block took its gold outline and nothing else moved. Switching the
+          // tab is what makes the sentence true.
+          var next = { edBlock: i, edBlockDraft: null, edTab: 'captions' };
           if (timed) { next.edTime = block.start; next.edPlayhead = block.start / edDuration; }
           setUI(next);
           if (timed) seekHost(block.start);
@@ -6518,6 +6525,42 @@
       edCropNote: tpl.smartFramingEnabled
         ? 'Only used where the speaker cannot be found — face tracking wins when it succeeds.'
         : 'Where the 9:16 window sits over the wider source.',
+
+      /*
+       * THE EDITOR'S LOOK TAB IS THE TEMPLATES SCREEN'S OWN LOOK GROUP, not a
+       * second set of controls that means the same thing.
+       *
+       * v3.118.0 gave Templates twelve graded looks and four weather effects
+       * (rain, snow, dust, bokeh) with their strength and a darken slider. The
+       * editor's Look tab was written before that and still offered grain,
+       * warmth, vignette and the watermark -- so per CLIP you could not reach
+       * the half of the look controls that actually changes the picture, and
+       * the one screen named "Look" was the one place they were missing.
+       *
+       * Reusing `tplControlsFor().look` rather than rebuilding those rows is
+       * the whole point: the options come from the schema's own ENUMS, the
+       * custom-eq sliders appear on exactly the same condition, and the
+       * strength slider hides with `overlayEffect: none` in both places. Two
+       * hand-written copies would drift the first time a look is added, which
+       * is the fault this file has recorded more often than any other.
+       *
+       * They write through the SAME `saveStyle`, which already routes to
+       * `saveClipStyle` while the editor is open -- so a change here lands on
+       * the clip's own overrides, exactly as grain and vignette beside them
+       * do, and nothing about what a row means changes with the screen.
+       *
+       * WHAT THE EXPORT ALREADY DRAWS IS FILTERED OUT, and that was found by
+       * counting the rendered rows rather than by reading the group: the Look
+       * panel's own markup carries Grain, Warmth and Vignette, so passing the
+       * group through whole put a SECOND slider for each of the three directly
+       * under the first. Two controls for one setting is worse than none --
+       * this repo has shipped that bug three times (two watermark positions,
+       * two onboarding systems, two tour buttons) and it is the reason the
+       * filter is keyed on the FIELD rather than on the label.
+       */
+      edLookControls: (tplControlsFor().look || []).filter(function (c) {
+        return c && c.field !== 'grain' && c.field !== 'warm' && c.field !== 'vignette';
+      }),
 
       // THE ACCOUNT'S switch, not this clip's. The watermark belongs to the
       // account (v3.113.0, v3.136.0 -- "once its configured it works for all

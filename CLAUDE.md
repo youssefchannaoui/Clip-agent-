@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1588 JS + 687 Python**
+- `npm test` and `npm run check` must pass. Currently **1594 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -11280,3 +11280,96 @@ destination that is certain to refuse is not a destination.**
 **Not built, and worth considering:** the clip length BANDS still offer lengths
 Facebook cannot take, so this keeps happening and is only ever caught at the
 destination. A warning where the band is chosen would stop it at source.
+
+## Two things the editor promised and did not do (v3.138.0, 7 Sept 2026)
+
+Youssef: "open up the editor or all so i can see if its any good." So it was
+un-gated locally, seeded with a clip carrying real sentence timings, and driven
+control by control. It is good -- all five panels, the timeline, the section
+cuts and the unsaved-caption ghost all behave -- and two things did not.
+
+**Both are invisible without opening it**, which is the whole reason they had
+survived: the editor is behind the coming-soon gate, so nothing routine looks at
+it, and a green suite says nothing about either.
+
+### The timeline's own hint was a lie from four of the five tabs
+
+The strip under the timeline reads *"Click a caption block to edit its words"*.
+Clicking one set `edBlock` and moved the playhead -- and the words loaded into
+the **Captions panel, which is not on screen** unless that tab already happened
+to be showing. Measured from Export: `edBlock: 2`, the right sentence in the
+textarea, and nothing a person could see had changed. From Framing, Audio, Look
+or Export the block took its gold outline and that was all.
+
+That is invariant 9 on the one gesture the timeline advertises. `select()` now
+sets `edTab: 'captions'` with the rest of the selection, so the sentence the
+screen prints is true from wherever you are standing.
+
+### The screen named "Look" was the one place the looks were missing
+
+v3.118.0 put **twelve graded looks and four weather effects** (rain, snow, dust,
+bokeh, with strength and a darken slider) on Templates → Style. The editor's Look
+tab predates that release and still offered grain, warmth, vignette and the
+watermark -- so **per clip the half that actually changes the picture could not
+be reached at all**, on the tab named after it.
+
+- **It is the Templates screen's OWN group, not a second set of rows.**
+  `edLookControls` is `tplControlsFor().look`, so the options come from the
+  schema's ENUMS, the four custom-eq sliders appear on the same condition, and
+  the strength slider hides with `overlayEffect: none` in both places. Two
+  hand-written copies would drift the first time a look is added.
+- **They already wrote to the right place.** `saveStyle` routes to
+  `saveClipStyle` while the editor is open, so a change lands on the clip's own
+  `styleOverrides` exactly as grain and vignette beside it do. Verified by
+  reading the record back: `{filterPreset: 'custom', overlayEffect: 'rain'}` on
+  the clip, `renderVersion` unmoved -- nothing re-renders.
+- **WHAT THE EXPORT ALREADY DRAWS IS FILTERED OUT, and only counting the
+  rendered rows found it.** Passing the group through whole put a SECOND Grain,
+  Warmth and Vignette slider directly under the export's own three. Reading the
+  group would not have shown it; the browser did. That is the fault this file
+  has recorded three times (two watermark positions, two onboarding systems, two
+  tour buttons), and it is why the filter is keyed on the FIELD, not the label.
+- **Host-rendered**, so no design re-import: four rows in the export regenerates
+  every hashed class name in the app. `data-host-owned`, `dcSetHtml`, in
+  paintStudio's list, and the mount is found by the panel's own **"DeenClipped
+  watermark"** text -- never a class, every one of which is hashed.
+- A `range` is dragged, so its value is written back **in place**; only a
+  structural change (choosing an effect, revealing the strength slider) redraws.
+  Rewriting the markup mid-drag drops the thumb.
+
+Measured at 1440x900 in both themes: rows and sliders land on the export's own
+edges (1141/283 and 1143/283), **zero duplicates**, **0 DOM operations on an
+unchanged repaint**, same node across three repaints, no page overflow. In
+daylight the select takes a white ground and dark ink from the tokens while the
+stage stays night -- the rows are inline `var()` styles, which the light-theme
+generator does not process and does not need to.
+
+### Traps paid for again
+
+- **A red probe whose edit does not MATCH proves nothing.** Probe 5 searched for
+  a `setAttribute` line at the wrong indentation, replaced zero bytes, and the
+  suite passed against unmodified code. It asserts its own replacement count
+  now, and was redone by line number. Fifth recorded occurrence.
+- **`\.s[0-9a-z]{2,3}` matches `c.set(`.** The "names no hashed class" assertion
+  went red on my own painter's `c.set(e)`. A generated class is `.s` + a DIGIT
+  (`.s29`, `.s4j`); requiring the digit is what tells one from ordinary code.
+- **`Array.from` before `deepEqual`** on anything built in the vm realm. Fourth
+  time.
+- **Guessing a binding name costs a run**: it is `edCapBlocks` and `edSelText`,
+  not `edCaptionBlocks`/`edBlockText`. Read the binding, do not infer it.
+
+### The other session was in the same file at the same time
+
+`origin` had moved to **v3.137.0, "The clip editor, driven control by control,
+so the gate can come off"** -- the same screen, the same afternoon. Checked
+before committing, per this file's own rule, and the two passes are
+complementary: they did the beta labelling, the watermark switch, Preview,
+Export's claims and the unsaved-words guard, and touched **neither** of the two
+faults above (`edBlock: i, edBlockDraft: null` was still unchanged at their
+line 4391, and `edLookControls` appears zero times). One conflict, in the
+bindings object, where their watermark comment and my Look group had landed on
+the same line -- **both sides kept**, which is what reading them rather than
+picking one gives you.
+
+**The gate is untouched and still on**, at origin and here: this is built
+BEHIND it, like the section cuts were.
