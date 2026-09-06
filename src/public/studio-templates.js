@@ -332,7 +332,25 @@
   // further. `.dct-right` is overflow-y: auto for exactly that, never hidden:
   // content drawn and then clipped with nothing able to scroll it is the fault
   // v3.126.0 spent a release on.
-  var FRAME_MIN = 300, FRAME_MAX = 620;
+  // THE ONLY CEILING IS THE COLUMN'S OWN WIDTH, and until v3.134.3 there was an
+  // arbitrary 620 beside it. The preview IS this screen, so a cap that holds it
+  // short of the room it has leaves the right-hand half half-empty -- measured
+  // at 1920x1080: 759px of room, a frame pinned to 620, 139px unused. That is
+  // the same fault the generated screen's own sizing carried until v3.132.0
+  // ("The right side video should fill as much as the page can"), and shipping
+  // it on the screen people actually see would have been that fix undone.
+  //
+  // The width cap is the real constraint and replaces it: a frame given the
+  // full height wants to be `height * ratio` wide, and a WIDE template blows
+  // straight through the column -- a 16:9 export at 759px of room asks for
+  // 1349px inside a 778px one. `max-width: 100%` alone does NOT save it: with
+  // an explicit height and aspect-ratio, clamping the width BREAKS the ratio
+  // rather than the height, so the preview would render the wrong SHAPE and
+  // quietly misrepresent the export. Every shipped template is 1080x1920 and
+  // width/height are excluded from the style fields, so this is latent today --
+  // but the safe-zone table already follows the output shape, so the data model
+  // permits it and the guard costs one line.
+  var FRAME_MIN = 300;
   function fitFrame() {
     if (!root || !root.isConnected) return;
     var right = root.querySelector('.dct-right');
@@ -354,7 +372,16 @@
       used += kid.offsetHeight;
     }
     var gaps = 10 * Math.max(0, right.children.length - 1);
-    var wanted = Math.round(Math.max(FRAME_MIN, Math.min(FRAME_MAX, room - used - gaps)));
+    // The ratio comes from the template's own aspect (w/h), read off the style
+    // the painter set rather than from the frame's measured box -- measuring
+    // the box to size the box is the feedback this whole function avoids.
+    var aspect = String(box.style.aspectRatio || '9 / 16').split('/');
+    var ratio = (Number(aspect[0]) || 9) / (Number(aspect[1]) || 16);
+    var cs = global.getComputedStyle(right);
+    var usableW = right.clientWidth
+      - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    var byWidth = ratio > 0 ? usableW / ratio : Infinity;
+    var wanted = Math.round(Math.max(FRAME_MIN, Math.min(byWidth, room - used - gaps)));
     if (root.style.getPropertyValue('--dct-frame-h') !== wanted + 'px') {
       root.style.setProperty('--dct-frame-h', wanted + 'px');
     }

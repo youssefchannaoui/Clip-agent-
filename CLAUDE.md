@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1546 JS + 687 Python**
+- `npm test` and `npm run check` must pass. Currently **1547 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10915,6 +10915,28 @@ it -- so `paintStudio()` runs to completion, no host panel after it is skipped,
 and an unchanged repaint costs **0 DOM operations**. A structural reason, not an
 accident of ordering. Both sizings grow, so whichever screen is up fills the
 room; keep them that way rather than letting the dead one rot.
+
+**AND THE HOST SCREEN HAD A CEILING THEIRS DOES NOT (v3.134.4).** `FRAME_MAX`
+was an arbitrary 620 sitting beside the room-based sizing, with no reason
+written next to it -- so on a tall screen the preview stopped short of the room
+it had. Measured at 1920x1080: **759px of room, a frame pinned to 620, 139px of
+the right-hand half left empty** -- their own fault's twin, on the screen people
+actually see, one release after they fixed it on the other. It is gone, and the
+COLUMN'S OWN WIDTH replaces it, which is the constraint that was really needed:
+a frame given the full height wants `height * ratio` of width, and a wide
+template blows through the column -- a 16:9 export at 759px of room asks for
+1349px inside a 778px one.
+**`max-width: 100%` does NOT save that, and measuring is the only way to see
+it**: with an explicit height AND an `aspect-ratio`, clamping the width breaks
+the RATIO rather than the height, so the frame renders 778x620 -- shape 1.255
+where 16:9 is 1.778 -- and the preview quietly misrepresents the export
+(invariant 4 by another door). Bounded, the same template lands 778x438, shape
+1.776, inside the column, no page scroll. Every shipped template is 1080x1920
+and `width`/`height` are excluded from the style fields, so this is LATENT
+today; the safe-zone table already follows the output shape, so the data model
+permits it and the guard costs one line. Measured after: 1280 and 1440 are
+unchanged (the ceiling was never binding there), 1920 goes **349x620 ->
+427x759**.
 
 **NOT done: the clip preview modal.** Measured and left alone. Its stage is
 `min(70vh, 640px)` with 112px of chrome around it, so at 1920x1200 it sits
