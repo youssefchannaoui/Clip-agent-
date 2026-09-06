@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1544 JS + 687 Python**
+- `npm test` and `npm run check` must pass. Currently **1552 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10833,3 +10833,60 @@ with 224px of unused margin above AND below. Growing it needs the card's
 `max-width: min(94vw, 860px)` raised in step, because the stage's width follows
 its height through the aspect ratio and 860 − 320 (tools) − 22 (gap) caps the
 stage at 518px wide, i.e. 921px tall. Worth doing; not done here.
+
+## The suite was red on a Mac and green in CI (v3.135.0, 6 Sept 2026)
+
+`test_worker_resume` had TWO failures here and none on the runner, from the day
+the feature landed (v3.133.0). Both were the tests, not the code:
+
+- **`alive(pid)` read `/proc/{pid}/stat`, and macOS has no procfs.** So it
+  answered False for every living process and `assertTrue(alive(grandchild))`
+  failed. It asks `ps -o state=` now, which is POSIX and prints the same first
+  letter on both; macOS decorates it (`S+`), hence startswith rather than
+  equality. Proven still able to say False: a killed process, an unreaped
+  zombie and a pid that never existed all come back False.
+- **`mkdtemp` hands back `/var/...` on macOS while the service resolves
+  `/private/var/...`** — two names for one directory, so a path assertion
+  failed. `self.root` is `realpath`'d at setUp.
+
+**This is the mirror of the case-sensitive-path trap this file already records,
+and the worse direction of the two.** That one is green on the Mac and red in
+CI, where it is at least caught. This one was green in CI and red on the only
+machine anyone actually runs the suite on — so "npm test is clean" stopped
+being checkable locally, which is the one thing a phone-first workflow rests on.
+**A test that reads `/proc`, or compares an unresolved temp path, is a test that
+only works on Linux.**
+
+## Facebook Reels takes 4–60 seconds and the clipper makes 62 (v3.135.0)
+
+Measured on the live account: of the last eight Facebook posts, five landed and
+**three failed**, every one on "Facebook Reels publishing requires a 4–60 second
+video; this clip is 61/62 seconds." The clip was fine and went out on YouTube
+and Instagram.
+
+**The refusal was already correct and already happened before any bytes were
+sent.** The fault was that a target was BUILT for a clip Facebook could never
+accept: scheduled, shown to the customer in the review queue as a destination
+this clip was going to, and turned into a red failure afterwards. **A
+destination that is certain to refuse is not a destination.**
+
+- `social.platformRefusal(provider, clip)` is the one answer, and
+  `uploadFacebook` asks it too — so the reason on the review card and the
+  reason in a failure cannot drift. A test asserts the sentence exists in
+  exactly one place.
+- **An unknown duration is not a refusal in the preview, and IS one at the
+  upload** (`assumeKnown`). The preview must not drop a destination because a
+  clip has not recorded its length; the upload is about to spend bandwidth on a
+  file Facebook will reject.
+- **Only Facebook has a length rule.** Shorts and Reels take far longer; a
+  limit invented for them would drop destinations that work.
+- **`healImpossibleTargets()` asks it of the rows already on disk**, at boot,
+  beside `healPartialPublishes`. Targets are stamped once at schedule time and
+  `tick()` only re-derives an EMPTY list, so every clip scheduled before this
+  still carried the target — one of eight on the live account, due to fail at
+  07:00. Narrow on purpose: only a target still `scheduled`, never one
+  mid-publish or posted, and never on a clip that has already gone out.
+
+**Not built, and worth considering:** the clip length BANDS still offer lengths
+Facebook cannot take, so this keeps happening and is only ever caught at the
+destination. A warning where the band is chosen would stop it at source.

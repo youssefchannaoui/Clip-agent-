@@ -910,6 +910,35 @@ function validateFor(next, userId) {
  * Consent is assumed because approving is what grants it -- see the note in
  * enabledTargetsForClip. Never used to publish: this only ever describes.
  */
+/*
+ * WHY A PLATFORM WILL REFUSE THIS CLIP, before anything is sent.
+ *
+ * Facebook Reels takes 4 to 60 seconds and nothing else. The clip length bands
+ * happily produce 61 and 62, so a Facebook target was built, scheduled, shown
+ * to the customer as a destination, uploaded to and THEN refused -- measured on
+ * the live account, 3 of the last 8 Facebook posts failed on exactly this. The
+ * clip is fine and goes out everywhere else; only Facebook cannot have it.
+ *
+ * ONE SENTENCE, TWO READERS. `uploadFacebook` asks this too, so the reason the
+ * preview gives and the reason a failure would give cannot drift apart.
+ *
+ * An UNKNOWN duration is not a refusal here (`assumeKnown`), and that split is
+ * deliberate: the preview must not drop a destination because a clip has not
+ * recorded its length yet, while the upload -- which is about to spend
+ * bandwidth on a file Facebook will reject -- is right to stop.
+ */
+const REELS_MIN_SECONDS = 4;
+const REELS_MAX_SECONDS = 60;
+export function platformRefusal(provider, clip, { assumeKnown = false } = {}) {
+  if (provider !== 'facebook') return '';
+  const seconds = Number(clip?.durationMs || 0) / 1000;
+  if (!seconds && !assumeKnown) return '';
+  if (seconds < REELS_MIN_SECONDS || seconds > REELS_MAX_SECONDS) {
+    return `Facebook Reels publishing requires a ${REELS_MIN_SECONDS}\u2013${REELS_MAX_SECONDS} second video; this clip is ${Math.ceil(seconds)} seconds.`;
+  }
+  return '';
+}
+
 export function plannedChannelsFor(clip) {
   let targets = [];
   try { targets = enabledTargetsForClip(clip, { quiet: true, assumeConsent: true }); }
@@ -1004,6 +1033,15 @@ export function enabledTargetsForClip(clip, { quiet = false, assumeConsent = fal
       const account = selectedAccount(provider, accountId, userId);
       if (!account) {
         say(`${provider} is switched on but has no account selected, so "${clip.title || clip.id}" will not post there. Pick the account in Connections.`, 'warn');
+        continue;
+      }
+      // A destination that is CERTAIN to refuse is not a destination. Building
+      // it anyway put a red "failed" row on a clip that was never eligible,
+      // after spending the upload -- and told the customer, in the review
+      // queue, that the clip was going somewhere it could not go.
+      const refusal = platformRefusal(provider, clip);
+      if (refusal) {
+        say(`"${clip.title || clip.id}" will not post to ${provider}: ${refusal}`, 'warn');
         continue;
       }
       targets.push({
@@ -1363,8 +1401,12 @@ function metaPage(accountId, kind, userId) {
 }
 
 async function uploadFacebook(clip, target, file, userId) {
-  const duration = Number(clip.durationMs || 0) / 1000;
-  if (duration < 4 || duration > 60) throw new SocialError(`Facebook Reels publishing requires a 4–60 second video; this clip is ${Math.ceil(duration)} seconds.`, { provider: 'facebook' });
+  // The same answer the preview gives, so a customer cannot be told one thing
+  // on the review card and another in the failure. `assumeKnown` because by
+  // here we are about to spend an upload: a clip with no recorded length is
+  // stopped rather than sent for Facebook to reject.
+  const refusal = platformRefusal('facebook', clip, { assumeKnown: true });
+  if (refusal) throw new SocialError(refusal, { provider: 'facebook' });
   const { account, accessToken } = metaPage(target.accountId, 'facebook', userId);
   target.providerState ||= {};
   let videoId = target.externalId || target.providerState.videoId || '';

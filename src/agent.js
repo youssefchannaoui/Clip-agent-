@@ -643,6 +643,48 @@ export function refreshPublishingStatus(clip) {
  * unposted. A clip still publishing, or one where nothing landed, is left
  * alone -- this corrects the record, it does not decide anything new.
  */
+/*
+ * TARGETS ALREADY ON DISK FOR A PLATFORM THAT CANNOT TAKE THEM.
+ *
+ * `enabledTargetsForClip` stopped building a Facebook target for a clip
+ * outside Reels' 4-60 second band -- but targets are stamped once, at schedule
+ * time, and `tick()` only re-derives them when the list is EMPTY. So every
+ * clip scheduled before that change still carries the target and would still
+ * fail at its slot: measured on the live account, one of eight.
+ *
+ * This repo has paid for that shape before. v3.29.1: "a behaviour change that
+ * only applies going forward should always be asked of the rows already on
+ * disk."
+ *
+ * NARROW ON PURPOSE. Only a target still `scheduled` -- never one mid-publish,
+ * never one that has posted -- and only on a clip that has not posted. The
+ * clip keeps every other destination and goes out normally; Facebook is simply
+ * not attempted, with the reason written down rather than arriving later as a
+ * red failure.
+ */
+export function healImpossibleTargets() {
+  let dropped = 0;
+  for (const clip of state.clips || []) {
+    if (clip.postedAt) continue;
+    const targets = clip.targets || [];
+    if (!targets.length) continue;
+    const keep = targets.filter(target => {
+      if (target.status !== 'scheduled') return true;
+      const refusal = social.platformRefusal(target.provider, clip);
+      if (!refusal) return true;
+      log(`"${clip.title || clip.id}" will not post to ${target.provider}: ${refusal}`, 'warn', clip.userId);
+      dropped += 1;
+      return false;
+    });
+    if (keep.length !== targets.length) clip.targets = keep;
+  }
+  if (dropped) {
+    save();
+    log(`Removed ${dropped} scheduled destination(s) the platform could never have accepted.`, 'info');
+  }
+  return dropped;
+}
+
 export function healPartialPublishes() {
   let healed = 0;
   for (const clip of state.clips || []) {

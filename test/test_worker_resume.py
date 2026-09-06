@@ -20,6 +20,7 @@ file handed to the child. All were proven red against the unpatched service.
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -65,18 +66,35 @@ GRANDCHILD = (
 
 
 def alive(pid: int) -> bool:
-    """Running, as opposed to gone or a zombie nobody has reaped yet."""
+    """Running, as opposed to gone or a zombie nobody has reaped yet.
+
+    THROUGH `ps`, NOT /proc. procfs is Linux-only, so on a Mac this answered
+    False for every living process and `assertTrue(alive(grandchild))` failed
+    -- while CI, which is Ubuntu, went green. That is the mirror of the
+    case-sensitive-path trap this repo already records, and the worse
+    direction of the two: a suite that is red only on the developer's own
+    machine is a tick nobody can trust, and this one had been red here since
+    the feature landed in v3.133.0.
+
+    `ps -o state=` is POSIX and prints the same first letter on both (`Z` for
+    a zombie, `S`/`R` for a live one); macOS decorates it (`S+`), hence the
+    startswith rather than an equality.
+    """
     try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
-    except OSError:
+        out = subprocess.run(["ps", "-o", "state=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:  # noqa: BLE001 - a probe must never fail the test it serves
         return False
-    state = stat.rsplit(")", 1)[-1].split()[0]
-    return state not in {"Z", "X"}
+    return bool(out) and not out.startswith("Z")
 
 
 class WorkerResumeTests(unittest.TestCase):
     def setUp(self):
-        self.root = tempfile.mkdtemp(prefix="deenclipped-resume-")
+        # RESOLVED, because on macOS /var is a symlink to /private/var: mkdtemp
+        # hands back the /var spelling and the service resolves the other, so a
+        # path assertion compared two names for one directory and failed here
+        # while passing on Linux.
+        self.root = os.path.realpath(tempfile.mkdtemp(prefix="deenclipped-resume-"))
         os.environ["WORKER_DATA_DIR"] = self.root
         os.environ["WORKER_SHARED_SECRET"] = "s" * 40
         self.service = importlib.reload(importlib.import_module("service"))
