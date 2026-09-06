@@ -47,7 +47,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 40px;
+  /* The SIDE padding must match .dct-body's, or the toolbar's controls and the
+     settings card below them start at different x -- the content's left edge
+     against the header above it is one of the alignments this repo measures.
+     The vertical padding is 9 rather than 14 for the same reason as the body's:
+     on this screen height is what sizes the preview. */
+  padding: 9px 28px;
   border-bottom: 1px solid var(--dc-line-soft, #1E1E22);
 }
 #dcTemplates .dct-pick { display: flex; align-items: center; gap: 10px; }
@@ -75,16 +80,25 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  /* 50/50 (Youssef, 6 Sept 2026: "make the left side config smaller and make
-     it more spacious for the right side, 50% 50% ratio to look cleaner"). The
-     settings column was taking every spare pixel while the preview was capped
-     at 420, so a wide screen only ever widened the half that needed it least.
-     minmax(0, 1fr) twice, never `1fr 1fr`: a grid track's automatic minimum is
-     its content, and the frame plus the hint under it would push the preview
-     column past its share and the row past the screen. */
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* 44/56, and it got here in two steps. 50/50 first (Youssef, 6 Sept 2026:
+     "make the left side config smaller and make it more spacious for the right
+     side, 50% 50% ratio to look cleaner"), because the settings column had been
+     taking every spare pixel while the preview was capped. Then, looking at
+     that: "make the preview larger by like 15% so left side is smaller". So
+     the split is no longer even -- the preview is the screen, and the settings
+     are rows that do not need the width.
+
+     minmax(0, Nfr) twice, never `Nfr`: a grid track's automatic minimum is its
+     content, and the frame plus the hint under it would push the preview column
+     past its share and the row past the screen. */
+  grid-template-columns: minmax(0, 44fr) minmax(0, 56fr);
   gap: 26px;
-  padding: 22px 40px;
+  /* "use full length of page for both ends" -- 22px above and below held the
+     columns off the top and bottom of the page for nothing, and on this screen
+     vertical room is not spare: it is what sizes the preview. 10px is enough to
+     keep the cards off the edge. The side padding comes in with it, which is
+     width the preview can also use. */
+  padding: 10px 28px;
 }
 #dcTemplates .dct-left {
   min-height: 0;
@@ -105,7 +119,9 @@
   scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  /* fitFrame READS this (it does not assume it), so it may be tuned freely --
+     but every pixel here comes off the preview. */
+  gap: 10px;
 }
 
 /* ── a settings group ────────────────────────────────────────────────────── */

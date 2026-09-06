@@ -267,23 +267,31 @@
    * To undo this, delete POSTING_BOTTOM and let postingInsets return
    * unionInsets unchanged.
    */
-  var POSTING_BOTTOM = 312;
+  var POSTING_BOTTOM = 258;
 
   /*
-   * The union the STUDIO draws, as insets: every edge from the table, with
-   * the bottom taken from the always-on chrome above unless a connected
-   * platform covers more.
+   * The union the STUDIO draws, as insets: top, left and right from the table,
+   * and the bottom from the chrome above -- NEVER from a connected platform.
+   *
+   * IT USED TO TAKE THE LARGEST CONNECTED PLATFORM'S BOTTOM, and that is what
+   * Youssef was looking at on 6 Sept 2026: "SOCIAL SAFE BOX IS STILL WRONG IT
+   * SHOULD GO ALL THE WAY DOWN TO ON TOP OF THE CAPTIONS". With Meta connected
+   * the band started at Meta's published 670 -- **more than double** the 312 it
+   * used, a third of the frame -- and swallowed the picture right up to under
+   * the clip's own caption. That is Meta's ASK (room for a multi-line caption
+   * they may or may not draw), not what the interface COVERS, and mixing the
+   * two is exactly the confusion POSTING_BOTTOM was split out to end.
+   *
+   * The other three edges do not have this problem and are left alone, because
+   * the silhouette draws them RELATIVE to the band: the feed tabs hang off
+   * `box.top` and the whole action rail is stacked up from `box.bottom`, so
+   * they follow whatever the union says and the drawing cannot disagree. Only
+   * the foot is in absolute frame coordinates, so only the foot could drift --
+   * and it did.
    */
   function postingInsets(keys) {
     var ins = unionInsets(keys);
-    var extra = 0;
-    var list = keys || [];
-    for (var i = 0; i < list.length; i++) {
-      if (BASE_PLATFORMS.indexOf(list[i]) > -1) continue;
-      var z = ZONES[list[i]];
-      if (z) extra = Math.max(extra, z.bottom);
-    }
-    ins.bottom = Math.max(POSTING_BOTTOM, extra);
+    ins.bottom = POSTING_BOTTOM;
     return ins;
   }
 

@@ -159,26 +159,43 @@ test('the silhouette draws the rail, the foot and the tabs from the same box as 
   assert.ok(attr(svg, 'like', 'y') < attr(svg, 'comment', 'y'), 'like above comment');
   assert.ok(attr(svg, 'comment', 'y') < attr(svg, 'share', 'y'), 'comment above share');
   assert.ok(attr(svg, 'share', 'y') < attr(svg, 'disc', 'cy'), 'share above the disc');
-  // The foot is measured from the frame's bottom and stays inside the band.
-  assert.ok(attr(svg, 'handle', 'y') >= bandBottom, 'the handle is in the covered band');
+  // The foot is measured from the frame's bottom and stays under the band.
   assert.ok(attr(svg, 'nav', 'y') > attr(svg, 'handle', 'y'), 'the tab bar is under the handle');
   // The tabs sit inside the top band.
   assert.ok(attr(svg, 'tabs', 'y') + 46 <= Math.round(floor.top * 1920), 'the tabs are in the top band');
-  /* THE BAND'S TOP EDGE AND THE TOPMOST DRAWN ELEMENT ARE ONE NUMBER.
-     Youssef, 6 Sept 2026: "move the social safe zone down to shere my cursor
-     is" -- his cursor was 172px below the band's edge, at the top of the
-     handle bar, because the shade was cut at TikTok's published 484 while the
-     chrome drawn inside it starts at 312. POSTING_BOTTOM is that 312, so on
-     the floor box the two coincide exactly: a shade that claims more than it
-     shows is what made it read as arbitrary. */
-  assert.equal(attr(svg, 'handle', 'y'), 1920 - load().DCSafeZones.POSTING_BOTTOM,
-    'the handle sits exactly on the band edge');
-  assert.equal(Math.round(floor.bottom * 1920), 1920 - load().DCSafeZones.POSTING_BOTTOM);
+  /* THE BAND'S TOP EDGE AND THE CAPTION BARS ARE ONE NUMBER.
+     Youssef, 6 Sept 2026, twice. First "move the social safe zone down to
+     shere my cursor is" -- the shade was cut at TikTok's published 484 while
+     the chrome drawn inside it started at 312, so 172px of it covered nothing.
+     Then, still wrong: "SOCIAL SAFE BOX IS STILL WRONG IT SHOULD GO ALL THE
+     WAY DOWN TO ON TOP OF THE CAPTIONS". So the edge is the top of the caption
+     bars, and POSTING_BOTTOM is that -- a shade that claims more than it shows
+     is what made it read as arbitrary both times.
 
-  // Widened by Meta: the rail stack climbs with the bottom band.
-  const wide = boxFor(['youtube', 'tiktok', 'instagram']);
-  assert.ok(wide.bottom < floor.bottom, 'fixture: Meta covers more of the foot');
-  assert.equal(attr(draw(wide), 'disc', 'cy'), Math.round(wide.bottom * 1920) - 70);
+     The @username line above them is deliberately OUTSIDE the band: it is one
+     short left-aligned line rather than a block that hides text, and reserving
+     for it cost 54px of frame. That is his call, and it is why the assertion
+     is on the caption rather than on the topmost drawn thing. */
+  assert.equal(attr(svg, 'caption', 'y'), 1920 - load().DCSafeZones.POSTING_BOTTOM,
+    'the caption bars sit exactly on the band edge');
+  assert.equal(Math.round(floor.bottom * 1920), 1920 - load().DCSafeZones.POSTING_BOTTOM);
+  assert.ok(attr(svg, 'handle', 'y') < attr(svg, 'caption', 'y'),
+    'the @username line is above the captions');
+
+  /* META NO LONGER WIDENS THE FOOT, and that is the fix rather than a
+     relaxation. Its published 670 is the room it ASKS you to leave for a
+     caption it may not draw; connecting it used to push the band from 312 to
+     670 -- a third of the frame, up to under the clip's own caption -- while
+     the silhouette went on drawing the same chrome in the same place. The
+     shade and the drawing are one answer now, at every combination. */
+  for (const keys of [['youtube', 'tiktok', 'instagram'],
+                      ['youtube', 'tiktok', 'instagram', 'facebook']]) {
+    assert.equal(boxFor(keys).bottom, floor.bottom,
+      `${keys.join('+')} must not move the foot`);
+  }
+  // The rail still stacks from whatever bottom edge it is given.
+  const shallow = { top: floor.top, right: floor.right, bottom: 0.5, left: floor.left };
+  assert.equal(attr(draw(shallow), 'disc', 'cy'), Math.round(0.5 * 1920) - 70);
   // Ink only: rgba literals, never hex, never a var() an SVG attribute cannot resolve.
   assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(svg), 'no hex in the silhouette');
   assert.ok(!/var\(/.test(svg), 'no var() in an SVG attribute');

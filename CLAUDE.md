@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1547 JS + 687 Python**
+- `npm test` and `npm run check` must pass. Currently **1548 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10543,6 +10543,71 @@ The drawn box matches the table to within the 1px border, at 9:16, 1:1 and
 checker the union rectangle's own edges were read out of the canvas pixels:
 they sit at the union's insets, and nowhere near where a centred box would be.
 All seven probes proven red first.
+
+## The band belongs on the captions, and Meta was doubling it (v3.134.5, 6 Sept 2026)
+
+Youssef, looking at the live app with all four platforms connected: "use full
+length of page for both ends, make the preview larger by like 15% so left side
+is smaller, SOCIAL SAFE BOX IS STILL WRONG IT SHOULD GO ALL THE WAY DOWN TO ON
+TOP OF THE CAPTIONS."
+
+- **The shade was more than DOUBLE what I could see, and only on his account.**
+  `postingInsets` took the bottom from the largest CONNECTED platform whenever
+  that beat the always-on chrome -- so with Meta connected it used **Meta's
+  published 670** (34.9% of the frame) instead of 312, swallowing the picture
+  right up to under the clip's own caption. Nothing on the test account showed
+  it: the base set is TikTok and Shorts, whose bottoms are 484 and 400, both
+  under the floor. **Reproduce a shade complaint against the reporter's own
+  connections, never the default set.**
+- **670 is Meta's ASK, not what its interface COVERS** -- room it wants left for
+  a caption it may or may not draw -- and mixing those two is the confusion
+  `POSTING_BOTTOM` was split out to end one release earlier. The bottom is that
+  constant at every combination now, full stop, and a test walks the four
+  combinations to say so.
+- **The landmark is the CAPTION BARS, not the topmost drawn thing.**
+  `safeSilhouette` draws the foot stack in absolute frame coordinates:
+  @username 1608, captions 1662, sound 1748, tab bar 1832. v3.134.2 put the band
+  on the username (312); his instruction puts it on the captions, so
+  `POSTING_BOTTOM` is **258** and the username line sits just ABOVE the band --
+  deliberately, because it is one short left-aligned line rather than a block
+  that hides text, and reserving for it cost 54px of frame. That is his call,
+  and the test states it rather than letting it read as an oversight.
+- **The other three edges could not drift and are untouched**: the silhouette
+  hangs its feed tabs off `box.top` and stacks the whole action rail up from
+  `box.bottom`, so they follow whatever the union says. Only the foot is in
+  absolute coordinates, so only the foot could disagree with the drawing -- and
+  twice it did.
+- **The shipped-template law is unaffected.** It reads `safeArea([])` -- the
+  union of all four, Meta's 670 -- which is the right bound for where a caption
+  may be ANCHORED. `postingBox` is only what the studio SHADES. Two questions,
+  two numbers, and this release moved one of them.
+
+### The room the columns were not using
+
+- **44/56, from 50/50** ("so left side is smaller"). The settings are rows that
+  do not need width; the preview is the screen.
+- **`padding: 22px 40px` -> `10px 28px`** on the row ("use full length of page
+  for both ends"). On this screen vertical room is not spare -- it is what sizes
+  the preview.
+- **The toolbar's side padding had to move WITH it.** It is set in a different
+  rule, so trimming the body alone silently put the toolbar's controls 12px off
+  the card beneath them. Measured after: both left edges at x=256, both right
+  edges at 1412, and `test/studio-templates.test.mjs` now compares the two
+  paddings so the next trim cannot break it quietly.
+- **`fitFrame` was assuming a 10px column gap the stylesheet had set to 12**, so
+  it sized the frame 6px taller than the room -- invisible, because the column
+  absorbed it, and exactly what a second copy of a number does. Both gaps are
+  READ now.
+- Measured at 1440x900: frame **316x561 -> 345x613**, +9.3% on the side and
+  **+19% of area**; at 1920x1080, 427x759 -> 437x777. One label edge, one
+  control edge, one readout edge, every readout **0px** off its label's centre,
+  no wrapped labels, 0 overflowing, 0 page scroll, both themes. The wider column
+  also put the safe-zone hint on ONE line (35px -> 17px), which is where a third
+  of the new height came from.
+- **15% was asked for and 9.3% is what a 900px-tall screen has**, said rather
+  than fudged: the rest of that column is the play bar, the layer row, the hint
+  and the CTA, which are all real controls. On a 1080-tall screen the frame was
+  already filling its room before this.
 
 ## The shade claimed more than it showed (v3.134.2, 6 Sept 2026)
 

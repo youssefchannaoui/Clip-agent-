@@ -2123,10 +2123,19 @@ test('the caption cannot be dragged outside the safe box', () => {
   const high = at(0.01);
   assert.equal(high.captionPosition, 'top');
   assert.equal(high.captionMarginV, Math.round(1920 * box.top), 'clamped to the safe top');
-  // The bottom clamp is the one that matters and the one that was wrong: the
-  // old box called the lowest 14% safe while Meta covers 35% of the frame.
-  assert.ok(low.captionMarginV > Math.round(1920 * 0.14),
-    'a caption may no longer sit where the platform draws its own caption');
+  /* The bottom clamp is the one that matters and it has been wrong twice.
+     It once called the lowest 14% safe; then it was cut at TikTok's published
+     484 while the chrome drawn inside it started higher; and with Meta
+     connected it reached 670, a third of the frame. It is POSTING_BOTTOM now,
+     which safe-chrome.test.mjs pins to the top of the platform's own caption
+     bars -- so a caption dropped off the bottom of the frame comes to rest
+     exactly on top of them.
+
+     Asserted against the constant rather than a number typed here: the two
+     tests then say one thing between them, and a figure written in this file
+     could go stale the way the 14% did. */
+  assert.equal(low.captionMarginV, globalThis.DCSafeZones.POSTING_BOTTOM,
+    'a caption dropped low rests on top of the platform\'s own captions');
 });
 
 test('each snap point has a name the preview can show', () => {

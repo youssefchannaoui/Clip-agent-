@@ -432,28 +432,59 @@ test('Brand is the first group in the configurator', () => {
   assert.ok(brand < first, 'Brand is drawn before every template group');
 });
 
-test('the two columns are an even split', () => {
-  /* Youssef, same message: "make the left side config smaller and make it
-     more spacious for the right side, 50% 50% ratio to look cleaner". The
-     settings column was minmax(360px, 1fr) against a preview capped at 420,
-     so every extra pixel of a wide screen went to the half that needed it
-     least -- at 1440 that was 648 against 420.
+test('the preview column is the larger of the two', () => {
+  /* Two instructions, an hour apart on 6 Sept 2026. First "make the left side
+     config smaller and make it more spacious for the right side, 50% 50% ratio
+     to look cleaner" -- the settings column had been taking every spare pixel
+     while the preview was capped. Then, looking at that: "make the preview
+     larger by like 15% so left side is smaller".
 
-     minmax(0, 1fr) twice, never `1fr 1fr`: a grid track's automatic minimum
-     is its content, and the frame plus the hint under it would push the
-     preview column past its half and the row past the screen. */
+     So the RELATIONSHIP is pinned, not the numbers: the preview column is
+     strictly the larger, and the settings column is not starved either. Tuning
+     the ratio is his call and must not fail the suite; inverting it is the
+     regression this catches.
+
+     minmax(0, Nfr) twice, never a bare `Nfr`: a grid track's automatic minimum
+     is its content, and the frame plus the hint under it would push the preview
+     column past its share and the row past the screen. */
   const css = src('src/public/studio-templates.css');
   const rule = /#dcTemplates \.dct-body \{([\s\S]*?)\}/.exec(css);
   assert.ok(rule, 'the body grid is still declared here');
   const cols = /grid-template-columns:\s*([^;]+);/.exec(rule[1]);
   assert.ok(cols, 'the body still sets its columns');
-  // Split on the gap BETWEEN tracks -- `minmax(0, 1fr)` has a space of its
+  // Split on the gap BETWEEN tracks -- `minmax(0, 44fr)` has a space of its
   // own inside it, so a naive split on whitespace cuts a track in half.
   const tracks = cols[1].trim().match(/minmax\([^)]*\)|\S+/g) || [];
   assert.equal(tracks.length, 2, `two tracks, got ${tracks.length}: ${cols[1].trim()}`);
-  assert.equal(tracks[0], tracks[1], 'both tracks take the same share');
-  assert.match(tracks[0], /^minmax\(\s*0\s*,\s*1fr\s*\)$/,
-    'a 1fr track floors at its content, which would push the preview past its half');
+  const share = t => {
+    const m = /^minmax\(\s*0\s*,\s*([\d.]+)fr\s*\)$/.exec(t);
+    assert.ok(m, `each track floors at 0 and takes a share: ${t}`);
+    return Number(m[1]);
+  };
+  const [left, right] = tracks.map(share);
+  assert.ok(right > left, `the preview column takes the larger share (${left} vs ${right})`);
+  assert.ok(left / (left + right) >= 0.35,
+    'the settings column still has to hold a label, a control and a readout');
+});
+
+test('the toolbar and the settings card share a left edge', () => {
+  /* The content's left edge against the header above it is one of the
+     alignments this repo measures, and the two paddings are set in different
+     rules -- so trimming one for vertical room silently moves the toolbar's
+     controls off the card below them. Measured in a browser after this change:
+     both at x=256, and both right edges at 1412. */
+  const css = src('src/public/studio-templates.css');
+  const side = name => {
+    const rule = new RegExp(`#dcTemplates \\.${name} \\{([\\s\\S]*?)\\}`).exec(css);
+    assert.ok(rule, `${name} is still declared here`);
+    const pad = /padding:\s*([^;]+);/.exec(rule[1]);
+    assert.ok(pad, `${name} still sets its padding`);
+    const parts = pad[1].trim().split(/\s+/);
+    // `a b` is vertical then horizontal; `a b c d` is top right bottom left.
+    return parts.length === 2 ? parts[1] : parts[1];
+  };
+  assert.equal(side('dct-bar'), side('dct-body'),
+    'the toolbar and the row must be inset from the side by the same amount');
 });
 
 test('the preview fills its column, bounded only by the column\'s own width', () => {

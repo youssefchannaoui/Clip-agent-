@@ -358,6 +358,11 @@
     if (!right || !box) return;
     var room = right.clientHeight;
     if (!room) return;
+    // BOTH GAPS ARE READ, NEVER TYPED. They were hardcoded at 10 while the
+    // stylesheet said 12, so the frame was sized 6px taller than the room it
+    // had -- invisible because the column simply absorbed it, and exactly the
+    // kind of drift a second copy of a number produces.
+    var colGap = parseFloat(global.getComputedStyle(right).rowGap) || 0;
     var used = 0;
     for (var i = 0; i < right.children.length; i++) {
       var kid = right.children[i];
@@ -366,12 +371,12 @@
         for (var j = 0; j < kid.children.length; j++) {
           if (!kid.children[j].contains(box)) used += kid.children[j].offsetHeight;
         }
-        used += 10;   // the stage's own gap
+        used += parseFloat(global.getComputedStyle(kid).rowGap) || 0;
         continue;
       }
       used += kid.offsetHeight;
     }
-    var gaps = 10 * Math.max(0, right.children.length - 1);
+    var gaps = colGap * Math.max(0, right.children.length - 1);
     // The ratio comes from the template's own aspect (w/h), read off the style
     // the painter set rather than from the frame's measured box -- measuring
     // the box to size the box is the feedback this whole function avoids.
