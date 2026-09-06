@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1517 JS + 687 Python**
+- `npm test` and `npm run check` must pass. Currently **1541 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10543,3 +10543,163 @@ The drawn box matches the table to within the 1px border, at 9:16, 1:1 and
 checker the union rectangle's own edges were read out of the canvas pixels:
 they sit at the union's insets, and nowhere near where a centred box would be.
 All seven probes proven red first.
+
+## Templates was rebuilt as its own screen (v3.134.0, 6 Sept 2026)
+
+Youssef: "I need the template to be REDONE same kinda thing a lot cleaner and
+just remake the whole layout and how it works NO ISSUES NO PRONLEMS PERFECTLY
+LOOKING SIMPLE NICE WITH MANY OPTIONS TO CHOOSE FROM AND SABING AND ETC
+WORKING" -- then "clean up sliders and options add drop boxes and etc make it
+look clean yet perfect with many configurations and sort out a new system if
+needed in terms of saving templates".
+
+### What was wrong, counted before anything was designed
+
+The screen offered **nine rows**, and every one of them opened a MODAL LIST:
+tap Caption style, a sheet covers the screen, pick one, the sheet closes.
+Nothing could be compared against anything, nothing showed its own value as a
+position, and the ~60 style fields the renderer actually reads were reachable
+through nine of them. It now draws **39-50 control rows over nine groups**,
+every field a select, a slider, a colour or a switch, in place.
+
+### It is a SECOND TEMPLATE over the same bindings
+
+`src/public/studio-templates.js` is the device `studio-mobile.js` established:
+a hand-written module authors a template in the runtime's own AST and renders
+it through the SAME `StudioRuntime` from the SAME `StudioAdapter.bindings()`
+object. No copied logic, no new state, no new route -- every write goes through
+the existing `saveStyle` funnel, so undo/redo, the debounce and the draft all
+work exactly as they did.
+
+- **The generated screen is HIDDEN IN PLACE, never removed.** Taking a node out
+  of `<main>` shortens the live child list against the rendered one and the
+  patcher pairs everything after it one across (the v3.124.5 lesson). It gets
+  `data-host-style` + `display:none`.
+- **The shell carries `data-tour="tpl-save"` itself**, so the walkthrough
+  spotlights a control a person can see -- and that is exactly why
+  `generatedScreen()` walks `main.children` and SKIPS its own node. A bare
+  `querySelector` for the anchor returns `#dcTemplates` (document order puts it
+  first), so the first cut walked up from it and hid the screen it had just
+  drawn.
+- **It never mounts where the phone draws its own** (`StudioMobile.query`).
+
+### The bug that made picking a caption mode unmount the whole screen
+
+The runtime stores handler indexes in an attribute and binds ONE delegated
+listener per event type on its mount root. A second runtime mounted INSIDE the
+studio writes the same `data-dc-h`, so a click on my `<select>` bubbled to the
+OUTER root, which read that attribute against its OWN handler table and called
+something unrelated -- `unmount()`. `StudioRuntime.mount(root, template, {attr})`
+takes the attribute now, and this screen mounts under `data-dct-h`. **Any
+future runtime mounted inside another must do the same.**
+
+### Alignment is by geometry, and it was measured
+
+One `--dct-line` (22px) is the height of the label, the control and the
+readout, on a three-column grid (`--dct-label` 160px / control / `--dct-value`
+64px) with `align-items: start`, so their centres coincide by construction
+rather than by a nudge. A select spans the last two columns so its right edge
+lands on the readouts'. A note is its own full-width grid row -- inside the
+label cell it made that cell two lines and the readout centred on the taller
+row (measured 15px out).
+
+Measured at **1100 / 1280 / 1366 / 1440 / 1920 in both themes**: one label left
+edge, one control left edge, one readout right edge, **0px** between every
+readout's centre and its label's, no wrapped labels, 0 elements overflowing, 0
+page scroll, **0 DOM operations on an unchanged repaint**, 0 page errors.
+
+### Three daylight faults, each invisible in night
+
+1. **Every `<select>` was a dark slab with a centred triangle.**
+   `build-light-theme` re-emits only the declarations whose value holds a hex
+   -- so a `background:` SHORTHAND came back on its own in daylight, RESETTING
+   `background-position`/`-size`/`-repeat` to their initial values, and the two
+   caret gradients drew at `0 0 / auto / repeat`. The ground is
+   `background-color` now (a longhand cannot reset a sibling longhand) and the
+   caret's colour is a bare `var()` with no fallback, so the generator finds no
+   hex in the gradients and the token flips the caret itself.
+2. **Save and apply rendered white on paper.** The base `.dct-btn` rule carried
+   hex fallbacks, so daylight re-emitted it as `body.dc-light #dcTemplates
+   .dct-btn` -- specificity (1,2,1), which beats `.dct-btn.dct-primary` at
+   (1,2,0) whatever the link order. **The escape hatch is the one v3.127.0
+   established: a rule written entirely in var() names has no hex to remap, so
+   the generator skips it and the tokens flip it themselves.**
+3. **The sliders had never drawn a track in NIGHT, and daylight hid it.**
+   index.html's inline block styles every studio slider at `#studio
+   input[type=range]::-webkit-slider-runnable-track` -- (1,1,1) -- and sets it
+   TRANSPARENT. `#dcTemplates .dct-range::…` is (1,1,0) and lost to it; the
+   daylight copy at (1,2,1) happened to win, which is why the same screen
+   looked right on paper and had bare floating thumbs on black. Every pseudo
+   carries `[type="range"]` now, taking it to (1,2,0).
+
+The track FILLS from the left: a native range has no pseudo-element for the
+part behind the thumb, so it is one gradient with a hard stop at `--dct-pct`,
+written by the adapter as an inline style beside the value it comes from.
+
+### The host brand panel was two switch languages in one card
+
+`paintWatermark` is shared machinery with its own paywall and its own account
+source, so it is not rewritten -- but it draws native checkboxes with INLINE
+styles, which no stylesheet outranks. Inside this screen's Brand group its two
+switches sat at the card's RIGHT edge (measured 908px) beside four that sat at
+the control column (455), at 17px square, in a different shape. `!important` on
+the layout, the size and the padding is what reaches an inline style (the
+standing lesson), and `justify-content: space-between` is inline too -- on a
+GRID it spreads the COLUMNS, so it had to be overridden as well or the switch
+stayed pinned right even once the grid applied. Measured after: **one left edge
+for every label (285) and every control (455) in the whole card.**
+
+### Saved looks, and putting a template back
+
+The catalogue is deliberately one template per content type -- `createTemplate`
+and `duplicateTemplate` throw, because copies once turned two templates into
+eight. So a saved LOOK is a snapshot of the style fields kept on the account
+(`state.userSettings[uid].stylePresets`), not a new template.
+
+- **Applying one loads it as the DRAFT** -- "Unsaved changes" -- so the one save
+  path persists and re-renders exactly as a hand edit does. Nothing new can
+  reach a render by a second road.
+- **A look carries neither brand switch.** `saveStylePreset` strips
+  `BRAND_FIELDS` after sanitising: those belong to the ACCOUNT, and a look that
+  carried them would turn the watermark off for every template the moment it
+  was applied -- straight around the paywall that guards that switch. It also
+  carries no `width`/`height` (the template's own frame) and no per-clip
+  framing.
+- **A name that already exists REPLACES its row**, because two rows with one
+  label is two things nobody can tell apart. The cap is 20 and a replacement is
+  still allowed at the cap, or a full list could not be edited.
+- **Restore DROPS the account's overrides** rather than writing a copy of
+  today's defaults, which would freeze the template at this deploy.
+- **`tplDirty` had never been cleared on a successful save**, so the screen read
+  "Unsaved changes" for ever once anything was touched.
+
+### Traps paid for, and one that was mine twice
+
+- **A row class must not collide with an element class.** `dct-row dct-select`
+  matched the `.dct-select` rule; the row classes are `dct-is-<kind>`.
+- **The frame is measured from the ROW and the column's other children**, never
+  from the frame's own box -- reading its height after fixing it feeds itself
+  (the v3.75.4 lesson). `.dct-right` needs `scrollbar-gutter: stable` or the
+  scrollbar narrows the column, the hint rewraps, the frame shrinks and the
+  scrollbar goes.
+- **`overflow-anchor: none` on the root.** Chrome's scroll anchoring ran the
+  settings column to the end after every change (v3.118.1, from a new door).
+- **A `<select>`'s options are built from a list of STRINGS** -- `tplList` is
+  not a list of objects, and `o.id`/`o.name` rendered eleven empty dropdowns.
+- **Two red probes came back green** and both were the test's own fault: the
+  AI-switch probe patched `tplAIRows` (the OLD screen's rows) while the test
+  drove `tplSwitch`, and the anchor probe matched the finder's own
+  `kid.querySelector`. Both are pinned properly now -- and the old screen's
+  pair, which really did share one key, has its own assertion.
+- **`state.json` lags a request by design** (the save is atomic and coalesced),
+  so a test that reads the FILE to check an override was dropped measures the
+  debounce. Read the live `state`.
+
+`test/studio-templates.test.mjs` (16) and `test/style-presets.test.mjs` (8, over
+HTTP with one real account -- the sign-up throttle is real). **All seventeen
+red probes proven**, against the missing fill, the visibility rules, the shared
+handler attribute, the shared toggle key, a brand switch in a look, the
+unqualified slider pseudos, a hex in the base button, the select's shorthand,
+the brand grid's `!important`, the finder's own-node skip, the cap, the
+same-name replacement, the empty-look refusal, the restore, and the state
+payload.

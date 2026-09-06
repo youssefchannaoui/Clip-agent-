@@ -86,7 +86,10 @@ test('the picker can only ever offer a value the sanitiser accepts', () => {
     assert.equal(templates.sanitiseTemplate({ filterPreset: value }).filterPreset, value,
       'the picker offers the ' + value + ' look');
   }
-  assert.equal(grab('filterPreset').length, 12, 'twelve looks are offered');
+  // Twelve looks plus the Custom grade (v3.134.0): the four grade sliders --
+  // brightness, contrast, saturation, gamma -- reach the export ONLY under it
+  // (filter_values in clip_worker.py), so without it they were dead controls.
+  assert.equal(grab('filterPreset').length, 13, 'twelve looks and the custom grade are offered');
 });
 
 test('every look is named in words, never as its own key', () => {

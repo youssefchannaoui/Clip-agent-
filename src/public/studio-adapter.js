@@ -1335,15 +1335,23 @@
     fitMode: ['contain', 'blur', 'crop'],
     smartFramingBias: ['auto', 'left', 'center', 'right'],
     filterPreset: ['natural', 'crisp', 'vivid', 'warm', 'cinematic', 'teal',
-      'faded', 'night', 'monochrome', 'noir', 'silver', 'sepia'],
+      'faded', 'night', 'monochrome', 'noir', 'silver', 'sepia', 'custom'],
     overlayEffect: ['none', 'rain', 'snow', 'dust', 'bokeh'],
-    captionMode: ['phrase', 'word', 'dynamic-stack', 'stack-build', 'cards'],
+    // The SCHEMA's list (src/templates.js), in full: quran and fill were left
+    // off for a release, so the Quran template's own mode was one the picker
+    // could show but never choose back.
+    captionMode: ['phrase', 'word', 'dynamic-stack', 'quran', 'fill', 'stack-build', 'cards'],
     captionPosition: ['top', 'middle', 'bottom'],
     captionHorizontal: ['left', 'center', 'right'],
     watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],
   };
   function titleCase(v) {
     return String(v || '').replace(/-/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); });
+  }
+  function modeLabelOf(mode) {
+    var names = { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines',
+      'stack-build': 'Building stack', cards: 'Phrase cards', fill: 'Fill in', quran: 'Quran ayah' };
+    return names[mode] || titleCase(mode);
   }
   // The lines a dragged overlay snaps to, drawn as dashes across the frame.
   // One element carrying five background layers, because the lines are not
@@ -3586,6 +3594,238 @@
       });
     }
     function defObj(k, v) { var o = {}; o[k] = v; return o; }
+
+    /*
+     * THE REBUILT TEMPLATES SCREEN'S CONTROLS (studio-templates.js draws them).
+     *
+     * Youssef, 6 Sept 2026: "clean up sliders and options add drop boxes and
+     * etc make it look clean yet perfect with many configurations". Every
+     * option is a <select> over the schema's own enum, every number a slider
+     * with a readout in the unit a person reads, every yes/no a switch. The
+     * SPECS live here rather than in the screen so the phone can draw the
+     * same list later and so a test can read the fields, the ranges and the
+     * visibility rules as executed output.
+     *
+     * Every write goes through saveStyle, the one funnel the whole editor
+     * already uses -- undo, the draft, the debounce and the per-clip routing
+     * come with it. `scale` maps slider units to the stored value (line
+     * spacing is stored 0.88 and dragged as 88), so what the slider shows is
+     * what the render reads.
+     *
+     * A control is drawn only when it can reach the export (invariant 9):
+     * the stack fields under a stacked mode, the grade sliders under the
+     * Custom look (the renderer applies brightness/contrast/saturation/gamma
+     * ONLY then -- filter_values in clip_worker.py), the blur strength under
+     * the blurred layout, the ayah fields on the Quran mode.
+     */
+    function tplSelect(field, label, opts, labels, note) {
+      var current = tpl[field];
+      var options = opts.map(function (o) {
+        return { value: String(o), label: (labels && labels[o]) || titleCase(o), on: String(o) === String(current) };
+      });
+      var chosen = options.filter(function (o) { return o.on; })[0];
+      return {
+        kind: 'select', isSelect: true, field: field, label: label, note: note || '',
+        value: chosen ? chosen.value : String(current == null ? '' : current),
+        valueLabel: chosen ? chosen.label : titleCase(current),
+        opts: options,
+        set: function (e) {
+          var raw = String(e && e.target ? e.target.value : '');
+          var ok = opts.some(function (o) { return String(o) === raw; });
+          if (!ok) return;
+          // The schema stores numbers as numbers; a select speaks strings.
+          var typed = typeof opts[0] === 'number' ? Number(raw) : raw;
+          saveStyle(defObj(field, typed));
+        },
+      };
+    }
+    function tplRange(field, label, min, max, step, o) {
+      o = o || {};
+      var scale = o.scale || 1;
+      var stored = Number(tpl[field]);
+      if (!isFinite(stored)) stored = Number(o.fallback) || 0;
+      var shown = Math.round(stored * scale);
+      shown = Math.max(min, Math.min(max, shown));
+      var fmt = o.fmt || function (v) { return String(v); };
+      /*
+       * The filled part of the track is drawn from the value, not from a
+       * second element. A native range gives no pseudo-element for "left of
+       * the thumb", so the track is a gradient with its stop at --dct-pct;
+       * this is the one number the CSS needs and it belongs here, where the
+       * bounds already are, rather than being re-derived in the browser.
+       */
+      var pct = max > min ? Math.round(((shown - min) / (max - min)) * 1000) / 10 : 0;
+      return {
+        kind: 'range', isRange: true, field: field, label: label, note: o.note || '',
+        min: String(min), max: String(max), step: String(step || 1), value: String(shown), readout: fmt(shown),
+        fillStyle: '--dct-pct: ' + pct + '%;',
+        set: function (e) {
+          var v = Number(e && e.target ? e.target.value : NaN);
+          if (!isFinite(v)) return;
+          v = Math.max(min, Math.min(max, v));
+          saveStyle(defObj(field, scale === 1 ? v : v / scale));
+        },
+      };
+    }
+    function tplColour(field, label, note) {
+      var raw = String(tpl[field] || '');
+      var hex = (/#[0-9a-fA-F]{6}/.exec(raw) || ['#FFFFFF'])[0].toUpperCase();
+      return {
+        kind: 'color', isColor: true, field: field, label: label, note: note || '',
+        value: hex, readout: hex,
+        swatchStyle: 'background: ' + hex + ';',
+        set: function (e) {
+          var v = String(e && e.target ? e.target.value : '').toUpperCase();
+          if (!/^#[0-9A-F]{6}$/.test(v)) return;
+          saveStyle(defObj(field, v));
+        },
+      };
+    }
+    function tplSwitch(field, label, note) {
+      var on = Boolean(tpl[field]);
+      return {
+        kind: 'switch', isSwitch: true, field: field, label: label, note: note || '', on: on,
+        onCls: on ? 'is-on' : '',
+        readout: on ? 'On' : 'Off',
+        toggle: function (e) { stop(e); saveStyle(defObj(field, !on)); },
+      };
+    }
+    var fmtPx = function (v) { return v + ' px'; };
+    var fmtPct = function (v) { return v + '%'; };
+    var fmtMs = function (v) { return v ? v + ' ms' : 'Off'; };
+    var fmtHundredths = function (unit) { return function (v) { return (v / 100).toFixed(2) + unit; }; };
+    function tplControlsFor() {
+      var mode = String(tpl.captionMode || '');
+      var isQuran = mode === 'quran';
+      var isStack = mode === 'dynamic-stack' || mode === 'stack-build';
+      var hasLiveWord = ['word', 'dynamic-stack', 'stack-build', 'fill'].indexOf(mode) > -1;
+      var lookLabels = {
+        natural: 'Natural', crisp: 'Crisp', vivid: 'Vivid', warm: 'Warm', cinematic: 'Cinematic',
+        teal: 'Teal & orange', faded: 'Faded film', night: 'Night', monochrome: 'Black & white',
+        noir: 'Noir \u00b7 hard B&W', silver: 'Silver \u00b7 soft B&W', sepia: 'Sepia', custom: 'Custom grade',
+      };
+      var modeLabels = {
+        phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines',
+        'stack-build': 'Building stack', cards: 'Phrase cards', fill: 'Fill in', quran: 'Quran ayah',
+      };
+      var fontNames = CAPTION_FONTS.map(function (f) { return f.name; });
+      var fontLabels = {};
+      CAPTION_FONTS.forEach(function (f) { fontLabels[f.name] = f.label; });
+      var arabicNames = ['Amiri', 'Scheherazade New', 'KFGQPC HAFS Uthmanic Script'];
+      var effect = String(tpl.overlayEffect || 'none');
+      function only(cond, control) { return cond ? control : null; }
+      function present(list) { return list.filter(Boolean); }
+      return {
+        layout: present([
+          tplSelect('fitMode', 'Clip layout', ENUMS.fitMode, { contain: 'Fit with blurred bars', blur: 'Blurred background', crop: 'Fill, face-tracked' }),
+          only(tpl.fitMode === 'blur', tplRange('blurStrength', 'Background blur', 0, 60, 1)),
+          only(tpl.fitMode === 'contain', tplColour('frameBackground', 'Bars colour')),
+          tplSwitch('smartFramingEnabled', 'Follow the speaker', 'the crop moves with the face'),
+          tplSelect('smartFramingBias', 'Framing bias', ENUMS.smartFramingBias, { auto: 'Automatic', left: 'Left', center: 'Centre', right: 'Right' }),
+          tplRange('smartFramingZoom', 'Crop zoom', 75, 250, 5, { scale: 100, fmt: fmtHundredths('\u00d7'), fallback: 1 }),
+          tplRange('smartFramingPadding', 'Air around the speaker', 0, 50, 1, { scale: 100, fmt: fmtPct, fallback: 0.18 }),
+          tplRange('framingSubjectBias', 'Push the speaker', -50, 50, 1, { fmt: function (v) { return v === 0 ? 'Centred' : (v > 0 ? 'Right ' : 'Left ') + Math.abs(v) + '%'; } }),
+        ]),
+        captions: present([
+          tplSelect('captionMode', 'Caption style', ENUMS.captionMode, modeLabels),
+          tplSelect('captionPosition', 'Position', ENUMS.captionPosition, { top: 'Top', middle: 'Middle', bottom: 'Bottom' }),
+          tplSelect('captionHorizontal', 'Alignment', ENUMS.captionHorizontal, { left: 'Left', center: 'Centre', right: 'Right' }),
+          tplRange('captionMarginV', 'Distance from the edge', 20, 960, 2, { fmt: fmtPx, fallback: 180 }),
+          tplRange('captionMarginH', 'Side margin', 20, 700, 2, { fmt: fmtPx, fallback: 60 }),
+          only(!isStack && !isQuran, tplRange('captionMaxWords', 'Words per line', 1, 12, 1, { fallback: 4 })),
+          only(isStack, tplRange('captionStackMaxWords', 'Words per line', 1, 6, 1, { fallback: 3 })),
+          only(isStack, tplRange('captionStackLines', 'Lines in the stack', 2, 6, 1, { fallback: 3 })),
+          only(isStack, tplRange('captionSizeVariation', 'Size variety', 0, 100, 1, { fmt: fmtPct })),
+          only(isStack, tplRange('captionBlockWidth', 'Block width', 30, 100, 1, { fmt: fmtPct, fallback: 80 })),
+          only(mode === 'dynamic-stack', tplRange('captionStackProbability', 'How often it stacks', 0, 100, 1, { scale: 100, fmt: fmtPct, fallback: 0.5 })),
+          only(isStack, tplRange('captionClearPause', 'Pause before clearing', 15, 200, 5, { scale: 100, fmt: fmtHundredths(' s'), fallback: 0.5 })),
+          tplRange('captionTimingOffsetMs', 'Timing nudge', -2000, 2000, 50, { fmt: function (v) { return v === 0 ? 'On time' : (v > 0 ? 'Later ' : 'Earlier ') + Math.abs(v) + ' ms'; } }),
+          only(isQuran, tplSelect('captionArabicFont', 'Arabic face', arabicNames, fontLabels)),
+          only(isQuran, tplSwitch('captionTranslation', 'Translation line', 'the ayah\u2019s meaning under it')),
+          only(isQuran && tpl.captionTranslation !== false, tplRange('captionTranslationSize', 'Translation size', 20, 90, 1, { fmt: fmtPx, fallback: 40 })),
+        ]),
+        text: present([
+          tplSelect('captionFont', 'Font', fontNames, fontLabels),
+          tplRange('captionFontSize', 'Size', 24, 240, 1, { fmt: fmtPx, fallback: 96 }),
+          tplSwitch('captionUppercase', 'Uppercase'),
+          tplColour('captionPrimary', 'Colour'),
+          tplRange('captionLetterSpacing', 'Letter spacing', -20, 40, 1, { fmt: function (v) { return v ? v + ' px' : 'Normal'; } }),
+          tplRange('captionLineHeight', 'Line spacing', 65, 140, 1, { scale: 100, fmt: fmtPct, fallback: 0.88 }),
+        ]),
+        outline: present([
+          tplColour('captionOutline', 'Outline colour'),
+          tplRange('captionOutlineWidth', 'Outline thickness', 0, 14, 1, { fmt: function (v) { return v ? v + ' px' : 'None'; } }),
+          tplRange('captionShadow', 'Drop shadow', 0, 8, 1, { fmt: function (v) { return v ? String(v) : 'None'; } }),
+          tplColour('captionBackground', 'Box colour'),
+          tplRange('captionBackgroundOpacity', 'Box opacity', 0, 100, 1, { fmt: function (v) { return v ? v + '%' : 'Off'; } }),
+        ]),
+        highlight: hasLiveWord ? present([
+          tplColour('captionHighlight', 'Colour'),
+          tplSelect('captionHighlightFont', 'Font', fontNames, fontLabels),
+          tplSwitch('captionHighlightItalic', 'Italic'),
+          tplRange('captionHighlightGlow', 'Glow', 0, 30, 1, { fmt: function (v) { return v ? String(v) : 'None'; } }),
+        ]) : [],
+        animation: (!isQuran && mode !== 'cards') ? present([
+          tplRange('captionPopScale', 'Word pop', 60, 140, 1, { fallback: 100, fmt: function (v) { return v === 100 ? 'Off' : v > 100 ? '+' + (v - 100) + '% pop' : (100 - v) + '% grow-in'; } }),
+          tplRange('captionPopMs', 'Pop speed', 0, 400, 10, { fmt: fmtMs }),
+          tplRange('captionFadeMs', 'Fade', 0, 600, 10, { fmt: function (v) { return v ? v + ' ms' : 'None'; } }),
+        ]) : [],
+        look: present([
+          tplSelect('filterPreset', 'Look', ENUMS.filterPreset, lookLabels),
+          only(tpl.filterPreset === 'custom', tplRange('brightness', 'Brightness', -100, 100, 1, { scale: 100, fmt: function (v) { return v === 0 ? 'Neutral' : (v > 0 ? '+' : '') + v; } })),
+          only(tpl.filterPreset === 'custom', tplRange('contrast', 'Contrast', 50, 200, 1, { scale: 100, fmt: fmtHundredths('\u00d7'), fallback: 1 })),
+          only(tpl.filterPreset === 'custom', tplRange('saturation', 'Saturation', 0, 300, 1, { scale: 100, fmt: fmtHundredths('\u00d7'), fallback: 1 })),
+          only(tpl.filterPreset === 'custom', tplRange('gamma', 'Gamma', 50, 200, 1, { scale: 100, fmt: fmtHundredths(''), fallback: 1 })),
+          tplRange('sharpen', 'Sharpen', 0, 200, 5, { scale: 100, fmt: fmtHundredths(''), fallback: 0.45 }),
+          tplRange('vignette', 'Vignette', 0, 100, 1, { scale: 100, fmt: fmtPct }),
+          tplRange('grain', 'Grain', 0, 100, 1, { fmt: fmtPct }),
+          tplRange('warm', 'Warmth', -100, 100, 1, { fmt: function (v) { return v === 0 ? 'Neutral' : (v > 0 ? 'Warm +' : 'Cool ') + Math.abs(v); } }),
+          tplSelect('overlayEffect', 'Atmosphere', ENUMS.overlayEffect, { none: 'None', rain: 'Rain', snow: 'Snow', dust: 'Dust motes', bokeh: 'Bokeh lights' }),
+          only(effect !== 'none', tplRange('overlayIntensity', 'Atmosphere strength', 10, 100, 5, { fmt: fmtPct, fallback: 55 })),
+          tplRange('overlayDarken', 'Darken video', 0, 80, 5, { fmt: function (v) { return v ? v + '%' : 'Off'; } }),
+        ]),
+        brand: present([
+          tplSelect('watermarkPosition', 'Watermark position', ENUMS.watermarkPosition),
+          tplColour('watermarkColor', 'Watermark colour'),
+          tplRange('watermarkFontSize', 'Watermark size', 12, 90, 1, { fmt: fmtPx, fallback: 28 }),
+          tplRange('watermarkMarginV', 'Watermark inset', 10, 500, 2, { fmt: fmtPx, fallback: 60 }),
+          tplRange('watermarkMarginH', 'Watermark side inset', 10, 500, 2, { fmt: fmtPx, fallback: 60 }),
+          tplSwitch('brandLineEnabled', 'Brand line', 'a rule along the bottom of the frame'),
+          only(Boolean(tpl.brandLineEnabled), tplColour('brandLineColor', 'Brand line colour')),
+          only(Boolean(tpl.brandLineEnabled), tplRange('brandLineHeight', 'Brand line height', 2, 30, 1, { fmt: fmtPx, fallback: 8 })),
+        ]),
+        processing: present([
+          tplSwitch('voiceEnhance', 'Voice enhancement', 'levels and clarity on speech'),
+          tplSwitch('captionBehindSubject', 'Captions behind the speaker', 'the speaker is cut out and laid over the text'),
+        ]),
+      };
+    }
+    // Every field the screen can write: the whole spec, whatever is shown.
+    // What a saved look carries (the brand switches are the ACCOUNT's, and
+    // width/height are the template's, so neither travels with a preset).
+    var PRESET_FIELDS = [
+      'fitMode', 'blurStrength', 'frameBackground', 'smartFramingEnabled', 'smartFramingBias', 'smartFramingZoom',
+      'smartFramingPadding', 'framingSubjectBias', 'captionMode', 'captionPosition', 'captionHorizontal',
+      'captionMarginV', 'captionMarginH', 'captionMaxWords', 'captionStackMaxWords', 'captionStackLines',
+      'captionSizeVariation', 'captionBlockWidth', 'captionStackProbability', 'captionClearPause',
+      'captionTimingOffsetMs', 'captionArabicFont', 'captionTranslation', 'captionTranslationSize',
+      'captionFont', 'captionFontSize', 'captionUppercase', 'captionPrimary', 'captionLetterSpacing',
+      'captionLineHeight', 'captionOutline', 'captionOutlineWidth', 'captionShadow', 'captionBackground',
+      'captionBackgroundOpacity', 'captionHighlight', 'captionHighlightFont', 'captionHighlightItalic',
+      'captionHighlightGlow', 'captionPopScale', 'captionPopMs', 'captionFadeMs', 'filterPreset',
+      'brightness', 'contrast', 'saturation', 'gamma', 'sharpen', 'vignette', 'grain', 'warm',
+      'overlayEffect', 'overlayIntensity', 'overlayDarken', 'watermarkPosition', 'watermarkColor',
+      'watermarkFontSize', 'watermarkMarginV', 'watermarkMarginH', 'brandLineEnabled', 'brandLineColor',
+      'brandLineHeight', 'voiceEnhance', 'captionBehindSubject',
+    ];
+    function presetFields() {
+      var out = {};
+      for (var i = 0; i < PRESET_FIELDS.length; i++) {
+        var k = PRESET_FIELDS[i];
+        if (tpl[k] !== undefined && tpl[k] !== null) out[k] = tpl[k];
+      }
+      return out;
+    }
 
     // Moves one step from one history stack to the other and applies it. Undo
     // and redo are the same operation with the stacks swapped, so `which` picks
@@ -7512,13 +7752,13 @@
       tplStyleRows: tplRow([
         { icon: 'ph ph-layout', label: 'Clip layout', field: 'fitMode', opts: ENUMS.fitMode, labels: { contain: 'Fit with blurred bars', blur: 'Blurred background', crop: 'Fill, face-tracked' } },
         { icon: 'ph ph-crosshair', label: 'Framing bias', field: 'smartFramingBias', opts: ENUMS.smartFramingBias },
-        { icon: 'ph ph-closed-captioning', label: 'Caption', field: 'captionMode', opts: ENUMS.captionMode, labels: { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines', 'stack-build': 'Building stack', cards: 'Phrase cards' } },
+        { icon: 'ph ph-closed-captioning', label: 'Caption', field: 'captionMode', opts: ENUMS.captionMode, labels: { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines', 'stack-build': 'Building stack', cards: 'Phrase cards', fill: 'Fill in', quran: 'Quran ayah' } },
         { icon: 'ph ph-palette', label: 'Look', field: 'filterPreset', opts: ENUMS.filterPreset,
           labels: {
             natural: 'Natural', crisp: 'Crisp', vivid: 'Vivid', warm: 'Warm',
             cinematic: 'Cinematic', teal: 'Teal & orange', faded: 'Faded film',
             night: 'Night', monochrome: 'Black & white', noir: 'Noir · hard B&W',
-            silver: 'Silver · soft B&W', sepia: 'Sepia',
+            silver: 'Silver · soft B&W', sepia: 'Sepia', custom: 'Custom grade',
           } },
         // "Dark with rain drops, but still the video." The scrim and the
         // weather are separate rows because they are separate decisions --
@@ -7549,9 +7789,57 @@
           trackStyle: 'position: relative; margin-left: auto; width: 34px; height: 19px; flex: none; border-radius: 20px; cursor: pointer; transition: background .16s ease, border-color .16s ease; border: 1px solid ' +
             (on ? 'rgba(217,180,120,.5); background: rgba(217,180,120,.22);' : 'var(--dc-n-33333a, #33333A); background: var(--dc-bg-raised, #17171A);'),
           knobStyle: 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? 'var(--dc-gold-lit, #F0D6A6)' : 'var(--dc-ink-faint, #6E6E76)') + '; transition: left .16s ease, background .16s ease;',
-          toggle: function (e) { stop(e); saveStyle({ voiceEnhance: !on }); },
+          // Each row flips ITS OWN key. It wrote voiceEnhance for both, so
+          // "Captions behind speaker" switched the voice enhancement instead.
+          toggle: function (e) { stop(e); saveStyle(defObj(r.key, !on)); },
         };
       }),
+      tplControls: tplControlsFor(),
+      tplIsQuran: tpl.captionMode === 'quran',
+      tplIsCustomLook: tpl.filterPreset === 'custom',
+      tplName: activeTemplate ? String(activeTemplate.name || '') : '',
+      tplVersion: activeTemplate && activeTemplate.version ? 'v' + activeTemplate.version : '',
+      // The design's mark node carries a LITERAL "DEENCLIPPED"; the rebuilt
+      // frame shows the text that renders.
+      markText: String(tpl.watermark || 'DEENCLIPPED'),
+      ratioOpts: RATIO_PRESETS.map(function (r) {
+        return { value: r.label, label: r.label, on: Number(tpl.width) === r.width && Number(tpl.height) === r.height };
+      }),
+      setRatio: function (e) {
+        var picked = RATIO_PRESETS.filter(function (r) { return r.label === String(e && e.target ? e.target.value : ''); })[0];
+        if (picked) saveStyle({ width: picked.width, height: picked.height });
+      },
+      pvFillStyle: 'width: ' + ((SAMPLE_TOTAL ? Math.max(0, Math.min(1, UI.pvTime / SAMPLE_TOTAL)) : 0) * 100).toFixed(1) + '%;',
+      // ── Saved looks (v3.134.0) ──
+      // A preset is a snapshot of the style fields, kept on the account, and
+      // applying one loads it as the DRAFT -- "Unsaved changes" -- so the
+      // one save path persists and re-renders exactly as a hand edit does.
+      stylePresets: (DATA.stylePresets || []).map(function (p) {
+        var fields = p.fields || {};
+        return {
+          id: p.id, name: p.name,
+          note: (fields.captionMode ? (modeLabelOf(fields.captionMode) + ' \u00b7 ') : '') + (fields.filterPreset ? titleCase(fields.filterPreset) : '') + (fields.captionFont ? ' \u00b7 ' + fields.captionFont : ''),
+          apply: function (e) { stop(e); global.StudioAdapter.onPresetApply(p, tpl.captionMode === 'quran'); },
+          rename: function (e) { stop(e); global.StudioAdapter.onPresetRename(p.id, p.name); },
+          remove: function (e) { stop(e); global.StudioAdapter.onPresetDelete(p.id, p.name); },
+        };
+      }),
+      hasPresets: Boolean((DATA.stylePresets || []).length),
+      presetName: UI.presetName || '',
+      setPresetName: function (e) { UI.presetName = String(e && e.target ? e.target.value : ''); },
+      savePreset: function (e) {
+        stop(e);
+        var name = String(UI.presetName || '').trim();
+        if (!name) { toast('Give the look a name first.'); return; }
+        UI.presetName = '';
+        global.StudioAdapter.onPresetSave(name, presetFields());
+      },
+      tplCustomised: Boolean(activeTemplate && activeTemplate.customised),
+      restoreTpl: function (e) {
+        stop(e);
+        if (!activeTemplate) return;
+        global.StudioAdapter.onTemplateRestore(activeTemplate.id, activeTemplate.name);
+      },
       tplDirtyLabel: UI.tplDirty ? 'Unsaved changes' : 'All changes saved',
       tplDirtyDotStyle: 'width: 7px; height: 7px; border-radius: 50%; background: ' + (UI.tplDirty ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-n-7fd1a6, #7FD1A6)') + ';',
       saveTpl: function (e) {
@@ -8842,6 +9130,11 @@
     onBuyTokens: function () {},
     onSelectTemplate: function () {},
     onSaveTemplate: function () {},
+    onPresetApply: function () {},
+    onPresetSave: function () {},
+    onPresetRename: function () {},
+    onPresetDelete: function () {},
+    onTemplateRestore: function () {},
     onResetTemplate: function () {},
     onDuplicateTemplate: function () {},
     onTemplateField: function () {},

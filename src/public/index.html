@@ -74,6 +74,9 @@
      only under the 820px query. Every rule in the sheet sits inside that
      query, so a desktop render is byte-for-byte unchanged. -->
 <link rel="stylesheet" href="/studio-mobile.css">
+<!-- The desktop Templates screen. A second template over the same bindings,
+     mounted only on that screen and only above the phone seam. -->
+<link rel="stylesheet" href="/studio-templates.css">
 <!-- The clip editor is held back for launch: it opens, blurred, behind a
      "coming soon" notice. Deleting these two lines and the two files they name
      turns it back on. -->
@@ -2728,6 +2731,7 @@ select:focus{outline:none;border-color:var(--blue)}
 <script src="/studio-adapter.js"></script>
 <script src="/editor-gate.js"></script>
 <script src="/studio-mobile.js"></script>
+<script src="/studio-templates.js"></script>
 <script src="/studio-notify.js"></script>
 
 <script>
@@ -3265,7 +3269,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          the answer. */
       /* The phone shell carries its own 9:16 frame for this sample while it
          owns the Templates screen; the desktop frame is hidden there. */
-      const mframe=document.getElementById('dcmPvFrame');
+      /* The phone shell and the desktop Templates screen each carry their own
+         9:16 frame for this sample; the design's own frame is hidden under
+         both. */
+      const mframe=document.getElementById('dcmPvFrame')||document.getElementById('dctPvFrame');
       const frame=mframe
         ? mframe
         : (pvEl.parentElement&&getComputedStyle(pvEl.parentElement).aspectRatio!=='auto')
@@ -3399,6 +3406,9 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       const i=STUDIO.handlers.indexOf(handler);
       if(i<0)return null;
       for(const node of document.querySelectorAll('#studio [data-dc-h]')){
+        /* #dcTemplates is a SECOND StudioRuntime with its own handler table,
+           so its indexes mean nothing here and would collide. */
+        if(node.closest('#dcTemplates'))continue;
         for(const pair of (node.getAttribute('data-dc-h')||'').split(';')){
           const [name,index]=pair.split('=');
           if(name===evt&&Number(index)===i)return node;
@@ -3406,7 +3416,12 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
       return null;
     }
-    function captionBox(vals){return nodeFor(vals.dragCaption)}
+    function captionBox(vals){
+      /* The rebuilt Templates screen draws the sample caption itself. */
+      const own=document.getElementById('dctCap');
+      if(own&&own.isConnected)return own;
+      return nodeFor(vals.dragCaption);
+    }
     /* The editor's real video.
 
        The design compiles the editor preview to a still frame with the
@@ -4824,6 +4839,11 @@ function studioWanted(){return window.STUDIO_SHELL===true}
               .find(b=>vals.capFonts.some(f=>f.label===(b.textContent||'').trim()))||{}).parentElement||{}).parentElement
           : null;
       if(StudioAdapter.ui.screen!=='templates')return null;
+      /* The rebuilt Templates screen carries every control this panel offers,
+         as ordinary rows in its own groups. Docking it there as well would be
+         two controls for one setting -- and it would dock into the generated
+         screen, which is hidden while that one is up. */
+      if(window.StudioTemplates&&window.StudioTemplates.mounted())return null;
       /* The Templates screen has no font row to hang off, so it goes at the end
          of the settings column -- found by the row every template screen has. */
       const row=[...document.querySelectorAll('#studio a,#studio div')]
@@ -6822,7 +6842,54 @@ function renderStudio(){
         StudioAdapter.showToast(`"${r.forkedFrom}" is built in — saved as "${r.template.name}" and switched you to it`);
         return;
       }
+      StudioAdapter.ui.tplDirty=false;
+      StudioAdapter.ui.tplDraft=null;
       StudioAdapter.showToast(n?`Saved — re-rendering ${n} clip${n===1?'':'s'}`:'Template saved')})};
+
+    /* ── saved looks ───────────────────────────────────────────────────────
+       A preset is a snapshot of the style fields, kept on the account. Applying
+       one loads it as the DRAFT rather than writing it, so it arrives as
+       "Unsaved changes" and the one save path persists it and re-renders --
+       exactly as a hand edit does. Anything else would be a second way to
+       write a template, and the two would drift. */
+    StudioAdapter.onPresetApply=(preset,isQuran)=>{
+      const fields={...((preset&&preset.fields)||{})};
+      /* Scripture captions scripture and nothing else (invariant 7), so a look
+         saved on an ordinary template must not switch the Quran one out of its
+         caption mode. Everything else in the look still applies. */
+      if(isQuran)delete fields.captionMode;
+      if(!Object.keys(fields).length){toast('That look has nothing to apply.','bad');return}
+      StudioAdapter.keepDraft(fields);
+      toast(`“${preset.name}” loaded — press Save and apply to keep it`,'good');
+    };
+    StudioAdapter.onPresetSave=(name,fields)=>studioDo(async()=>{
+      await api('/api/style-presets',{method:'POST',body:JSON.stringify({name,fields})});
+    },`Saved “${name}”`);
+    StudioAdapter.onPresetRename=(id,current)=>{
+      const name=prompt('Rename this look:',current);
+      if(!name||!name.trim()||name.trim()===current)return;
+      studioDo(async()=>{
+        await api(`/api/style-presets/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({name:name.trim()})});
+      },'Renamed');
+    };
+    StudioAdapter.onPresetDelete=(id,name)=>{
+      if(!confirm(`Delete the saved look “${name}”? The templates using it now are untouched.`))return;
+      studioDo(async()=>{
+        await api(`/api/style-presets/${encodeURIComponent(id)}`,{method:'DELETE'});
+      },'Deleted');
+    };
+    /* Every setting back to what the template ships with. It clears the
+       account's overrides rather than writing a copy of the defaults, so a
+       later change to the shipped file reaches this account like any other. */
+    StudioAdapter.onTemplateRestore=(id,name)=>{
+      if(!id)return;
+      if(!confirm(`Put “${name}” back to its shipped settings? Your changes to it are discarded.`))return;
+      studioDo(async()=>{
+        StudioAdapter.ui.tplDraft=null;
+        StudioAdapter.ui.tplDirty=false;
+        await api(`/api/templates/${encodeURIComponent(id)}/reset`,{method:'POST',body:'{}'});
+      },`“${name}” restored`);
+    };
     StudioAdapter.onResetTemplate=()=>refresh();
     /* Deleting a lecture removes its clips and rendered files everywhere --
        local and object storage -- so it asks plainly first. */
@@ -8166,7 +8233,11 @@ StudioAdapter.onProbeSource=async url=>{try{
              screen container; the toolbar this button sits in has none, so
              that finds it without depending on a generated class name, which
              the design export regenerates on every re-import. */
-          const mount=host.parentNode.querySelector('section')||host.parentNode;
+          /* The rebuilt Templates screen gives these two account-wide switches
+             a slot of their own inside its Brand group; without this they
+             would mount into the generated screen, which is hidden there. */
+          const slot=document.getElementById('dctBrandSlot');
+          const mount=(slot&&slot.isConnected)?slot:(host.parentNode.querySelector('section')||host.parentNode);
           let box=document.getElementById('dcWatermark');
           if(!box){ box=document.createElement('div'); box.id='dcWatermark'; box.setAttribute('data-host-owned',''); }
           // Idempotent and self-correcting: a render that replaced the column
@@ -10058,6 +10129,9 @@ function paintStudio(){
   if(!DATA||!STUDIO)return;
   const vals=StudioAdapter.bindings(DATA);
   STUDIO.render(vals);
+  /* Before every painter that docks into a frame or reads a bound node: this
+     one mounts the Templates screen those painters then find. */
+  try{ if(window.paintTemplates)window.paintTemplates(vals); }catch(e){ console.error('paintTemplates',e); }
   paintSetupCelebration(vals);
   paintTikTokOptions();
   paintLiveWork(vals);

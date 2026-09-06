@@ -602,6 +602,8 @@ function withAccountEdits(template, user) {
   if (!patch || typeof patch !== 'object') return withBrand({ ...template, editable: true }, user);
   const merged = sanitiseTemplate({ ...template, ...patch }, { id: template.id, builtIn: true, userId: '' });
   merged.editable = true;
+  // This account has edited it, so there is something for Restore to undo.
+  merged.customised = true;
   // Taken from the shipped template, never from the patch: an account's own
   // edits decide how a template looks, not which plan it is on.
   merged.pro = Boolean(template.pro);
@@ -619,6 +621,9 @@ function withAccountEdits(template, user) {
   // up from an older per-template save.
   const branded = withBrand(merged, user);
   branded.editable = true;
+  // withBrand round-trips through sanitiseTemplate, which keeps schema fields
+  // only -- so every flag set above has to be put back here, this one included.
+  branded.customised = true;
   branded.pro = Boolean(template.pro);
   branded.version = merged.version;
   if (merged.updatedAt) branded.updatedAt = merged.updatedAt;
@@ -673,6 +678,120 @@ export function deleteTemplate(user, id) {
   const existing = templateById(id, user);
   if (!existing) return false;
   throw new Error('Built-in templates cannot be deleted.');
+}
+
+/*
+ * SAVED LOOKS (v3.134.0).
+ *
+ * Youssef, 6 Sept 2026: "sort out a new system if needed in terms of saving
+ * templates". The catalogue is deliberately ONE TEMPLATE PER CONTENT TYPE --
+ * createTemplate and duplicateTemplate throw, because copies once turned two
+ * templates into eight -- so this is deliberately NOT a way to mint one. A
+ * preset is a named snapshot of the STYLE fields that can be loaded onto any
+ * template; the templates themselves stay two.
+ *
+ * What it carries is `sanitiseClipStyle`'s own answer minus the account-wide
+ * brand fields: the sanitiser is what decides a value is storable, so a preset
+ * can never hold a field a template could not, and the watermark cannot be
+ * emptied through this door (BRAND_FIELDS are the ACCOUNT's, set once for every
+ * template, and `assertWatermarkAllowed` guards them on their own route).
+ */
+export const MAX_STYLE_PRESETS = 20;
+
+function presetList(user) {
+  const id = userIdOf(user);
+  if (!id) return [];
+  const stored = readUserSetting(state, id, 'stylePresets');
+  return Array.isArray(stored) ? stored.filter(row => row && typeof row === 'object') : [];
+}
+
+function presetName(value, fallback = '') {
+  const text = cleanText(value, fallback, 40).trim();
+  return text;
+}
+
+export function listStylePresets(user) {
+  return presetList(user).map(row => ({
+    id: String(row.id || ''),
+    name: String(row.name || ''),
+    savedAt: Number(row.savedAt) || 0,
+    fields: { ...(row.fields && typeof row.fields === 'object' ? row.fields : {}) },
+  }));
+}
+
+export function saveStylePreset(user, name, fields = {}) {
+  const userId = userIdOf(user);
+  if (!userId) throw new Error('Saving a look needs an account.');
+  const clean = presetName(name);
+  if (!clean) throw new Error('Give the look a name.');
+  const style = sanitiseClipStyle(fields);
+  // The two account-wide switches belong to the account, not to a look: a
+  // preset that carried them would turn the watermark off for every template
+  // the moment it was applied, around the paywall that guards that switch.
+  for (const key of BRAND_FIELDS) delete style[key];
+  if (!Object.keys(style).length) throw new Error('There is nothing to save in that look.');
+  const rows = presetList(user);
+  if (rows.length >= MAX_STYLE_PRESETS && !rows.some(row => row.name === clean)) {
+    throw new Error(`You can keep ${MAX_STYLE_PRESETS} saved looks. Delete one first.`);
+  }
+  // Saving under a name that already exists REPLACES it rather than making a
+  // second row with the same label, which nobody could tell apart.
+  const existing = rows.find(row => row.name === clean);
+  const row = {
+    id: existing ? existing.id : crypto.randomUUID(),
+    name: clean,
+    savedAt: Date.now(),
+    fields: style,
+  };
+  const next = existing ? rows.map(item => (item.id === row.id ? row : item)) : rows.concat([row]);
+  writeUserSetting(state, userId, 'stylePresets', next);
+  save();
+  return row;
+}
+
+export function renameStylePreset(user, id, name) {
+  const userId = userIdOf(user);
+  if (!userId) throw new Error('Renaming a look needs an account.');
+  const rows = presetList(user);
+  const row = rows.find(item => String(item.id) === String(id));
+  if (!row) throw new Error('That saved look no longer exists.');
+  const clean = presetName(name, row.name);
+  if (!clean) throw new Error('Give the look a name.');
+  const next = rows.map(item => (item === row ? { ...item, name: clean } : item));
+  writeUserSetting(state, userId, 'stylePresets', next);
+  save();
+  return { ...row, name: clean };
+}
+
+export function deleteStylePreset(user, id) {
+  const userId = userIdOf(user);
+  if (!userId) throw new Error('Deleting a look needs an account.');
+  const rows = presetList(user);
+  const next = rows.filter(item => String(item.id) !== String(id));
+  if (next.length === rows.length) return false;
+  writeUserSetting(state, userId, 'stylePresets', next);
+  save();
+  return true;
+}
+
+/*
+ * Put a built-in back to what it ships with.
+ *
+ * It DROPS the account's overrides rather than writing a copy of the shipped
+ * values, so a later change to the shipped file reaches this account like any
+ * other -- writing the defaults down would freeze it at today's.
+ */
+export function clearTemplateOverrides(user, id) {
+  const userId = userIdOf(user);
+  if (!userId) throw new Error('Restoring a template needs an account.');
+  const existing = templateById(id, user);
+  if (!existing) throw new Error('That template does not exist.');
+  const all = { ...builtInOverrides(user) };
+  if (!all[id]) return templateById(id, user);
+  delete all[id];
+  writeUserSetting(state, userId, 'templateOverrides', all);
+  save();
+  return templateById(id, user);
 }
 
 export function defaultTemplateDraft() {

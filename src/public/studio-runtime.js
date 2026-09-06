@@ -61,7 +61,19 @@
     return '';
   }
 
-  function Renderer() {
+  /*
+   * `attr` is the attribute a rendered node carries its handler indexes in.
+   *
+   * IT MUST DIFFER FOR A RUNTIME MOUNTED INSIDE ANOTHER ONE, and that is not a
+   * nicety: events are DELEGATED from each mount, so an inner runtime's node
+   * bubbles to the outer root as well -- which reads the same attribute, looks
+   * the index up in ITS OWN handler table, and calls a completely unrelated
+   * function. Measured on the rebuilt Templates screen: picking a caption mode
+   * fired the outer table's handler at that index and unmounted the screen.
+   * The phone shell never hit it because #dcMobile is a SIBLING of #studio.
+   */
+  function Renderer(attr) {
+    this.attr = attr || 'data-dc-h';
     this.handlers = [];
     // Bindings the template asked for and the adapter did not supply. The
     // element still renders -- styled, cursor:pointer, looking live -- with no
@@ -132,7 +144,7 @@
         }
         spec.push(evt + '=' + (this.handlers.push(fn) - 1));
       }
-      if (spec.length) out.push(' data-dc-h="', spec.join(';'), '"');
+      if (spec.length) out.push(' ', this.attr, '="', spec.join(';'), '"');
     }
 
     out.push('>');
@@ -157,9 +169,10 @@
   // mouseover/mouseout with a containment check.
   var HOVER = { mouseenter: 'mouseover', mouseleave: 'mouseout' };
 
-  function Studio(root, template) {
+  function Studio(root, template, attr) {
     this.root = root;
     this.template = template;
+    this.attr = attr || 'data-dc-h';
     this.handlers = [];
     this.bound = false;
   }
@@ -179,7 +192,7 @@
       self.root.addEventListener(HOVER[logical], function (e) {
         var el = e.target;
         while (el && el !== self.root) {
-          if (el.hasAttribute && el.hasAttribute('data-dc-h')) {
+          if (el.hasAttribute && el.hasAttribute(self.attr)) {
             // Only fire when the pointer actually crossed this element's boundary.
             if (!el.contains(e.relatedTarget)) self.invoke(el, logical, e);
             return;
@@ -193,7 +206,7 @@
   Studio.prototype.dispatch = function (evt, e, target) {
     var el = target;
     while (el && el !== this.root) {
-      if (el.hasAttribute && el.hasAttribute('data-dc-h')) {
+      if (el.hasAttribute && el.hasAttribute(this.attr)) {
         if (this.invoke(el, evt, e)) return;
       }
       el = el.parentNode;
@@ -201,7 +214,7 @@
   };
 
   Studio.prototype.invoke = function (el, evt, e) {
-    var spec = el.getAttribute('data-dc-h') || '';
+    var spec = el.getAttribute(this.attr) || '';
     var pairs = spec.split(';');
     for (var i = 0; i < pairs.length; i++) {
       var eq = pairs[i].indexOf('=');
@@ -357,7 +370,7 @@
   }
 
   Studio.prototype.render = function (vals) {
-    var r = new Renderer();
+    var r = new Renderer(this.attr);
     var out = [];
     r.render(this.template, vals, out);
     var html = out.join('');
@@ -389,10 +402,13 @@
 
   global.StudioRuntime = {
     // mount(rootEl) -> { render(vals) }
-    mount: function (root, template) {
+    // mount(rootEl, template, { attr }) -- `attr` names the handler-index
+    // attribute and MUST be given, and be unique, for a runtime mounted inside
+    // another one. See the note on Renderer.
+    mount: function (root, template, options) {
       var tpl = template || global.STUDIO_TEMPLATE;
       if (!tpl) throw new Error('studio-runtime: STUDIO_TEMPLATE missing — run scripts/import-design.mjs');
-      return new Studio(root, tpl);
+      return new Studio(root, tpl, options && options.attr);
     },
     // Exposed for tests.
     _internals: { evalValue: evalValue, lookup: lookup, Renderer: Renderer },

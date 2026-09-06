@@ -39,6 +39,8 @@ const SOURCES = [
   // leaving that file out kept a black strip across a lit calendar.
   'src/public/studio-tokens.css',
   'src/public/studio-motion.css',
+  // The desktop Templates screen's own sheet.
+  'src/public/studio-templates.css',
 ].map(rel => path.join(ROOT, rel)).filter(file => fs.existsSync(file));
 const TARGET = path.join(ROOT, 'src/public/studio-light.generated.css');
 
