@@ -172,6 +172,19 @@
       // ── body ─────────────────────────────────────────────────────────────
       h('div', { class: 'dct-body' }, [
         h('div', { class: 'dct-left' }, [
+          // BRAND FIRST (Youssef, 6 Sept 2026: "Brand should be at the top of
+          // the configurator"). The watermark and the promo bar are the two
+          // settings that belong to the ACCOUNT rather than to this template,
+          // so they are what somebody checks before touching anything else --
+          // and they were the one group you had to scroll past six others to
+          // reach. The two switches are host-rendered (paintWatermark) and
+          // dock into this slot; the template's own watermark placement rows
+          // sit under them.
+          h('section', { class: 'dct-sec' }, [
+            h('div', { class: 'dct-gh' }, [h('span', {}, 'Brand')]),
+            h('div', { class: 'dct-slot', id: 'dctBrandSlot' }),
+            h('div', { class: 'dct-rows' }, [each('tplControls.brand', 'c', [controlRow()])]),
+          ]),
           group('Clip layout', 'tplControls.layout'),
           group('Captions', 'tplControls.captions'),
           group('Caption text', 'tplControls.text'),
@@ -179,15 +192,6 @@
           iff('tplControls.highlight', [group('Highlighted word', 'tplControls.highlight')]),
           iff('tplControls.animation', [group('Animation', 'tplControls.animation')]),
           group('Look', 'tplControls.look'),
-          // The two account-wide brand switches are host-rendered
-          // (paintWatermark) and dock into this slot, so the watermark and the
-          // promo bar sit with the template's own watermark placement rather
-          // than in a panel of their own.
-          h('section', { class: 'dct-sec' }, [
-            h('div', { class: 'dct-gh' }, [h('span', {}, 'Brand')]),
-            h('div', { class: 'dct-slot', id: 'dctBrandSlot' }),
-            h('div', { class: 'dct-rows' }, [each('tplControls.brand', 'c', [controlRow()])]),
-          ]),
           group('Processing', 'tplControls.processing'),
 
           // ── saved looks ───────────────────────────────────────────────────

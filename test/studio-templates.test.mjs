@@ -416,3 +416,42 @@ test('the host brand panel is laid on this screen\'s own grid', () => {
   assert.match(src('src/public/index.html'), /id="dctBrandSlot"|dctBrandSlot/,
     'paintWatermark knows the slot');
 });
+
+test('Brand is the first group in the configurator', () => {
+  /* Youssef, 6 Sept 2026: "Brand should be at the top of the configurator".
+     The watermark and the promo bar belong to the ACCOUNT rather than to the
+     selected template, so they are what somebody checks before touching a
+     caption -- and they were the one group you had to scroll past six others
+     to reach. Asserted on the ORDER in the authored template rather than on a
+     screenshot: nothing else would notice it drifting back down. */
+  const js = src('src/public/studio-templates.js');
+  const body = js.slice(js.indexOf("h('div', { class: 'dct-body' }"));
+  const brand = body.indexOf("id: 'dctBrandSlot'");
+  const first = body.indexOf("group('Clip layout'");
+  assert.ok(brand > -1 && first > -1, 'both groups are still authored');
+  assert.ok(brand < first, 'Brand is drawn before every template group');
+});
+
+test('the two columns are an even split', () => {
+  /* Youssef, same message: "make the left side config smaller and make it
+     more spacious for the right side, 50% 50% ratio to look cleaner". The
+     settings column was minmax(360px, 1fr) against a preview capped at 420,
+     so every extra pixel of a wide screen went to the half that needed it
+     least -- at 1440 that was 648 against 420.
+
+     minmax(0, 1fr) twice, never `1fr 1fr`: a grid track's automatic minimum
+     is its content, and the frame plus the hint under it would push the
+     preview column past its half and the row past the screen. */
+  const css = src('src/public/studio-templates.css');
+  const rule = /#dcTemplates \.dct-body \{([\s\S]*?)\}/.exec(css);
+  assert.ok(rule, 'the body grid is still declared here');
+  const cols = /grid-template-columns:\s*([^;]+);/.exec(rule[1]);
+  assert.ok(cols, 'the body still sets its columns');
+  // Split on the gap BETWEEN tracks -- `minmax(0, 1fr)` has a space of its
+  // own inside it, so a naive split on whitespace cuts a track in half.
+  const tracks = cols[1].trim().match(/minmax\([^)]*\)|\S+/g) || [];
+  assert.equal(tracks.length, 2, `two tracks, got ${tracks.length}: ${cols[1].trim()}`);
+  assert.equal(tracks[0], tracks[1], 'both tracks take the same share');
+  assert.match(tracks[0], /^minmax\(\s*0\s*,\s*1fr\s*\)$/,
+    'a 1fr track floors at its content, which would push the preview past its half');
+});

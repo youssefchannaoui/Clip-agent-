@@ -75,7 +75,14 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(360px, 1fr) minmax(300px, 420px);
+  /* 50/50 (Youssef, 6 Sept 2026: "make the left side config smaller and make
+     it more spacious for the right side, 50% 50% ratio to look cleaner"). The
+     settings column was taking every spare pixel while the preview was capped
+     at 420, so a wide screen only ever widened the half that needed it least.
+     minmax(0, 1fr) twice, never `1fr 1fr`: a grid track's automatic minimum is
+     its content, and the frame plus the hint under it would push the preview
+     column past its share and the row past the screen. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 26px;
   padding: 22px 40px;
 }

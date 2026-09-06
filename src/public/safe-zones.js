@@ -153,9 +153,12 @@
    * and the one to check first when this looks wrong.
    */
   function safeArea(keys, width, height) {
+    return boxFromInsets(unionInsets(keys), width, height);
+  }
+
+  function boxFromInsets(ins, width, height) {
     var w = Math.max(1, Number(width) || REF_WIDTH);
     var h = Math.max(1, Number(height) || REF_HEIGHT);
-    var ins = unionInsets(keys);
 
     // Where the video sits inside the player, in reference pixels.
     var scale = Math.min(REF_WIDTH / w, REF_HEIGHT / h);
@@ -225,6 +228,71 @@
    */
   var BASE_PLATFORMS = ['youtube', 'tiktok'];
 
+  /*
+   * THE BOTTOM THE STUDIO SHADES, AND WHY IT IS NOT THE TABLE'S.
+   *
+   * Youssef, 6 Sept 2026, with his cursor 172px below the shaded band's top
+   * edge: "move the social safe zone down to shere my cursor is."
+   *
+   * He was pointing at a real inconsistency rather than asking for a looser
+   * rule. The band was cut at TikTok's 484 while the silhouette drawn inside
+   * it -- the handle, the caption lines, the sound line and the tab bar,
+   * drawn from the chrome that is actually on screen -- starts at 312 from
+   * the bottom. So 172px of the picture was dimmed with nothing drawn on it,
+   * which reads as the shade being arbitrary. Measured: his cursor sat at
+   * 83.8% of the frame; the top of the handle bar is 83.75%.
+   *
+   * The two numbers answer different questions and BOTH are right:
+   *
+   *   484  what TikTok asks you to keep clear -- their published figure,
+   *        which reserves room for a MULTI-LINE caption. It is the number
+   *        the free public checker cites and the number the shipped-template
+   *        law is enforced against, and it is not touched here: it is a
+   *        factual claim about somebody else's product.
+   *   312  what TikTok's interface actually covers on every clip -- the
+   *        handle, one caption line, the sound line and the tab bar. This is
+   *        what the preview shades, because the preview is a picture of the
+   *        phone rather than a specification.
+   *
+   * IT IS THE SAME NUMBER THE SILHOUETTE IS DRAWN FROM, deliberately: the
+   * band's top edge and the topmost drawn element are one value, so the shade
+   * can never again claim more than it shows. safeSilhouette's `handle` sits
+   * at H - POSTING_BOTTOM and test/safe-chrome.test.mjs pins the two together.
+   *
+   * A CONNECTED META PLATFORM STILL WIDENS IT to Reels' own 670. That figure
+   * is not a caption allowance -- Meta's unified bottom stacks the caption,
+   * likes, comments, share, save, audio and CTA -- so there is nothing
+   * over-generous about it to trim.
+   *
+   * To undo this, delete POSTING_BOTTOM and let postingInsets return
+   * unionInsets unchanged.
+   */
+  var POSTING_BOTTOM = 312;
+
+  /*
+   * The union the STUDIO draws, as insets: every edge from the table, with
+   * the bottom taken from the always-on chrome above unless a connected
+   * platform covers more.
+   */
+  function postingInsets(keys) {
+    var ins = unionInsets(keys);
+    var extra = 0;
+    var list = keys || [];
+    for (var i = 0; i < list.length; i++) {
+      if (BASE_PLATFORMS.indexOf(list[i]) > -1) continue;
+      var z = ZONES[list[i]];
+      if (z) extra = Math.max(extra, z.bottom);
+    }
+    ins.bottom = Math.max(POSTING_BOTTOM, extra);
+    return ins;
+  }
+
+  /** The studio's box: postingInsets, fitted to the output's own shape. */
+  function postingBox(keys, width, height) {
+    return boxFromInsets(postingInsets(keys), width, height);
+  }
+
+
   function postingSet(publishingSettings, social) {
     var connected = platformsFor(publishingSettings, social);
     var out = [];
@@ -254,7 +322,10 @@
     safeArea: safeArea,
     platformsFor: platformsFor,
     BASE_PLATFORMS: BASE_PLATFORMS,
+    POSTING_BOTTOM: POSTING_BOTTOM,
     postingSet: postingSet,
+    postingInsets: postingInsets,
+    postingBox: postingBox,
     describe: describe,
   };
 }(typeof globalThis !== 'undefined' ? globalThis : this));

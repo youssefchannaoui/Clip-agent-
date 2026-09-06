@@ -2086,7 +2086,10 @@ test('the snap lines come from the safe-zone table, not from a literal', () => {
   // shape, so this asserts the DERIVATION rather than a pair of numbers that
   // would then have to be edited whenever a platform moves.
   const adapter = fs.readFileSync(path.join(ROOT, 'src/public/studio-adapter.js'), 'utf8');
-  assert.match(adapter, /var SAFE_BOX = SAFE\.safeArea\(SAFE_PLATFORMS, tpl\.width, tpl\.height\)/);
+  // postingBox, not safeArea: the studio shades what the interface covers
+  // (POSTING_BOTTOM), while the public checker and the shipped-template law
+  // keep citing the platforms' own published figures.
+  assert.match(adapter, /var SAFE_BOX = \(SAFE\.postingBox \|\| SAFE\.safeArea\)\(SAFE_PLATFORMS, tpl\.width, tpl\.height\)/);
   assert.match(adapter, /var SAFE_TOP = SAFE_BOX\.top;/);
   assert.match(adapter, /var SAFE_BOTTOM = SAFE_BOX\.bottom;/);
   // And the adapter must keep NO numbers of its own: a second copy of the
@@ -2110,7 +2113,7 @@ test('the caption cannot be dragged outside the safe box', () => {
   // Expectations are COMPUTED from the same table and the same set the
   // adapter reads, so this test cannot drift from it when a platform moves
   // its interface; what it pins is that the clamp honours the box.
-  const box = globalThis.DCSafeZones.safeArea(globalThis.DCSafeZones.postingSet({}, {}), 1080, 1920);
+  const box = globalThis.DCSafeZones.postingBox(globalThis.DCSafeZones.postingSet({}, {}), 1080, 1920);
   const height = 533;
   const at = f => dragOn({ clientX: 150, clientY: f * height });
   // Dropped below the frame entirely, it stops at the safe edge.
@@ -2835,7 +2838,7 @@ test('the caption snaps to the lines the label promises', () => {
   // and is then not offered -- a snap point that drops the caption somewhere
   // the platform covers is worse than no snap point at all.
   // Nothing connected: the TikTok + Shorts floor, the same set the adapter draws.
-  const box = globalThis.DCSafeZones.safeArea(globalThis.DCSafeZones.postingSet({}, {}), 1080, 1920);
+  const box = globalThis.DCSafeZones.postingBox(globalThis.DCSafeZones.postingSet({}, {}), 1080, 1920);
   const height = 533;
   const at = fraction => dragOn({ clientX: 150, clientY: fraction * height });
   // The upper third, snapped from just below it, measured down from the top.

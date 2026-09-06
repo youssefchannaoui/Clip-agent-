@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1544 JS + 687 Python**
+- `npm test` and `npm run check` must pass. Currently **1546 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10543,6 +10543,81 @@ The drawn box matches the table to within the 1px border, at 9:16, 1:1 and
 checker the union rectangle's own edges were read out of the canvas pixels:
 they sit at the union's insets, and nowhere near where a centred box would be.
 All seven probes proven red first.
+
+## The shade claimed more than it showed (v3.134.2, 6 Sept 2026)
+
+Youssef, with his cursor 172px below the shaded band's top edge: "move the
+social safe zone down to shere my cursor is", plus "make the left side config
+smaller and make it more spacious for the right side, 50% 50% ratio to look
+cleaner" and "Brand should be at the top of the configurator".
+
+### He was pointing at an inconsistency, not asking for a looser rule
+
+**MEASURED BEFORE ANYTHING MOVED.** The band was cut at TikTok's published
+484, while the silhouette drawn INSIDE it -- the handle, the caption lines,
+the sound line and the tab bar, drawn from the chrome that is actually on
+screen -- starts at 312 from the bottom. So **172px of picture was dimmed with
+nothing drawn on it**, which is what makes a shade read as arbitrary rather
+than as information. His cursor sat at **83.8%** of the frame; the top of the
+handle bar is **83.75%**. He was pointing at the drawing.
+
+**The two numbers answer different questions and BOTH are kept:**
+
+| | |
+|---|---|
+| **484** | what TikTok asks you to keep clear -- their published figure, which reserves room for a MULTI-LINE caption |
+| **312** | what the interface actually covers on every clip -- handle, one caption line, sound line, tab bar |
+
+- **The platform table is UNTOUCHED**, deliberately. Those entries are factual
+  claims about somebody else's product: the free public checker cites them,
+  and the shipped-template law (`safeArea([])`, the union of all four) is
+  enforced against them. Editing TikTok's row to make a preview look better
+  would put a wrong number about TikTok on a public page.
+- **`POSTING_BOTTOM` is the studio's own**, in the same file, with its own
+  reason: `postingInsets`/`postingBox` beside `safeArea`, and the adapter
+  reads the new one. One file, one source per question.
+- **IT IS THE SAME NUMBER THE SILHOUETTE IS DRAWN FROM.** That is the point of
+  the change rather than a nicety -- `test/safe-chrome.test.mjs` now asserts
+  the handle sits EXACTLY on the band's edge, so the shade can never again
+  claim more than it shows.
+- **A connected Meta platform still widens it to 670.** That figure is not a
+  caption allowance -- Meta's unified bottom stacks the caption, likes,
+  comments, share, save, audio and CTA -- so there is nothing to trim.
+- **The shipped-template law did not move**: it checks against all four, which
+  still means Meta's 670. Nothing about which templates are legal changed.
+
+### 50/50, and Brand first
+
+- The body was `minmax(360px, 1fr)` against a preview capped at **420px**, so
+  every extra pixel of a wide screen went to the half that needed it least --
+  at 1440 that was 648 against 420. `minmax(0, 1fr)` twice now.
+  **Never `1fr 1fr`:** a grid track's automatic minimum is its content, and
+  the frame plus the hint under it would push the preview past its half and
+  the row past the screen -- the same trap the public site's journey scene
+  paid for at three nested levels.
+- **The preview does not get BIGGER, and that is not a miss.** The frame is
+  height-capped by the row, so the extra width becomes air around it: measured
+  at 1440, frame 316x561 centred in a 553px column. What the split buys is a
+  narrower settings column and a preview that is not crammed against the edge.
+- **Brand is the first group.** The watermark and the promo bar belong to the
+  ACCOUNT rather than to the selected template (v3.113.0), so they are what
+  somebody checks before touching a caption -- and they were the one group you
+  had to scroll past six others to reach.
+
+### Measured after, at 1100 / 1280 / 1440 / 1920, both themes
+
+Ratio exactly 1 at every width; ONE label left edge (285), ONE control left
+edge (455), ONE readout right edge; 0 wrapped labels; 0 elements overflowing;
+0 page scroll; 0 DOM operations on an unchanged repaint; no page errors. The
+band's top edge reads 83.61-83.64% against the 83.75% it is cut from (the
+difference is the frame's own rounding).
+
+**At narrow widths the settings column actually GAINS**, which is worth
+knowing before someone "restores" the old rule: at 1100 the preview's 420px
+cap left the settings column on its 360px floor, so 50/50 gives it 383.
+
+Four red probes proven: the adapter reading `safeArea` again, `POSTING_BOTTOM`
+not applied, Brand moved back below Look, and the uneven columns restored.
 
 ## The dotted zone, and a caption that greyed in daylight (v3.134.1, 6 Sept 2026)
 
