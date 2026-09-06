@@ -733,11 +733,29 @@ class JobInterrupted(Exception):
 
 
 def _signal_group(child: subprocess.Popen, sig: int) -> None:
+    """Signal the child's whole process group: the child and everything it started.
+
+    The child is started with start_new_session=True, so it LEADS its group
+    and the group id is its own pid -- which still names the group after the
+    child has been reaped, and that is exactly when it matters: a grandchild
+    left running keeps the group alive. A child that is somehow not leading
+    its own group would be sharing OURS, and killpg would take this service
+    down with it, so that case signals the child alone.
+    """
+    pgid = child.pid
     try:
-        os.killpg(os.getpgid(child.pid), sig)
-    except (ProcessLookupError, PermissionError, OSError):
-        # Already reaped, or not ours to signal as a group: fall back to the
-        # child alone, which is what terminate() always did.
+        if os.getpgid(pgid) != pgid:
+            child.send_signal(sig)
+            return
+    except ProcessLookupError:
+        pass  # reaped already; its group may still hold what it started
+    except OSError:
+        pass
+    try:
+        os.killpg(pgid, sig)
+    except ProcessLookupError:
+        pass  # nothing left in the group
+    except (PermissionError, OSError):
         try:
             child.send_signal(sig)
         except (ProcessLookupError, OSError):
@@ -756,16 +774,21 @@ def stop_child(child: subprocess.Popen, grace: float | None = None) -> None:
     SIGKILL to whatever is still there after `grace` seconds. The escalation
     runs on a timer so a cancel returns to its caller at once; the reader loop
     that owns the child still sees it exit.
+
+    THE ESCALATION IS UNCONDITIONAL. The first cut asked child.poll() before
+    the SIGKILL and skipped it when the child was gone -- but poll() REAPS a
+    child that died on the SIGTERM, and a grandchild that ignored it lived on
+    in the group, holding the stdout pipe the reader loop was blocked on.
+    CI's timing found it on the first run; a grandchild that ignores SIGTERM
+    now pins it. killpg on a group with nobody left in it is a
+    ProcessLookupError, swallowed above.
     """
-    if child.poll() is not None:
-        return
     if grace is None:
         grace = KILL_GRACE_SECONDS
     _signal_group(child, signal.SIGTERM)
 
     def _escalate() -> None:
-        if child.poll() is None:
-            _signal_group(child, signal.SIGKILL)
+        _signal_group(child, signal.SIGKILL)
 
     timer = threading.Timer(grace, _escalate)
     timer.daemon = True

@@ -10114,7 +10114,7 @@ horrible and its all broken now."
   1520x855 with the live bar up: both columns end at the same y, the card
   runs to the row's foot in both themes.
 
-## The worker survives being stopped (v3.133.0, 6 Sept 2026)
+## The worker survives being stopped (v3.133.0 / v3.133.1, 6 Sept 2026)
 
 Youssef: "MAKE SURE THE AI WORKER IS WORKING COMPLETELY FINE FIX ALL ISSUES
 MAKE IT BULLETPROOF." The job lifecycle was mapped end to end -- service.py,
@@ -10200,6 +10200,20 @@ and never to be STOPPED. Every fault below is a stop going wrong.
   clip_worker (with a real grandchild), the real engine against a fake worker
   on a local port, the real job store. All twenty proven red in ONE stashed
   run against the unpatched sources before being kept.
+- **CI's first run of v3.133.0 caught a real fault in the fix (v3.133.1).**
+  The escalation asked `child.poll()` before the SIGKILL and skipped it when
+  the child was gone -- but poll() REAPS a child that died on the SIGTERM,
+  and a grandchild that ignored it lived on in the group, holding the stdout
+  pipe the reader loop was blocked on. The runner's timing killed the fake
+  worker before its next heartbeat and the test sat on that pipe for ten
+  seconds; locally the SIGTERM had reached the grandchild during its own
+  interpreter start-up, before `SIG_IGN` was installed, so it died like any
+  process and the test passed against code that never reached it. Two
+  lessons: the group is signalled UNCONDITIONALLY now (killpg on an empty
+  group is a swallowed ProcessLookupError), and the fixture's grandchild
+  writes a READY marker once its handler is in, with heartbeats two seconds
+  apart so the loop cannot reach its own cancel check first. A grandchild
+  that is not provably ignoring the signal proves nothing about the kill.
 - **What is NOT proven here**: a real restart on the box mid-render. The next
   worker deploy that lands while a job runs is the confirmation -- the job's
   status should read `interrupted`, then `resumed: 1` with "Resuming from the

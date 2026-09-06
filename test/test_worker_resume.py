@@ -41,14 +41,26 @@ HEARTBEATS = (
 )
 
 # A fake clip_worker that starts a grandchild which IGNORES SIGTERM -- what a
-# wedged ffmpeg looks like -- and writes its pid beside the job file.
+# wedged ffmpeg looks like -- and writes its pid beside the job file. The
+# grandchild inherits the child's stdout PIPE, as a real ffmpeg does, so the
+# service's reader loop stays blocked on it for as long as the grandchild
+# lives. Heartbeats are SLOW on purpose: CI's first run of this test had the
+# child die on SIGTERM before its next line, so the loop never reached its own
+# cancel check and sat on that pipe -- and the escalation checked the CHILD,
+# which poll() had already reaped, instead of the group, so nothing ever
+# killed the grandchild. Fast heartbeats hid all of that locally.
+# The grandchild writes a READY marker once its handler is installed: sent
+# the SIGTERM a few milliseconds earlier, during interpreter start-up, it
+# would die of it like any process and the test would pass against code
+# that never reached it -- which is what happened locally the first time.
 GRANDCHILD = (
     "import json, subprocess, sys, time\n"
     "g = subprocess.Popen([sys.executable, '-c',\n"
-    "    'import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(120)'])\n"
+    "    'import signal, sys, time; signal.signal(signal.SIGTERM, signal.SIG_IGN);'\n"
+    "    ' open(sys.argv[1], \"w\").write(\"ready\"); time.sleep(120)', sys.argv[1] + '.ready'])\n"
     "open(sys.argv[1] + '.pid', 'w').write(str(g.pid))\n"
     "while True:\n"
-    "    print(json.dumps({'type': 'heartbeat'}), flush=True); time.sleep(0.1)\n"
+    "    print(json.dumps({'type': 'heartbeat'}), flush=True); time.sleep(2)\n"
 )
 
 
@@ -111,10 +123,11 @@ class WorkerResumeTests(unittest.TestCase):
              mock.patch.object(self.service, "KILL_GRACE_SECONDS", 0.5):
             thread, outcome, job_file = self.run_child(processor, "grp", fake_root)
             pid_file = Path(str(job_file) + ".pid")
+            ready_file = Path(str(job_file) + ".ready")
             deadline = time.time() + 10
-            while time.time() < deadline and not pid_file.exists():
+            while time.time() < deadline and not (pid_file.exists() and ready_file.exists()):
                 time.sleep(0.02)
-            self.assertTrue(pid_file.exists(), "the fake worker started its grandchild")
+            self.assertTrue(pid_file.exists() and ready_file.exists(), "the grandchild is up and ignoring SIGTERM")
             grandchild = int(pid_file.read_text())
             self.assertTrue(alive(grandchild))
             processor.cancel("grp")
