@@ -20,6 +20,12 @@ else
 fi
 echo "public url now: $(grep '^OBJECT_STORAGE_PUBLIC_URL=' worker/.env)"
 
+# Let the slot empty first. Recreating the container takes whatever it was
+# doing with it; the worker resumes an interrupted job, but not waiting costs
+# the customer a re-import and a re-render they never asked for. See
+# worker/drain.sh (DEPLOY_DRAIN_MINUTES=0 skips it for an emergency fix).
+bash worker/drain.sh
+
 docker compose -f worker/docker-compose.yml up -d --build
 # The layer cache from --build accumulates invisibly; eight rebuilds once
 # grew it to 25.7GB and read as a full disk. See CLAUDE.md Deploys.

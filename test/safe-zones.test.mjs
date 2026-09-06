@@ -124,6 +124,20 @@ test('only connected AND switched-on platforms narrow the box', () => {
   assert.deepEqual(SAFE.platformsFor(ps, {}), []);
 });
 
+test('the box the studio draws is never narrower than TikTok and Shorts together', () => {
+  // "use it for ours": the pair is the floor. Connected Meta widens it;
+  // nothing connected, or only one of the pair, still clears both.
+  assert.deepEqual(SAFE.BASE_PLATFORMS, ['youtube', 'tiktok']);
+  assert.deepEqual(SAFE.postingSet({}, {}), ['youtube', 'tiktok']);
+  const onlyTikTok = { providers: { tiktok: { connected: true } } };
+  assert.deepEqual(SAFE.postingSet({ tiktok: { enabled: true } }, onlyTikTok), ['youtube', 'tiktok']);
+  const meta = { providers: { instagram: { connected: true }, facebook: { connected: true } } };
+  assert.deepEqual(SAFE.postingSet({ instagram: { enabled: true }, facebook: { enabled: true } }, meta),
+    ['youtube', 'tiktok', 'instagram', 'facebook'], 'Meta widens it, in the table\u2019s own order');
+  const pair = SAFE.unionInsets(SAFE.postingSet({}, {}));
+  assert.deepEqual(pair, { top: 150, right: 140, bottom: 484, left: 60 }, 'Shorts\u2019 top and left, TikTok\u2019s bottom, the shared rail');
+});
+
 test('nothing outside the table restates a platform inset', () => {
   // The whole point. Every number lives in safe-zones.js; a second copy is
   // exactly how the six disagreeing answers came about.

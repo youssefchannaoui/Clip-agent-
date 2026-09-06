@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1509 JS + 673 Python**
+- `npm test` and `npm run check` must pass. Currently **1517 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10113,6 +10113,130 @@ horrible and its all broken now."
   padding evened to its head's 22px under the lock. Measured at 1440x900 and
   1520x855 with the live bar up: both columns end at the same y, the card
   runs to the row's foot in both themes.
+
+## The worker survives being stopped (v3.133.0, 6 Sept 2026)
+
+Youssef: "MAKE SURE THE AI WORKER IS WORKING COMPLETELY FINE FIX ALL ISSUES
+MAKE IT BULLETPROOF." The job lifecycle was mapped end to end -- service.py,
+clip_worker.py, the deploy, the app's polling loops -- before anything was
+built, and what the map showed is that the worker had been designed to RUN
+and never to be STOPPED. Every fault below is a stop going wrong.
+
+- **A stop reached the child and not what the child had started.** `cancel()`,
+  the wall-clock budget and the SIGTERM handler each sent one `terminate()` to
+  `clip_worker.py`; the ffmpeg or Whisper it had spawned was never signalled,
+  and went on holding the cores and the memory -- beside the next job, on a
+  3.7G box. The child runs in its own session now (`start_new_session=True`)
+  and every stop goes through `stop_child()`: SIGTERM to the whole GROUP,
+  then SIGKILL to whatever is still there after `KILL_GRACE_SECONDS` (8).
+  Proven with a grandchild that IGNORES SIGTERM: `terminate()` left it alive,
+  the group kill did not. `.terminate()` no longer appears in service.py and a
+  test fails if it returns.
+- **A restart was a fresh run, and that is what "it was paused maybe cause
+  the update" was.** The SIGTERM handler only closed the HTTP server; the
+  child rendered on until Docker killed the container under it, and
+  `recover()` requeued the job at progress 5 with nothing kept, so a render
+  three clips in started again from the import. Twice for one customer on
+  5 Sept, because two sessions deployed four minutes apart. Now
+  `Processor.shutdown()` runs FIRST on SIGTERM: every job in flight is marked
+  `interrupted` (one write each, before anything slow), the children are
+  stopped as groups, the consumer threads stand down, and the handler only
+  then closes the server. `process()` keeps that mark whichever exception the
+  dying child or the aborted import surfaced as, and sends NO failure
+  callback -- the app keeps polling and sees the resume itself. `recover()`
+  then RESUMES rather than restarts: `partialClips`, `clipPlan` and
+  `totalClips` stay on the record, `resumed` counts the restarts, and the
+  fourth is failed with a reason (`MAX_RESUMES` = 3) instead of being retried
+  at every boot for ever with the only slot held each time.
+- **The plan checkpoint.** Scoring is minutes of Ollama on a single-slot box,
+  and a job interrupted while RENDERING paid it again from the top.
+  `clip_worker` now writes the selected, snapped, titled clips to
+  `jobs/<id>/plan.json` -- beside the RECORD, which survives a restart; the
+  working directory is removed on every attempt -- and a resumed job reads
+  them back, re-derives the verse map from the same transcript (under a
+  second, and the map holds nested records the plan has no reason to carry),
+  and renders only the clips whose ids the service did not already upload.
+  `upload_result` puts the earlier attempt's clips back in plan order and
+  recounts. **Only a RESUMED job reads a plan**: a fresh run of the same id
+  after an edit must not pick up a plan made from other settings.
+- **The deploy waits for the slot to empty.** `worker/drain.sh` reads the job
+  records out of the RUNNING container with the python it already has -- no
+  HTTP, no secret, and nothing the NEW image has to contain, because the old
+  container is the one answering -- and waits up to `DEPLOY_DRAIN_MINUTES`
+  (20) for running jobs. Queued ones have not started and are not waited
+  for. On timeout it WARNS AND PROCEEDS: the resume covers that case, and a
+  job that never finishes must not hold a deploy hostage. `deploy.sh` runs it
+  before `docker compose up --build`; the compose file gives the container
+  `stop_grace_period: 45s` for the marking and the group stop; the workflow's
+  timeout moved 30 -> 55 minutes and takes `drain_minutes` (validated to
+  digits, the one value it interpolates into a remote command). `/readiness`
+  reports `inFlight`. **`DEPLOY_DRAIN_MINUTES=0` is the emergency override**
+  -- a fix that must land whatever is running.
+- **Housekeeping ran ONCE, at boot.** Pruning the caches and the aged job
+  records is on an hourly thread now, because a worker that stays up for
+  weeks -- the point of deploys no longer restarting it needlessly -- never
+  pruned again, and the source cache is a gigabyte and a half per lecture. A
+  recovered preview render also goes back through `submit()` to the quick
+  lane instead of behind the next lecture on the main slot.
+- **The app's half.** `runRemoteAux` had NO stall detection: a re-render or
+  more-clips job whose worker died mid-way sat at "processing" until the
+  six-hour job timeout, holding the app-side slot and the worker's own, which
+  it never told to stop. It watches the same stage|progress|heartbeat
+  signature `runRemoteProject` has always watched, and cancels on the worker
+  before failing here, on a stall and on the timeout. A **404** from the
+  worker for a job it was given -- a replaced data volume, a record that aged
+  out while the app still held it -- re-submits the SAME payload under the
+  SAME id ONCE: `JobStore.create` is idempotent, so a worker that holds the
+  job answers with its record and one that lost it starts it; a second 404 is
+  the failure it always was. `MAX_WORKER_RETRIES` 10 -> 20, so the outage
+  window (ten minutes) outlasts a rebuild that reinstalls the Python wheels.
+  And `agent.tick()` pumps the queue whenever `retryDue()` -- the 30s retry
+  timers were the only clock, and a timer is lost with the process, so a
+  lecture left queued with its retry due sat until something else changed.
+  Gated on an OVERDUE retry deliberately, so a test that seeds a queued job
+  never starts it by accident.
+- **Tests: `test_worker_resume.py` (11), `test_render_plan.py` (3),
+  `worker-resilience.test.mjs` (6)** -- the real service against a fake
+  clip_worker (with a real grandchild), the real engine against a fake worker
+  on a local port, the real job store. All twenty proven red in ONE stashed
+  run against the unpatched sources before being kept.
+- **What is NOT proven here**: a real restart on the box mid-render. The next
+  worker deploy that lands while a job runs is the confirmation -- the job's
+  status should read `interrupted`, then `resumed: 1` with "Resuming from the
+  saved clip plan" in its stage, and the clip count should come back whole.
+  Until then the claim is the tests', not the box's.
+
+## The safe box is always TikTok and Shorts (v3.133.0, 6 Sept 2026)
+
+Youssef: "figure out the perfect safe social zone using TikTok and YouTube
+and use it for ours". `platformsFor` drew the box for the CONNECTED
+platforms, so a template designed with YouTube alone connected sat its
+caption under TikTok's caption block the day TikTok was connected -- the
+exact fault the table exists to prevent, one connection later. `postingSet()`
+in safe-zones.js is the floor now: always TikTok and Shorts together (top 150,
+right 140, bottom 484, left 60 -- 7.8% / 13.0% / 25.2% / 5.6% of a 9:16
+frame), WIDENED by any connected Meta platform and never narrowed below the
+pair. With nothing connected the hint names the pair.
+
+**And the shade now says BY WHAT it is covered.** "show a siloet where side
+buttons and text would go" -- `safeSilhouette()` in index.html draws the
+player's own chrome as one SVG in the frame's 1080x1920 space: the action
+rail up the right (avatar with its follow badge, like, comment, share, the
+sound disc, each with a count bar), the handle, two caption lines and the
+sound line above the tab bar at the foot, and the feed tabs at the head. It
+is positioned from the SAME box the bands are cut from -- the rail on the
+centre line of the right-hand band, its stack climbing from the bottom
+band's top edge -- so connecting a platform that covers more moves the
+silhouette with the shade (measured: the disc sits 70px above the band's
+edge on the floor and on the Meta-widened box alike). Ink only, rgba
+literals in the markup so the daylight generator, which remaps hex in CSS,
+never touches them; the stage is night in both themes. Ten `data-part`
+groups, and `test/safe-chrome.test.mjs` CALLS the function with two boxes
+and reads the SVG back. The two drag tests in studio-design that computed
+their box from "nothing connected = every platform" now compute it from
+`postingSet`, and the one assertion that read the hint for the words "lower
+third" -- words v3.132.0 took OUT of the hint on purpose -- checks by
+dragging instead, which is what the hint's promise had become.
 
 ## A cancelled lecture was told to wait, and a retry would have doubled its clips (v3.132.1, 6 Sept 2026)
 

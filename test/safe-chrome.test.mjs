@@ -40,21 +40,30 @@ const state = (providers, publishing) => ({
 test('the shade is positioned from the same box the dashed edge is drawn from', () => {
   const sb = load();
   const v = sb.StudioAdapter.bindings(state({ youtube: { connected: true } }, { youtube: { enabled: true } }));
-  const box = sb.DCSafeZones.safeArea(['youtube'], 1080, 1920);
+  // YouTube alone connected still draws the TikTok+Shorts pair (the floor);
+  // what this test pins is that the shade and the dashed edge read ONE box.
+  const box = sb.DCSafeZones.safeArea(['youtube', 'tiktok'], 1080, 1920);
   for (const k of ['left', 'right', 'top', 'bottom']) assert.ok(Math.abs(v.safeBox[k] - box[k]) < 1e-9, k);
   assert.equal(v.safeBox.degenerate, false);
-  assert.deepEqual(Array.from(v.safePlatforms), ['youtube']);
+  assert.deepEqual(Array.from(v.safePlatforms), ['youtube', 'tiktok']);
   // And the design's own edge reads the identical numbers.
   assert.match(v.safeBoxStyle, new RegExp(`top: ${(box.top * 100).toFixed(2)}%`));
   assert.match(v.safeBoxStyle, new RegExp(`bottom: ${((1 - box.bottom) * 100).toFixed(2)}%`));
 });
 
-test('with nothing connected the shade is the union, and says so', () => {
+test('with nothing connected the shade is TikTok and Shorts, and says so', () => {
+  // Youssef, 6 Sept 2026: "figure out the perfect safe social zone using
+  // TikTok and YouTube and use it for ours". The pair is the floor whether or
+  // not either is connected while a template is being designed; a connected
+  // Meta platform widens it (the sibling test in safe-zones.test.mjs).
   const sb = load();
   const v = sb.StudioAdapter.bindings(state({}, {}));
-  const box = sb.DCSafeZones.safeArea([], 1080, 1920);
-  assert.ok(Math.abs(v.safeBox.bottom - box.bottom) < 1e-9);
-  assert.match(v.safeHint, /every platform/);
+  const box = sb.DCSafeZones.safeArea(['youtube', 'tiktok'], 1080, 1920);
+  assert.ok(Math.abs(v.safeBox.bottom - box.bottom) < 1e-9, 'the bottom is TikTok\u2019s 484, not Meta\u2019s 670');
+  assert.ok(Math.abs(v.safeBox.top - box.top) < 1e-9, 'the top is Shorts\u2019 150');
+  assert.deepEqual(Array.from(v.safePlatforms), ['youtube', 'tiktok']);
+  assert.match(v.safeHint, /Shorts and TikTok/);
+  assert.doesNotMatch(v.safeHint, /every platform/);
 });
 
 test('the hint is one line about the shade, and the snap list is gone from it', () => {
@@ -103,4 +112,64 @@ test('the shade sits under the caption and takes no pointer events', () => {
   assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(block.replace(/#dcSafeChrome/g, '')), 'no hex colour in the shade rules');
   assert.ok(!/rgba\(\s*0\s*,\s*0\s*,\s*0/.test(block), 'no rgba(0,0,0) in the shade rules');
   assert.ok(!/body\.dc-light[^{]*dcSafeChrome/.test(read('src/public/studio-light.generated.css')), 'and the generated daylight sheet carries no twin of it');
+});
+
+/**
+ * The silhouette (6 Sept 2026). Youssef: "show a siloet where side buttons
+ * and text would go". safeSilhouette() is pulled out of index.html and CALLED
+ * with two boxes -- the TikTok + Shorts floor and one widened by Meta -- and
+ * the SVG it returns is read: every part is there, the rail and the foot
+ * are positioned from the box, nothing is drawn in the clear area, and every
+ * colour is an rgba literal the daylight generator cannot remap.
+ */
+function silhouette() {
+  const page = read('src/public/index.html');
+  const start = page.indexOf('function safeSilhouette(');
+  const end = page.indexOf('\n    }\n', start) + 6;
+  return new Function(page.slice(start, end) + '; return safeSilhouette;')();
+}
+const boxFor = keys => {
+  const sb = load();
+  return sb.DCSafeZones.safeArea(keys, 1080, 1920);
+};
+const attr = (svg, part, name) => {
+  const group = new RegExp(`<g data-part="${part}">([\\s\\S]*?)</g>`).exec(svg);
+  assert.ok(group, `part ${part} is drawn`);
+  const value = new RegExp(`${name}="(-?[0-9.]+)"`).exec(group[1]);
+  assert.ok(value, `${part} carries ${name}`);
+  return Number(value[1]);
+};
+
+test('the silhouette draws the rail, the foot and the tabs from the same box as the shade', () => {
+  const draw = silhouette();
+  const floor = boxFor(['youtube', 'tiktok']);
+  const svg = draw(floor);
+  assert.match(svg, /^<svg class="dc-safe-ui" viewBox="0 0 1080 1920"/);
+  for (const part of ['tabs', 'nav', 'sound', 'caption', 'handle', 'disc', 'share', 'comment', 'like', 'avatar']) {
+    assert.match(svg, new RegExp(`data-part="${part}"`), `${part} is drawn`);
+  }
+  // The rail sits on the centre line of the right-hand band.
+  const railW = Math.round((1 - floor.right) * 1080);
+  assert.equal(attr(svg, 'disc', 'cx'), 1080 - Math.round(railW / 2));
+  // and stacks up from the bottom band's top edge, so it moves with the box.
+  const bandBottom = Math.round(floor.bottom * 1920);
+  assert.equal(attr(svg, 'disc', 'cy'), bandBottom - 70);
+  // like, comment and share are paths; their count bars carry the y.
+  assert.ok(attr(svg, 'avatar', 'cy') < attr(svg, 'like', 'y'), 'avatar above like');
+  assert.ok(attr(svg, 'like', 'y') < attr(svg, 'comment', 'y'), 'like above comment');
+  assert.ok(attr(svg, 'comment', 'y') < attr(svg, 'share', 'y'), 'comment above share');
+  assert.ok(attr(svg, 'share', 'y') < attr(svg, 'disc', 'cy'), 'share above the disc');
+  // The foot is measured from the frame's bottom and stays inside the band.
+  assert.ok(attr(svg, 'handle', 'y') >= bandBottom, 'the handle is in the covered band');
+  assert.ok(attr(svg, 'nav', 'y') > attr(svg, 'handle', 'y'), 'the tab bar is under the handle');
+  // The tabs sit inside the top band.
+  assert.ok(attr(svg, 'tabs', 'y') + 46 <= Math.round(floor.top * 1920), 'the tabs are in the top band');
+  // Widened by Meta: the rail stack climbs with the bottom band.
+  const wide = boxFor(['youtube', 'tiktok', 'instagram']);
+  assert.ok(wide.bottom < floor.bottom, 'fixture: Meta covers more of the foot');
+  assert.equal(attr(draw(wide), 'disc', 'cy'), Math.round(wide.bottom * 1920) - 70);
+  // Ink only: rgba literals, never hex, never a var() an SVG attribute cannot resolve.
+  assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(svg), 'no hex in the silhouette');
+  assert.ok(!/var\(/.test(svg), 'no var() in an SVG attribute');
+  assert.match(read('src/public/studio-tokens.css'), /#dcSafeChrome \.dc-safe-ui \{[^}]*pointer-events: none/);
 });

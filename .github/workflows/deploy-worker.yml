@@ -70,6 +70,12 @@ on:
         description: 'Probe: the lecture title (the only place a speaker may come from)'
         required: false
         default: ''
+      # How long the deploy waits for the box's running job(s) to finish
+      # before recreating the container (worker/drain.sh). 0 deploys at once.
+      drain_minutes:
+        description: 'Minutes to wait for running jobs before recreating the container (0 = do not wait)'
+        required: false
+        default: '20'
       # Diagnostics. Dispatch-only and OFF by default. When on, the deploy is
       # SKIPPED -- asking the box a question must never restart a worker
       # mid-job -- and the box is asked what happened to its recent jobs:
@@ -113,7 +119,9 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The drain (up to drain_minutes, default 20) plus a rebuild and the
+    # proof; the drain is what made 30 too short.
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
 
@@ -215,7 +223,14 @@ jobs:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
           RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
+          DRAIN_MINUTES: ${{ inputs.drain_minutes }}
         run: |
+          # Digits only, or the default. Validated here so that the ONE value
+          # this step interpolates into a remote command cannot be anything
+          # but a number (a push has no inputs and gets the default).
+          DRAIN="${DRAIN_MINUTES:-20}"
+          case "$DRAIN" in ''|*[!0-9]*) DRAIN=20 ;; esac
+          echo "Drain: up to $DRAIN minute(s) for running jobs"
           # Strip CR/LF only. A password pasted into GitHub's secret box can
           # carry a trailing newline, and sshpass would then offer the password
           # PLUS that newline -- refused, and indistinguishable from the box
@@ -224,7 +239,7 @@ jobs:
           # newline can never be part of a password typed into a form, a space
           # can.
           export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
-          "$RUNNER_TEMP/rssh" 'bash -s' <<'REMOTE'
+          "$RUNNER_TEMP/rssh" "DEPLOY_DRAIN_MINUTES=$DRAIN bash -s" <<'REMOTE'
           set -euo pipefail
           cd /opt/deenclipped
           echo "--- before ---"

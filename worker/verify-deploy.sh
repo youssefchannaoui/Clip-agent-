@@ -69,6 +69,12 @@ check_code "AI request declares num_ctx"     "AI_NUM_CTX"          /app/worker/c
 check_code "AI answer pinned by schema"      "clip_rows_schema"    /app/worker/clip_worker.py
 check_code "translate clipped to the Arabic" "clip_timestamps"     /app/worker/clip_worker.py
 check_code "job wall-clock budget"           "job_budget_seconds"  /app/worker/service.py
+# 6 Sept 2026: a stopped job takes its ffmpeg and Whisper with it, a restart
+# marks running jobs interrupted and resumes them from the saved plan rather
+# than from the import, and the deploy waits for the slot to empty first.
+check_code "children stopped as a group"     "start_new_session"   /app/worker/service.py
+check_code "restart resumes, not restarts"   "def shutdown"        /app/worker/service.py
+check_code "render plan checkpoint"          "def write_plan"      /app/worker/clip_worker.py
 
 echo
 

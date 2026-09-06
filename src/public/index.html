@@ -3323,10 +3323,56 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       const pct=v=>(Math.max(0,Math.min(1,v))*100).toFixed(2)+'%';
       const L=pct(box.left),R=pct(1-box.right),T=pct(box.top),B=pct(1-box.bottom);
       dcSetHtml(safeChromeEl,
-        `<span class="dc-safe-band dc-safe-top" style="left:0;right:0;top:0;height:${T}"><i class="dc-safe-tabs"></i></span>`
-        +`<span class="dc-safe-band dc-safe-bottom" style="left:0;right:0;bottom:0;height:${B}"><i class="dc-safe-user"></i><i class="dc-safe-line-a"></i><i class="dc-safe-line-b"></i></span>`
+        `<span class="dc-safe-band dc-safe-top" style="left:0;right:0;top:0;height:${T}"></span>`
+        +`<span class="dc-safe-band dc-safe-bottom" style="left:0;right:0;bottom:0;height:${B}"></span>`
         +`<span class="dc-safe-band dc-safe-left" style="left:0;width:${L};top:${T};bottom:${B}"></span>`
-        +`<span class="dc-safe-band dc-safe-rail" style="right:0;width:${R};top:${T};bottom:${B}"><i></i><i></i><i></i><i></i></span>`);
+        +`<span class="dc-safe-band dc-safe-rail" style="right:0;width:${R};top:${T};bottom:${B}"></span>`
+        +safeSilhouette(box));
+    }
+    /*
+     * THE SILHOUETTE. Youssef, 6 Sept 2026: "show a siloet where side buttons
+     * and text would go". The shade says WHAT is covered; this says BY WHAT:
+     * the action rail (avatar, like, comment, share, sound disc) up the right,
+     * the handle, caption lines and sound line above the tab bar at the foot,
+     * and the feed tabs at the head -- the chrome every short-form player
+     * draws over a vertical video. It is one SVG in the frame's own 1080x1920
+     * space, positioned from the SAME box the shade is cut from: the rail sits
+     * in the right-hand band and stacks up from the bottom band's top edge, so
+     * connecting a platform that covers more moves the silhouette with the
+     * shade. Ink only, no fill behind it, and never over the clear area.
+     */
+    function safeSilhouette(box){
+      const W=1080,H=1920;
+      const ink='rgba(255,255,255,.22)',bright='rgba(255,255,255,.4)';
+      const bandTop=Math.round(box.top*H);              // where the top band ends
+      const bandBottom=Math.round(box.bottom*H);        // where the bottom band starts
+      const railW=Math.round((1-box.right)*W);          // the rail band's width
+      const cx=W-Math.round(railW/2);                   // rail centre line
+      const bar=(x,y,w,h,fill)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.round(h/2)}" fill="${fill||ink}"/>`;
+      const parts=[];
+      // Feed tabs just above the top band's edge: "Following · For You".
+      if(bandTop>=90){
+        const ty=bandTop-64;
+        parts.push(`<g data-part="tabs">${bar(392,ty,132,26)}${bar(560,ty,118,26,bright)}${bar(586,ty+40,66,6,bright)}<circle cx="1002" cy="${ty+13}" r="13" fill="none" stroke="${ink}" stroke-width="6"/><rect x="1010" y="${ty+22}" width="18" height="6" rx="3" fill="${ink}" transform="rotate(45 1010 ${ty+22})"/></g>`);
+      }
+      // The foot, from the frame's bottom edge up: tab bar, sound, captions, handle.
+      const navY=H-96;
+      parts.push(`<g data-part="nav">${bar(80,navY+20,64,10)}${bar(300,navY+20,64,10)}<rect x="500" y="${navY+8}" width="80" height="48" rx="12" fill="${bright}"/><rect x="530" y="${navY+18}" width="20" height="28" rx="4" fill="rgba(9,9,10,.6)"/><rect x="526" y="${navY+22}" width="28" height="20" rx="4" fill="rgba(9,9,10,.6)"/>${bar(736,navY+20,64,10)}${bar(956,navY+20,64,10)}${bar(74,navY+48,76,8)}${bar(292,navY+48,80,8)}${bar(732,navY+48,72,8)}${bar(950,navY+48,76,8)}</g>`);
+      parts.push(`<g data-part="sound"><circle cx="72" cy="${H-142}" r="10" fill="${ink}"/><rect x="78" y="${H-172}" width="6" height="30" rx="3" fill="${ink}"/>${bar(104,H-162,340,20)}</g>`);
+      parts.push(`<g data-part="caption">${bar(60,H-258,620,24)}${bar(60,H-214,430,24)}</g>`);
+      parts.push(`<g data-part="handle">${bar(60,H-312,232,30,bright)}</g>`);
+      // The rail, stacked up from the bottom band's top edge.
+      const disc=bandBottom-70;
+      parts.push(`<g data-part="disc"><circle cx="${cx}" cy="${disc}" r="34" fill="none" stroke="${ink}" stroke-width="9"/><circle cx="${cx}" cy="${disc}" r="12" fill="${ink}"/></g>`);
+      const share=disc-138;
+      parts.push(`<g data-part="share"><path transform="translate(${cx-30} ${share-24})" d="M4 46 C6 24 22 12 42 12 L42 2 L58 18 L42 34 L42 24 C26 24 12 32 4 46 Z" fill="${ink}"/>${bar(cx-24,share+34,48,12)}</g>`);
+      const comment=share-134;
+      parts.push(`<g data-part="comment"><path transform="translate(${cx-30} ${comment-26})" d="M8 0 H52 A8 8 0 0 1 60 8 V34 A8 8 0 0 1 52 42 H30 L16 54 V42 H8 A8 8 0 0 1 0 34 V8 A8 8 0 0 1 8 0 Z" fill="${ink}"/>${bar(cx-24,comment+36,48,12)}</g>`);
+      const like=comment-134;
+      parts.push(`<g data-part="like"><path transform="translate(${cx-33} ${like-30}) scale(1.4)" d="M24 42 L21.5 39.8 C10 29.4 4 24 4 17.2 4 11.8 8.2 7.6 13.6 7.6 16.6 7.6 19.6 9 21.5 11.3 23.4 9 26.4 7.6 29.4 7.6 34.8 7.6 39 11.8 39 17.2 39 24 33 29.4 26.5 39.8 Z" fill="${ink}"/>${bar(cx-24,like+38,48,12)}</g>`);
+      const avatar=like-140;
+      parts.push(`<g data-part="avatar"><circle cx="${cx}" cy="${avatar}" r="38" fill="${ink}"/><circle cx="${cx}" cy="${avatar+40}" r="15" fill="${bright}"/><rect x="${cx-8}" y="${avatar+37}" width="16" height="6" rx="3" fill="rgba(9,9,10,.6)"/><rect x="${cx-3}" y="${avatar+32}" width="6" height="16" rx="3" fill="rgba(9,9,10,.6)"/></g>`);
+      return `<svg class="dc-safe-ui" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${parts.join('')}</svg>`;
     }
 
     /* The sample caption, drawn word by word so the live word can carry its own

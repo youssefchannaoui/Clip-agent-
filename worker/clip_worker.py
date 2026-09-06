@@ -34,6 +34,7 @@ import time
 import threading
 import urllib.error
 import urllib.request
+import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -5975,6 +5976,50 @@ class StageClock:
         return {**self.stages, "total": round(time.time() - self.started, 1)}
 
 
+PLAN_VERSION = 1
+
+
+def write_plan(path: Path, selected: list[Candidate]) -> None:
+    """Checkpoint the selected, snapped, titled clips beside the job record.
+
+    Scoring is minutes of Ollama on a single-slot box, and a job interrupted
+    while RENDERING used to pay it again from the top. The verse map (`ayat`)
+    is deliberately NOT stored: it is re-derived from the same transcript on
+    resume in under a second, and it holds nested records the plan has no
+    reason to carry. Written atomically, so a restart mid-write leaves the
+    previous plan or none rather than half of one.
+    """
+    rows = []
+    for candidate in selected:
+        row = dataclasses.asdict(candidate)
+        row.pop("ayat", None)
+        rows.append(row)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps({"version": PLAN_VERSION, "clips": rows}, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(path)
+
+
+def load_plan(path: Path) -> list[Candidate] | None:
+    """The plan write_plan wrote, or None for anything it did not."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("version") != PLAN_VERSION:
+        return None
+    names = {field.name for field in dataclasses.fields(Candidate)}
+    out: list[Candidate] = []
+    for row in data.get("clips") or []:
+        if not isinstance(row, dict):
+            return None
+        try:
+            out.append(Candidate(**{key: value for key, value in row.items() if key in names}))
+        except TypeError:
+            return None
+    return out or None
+
+
 def process(job_file: Path) -> None:
     job = json.loads(job_file.read_text(encoding="utf-8"))
     if job.get("mode") == "rerender":
@@ -6102,30 +6147,45 @@ def process(job_file: Path) -> None:
 
     progress("Analysing transcript", 61, sourceDurationSec=round(duration, 2), processedSec=round(duration, 2), etaSec=None)
     settings = job["settings"]
-    candidates = filter_length_bands(build_candidates(
-        segments,
-        float(settings.get("clipMinSeconds", 20)),
-        float(settings.get("clipMaxSeconds", 90)),
-    ), settings)
-    # A retry of a lecture that already produced clips -- cancelled part-way,
-    # or failed after some had uploaded -- carries the moments it already
-    # holds (existingRanges, the same list the more-clips path reads), so the
-    # re-run ADDS to the set instead of cutting the same moments again under
-    # new ids. A first run carries none and this is a no-op.
-    existing = list(job.get("existingRanges") or [])
-    if existing:
-        before = len(candidates)
-        candidates = remove_existing_moments(candidates, existing)
-        if before and not candidates:
-            raise RuntimeError(nothing_new_reason(existing))
-    progress("Finding and scoring clips", 69, candidateCount=len(candidates), etaSec=None)
-    candidates = refine_with_ollama(candidates, settings, str(job.get("title") or ""))
-    selected = select_candidates(candidates, int(settings.get("clipsPerVideo", 8)))
+    plan_file = Path(str(job["planFile"])) if job.get("planFile") else None
+    resume = job.get("resume") if isinstance(job.get("resume"), dict) else None
     lecture_verses = lecture_ayat(segments, quran.load() if quran else None)
-    selected = snap_clips_to_ayat(selected, segments, job.get("template") or {}, settings,
-                                  ayat=lecture_verses)
-    selected = attach_lecture_ayat(selected, lecture_verses)
-    selected = title_selected_clips(selected, settings, str(job.get("title") or ""))
+    # THE PLAN CHECKPOINT. A job the worker picks up again after a restart
+    # (service.py recover()) reads the clips its first attempt chose instead
+    # of scoring the lecture a second time; the verse map is re-derived
+    # because it comes off the same transcript either way. Only a resumed
+    # job reads a plan -- a fresh run of the same id after an edit would
+    # otherwise pick up a plan made from different settings.
+    selected = load_plan(plan_file) if (resume and plan_file) else None
+    if selected is not None:
+        selected = attach_lecture_ayat(selected, lecture_verses)
+        progress("Resuming from the saved clip plan", 69, candidateCount=len(selected), etaSec=None)
+    else:
+        candidates = filter_length_bands(build_candidates(
+            segments,
+            float(settings.get("clipMinSeconds", 20)),
+            float(settings.get("clipMaxSeconds", 90)),
+        ), settings)
+        # A retry of a lecture that already produced clips -- cancelled
+        # part-way, or failed after some had uploaded -- carries the moments
+        # it already holds (existingRanges, the same list the more-clips path
+        # reads), so the re-run ADDS to the set instead of cutting the same
+        # moments again under new ids. A first run carries none: a no-op.
+        existing = list(job.get("existingRanges") or [])
+        if existing:
+            before = len(candidates)
+            candidates = remove_existing_moments(candidates, existing)
+            if before and not candidates:
+                raise RuntimeError(nothing_new_reason(existing))
+        progress("Finding and scoring clips", 69, candidateCount=len(candidates), etaSec=None)
+        candidates = refine_with_ollama(candidates, settings, str(job.get("title") or ""))
+        selected = select_candidates(candidates, int(settings.get("clipsPerVideo", 8)))
+        selected = snap_clips_to_ayat(selected, segments, job.get("template") or {}, settings,
+                                      ayat=lecture_verses)
+        selected = attach_lecture_ayat(selected, lecture_verses)
+        selected = title_selected_clips(selected, settings, str(job.get("title") or ""))
+        if plan_file and selected:
+            write_plan(plan_file, selected)
     clock.lap("score")
     if not selected:
         raise RuntimeError(no_clip_reason(segments, duration, settings))
@@ -6150,7 +6210,18 @@ def process(job_file: Path) -> None:
     ]
     clip_seconds: list[float] = []
 
+    # Clips the interrupted attempt already rendered AND uploaded. The service
+    # names them from its own record; they are skipped here and put back into
+    # the result by its upload_result, so the lecture comes back whole with
+    # nothing that already exists rendered twice.
+    already_done = {str(clip_id) for clip_id in ((resume or {}).get("uploadedIds") or [])}
+    skipped = 0
     for index, candidate in enumerate(selected, 1):
+        if f"{job['id']}-{index:02d}" in already_done:
+            skipped += 1
+            progress(f"Clip {index} of {total} was rendered before the restart", 75 + int((index / max(total, 1)) * 20),
+                     currentClip=index, totalClips=total, clipPlan=clip_plan, clipPercent=100, etaSec=None)
+            continue
         clip_started = time.time()
         # ffmpeg reports several times a second and every progress() writes the
         # status file, so this is throttled to something a person can read.
@@ -6203,7 +6274,7 @@ def process(job_file: Path) -> None:
             "templateId": job["template"]["id"],
             "templateName": job["template"]["name"],
             "musicRequired": True,
-            "clipCount": len(rendered),
+            "clipCount": len(rendered) + skipped,
             # Asking for 8 and getting 5 is normal -- overlapping windows are
             # dropped and a short lecture simply has fewer distinct moments --
             # but it needs saying, or it reads as clips going missing.

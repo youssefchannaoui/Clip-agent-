@@ -29,6 +29,7 @@
   var SAFE = global.DCSafeZones || {
     safeArea: function () { return { top: 0, right: 1, bottom: 1, left: 0, degenerate: false }; },
     platformsFor: function () { return []; },
+    postingSet: function () { return []; },
     describe: function () { return ''; },
     unionInsets: function () { return { top: 0, right: 0, bottom: 0, left: 0 }; },
   };
@@ -3845,7 +3846,9 @@
      * picture. safe-zones.js does that arithmetic; see it for the numbers and
      * their sources.
      */
-    var SAFE_PLATFORMS = SAFE.platformsFor(DATA.publishingSettings, DATA.social);
+    // Always TikTok and Shorts, widened by anything else connected -- see
+    // postingSet in safe-zones.js for why the pair is the floor.
+    var SAFE_PLATFORMS = SAFE.postingSet(DATA.publishingSettings, DATA.social);
     var SAFE_BOX = SAFE.safeArea(SAFE_PLATFORMS, tpl.width, tpl.height);
     var SAFE_TOP = SAFE_BOX.top;
     var SAFE_BOTTOM = SAFE_BOX.bottom;

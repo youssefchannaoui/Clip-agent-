@@ -1465,13 +1465,9 @@ body.dc-livebar #studio main { padding-bottom: 92px; }
    percentages from the adapter's safeBox; only the look lives here. */
 #dcSafeChrome { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 #dcSafeChrome .dc-safe-band { position: absolute; pointer-events: none; background: rgba(9, 9, 10, .46); }
-#dcSafeChrome .dc-safe-band i { position: absolute; display: block; border-radius: 999px; background: rgba(255, 255, 255, .22); }
-#dcSafeChrome .dc-safe-tabs { left: 30%; right: 30%; top: 58%; height: 20%; }
-#dcSafeChrome .dc-safe-user { left: 6%; top: 15%; width: 27%; height: 9%; }
-#dcSafeChrome .dc-safe-line-a { left: 6%; top: 32%; width: 66%; height: 6%; }
-#dcSafeChrome .dc-safe-line-b { left: 6%; top: 44%; width: 46%; height: 6%; }
-#dcSafeChrome .dc-safe-rail i { left: 22%; width: 56%; aspect-ratio: 1; }
-#dcSafeChrome .dc-safe-rail i:nth-child(1) { bottom: 4%; }
-#dcSafeChrome .dc-safe-rail i:nth-child(2) { bottom: 16%; }
-#dcSafeChrome .dc-safe-rail i:nth-child(3) { bottom: 28%; }
-#dcSafeChrome .dc-safe-rail i:nth-child(4) { bottom: 40%; }
+/* The silhouette of the player's own chrome (safeSilhouette in index.html):
+   one SVG in the frame's 1080x1920 space, ink only, drawn from the same box
+   the bands are cut from. Its colours are rgba literals in the markup so the
+   daylight generator, which remaps hex in CSS, never touches them -- the
+   stage is night in both themes. */
+#dcSafeChrome .dc-safe-ui { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
