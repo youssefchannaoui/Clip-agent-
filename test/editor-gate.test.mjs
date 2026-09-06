@@ -97,17 +97,27 @@ test('the editor underneath cannot be reached by mouse or by keyboard', () => {
     'and the keyboard in JS — pointer-events does not affect the tab order');
 });
 
-test('the beta popup, which promises that edits save, is silenced', () => {
-  // "Your edits save the moment you make them" is true of the editor and false
-  // of the gate, and it renders on top of the notice.
-  assert.match(gateCss, /body\.dc-editor-gated #edBetaPop[^}]*display:\s*none/);
-  assert.match(gateJs, /dc-editor-gated/, 'something has to set that class');
+test('the editor no longer wears a BETA badge or a first-run beta pop-up', () => {
+  // The pop-up ("rough edges are possible while we improve this") and the
+  // "Clip editor · BETA" title were retired with the editor fixes of
+  // 6 Sept 2026: a screen that has just come out from behind "coming soon"
+  // must not open by telling the customer it is not ready after all. The
+  // gate's CSS rule for the pop-up is harmless and may stay; the pop-up
+  // itself must not come back.
+  const host = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  assert.ok(!host.includes('edBetaPop'), 'the beta pop-up is gone from the host');
+  assert.ok(!host.includes('deenEditorBetaSeen'), 'and so is its storage key');
+  const adapter = fs.readFileSync(path.join(ROOT, 'src/public/studio-adapter.js'), 'utf8');
+  assert.ok(!/editor:\s*'Clip editor[^']*BETA/.test(adapter), 'the title carries no BETA');
+  assert.ok(!/Beta \\u2014 sliders preview instantly/.test(adapter), 'the subtitle no longer calls it a beta');
+  assert.match(gateJs, /dc-editor-gated/, 'the gate still marks the body while it is up');
 });
 
 test('the gate never rewrites a subtitle belonging to another screen', () => {
-  // It replaces the editor's beta line in the topbar, and the topbar is shared
-  // by every screen in the app.
-  assert.match(gateJs, /beta/i);
+  // It replaces the editor's own line in the topbar, and the topbar is shared
+  // by every screen in the app. The match is on the words the editor's line
+  // actually carries (Preview / Save clip), never on "beta".
+  assert.match(gateJs, /Save clip\|Preview/);
   assert.ok(/if \(!editor\) return;/.test(gateJs),
     'it must give up before touching anything when the editor is not on screen');
 });

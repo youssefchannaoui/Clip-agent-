@@ -50,7 +50,11 @@
     "Unlock with Pro": "aiGateCta",
     "STUDIO": "aiTierTag",
     "Desktop notifications": "notifsLabel",
-    "Drag freely — it snaps to thirds, halves and the safe-zone edges": "safeHint"
+    "Drag freely — it snaps to thirds, halves and the safe-zone edges": "safeHint",
+    "30 fps": "edFrameRate",
+    "AAC 192 kbps": "edAudioSpec",
+    "FFprobe on export": "edVerifyLabel",
+    "Re-rendering this clip costs 1 token. Saving to all clips of the lecture re-renders each of them.": "edExportNote"
   },
   "styleOverrides": {
     "position: relative; aspect-ratio: 16 / 9; border-radius: 11px; overflow: hidden; border: 1px solid #26262A; background: #17171A url('src/public/marketing-assets/reel-kaaba-a.webp') center/cover no-repeat;": "jobPosterStyle",

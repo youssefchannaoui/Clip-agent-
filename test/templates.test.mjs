@@ -337,6 +337,13 @@ test('the sanitiser refuses to store an invisible watermark', () => {
   // Blocked at the gate AND at storage. A subscription can lapse between
   // saving a template and rendering with it, so the stored value must not be
   // an invisible string waiting to become free watermark removal later.
-  const saved = templates.sanitiseClipStyle({ watermark: '​⠀' });
-  assert.equal(saved.watermark, '', 'an invisible watermark is stored as empty, not as the character');
+  // Since v3.137.0 the watermark is not a per-clip field at ALL (it belongs
+  // to the account, BRAND_FIELDS), so the strongest form of this holds: the
+  // key is dropped, not stored empty. The template-level sanitiser keeps the
+  // empty-not-invisible rule.
+  const saved = templates.sanitiseClipStyle({ watermark: '​⠀', grain: 5 });
+  assert.ok(!('watermark' in saved), 'a clip carries no watermark field of its own');
+  assert.equal(saved.grain, 5, 'and the rest of the patch still lands');
+  const template = templates.sanitiseTemplate({ watermark: '​⠀' }, { id: 'x', builtIn: false, userId: 'u' });
+  assert.equal(template.watermark, '', 'on a template an invisible watermark is stored as empty, not as the character');
 });

@@ -73,8 +73,8 @@
     return overlay;
   }
 
-  // What the topbar says instead of the beta line, which promises that edits
-  // save the moment they are made -- true of the editor, not of this.
+  // What the topbar says instead of the editor's own line, which promises
+  // that sliders show and Save renders -- true of the editor, not of this.
   var GATED_SUBTITLE = 'Opens in the next update. Your clips are unaffected.';
 
   function apply() {
@@ -85,10 +85,12 @@
     document.body.classList.toggle('dc-editor-gated', !!editor);
     if (!editor) return;
 
-    // Only ever rewrites the editor's own beta line, and only while the editor
-    // is the screen: every other subtitle is left exactly as the app wrote it.
+    // Only ever rewrites the editor's own subtitle, and only while the editor
+    // is the screen (the early return above): every other subtitle is left
+    // exactly as the app wrote it. The editor's line names its three speeds
+    // (sliders / Preview / Save); none of them is available behind the gate.
     var subtitle = document.querySelector('#dcTopbar > div:first-child > span');
-    if (subtitle && /beta/i.test(subtitle.textContent) && subtitle.textContent !== GATED_SUBTITLE) {
+    if (subtitle && /Save clip|Preview/.test(subtitle.textContent) && subtitle.textContent !== GATED_SUBTITLE) {
       subtitle.textContent = GATED_SUBTITLE;
     }
     var overlay = editor.querySelector('#' + OVERLAY_ID);

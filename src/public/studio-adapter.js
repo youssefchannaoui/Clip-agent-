@@ -2412,7 +2412,7 @@
   var TITLES = {
     home: 'Home', queue: 'Review queue', library: 'Lecture library', schedule: 'Schedule',
     templates: 'Templates', music: 'Nasheed library', language: 'Arabic & terms',
-    performance: 'Performance', editor: 'Clip editor \u00b7 BETA', tokens: 'Tokens & billing',
+    performance: 'Performance', editor: 'Clip editor', tokens: 'Tokens & billing',
     owner: 'Owner', deenai: 'DeenAI', help: 'Help',
     // The lecture's own name is drawn 18px bold in the BODY directly under this
     // header (detailTitle), so the header names the kind of screen rather than
@@ -2422,9 +2422,11 @@
   };
 
   function sublineFor(screen, ctx) {
-    // Honest label while the editor is rough: preview and edit feedback can
-    // be slow, and saying so beats looking broken. Remove when it earns it.
-    if (screen === 'editor') return 'Beta \u2014 sliders preview instantly; Save renders your changes onto the video';
+    // Three speeds, said plainly: caption geometry moves as the slider does,
+    // Preview renders a few real seconds of everything else on the quick lane,
+    // and Save renders the whole clip. "Sliders preview instantly" used to be
+    // the promise for every tab, and it was only ever true of captions.
+    if (screen === 'editor') return 'Caption sliders show instantly \u00b7 Preview renders a few seconds \u00b7 Save clip renders it all';
     var empty = ctx.projects.length === 0;
     switch (screen) {
       case 'home':
@@ -4587,6 +4589,26 @@
     function endTour() { markTourSeen(); setUI({ tourStep: -1, tourAwait: null }); }
     // Set by the host only when the rendered file fails to play.
     var edSourceFallback = Boolean(UI.edSourceFallback);
+    // The account's watermark, read the way the Templates screen reads it: the
+    // brand record first, the template (which the server has already laid the
+    // brand over) when the record has nothing to say.
+    var edBrand = (DATA && DATA.brand) || {};
+    var edHasBrand = function (k) { return Object.prototype.hasOwnProperty.call(edBrand, k); };
+    var edWmText = edHasBrand('watermark') ? edBrand.watermark : tpl.watermark;
+    var edWmOp = edHasBrand('watermarkOpacity') ? edBrand.watermarkOpacity : tpl.watermarkOpacity;
+    var edWmOn = Boolean(String(edWmText || '').trim()) && Number(edWmOp) > 0;
+    // What the RENDER cannot show yet. A style change that is still a draft,
+    // or saved but not rendered, is invisible on the file underneath -- the
+    // editor plays the render (invariant 4) and the render predates it. The
+    // grade is echoed approximately over the picture and labelled; framing
+    // cannot be, so it is said instead. Both clear the moment the render lands.
+    var edPendingStyle = (UI.screen === 'editor' && edClipRecord)
+      ? Object.assign({}, (edClipRecord.stylePending ? edClipRecord.styleOverrides : null) || {}, UI.edStyleDraft || {})
+      : {};
+    var ED_LOOK_KEYS = ['grain', 'warm', 'vignette', 'filterPreset'];
+    var ED_FRAMING_KEYS = ['fitMode', 'smartFramingZoom', 'cropPositionX', 'cropPositionY', 'smartFramingEnabled'];
+    var edLookApprox = ED_LOOK_KEYS.some(function (k) { return Object.prototype.hasOwnProperty.call(edPendingStyle, k); });
+    var edFramingPending = ED_FRAMING_KEYS.some(function (k) { return Object.prototype.hasOwnProperty.call(edPendingStyle, k); });
 
     var job = UI.job;
     // A nasheed under Quran recitation is not a style choice, so the Quran
@@ -6244,7 +6266,14 @@
       // instead lets the overlays resolve against <main> and cover the tool rail.
       edThumbStyle: 'position: relative; container-type: inline-size; width: 100%; max-width: 268px; aspect-ratio: 9 / 16; border-radius: 13px; overflow: hidden; border: 1px solid var(--dc-line, #26262A); background: ' +
         thumb(edClip && edClip.thumbUrl) + '; box-shadow: 0 26px 60px rgba(0,0,0,.5);',
-      closeEditor: function (e) { stop(e); setUI({ screen: 'queue', edClipId: null, edStyleDraft: null, edBlockDraft: null, edTrim: null, edCutOuts: null, edCutMark: null }); },
+      closeEditor: function (e) {
+        stop(e);
+        // Style tweaks save as they are made; the words and the trim save on
+        // Save clip. Leaving with those pending used to drop them silently.
+        if (UI.edDirty && typeof global.confirm === 'function'
+          && !global.confirm('Leave the editor? The caption words and trim you changed have not been saved.')) return;
+        setUI({ screen: 'queue', edClipId: null, edStyleDraft: null, edBlockDraft: null, edTrim: null, edCutOuts: null, edCutMark: null, edDirty: false });
+      },
 
       // The SELECTED CAPTION box edits the chosen block, not the whole clip.
       // It was bound to the entire transcript and stayed empty because nothing
@@ -6316,8 +6345,14 @@
         if (job && job.status === 'failed') {
           return 'The preview could not be updated: ' + (job.error || 'unknown error') + ' — Save retries it.';
         }
-        if (edClipRecord.stylePending || edClipRecord.templateOutdated) {
-          return 'Changes saved — press Save clip to render them onto the video.';
+        // Two different reasons the picture is behind, and they used to share
+        // one sentence that named neither: "Changes saved" over a clip nobody
+        // had touched, because its TEMPLATE had moved on since the render.
+        if (edClipRecord.stylePending) {
+          return 'Saved, not rendered yet \u2014 Save clip renders it onto the video.';
+        }
+        if (edClipRecord.templateOutdated) {
+          return 'The style changed since this render \u2014 Save clip re-renders it.';
         }
         return '';
       }()),
@@ -6484,10 +6519,26 @@
         ? 'Only used where the speaker cannot be found — face tracking wins when it succeeds.'
         : 'Where the 9:16 window sits over the wider source.',
 
+      // THE ACCOUNT'S switch, not this clip's. The watermark belongs to the
+      // account (v3.113.0, v3.136.0 -- "once its configured it works for all
+      // clips"), so this row reads the brand record and writes it through the
+      // same route the Templates screen uses, paywall included. It used to
+      // write watermarkOpacity into THIS clip's overrides: the route's paywall
+      // refused a free account, but a paid one kept a per-clip override that
+      // contradicted the account-wide switch on the Templates screen.
       edWmTrack: sliderTrack(),
-      edWmKnob: sliderKnob(Number(tpl.watermarkOpacity) > 0),
-      edWmNote: tpl.watermark ? tpl.watermark + ' at ' + (Number(tpl.watermarkOpacity) || 0) + '%' : 'No watermark',
-      toggleWatermark: function (e) { stop(e); saveStyle({ watermarkOpacity: Number(tpl.watermarkOpacity) > 0 ? 0 : 100 }); },
+      edWmKnob: sliderKnob(edWmOn),
+      edWmNote: String(tpl.captionMode || '') === 'quran'
+        ? 'Never drawn over scripture'
+        : (edWmOn ? String(edWmText).trim() + ' on every clip \u00b7 set for the account' : 'Off for every clip \u00b7 set for the account'),
+      toggleWatermark: function (e) {
+        stop(e);
+        if (typeof global.dcSaveBrand !== 'function') return;
+        var want = !edWmOn;
+        var text = String(edWmText || '').trim() || 'DEENCLIPPED';
+        var p = global.dcSaveBrand({ watermark: text, watermarkOpacity: want ? 100 : 0 });
+        if (p && typeof p.then === 'function') p.then(function () { refresh(); }, function (err) { toast(err && err.message ? err.message : 'Could not change the watermark'); refresh(); });
+      },
       // Lights the design's "Pro" chip on the watermark row: removal is a
       // paid feature, and the server refuses it for free plans.
       notPro: String((current && current.plan) || 'free') === 'free',
@@ -6677,13 +6728,40 @@
       edSourceFallback: edSourceFallback,
       // One line on the frame, never a stack: while a render job is speaking
       // (edRenderNotice), this stays quiet -- two banners covered the video.
-      edSourceNote: (edClipRecord && edClipRecord.rerender && (edClipRecord.rerender.status === 'queued' || edClipRecord.rerender.status === 'processing'))
+      // ONE line on the frame, never two: the render notice (a job running,
+      // a save not rendered, a template moved on) wins, and this stays quiet
+      // while it speaks -- both sit at the frame's foot and stacked over
+      // each other on the first try. The caption box's own "approximate" tag
+      // still says the grade is an echo.
+      edSourceNote: (edClipRecord && (edClipRecord.stylePending || edClipRecord.templateOutdated
+          || (edClipRecord.rerender && (edClipRecord.rerender.status === 'queued' || edClipRecord.rerender.status === 'processing' || edClipRecord.rerender.status === 'failed'))))
         ? ''
         : (edClip && edClip.stylePreview && edClip.stylePreview.url)
         ? 'Preview of your changes (short window) — the full clip is re-rendering'
         : edSourceFallback
         ? 'Uncaptioned source — this clip has no rendered file yet'
+        : edLookApprox
+        ? 'Grade shown approximately \u2014 Preview or Save renders it'
+        : edFramingPending
+        ? 'Framing changes show after Preview or Save'
         : '',
+      // The pending grade, as CSS over the render: only THIS clip's own
+      // additions (the template's preset is already in the picture), so it
+      // never doubles what the file carries.
+      edLookApprox: edLookApprox,
+      edFramingPending: edFramingPending,
+      edApproxFilter: edLookApprox ? lookFilter({ filterPreset: 'natural', warm: edPendingStyle.warm }).replace(/^filter:\s*/, '').replace(/;$/, '') : '',
+      edApproxVignette: edLookApprox ? Math.max(0, Math.min(1, Number(edPendingStyle.vignette) || 0)) : 0,
+      edApproxGrain: edLookApprox ? Math.max(0, Math.min(100, Number(edPendingStyle.grain) || 0)) : 0,
+      // The Export tab's facts, from the same numbers the render uses
+      // (clip_worker.py: -r 30, aac 192k, ffprobe verification). They were
+      // literals in the design beside a sentence claiming a re-render costs a
+      // token and that saving reaches every clip of the lecture -- neither is
+      // true: re-renders are free and Save clip renders THIS clip.
+      edFrameRate: '30 fps',
+      edAudioSpec: 'AAC 192 kbps',
+      edVerifyLabel: 'FFprobe on export',
+      edExportNote: 'Re-rendering is free \u2014 it never costs tokens. Save clip renders this clip only; the Templates screen restyles every clip still waiting.',
       edIsDraft: Boolean(edClip && edClip.renderQuality === 'draft' && !edSourceFallback),
       // Clip-local time. The rendered clip IS the clip: it starts at zero and
       // its timeline equals the clip's, so there is no offset arithmetic on
@@ -7955,6 +8033,27 @@
       // when the account had clips built on the very template being edited.
       previewClip: function (e) {
         stop(e);
+        // IN THE EDITOR this is a real render: ~6 seconds around the playhead
+        // through the worker's quick lane, the same pixels a Save produces,
+        // parked on clip.stylePreview for the frame to play (labelled). The
+        // route, the engine slot and the frame's player have existed since the
+        // preview window shipped; nothing in the browser ever asked for one,
+        // so this button ran the Templates screen's binding instead and opened
+        // some OTHER clip's player.
+        if (UI.screen === 'editor' && edClip) {
+          if (UI.edStyleTimer) { global.clearTimeout(UI.edStyleTimer); UI.edStyleTimer = null; }
+          var pendingStyle = UI.edStyleDraft; UI.edStyleDraft = null;
+          var half = 3;
+          var span = Math.max(0, edDuration || 0);
+          var from = Math.max(0, Math.min((edTime || 0) - half, Math.max(0, span - half * 2)));
+          var to = span ? Math.min(span, from + half * 2) : from + half * 2;
+          global.StudioAdapter.onPreviewClip(edClip.id, {
+            startSec: from, endSec: to,
+            templateId: UI.edTplId || edClip.templateId || '',
+            style: pendingStyle && Object.keys(pendingStyle).length ? pendingStyle : null,
+          });
+          return;
+        }
         var id = activeTemplate && activeTemplate.id;
         var built = clips.filter(function (c) { return c.templateId === id && c.thumbUrl; })
           .sort(function (a, b) { return Number(b.readyAt || b.createdAt || 0) - Number(a.readyAt || a.createdAt || 0); });
@@ -8329,7 +8428,9 @@
       rotCount: String(tracks.length),
       nasheedVol: musicVolume,
       nasheedVolLabel: musicVolume + '%',
-      nasheedDb: (musicVolume ? Math.round(20 * Math.log10(musicVolume / 100)) : -60) + ' dB under speech',
+      // Account-wide, and said so: this slider sits in a per-clip editor and
+      // writes /api/music-settings, which every clip in the account reads.
+      nasheedDb: (musicVolume ? Math.round(20 * Math.log10(musicVolume / 100)) : -60) + ' dB under speech \u00b7 applies to every clip',
       setVol: setVolumeFrom,
 
       // ── Performance ──
@@ -9268,6 +9369,7 @@
     onBulkClips: function () {},
     onBulkProjects: function () {},
     onSaveClip: function () {},
+    onPreviewClip: function () {},
     clipSaved: function () { UI.edSaving = false; UI.edDirty = false; UI.edCaption = null; UI.edBlockDraft = null; UI.edTrim = null; UI.edCutOuts = null; UI.edCutMark = null; refresh(); },
     // Called by the host once /api/source-info resolves, so the range picker can
     // open against the real duration.

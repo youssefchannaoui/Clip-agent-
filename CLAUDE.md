@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1574 JS + 687 Python**
+- `npm test` and `npm run check` must pass. Currently **1588 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10219,6 +10219,111 @@ and never to be STOPPED. Every fault below is a stop going wrong.
   status should read `interrupted`, then `resumed: 1` with "Resuming from the
   saved clip plan" in its stage, and the clip count should come back whole.
   Until then the claim is the tests', not the box's.
+
+## The clip editor, driven control by control, so the gate can come off (v3.137.0, 6 Sept 2026)
+
+Youssef: "this clip editor has caused me so many issues, and needs to be fixed
+so then i can remove the coming soon." The gate is NOT removed here -- that is
+his call and it is still the two files and their two lines -- but everything
+behind it was driven in a browser against a rendered clip, every control, and
+what follows is what was wrong. **The render path itself held**: the editor
+plays the rendered file (invariant 4), the ruler, the six caption blocks, the
+drag, the trim handles, the section cuts and Restore, the per-clip template
+pick, Undo/Redo and the seek all worked as built.
+
+### THE FIRST READING WAS THE HARNESS, and it is worth writing down first
+
+Playwright's bundled Chromium has NO H.264 decoder (`canPlayType('video/mp4;
+codecs="avc1…"')` answers ""). The rendered clip fired `error` code 4, the
+editor fell back to the source preview as designed, and the frame read
+"Uncaptioned source -- this clip has no rendered file yet" over a clip whose
+render served 206 from the same server a moment earlier. That looked exactly
+like the invariant-4 bug this file warns about, and it was not: re-encode the
+seed clip to VP9/Opus (`.webm`; the route still serves it) and the render plays
+at readyState 4. CLAUDE.md already says a black preview in an agent screenshot
+is usually the harness; a "source fallback" label is the same trap wearing
+different words. The Phosphor CDN is blocked too, so every icon photographs as
+an empty box until the package is served from disk (npm pack, route in the
+harness -- `scratchpad/ed/lib.mjs`).
+
+### What was actually wrong
+
+- **Preview opened some other clip's player.** The button was bound to the
+  Templates screen's `previewClip`, which plays the newest clip rendered with
+  the active template. The server has rendered a ~6s preview window on the
+  quick lane since the feature shipped (`POST /rerender` with `preview`, the
+  engine parking it on `clip.stylePreview`, the frame playing it labelled) and
+  nothing in the browser ever asked for one. In the editor it now flushes the
+  style draft and asks for three seconds either side of the playhead, clamped
+  inside the clip; the label and the progress line already existed.
+- **The Look and Framing sliders showed nothing until a full re-render came
+  back**, which read as eight dead controls -- the header promised "sliders
+  preview instantly" and that was only ever true of the caption geometry. The
+  grade is now echoed over the render as CSS (only THIS clip's own additions:
+  the template's preset is already in the picture, so nothing doubles) and the
+  frame says "Grade shown approximately"; framing cannot be echoed on an
+  already-cropped file and is SAID instead. Both clear when the render lands.
+  The subtitle names the three speeds: sliders, Preview, Save.
+- **The frame stacked two banners at the same spot.** The render notice and
+  the source/approximation note both sat at `bottom: 30px`; one line now, the
+  render notice winning. And that notice read "Changes saved -- press Save
+  clip" over a clip nobody had touched, because its TEMPLATE had moved on
+  since the render; the two causes have two sentences.
+- **The Look tab's watermark switch wrote `watermarkOpacity: 0` into THIS
+  clip's overrides.** The route's paywall refused a free account there; a
+  paid one kept a per-clip override that contradicted the account-wide switch
+  on the Templates screen, and every other brand field (colour, position, the
+  promo bar, the brand line) went through for anyone. `sanitiseClipStyle`
+  drops `BRAND_FIELDS` on the way in AND on every read, so a record written
+  before this cannot ship one either; the editor's switch reads and writes the
+  ACCOUNT brand through `dcSaveBrand`, paywall included.
+- **One Save announced itself three times** -- the legacy toast, the dock's
+  "Clip saved", and the render error again as its own red card. One outcome
+  sentence now: rendering, or saved-but-the-render-could-not-start with the
+  reason.
+- **Leaving dropped unsaved caption words silently.** Style tweaks save as
+  they are made; the words and the trim save on Save clip, and "Queue" asks
+  before discarding them.
+- **The Export tab lied twice**: "Re-rendering this clip costs 1 token" (it is
+  free) and "Saving to all clips of the lecture re-renders each of them"
+  (Save renders THIS clip). Those and three facts beside them were design
+  literals; they are bindings via `text-overrides.json` now (re-import proven
+  byte-stable, CSS identical, two template lines). The Audio tab's slider
+  writes `/api/music-settings` for the whole account from inside a per-clip
+  editor, so its line says "applies to every clip".
+- **The Look tab's Grain row and the Framing tab's Zoom row had no label and
+  no value after a direct switch from Captions.** The caption dock hides the
+  design's font group on the Captions tab with `data-host-style`, the patcher
+  pairs a tab's rows against the next tab's BY INDEX, and that survives the
+  switch: the hidden label WAS the Grain label now. Hidden nodes carry a
+  `data-host-hlhid` marker and are un-hidden on every paint before anything is
+  hidden again; a `data-dc-*` marker was tried first and was stripped by the
+  very pairing it had to survive. Walked in five tab orders after: every row
+  named at every step.
+- **The ruler's last label sat under the end handle** ("0:30" photographed as
+  "0:3"): 12px of right padding, measured clear.
+- **"Clip editor · BETA" and the first-run pop-up are gone.** A screen that has
+  just come out from behind "coming soon" must not open by saying rough edges
+  are likely. The gate's subtitle rewrite keys on the editor's own words now
+  (Preview / Save clip), not on "beta".
+
+### Verified, and what is still not
+
+Driven at 1440x900 in both themes, at 1100x800, and on a 390 phone (which says
+"needs a wider screen", as before): title, no pop-up, one frame line, the
+approximate grade layers on the render, the brand POST from the Look tab, the
+Framing note, the Export copy, a real `preview:{startSec,endSec}` on the
+rerender, the confirm on leaving, and one toast per Save. 0 page errors, 0
+overflow. `test/editor-ships.test.mjs` (14) drives the adapter's bindings and
+the real server; every test across it and the gate test was proven red by
+swapping each changed file back to its pre-change copy.
+
+**Not seen: a preview or a save landing from the REAL worker.** This box has
+no worker, so every render request here answered 400 (PUBLIC_BASE_URL) and the
+frame's "Rendering preview · 40%" and the labelled preview playback are proven
+by the bindings and by the engine's own tests, not on screen. One Preview press
+on production settles it -- and that is the last thing to see before the two
+gate files are deleted.
 
 ## Brand belongs to the account; the toolbar stopped charging for nothing (v3.136.0, 6 Sept 2026)
 

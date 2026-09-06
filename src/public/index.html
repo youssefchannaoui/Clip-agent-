@@ -3630,10 +3630,16 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(edVideoNode.style.transform!==want)edVideoNode.style.transform=want;
       /* The Look grade on the real footage -- the same preset+warmth maths the
          renderer runs, as CSS. Without this every Look control read as dead in
-         the editor: the export changed, the preview never did. */
-      const filt=onRender?'':(vals.edVideoFilter||'');
+         the editor: the export changed, the preview never did.
+         On the RENDER the preset is already in the picture, so only a grade
+         the file does not carry yet -- a draft, or saved and not rendered --
+         is echoed on top, and the frame says it is approximate. Otherwise the
+         Look sliders moved nothing until a full re-render came back, which
+         read as five dead controls. */
+      const approx=onRender&&Boolean(vals.edLookApprox);
+      const filt=onRender?(approx?(vals.edApproxFilter||''):''):(vals.edVideoFilter||'');
       if(edVideoNode.style.filter!==filt)edVideoNode.style.filter=filt;
-      paintEditorGrade(onRender?{...vals,edVideoBlurBg:false,edVideoVignette:0,edVideoGrain:0}:vals,frame);
+      paintEditorGrade(onRender?{...vals,edVideoBlurBg:false,edVideoVignette:approx?vals.edApproxVignette:0,edVideoGrain:approx?vals.edApproxGrain:0}:vals,frame);
       paintEditorSourceNote(vals,frame);
     }
 
@@ -3962,6 +3968,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         return kids.length>=5&&kids.length<=7&&kids.every(k=>k.tagName==='SPAN'&&tick.test((k.textContent||'').trim()));
       });
       for(const row of rows){
+        /* The trim handles span the whole lane, ruler included, and the end
+           handle sat over the last label -- "0:30" photographed as "0:3".
+           Measured 3px of overlap; 12px of room clears the 10px handle. */
+        if(row.getAttribute('data-host-style')===null){row.setAttribute('data-host-style','');row.style.paddingRight='12px'}
         [...row.children].forEach((span,i)=>{
           const label=vals.edRuler[i]&&vals.edRuler[i].label;
           if(label&&span.textContent!==label)span.textContent=label;
@@ -4873,11 +4883,19 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           &&![...n.children].some(c=>/^Caption position/.test((c.textContent||'').trim()))).pop();
       return row&&row.parentElement;
     }
+    /* Everything paintHighlight hid on a previous paint, shown again. Called
+       before it hides anything and whenever it has nowhere to dock, so a node
+       the patcher has since repurposed for another tab comes back. */
+    function hlUnhide(){
+      document.querySelectorAll('#studio [data-host-hlhid]').forEach(n=>{
+        n.style.display='';n.removeAttribute('data-host-hlhid');n.removeAttribute('data-host-style');
+      });
+    }
     function paintHighlight(vals){
       alive(hlEl);
       const panel=hlAnchor(vals);
       hlEl.classList.toggle('hide',!panel);
-      if(!panel)return;
+      if(!panel){hlUnhide();return}
       if(hlEl.parentElement!==panel)panel.appendChild(hlEl);
       const key=vals.capFonts.map(f=>f.name).join('|')+'|'+StudioAdapter.ui.screen;
       const inEditor=StudioAdapter.ui.screen==='editor';
@@ -4885,13 +4903,20 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         /* The design's own template-level controls on this tab -- the font
            group the dock is anchored inside, and the All caps row -- hide with
            the rest of the look controls. data-host-style keeps the patcher
-           from stripping the inline style on the next poll. */
+           from stripping the inline style on the next poll.
+           HIDDEN NODES ARE MARKED, and un-hidden first on every paint: the
+           patcher pairs a tab's rows against the next tab's BY INDEX, so a
+           label hidden here on Captions was still hidden when the same node
+           became the Look tab's "Grain" label -- a slider with no name and no
+           value, on every direct Captions -> Look switch. data-host-style is
+           exactly what let the hiding survive the switch. */
+        hlUnhide();
         for(const child of panel.children){
-          if(child!==hlEl){child.setAttribute('data-host-style','');child.style.display='none'}
+          if(child!==hlEl){child.setAttribute('data-host-style','');child.setAttribute('data-host-hlhid','');child.style.display='none'}
         }
         const col=panel.parentElement;
         if(col)for(const row of col.children){
-          if((row.textContent||'').trim()==='All caps'){row.setAttribute('data-host-style','');row.style.display='none'}
+          if((row.textContent||'').trim()==='All caps'){row.setAttribute('data-host-style','');row.setAttribute('data-host-hlhid','');row.style.display='none'}
         }
       }
       if(hlEl.dataset.key!==key){
@@ -7038,18 +7063,35 @@ function renderStudio(){
     /* Caption text is the clip's transcript and is the one visual thing the
        server keeps per clip; everything else in the editor lives on the template
        and is saved as it changes. */
-    StudioAdapter.onSaveClip=(id,fields)=>studioDo(async()=>{
-      const r=await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(fields)});
-      /* The studio surface has no separate render button, so Save is where an
-         out-of-date video gets its re-render. Without this the editor saved
-         styles and captions that never reached any exported video. A render
-         that cannot start (source cleaned up) downgrades to a plain save. */
-      if(r?.clip?.stylePending){
-        try{await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',body:JSON.stringify({templateId:r.clip.templateId||'',asVariant:r.clip.status==='posted'})});
-          StudioAdapter.showToast('Saved — new render queued')}
-        catch(e){StudioAdapter.showToast(`Saved. Render not started: ${e.message}`)}
-      }
-      StudioAdapter.clipSaved()},'Clip saved',()=>{StudioAdapter.ui.edSaving=false});
+    StudioAdapter.onSaveClip=(id,fields)=>{
+      /* ONE sentence per press. This used to announce three times -- the
+         legacy toast ("Saved — new render queued"), the dock's "Clip saved",
+         and the render error again as its own red card -- and a save whose
+         render could not start read as two successes and a failure at once. */
+      let outcome=null;
+      return studioDo(async()=>{
+        const r=await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(fields)});
+        /* The studio surface has no separate render button, so Save is where an
+           out-of-date video gets its re-render. Without this the editor saved
+           styles and captions that never reached any exported video. A render
+           that cannot start (source cleaned up) downgrades to a plain save. */
+        if(r?.clip?.stylePending){
+          try{await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',body:JSON.stringify({templateId:r.clip.templateId||'',asVariant:r.clip.status==='posted'})});
+            outcome=['Saved \u2014 rendering your changes onto the clip','good']}
+          catch(e){outcome=[`Saved, but the render could not start: ${e.message}`,'bad']}
+        }else outcome=['Clip saved','good'];
+        StudioAdapter.clipSaved()},null,()=>{StudioAdapter.ui.edSaving=false})
+        .then(()=>{if(outcome)toast(outcome[0],outcome[1])});
+    };
+    /* The Preview button, in the editor: flush the style draft (the same
+       PATCH the sliders debounce), then ask for a ~6s window on the quick
+       lane. The result lands on clip.stylePreview through the state poll and
+       the frame plays it, labelled. Nothing replaces the clip. */
+    StudioAdapter.onPreviewClip=(id,win)=>studioDo(async()=>{
+      if(win&&win.style)await api(`/api/clips/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({styleOverrides:win.style})});
+      await api(`/api/clips/${encodeURIComponent(id)}/rerender`,{method:'POST',
+        body:JSON.stringify({templateId:(win&&win.templateId)||'',preview:{startSec:Number(win&&win.startSec)||0,endSec:Number(win&&win.endSec)||0}})});
+    },'Rendering a few seconds of your changes \u2014 the frame plays them when they land');
     StudioAdapter.onConnect=name=>studioDo(async()=>{
       const r=await api(`/api/social/${encodeURIComponent(name)}/connect`,{method:'POST'});
       if(r&&r.url)location.href=r.url});
@@ -8770,28 +8812,11 @@ function paintSetupCelebration(vals){
   if(go)go.focus();
 }
 
-function paintEditorBetaNotice(){
-  /* One pop-up, first editor open only. Its text describes what the editor
-     ACTUALLY does today -- the live-draft version of this dialog shipped with
-     behaviour that did not survive contact with a real user and was reverted;
-     a notice that oversells is worse than none. */
-  try{
-    if(StudioAdapter.ui.screen!=='editor'){const old=document.getElementById('edBetaPop');if(old)old.remove();return}
-    if(localStorage.getItem('deenEditorBetaSeen')==='1')return;
-    if(document.getElementById('edBetaPop'))return;
-    const pop=document.createElement('div');
-    pop.id='edBetaPop';
-    pop.style.cssText='position:fixed;inset:0;z-index:400;display:grid;place-items:center;background:rgba(8,8,10,.62)';
-    pop.innerHTML='<div style="max-width:400px;margin:16px;padding:22px 22px 18px;border-radius:14px;background:var(--dc-n-141416, #141416);border:1px solid var(--dc-n-2a2a2e, #2A2A2E);box-shadow:0 30px 80px rgba(0,0,0,.55)">'
-      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.08em;background:rgba(217,180,120,.16);color:var(--dc-gold-lit, #F0D6A6);border:1px solid rgba(217,180,120,.4)">BETA</span><strong style="font-size:15px;color:var(--dc-n-f6f6f8, #F6F6F8)">The editor is in beta</strong></div>'
-      +'<p style="margin:0 0 10px;font-size:12.5px;line-height:1.6;color:var(--dc-ink-body, #BCBCC3)">Your edits save the moment you make them — but the video preview has to <strong style="color:var(--dc-ink-bright, #E9E9ED)">re-render to show changes</strong>, and that can take a few minutes. The banner on the frame and the header tell you where it is up to.</p>'
-      +'<p style="margin:0 0 14px;font-size:12.5px;line-height:1.6;color:var(--dc-ink-body, #BCBCC3)">Rough edges are possible while we improve this. Nothing you do here is ever lost.</p>'
-      +'<button id="edBetaOk" style="width:100%;padding:10px;border:0;border-radius:9px;background:var(--dc-gold, #D9B478);color:#141109;font-weight:600;font-size:13px;cursor:pointer">Got it</button></div>';
-    document.body.appendChild(pop);
-    const btn=document.getElementById('edBetaOk');
-    if(btn)btn.onclick=()=>{try{localStorage.setItem('deenEditorBetaSeen','1')}catch(e){};pop.remove()};
-  }catch(e){}
-}
+/* The editor's first-run "BETA" pop-up lived here. It went with the beta
+   label: a notice saying rough edges are possible, on the screen that just
+   came out from behind "coming soon", tells a customer the thing is not
+   ready after all. What it explained (style tweaks save as you go, Save clip
+   renders) is the topbar's subtitle now, on every visit. */
 /* ── the in-app help centre ─────────────────────────────────────────────
    Host-rendered rather than added to the design export, which would
    regenerate every hashed class name in the app for one screen. It mounts
@@ -10233,7 +10258,6 @@ function paintStudio(){
   paintBlockerTone(vals);
   paintJobPanelScroll();
   paintEditorMissing();
-  paintEditorBetaNotice();
   paintPreviewPlayer(vals);
   paintClipTools(vals);
   paintClipStars(vals);

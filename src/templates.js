@@ -396,6 +396,15 @@ export function sanitiseClipStyle(patch = {}) {
   if (!patch || typeof patch !== 'object') return output;
   for (const [key, value] of Object.entries(patch)) {
     if (!CLIP_STYLE_FIELD_SET.has(key)) continue;
+    // The watermark, the brand line and the promo bar belong to the ACCOUNT
+    // (v3.113.0, v3.136.0) and are laid over every template by withBrand. A
+    // per-clip override of any of them was a second door: the editor's Look
+    // tab wrote watermarkOpacity: 0 into a clip (the route's paywall caught a
+    // free account there; a paid one kept the override), and every other
+    // brand field went through for anyone. Dropped on the way in AND on every
+    // read (templateForClip sanitises stored overrides too), so a record
+    // written before this cannot ship a clean clip either.
+    if (BRAND_FIELD_SET.has(key)) continue;
     if (value === null || value === undefined) continue;
     if (ENUMS[key]) {
       if (ENUMS[key].includes(value)) output[key] = value;
@@ -582,6 +591,7 @@ export const BRAND_FIELDS = [
   'promoBarEnabled', 'promoBarStartSec', 'promoBarSeconds',
   'brandLineEnabled', 'brandLineColor', 'brandLineHeight',
 ];
+const BRAND_FIELD_SET = new Set(BRAND_FIELDS);
 
 export function brandSettings(user) {
   const id = userIdOf(user);
