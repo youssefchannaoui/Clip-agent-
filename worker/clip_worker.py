@@ -607,6 +607,22 @@ def second_listen(
     return best, winner
 
 
+def nothing_new_reason(existing: list[dict[str, Any]]) -> str:
+    """A retry found every clip-worthy moment already in the library.
+
+    Said as what it is rather than as "no candidates fit the range": the
+    lecture is not short of moments, they have all been cut already. The
+    honest next step is the more-clips path, which asks for a count and
+    knows how to work around them, or approving what is there.
+    """
+    count = len(existing)
+    return (
+        f"Every clip-worthy moment in this lecture is already in your library "
+        f"({count} clip{'' if count == 1 else 's'}), so the retry had nothing new to add. "
+        "Approve what is there, or cut more clips from the lecture's page."
+    )
+
+
 def no_clip_reason(segments: list[dict[str, Any]], duration_sec: float, settings: dict[str, Any]) -> str:
     """Why a run produced nothing, said about the transcript when that is why.
 
@@ -6091,6 +6107,17 @@ def process(job_file: Path) -> None:
         float(settings.get("clipMinSeconds", 20)),
         float(settings.get("clipMaxSeconds", 90)),
     ), settings)
+    # A retry of a lecture that already produced clips -- cancelled part-way,
+    # or failed after some had uploaded -- carries the moments it already
+    # holds (existingRanges, the same list the more-clips path reads), so the
+    # re-run ADDS to the set instead of cutting the same moments again under
+    # new ids. A first run carries none and this is a no-op.
+    existing = list(job.get("existingRanges") or [])
+    if existing:
+        before = len(candidates)
+        candidates = remove_existing_moments(candidates, existing)
+        if before and not candidates:
+            raise RuntimeError(nothing_new_reason(existing))
     progress("Finding and scoring clips", 69, candidateCount=len(candidates), etaSec=None)
     candidates = refine_with_ollama(candidates, settings, str(job.get("title") or ""))
     selected = select_candidates(candidates, int(settings.get("clipsPerVideo", 8)))

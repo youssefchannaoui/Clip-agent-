@@ -2437,6 +2437,7 @@
         var dc = ctx.detailClips || [];
         if (!ctx.detailOpen) return 'Open a lecture from the library';
         if (ctx.detailWhy) return 'Import failed \u2014 ' + ctx.detailWhy.title;
+        if (ctx.detailCancelled) return 'Cancelled before it finished';
         if (!dc.length) return 'No clips from this lecture yet';
         var waiting = 0, kept = 0;
         dc.forEach(function (c) {
@@ -2789,6 +2790,10 @@
       // screen offered "Approve all remaining" on a lecture that never came
       // down. It is its own state, carrying the reason and the fix.
       if (p.status === 'failed') return 'failed';
+      // 'archived' is exactly "cancelled" -- nothing else reaches it. The
+      // library used to LABEL it Archived while Home said Cancelled, two
+      // screens disagreeing about one lecture; the key stays for the filter,
+      // the words say what happened.
       if (p.status === 'cancelled') return 'archived';
       return 'processing';
     }
@@ -2826,14 +2831,14 @@
             ? ' background-image: linear-gradient(to bottom, rgba(8,8,10,0) 40%, rgba(8,8,10,.82) 100%), url("' + cssUrl(p.sourceThumbUrl) + '");'
               + ' background-size: cover, cover; background-position: center, center 30%; --dc-on-photo: 1;'
             : ''),
-        stateChip: state === 'processing' ? 'Processing' : state === 'ready' ? 'Ready' : state === 'failed' ? 'Failed' : 'Archived',
+        stateChip: state === 'processing' ? 'Processing' : state === 'ready' ? 'Ready' : state === 'failed' ? 'Failed' : 'Cancelled',
         isFailed: state === 'failed',
         chipStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; border: 1px solid ' +
           (state === 'processing' ? 'rgba(217,180,120,.4); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-f0d6a6, var(--dc-n-f0d6a6, #F0D6A6));'
             : state === 'ready' ? 'rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));'
             : state === 'failed' ? 'rgba(227,146,140,.4); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-e3928c, var(--dc-n-e3928c, #E3928C));'
             : 'var(--dc-n-33333a, #33333A); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-a2a2aa, var(--dc-n-a2a2aa, #A2A2AA));'),
-        chipIcon: state === 'processing' ? 'ph ph-circle-notch' : state === 'ready' ? 'ph-fill ph-check-circle' : state === 'failed' ? 'ph-fill ph-warning-circle' : 'ph ph-archive',
+        chipIcon: state === 'processing' ? 'ph ph-circle-notch' : state === 'ready' ? 'ph-fill ph-check-circle' : state === 'failed' ? 'ph-fill ph-warning-circle' : 'ph ph-x',
         chipIconStyle: 'font-size: 11px;' + (state === 'processing' ? ' animation: dcSpin 1.1s linear infinite;' : ''),
         isProcessing: state === 'processing',
         barStyle: 'position: absolute; left: 0; bottom: 0; height: 3px; width: ' + Math.round(p.progress || 0) + '%; background: linear-gradient(90deg, var(--dc-gold, #D9B478), var(--dc-gold-lit, #F0D6A6)); transition: width .5s ease;',
@@ -2842,6 +2847,7 @@
         // clips having gone missing.
         metric: state === 'processing' ? (p.stage || 'working…')
           : state === 'failed' ? importWhy(p).title
+          : state === 'archived' ? (mine.length ? 'cancelled before it finished · ' + plural(mine.length, 'clip') + ' kept' : 'cancelled before it finished')
           : (p.clipsRequested && mine.length && mine.length < p.clipsRequested)
             ? mine.length + ' of ' + p.clipsRequested + ' asked for · the rest overlapped'
             : median ? 'median score ' + median : 'no clips yet',
@@ -2865,8 +2871,10 @@
           // Retry is offered on exactly the lectures it can help. The route has
           // always existed; its only button lived in a shell nothing links to,
           // while the failure messages went on telling people to "press Retry".
-          var failed = String(p.status || '') === 'failed';
-          var options = failed ? ['Retry this lecture'] : [];
+          // The route accepts a failed OR a cancelled lecture (retryProject),
+          // and a retry keeps the clips already made and adds to them.
+          var stopped = ['failed', 'cancelled'].indexOf(String(p.status || '')) >= 0;
+          var options = stopped ? ['Retry this lecture'] : [];
           options = options.concat(['Cut 4 more clips', 'Cut 8 more clips', 'Delete this lecture', 'Cancel']);
           global.StudioAdapter.onPickOption('This lecture', options, function (choice) {
             var n = choice === 'Cut 4 more clips' ? 4 : choice === 'Cut 8 more clips' ? 8 : 0;
@@ -2884,6 +2892,9 @@
     // The reason and the fix, when the open lecture never imported. Null
     // otherwise, so every reader below can branch on it.
     var detailWhy = detail && lecState(detail) === 'failed' ? importWhy(detail) : null;
+    // A lecture stopped by hand. Its clips (if any) are real; what it lacks is
+    // the rest of the run, and Retry is the one action that supplies it.
+    var detailCancelled = Boolean(detail && String(detail.status || '') === 'cancelled');
     // The header's subline is built by sublineFor, which is module-level and
     // cannot see these locals -- so they travel on ctx like everything else it
     // reads. The RAW clips, not the cards: decision() is the one place that
@@ -2891,6 +2902,7 @@
     ctx.detailOpen = Boolean(detail);
     ctx.detailClips = detailRaw;
     ctx.detailWhy = detailWhy;
+    ctx.detailCancelled = detailCancelled;
 
     // Schedule: the next seven days, filled from clips that already hold a slot.
     var DAY_MS = 86400000;
@@ -5572,7 +5584,7 @@
         { key: 'ready', label: 'Ready' },
         { key: 'processing', label: 'Processing' },
         { key: 'failed', label: 'Failed' },
-        { key: 'archived', label: 'Archived' },
+        { key: 'archived', label: 'Cancelled' },
       ].map(function (t) {
         return {
           key: t.key, on: UI.libFilter === t.key,
@@ -5598,6 +5610,8 @@
       detailHint: detailWhy
         ? detailWhy.cause + (detailWhy.fixes && detailWhy.fixes[0] ? ' ' + detailWhy.fixes[0] : '')
           + (detail.error ? ' \u2014 \u201c' + String(detail.error).slice(0, 220) + '\u201d' : '')
+        : detailCancelled
+        ? 'This lecture was cancelled before it finished' + (detailRaw.length ? ', so only some of its clips were cut' : '') + '. Retry runs the import again' + (detailRaw.length ? ' and adds to the clips already here' : '') + '.'
         : detail && lecState(detail) === 'processing'
         ? 'Still processing — clips appear here as the worker finishes them.'
         : 'Every clip cut from this lecture. Approving one queues it for the next open slot.',
@@ -5612,11 +5626,11 @@
       // On a lecture that never imported the only honest primary action is to
       // try the import again; "Approve all remaining" there was a button over
       // nothing.
-      bulkLabel: detailWhy ? 'Retry this lecture' : 'Approve all remaining',
-      bulkIcon: detailWhy ? 'ph ph-arrow-counter-clockwise' : 'ph ph-check',
+      bulkLabel: (detailWhy || detailCancelled) ? 'Retry this lecture' : 'Approve all remaining',
+      bulkIcon: (detailWhy || detailCancelled) ? 'ph ph-arrow-counter-clockwise' : 'ph ph-check',
       bulkAction: function (e) {
         stop(e);
-        if (detailWhy) { global.StudioAdapter.onRetryProject(detail.id, detail.title || 'this lecture'); return; }
+        if (detailWhy || detailCancelled) { global.StudioAdapter.onRetryProject(detail.id, detail.title || 'this lecture'); return; }
         detailClips.forEach(function (c) { if (c.stateChip === '') c.approve(e); });
       },
 
@@ -7889,7 +7903,7 @@
         if (!detail) return;
         // Nothing to re-cut from a lecture that never came down: the same
         // press retries the import instead of opening a menu of dead options.
-        if (detailWhy) { global.StudioAdapter.onRetryProject(detail.id, detail.title || 'this lecture'); return; }
+        if (detailWhy || detailCancelled) { global.StudioAdapter.onRetryProject(detail.id, detail.title || 'this lecture'); return; }
         global.StudioAdapter.onPickOption('More clips from this lecture',
           ['Cut 4 more clips', 'Cut 8 more clips', 'Cancel'], function (choice) {
             var n = choice === 'Cut 4 more clips' ? 4 : choice === 'Cut 8 more clips' ? 8 : 0;

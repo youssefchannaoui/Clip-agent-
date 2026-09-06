@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1499 JS + 670 Python**
+- `npm test` and `npm run check` must pass. Currently **1509 JS + 673 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10113,6 +10113,41 @@ horrible and its all broken now."
   padding evened to its head's 22px under the lock. Measured at 1440x900 and
   1520x855 with the live bar up: both columns end at the same y, the card
   runs to the row's foot in both themes.
+
+## A cancelled lecture was told to wait, and a retry would have doubled its clips (v3.132.1, 6 Sept 2026)
+
+Youssef, with Home showing both lectures CANCELLED (he had cancelled them
+during the two worker deploys) and a toast reading "Wait for the lecture to
+finish processing before generating more clips.": "Fix this cause I have
+nothing waiting but getting an error."
+
+- **`queueMoreClips` answered every non-finished status with the WAIT
+  sentence**, cancelled and failed included -- a sentence with no end, on a
+  lecture that will never finish. It names the way forward now (Retry this
+  lecture); a lecture still processing keeps the honest wait.
+- **The studio offered Retry for `failed` only**, though `retryProject` has
+  accepted a cancelled project all along. The card menu and the detail's
+  primary action offer it for both now. The library filed a cancelled lecture
+  as "Archived" while Home said "Cancelled" -- two screens disagreeing about
+  one lecture, the shape the audit fixed for `failed` one state over. The tab
+  and the chip say Cancelled; the detail's subline says "Cancelled before it
+  finished" and its hint says Retry adds to the clips already there.
+- **A retry would have DOUBLED the clips.** Clip ids are `<worker job id>-NN`
+  and a retry mints a fresh job id, so the khutbah cancelled at 69% with four
+  clips (two approved) would have had the same four moments cut again under
+  new ids, beside the originals. `remove_existing_moments` only ever ran on
+  the more-clips path. `existingRangesFor(projectId)` is one builder for the
+  three paths now (more clips, the remote run, the local retry); the remote
+  payload carries it at RUN time, so a first run holds nothing; the worker's
+  main path removes those moments BEFORE scoring (asking the model to rank
+  moments that will be discarded is a wasted generation); and a retry that
+  finds nothing left says so (`nothing_new_reason`) rather than blaming the
+  duration range. A completion counts every clip the lecture holds rather
+  than only the run's new ones -- it read "4 clips" beside eight cards.
+- Ten JS tests on executed output (the engine's own refusals, the adapter's
+  bindings, the card menu pressed, the detail's primary action pressed) and
+  three Python, the red probes proven. Worker change, so `deploy-worker.yml`
+  deploys it on push; the box was idle (diagnose run 64) before the push.
 
 ## The product audit: used, not read (v3.130.0 / v3.130.1, 5 Sept 2026)
 

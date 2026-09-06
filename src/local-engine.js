@@ -853,7 +853,10 @@ function importResultObject(project, result, engine = 'self-hosted') {
   // this makes "socialkit failed, ytdlp carried it" answerable from the record.
   project.importProvider = result.project?.importProvider || project.importProvider || null;
   project.transcriptUrl = result.project?.transcriptUrl || null;
-  project.clipCount = imported.length;
+  // Every clip the lecture holds, not only this run's: a retry ADDS to the
+  // clips a cancelled run had already made, and counting only the new ones
+  // read "4 clips" beside eight cards.
+  project.clipCount = state.clips.filter(clip => clip.projectId === project.id).length;
   // Kept so the UI can explain a shortfall rather than leaving it unexplained.
   project.clipsRequested = Number(result.project?.clipsRequested || project.clipsRequested || 0);
   project.status = 'done'; project.stage = 'Clips are ready for review'; project.progress = 100;
@@ -1138,6 +1141,11 @@ async function runRemoteProject(project) {
   // new run. Everything server-side still keys off project.id.
   const workerJobId = project.workerJobId || project.id;
   payload.id = workerJobId;
+  // Read at RUN time, not at submit time: a first run holds nothing and this
+  // is an empty list; a retry of a lecture cancelled part-way carries the
+  // clips it already made, so the worker adds to them rather than cutting
+  // the same moments again under new ids.
+  payload.existingRanges = existingRangesFor(project.id);
   project.status = 'processing'; project.stage = 'Connecting to processing worker'; project.progress = Math.max(1, project.progress || 0); project.error = null; save();
   running.set(project.id, { remote: true });
   const started = Date.now();
@@ -1719,9 +1727,28 @@ function runRerender(jobRecord) {
   });
 }
 
+// The moments a lecture already holds, in the shape the worker's
+// remove_existing_moments reads. One builder for the three paths that must
+// agree about it: cutting more clips, and a retry of a lecture that was
+// cancelled or failed AFTER some clips had landed -- without this a retry
+// re-picked the same moments under new ids and the queue showed them twice.
+export function existingRangesFor(projectId) {
+  return state.clips
+    .filter(clip => clip.projectId === projectId)
+    .map(clip => ({ id: clip.id, startSec: Number(clip.startSec || 0), endSec: Number(clip.endSec || 0) }));
+}
+
 export function queueMoreClips(projectId, requestedCount = 8) {
   const project = projectById(projectId);
   if (!project) throw new Error('That lecture does not exist.');
+  // A lecture that STOPPED -- cancelled by hand, or failed -- will never
+  // "finish processing", so telling somebody to wait for it is a sentence
+  // with no end. Youssef cancelled two imports during a pair of worker
+  // deploys, pressed the one button the screen offered, and was told to
+  // wait. Name the way forward instead: the retry route accepts exactly
+  // these two states, and a retry carries the moments already cut.
+  if (project.status === 'cancelled') throw new Error('This lecture was cancelled before it finished, so there is nothing to cut more clips from yet. Retry this lecture to run the import again — it keeps the clips it already made and adds to them.');
+  if (project.status === 'failed') throw new Error('This lecture never finished importing, so there is nothing to cut more clips from. Retry this lecture to run the import again.');
   if (!['done', 'completed'].includes(project.status)) throw new Error('Wait for the lecture to finish processing before generating more clips.');
   if (project.moreJob && ['queued', 'processing'].includes(project.moreJob.status)) {
     throw new Error('This lecture is already generating more clips.');
@@ -1750,9 +1777,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
   const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile) ? JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8')) : [];
   if (project.engine !== 'remote' && (!Array.isArray(transcriptSegments) || !transcriptSegments.length)) throw new Error('The saved transcript is empty.');
-  const existingRanges = state.clips
-    .filter(clip => clip.projectId === project.id)
-    .map(clip => ({ id: clip.id, startSec: Number(clip.startSec || 0), endSec: Number(clip.endSec || 0) }));
+  const existingRanges = existingRangesFor(project.id);
 
   const moreId = id('more');
   const dir = path.join(jobsDir, moreId);
@@ -2244,6 +2269,7 @@ export function retryProject(projectId) {
   if (!template?.id) throw new Error('Select a template before retrying.');
   if (!tracks.length) throw new Error('Upload at least one nasheed before retrying.');
   job.template = template; job.musicTracks = tracks; job.settings = sharedSettings(projectOwner);
+  job.existingRanges = existingRangesFor(projectId);
   fs.writeFileSync(jobFile(projectId), JSON.stringify(job, null, 2));
   fs.rmSync(resultFile(projectId), { force: true });
   Object.assign(project, {
