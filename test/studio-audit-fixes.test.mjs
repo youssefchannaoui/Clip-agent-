@@ -383,7 +383,11 @@ test('the Templates lock always holds side by side, and the FRAME gives way, nev
   // Measured AFTER the lock is applied: the preview column against the
   // scroller's foot.
   const lock = body.indexOf("set(settings,{'align-self':'stretch','max-height':'100%','overflow-y':'auto','min-height':'0'})");
-  const fit = body.indexOf('const over=previewCol.getBoundingClientRect().bottom-limit');
+  // Matched on the MEASUREMENT, not on the whole expression: v3.132.0 changed
+  // what is subtracted (a bottom gap, so the CTA row is not flush against the
+  // window) and this went red against code whose property was unchanged --
+  // the source-string shape this repo has now been caught by seven times.
+  const fit = body.indexOf('previewCol.getBoundingClientRect().bottom');
   assert.ok(lock > 0 && fit > lock, 'the preview column is measured after the lock, not before');
   // Stretched, not merely capped: the card fills the row, and the preview
   // column is fitted to the ROW's content foot rather than the scroller's, so

@@ -10856,3 +10856,69 @@ unqualified slider pseudos, a hex in the base button, the select's shorthand,
 the brand grid's `!important`, the finder's own-node skip, the cap, the
 same-name replacement, the empty-look refusal, the restore, and the state
 payload.
+## The Templates preview only ever shrank (v3.132.0, 6 Sept 2026)
+
+Youssef: "The right side video should fill as much as the page can."
+
+`paintTemplatesLayout` sized the frame with `if(over>0.5)` — it took height OFF
+when the column overflowed and did nothing when it fitted. So the preview kept
+the design's 264px on every screen with room to spare. **Measured at 1440x950:
+a 770px column holding a 264px frame, with 107px of vertical room unused.**
+
+- **`over` is signed, so one subtraction serves both directions.** Positive is
+  overflow to take off; negative is spare room to give. The preview IS the
+  screen, so it should be as big as the screen can hold it.
+- **It is capped by the COLUMN'S WIDTH**, which is what stops a wide template
+  running out of it: a 16:9 frame given the full height wants to be 1.78x as
+  wide as it is tall, so at 576px of room it asks for 1024px inside a 770px
+  column. A 9:16 frame never reaches that cap — it would need 1369px of height
+  — so the cap does nothing on the common case and everything on the uncommon
+  one.
+- **IT RUNS TWICE, AND THE SECOND PASS IS NOT BELT AND BRACES.** The content
+  BELOW the frame is not a constant: the safe-zone hint is a sentence whose
+  length depends on how many platforms are connected, so it wraps to one line
+  or two and the column's foot moves with it. Measured while building this: a
+  single pass read 88px of content below the frame, filled to the foot, and the
+  hint then wrapped and pushed the CTA row **42px past the cut** — which is
+  exactly the fault v3.126.0 fixed, reintroduced by the fix for something else.
+  The second pass measures the reflowed column and corrects, and is a no-op
+  whenever the first was right.
+- **`FRAME_BOTTOM_GAP` (28px) is reserved under the last row.** Filling to the
+  scroller's exact foot put "Preview on a real clip" hard against the bottom of
+  the window with nothing under it, which reads as cut off whether or not a
+  pixel is lost — and the scroller the walk settles on does not always carry
+  the design's own bottom padding, so "the foot" is not reliably where the
+  design meant the page to end.
+
+Measured after, across seven viewports: **1366x768 shrinks to 230x409** (that
+screen genuinely has less room, and it is the size v3.126.0 was fixed for),
+1440x950 grows 264→343, **1920x1200 grows 264→484**. Every one keeps a ~28px
+gap under the CTA row, none clips it, none scrolls the page, and none overflows
+sideways. Below 1050px the columns wrap, the painter stands down as before, and
+the CTA is reachable through the screen's own scroller.
+
+**A seventh source-string test failure.** `studio-audit-fixes` pinned the exact
+expression `const over=previewCol.getBoundingClientRect().bottom-limit`; the
+property it protects — that the column is measured AFTER the lock, not before —
+was untouched. It matches the measurement rather than the arithmetic now.
+
+**IT IS THE FALLBACK PATH'S FIX NOW, and that is worth stating rather than
+leaving the entry above reading as the screen a person sees.** v3.134.0 replaced
+the desktop Templates screen with the host-rendered `#dcTemplates`
+(studio-templates.js), which hides the generated one in place and sizes its own
+frame from the room its column has -- growing as well as shrinking, clamped to
+[300, 620]. So `paintTemplatesLayout` no longer draws what anybody looks at
+unless that mount fails, which is exactly when it is wanted. Measured on the
+merged tree at 1440x900: it **bails at its own `hlEl.classList.contains('hide')`
+guard** -- `#studioHighlight` belongs to the generated screen and is hidden with
+it -- so `paintStudio()` runs to completion, no host panel after it is skipped,
+and an unchanged repaint costs **0 DOM operations**. A structural reason, not an
+accident of ordering. Both sizings grow, so whichever screen is up fills the
+room; keep them that way rather than letting the dead one rot.
+
+**NOT done: the clip preview modal.** Measured and left alone. Its stage is
+`min(70vh, 640px)` with 112px of chrome around it, so at 1920x1200 it sits
+with 224px of unused margin above AND below. Growing it needs the card's
+`max-width: min(94vw, 860px)` raised in step, because the stage's width follows
+its height through the aspect ratio and 860 − 320 (tools) − 22 (gap) caps the
+stage at 518px wide, i.e. 921px tall. Worth doing; not done here.
