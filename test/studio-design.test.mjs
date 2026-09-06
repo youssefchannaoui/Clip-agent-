@@ -2104,12 +2104,13 @@ test('the snap lines come from the safe-zone table, not from a literal', () => {
 });
 
 test('the caption cannot be dragged outside the safe box', () => {
-  // The fixture connects nothing, so the box is the union of all four
-  // platforms -- the safe direction for an account whose destinations are not
-  // known yet. Expectations are COMPUTED from the same table the adapter
-  // reads, so this test cannot drift from it when a platform moves its
-  // interface; what it pins is that the clamp honours the box.
-  const box = globalThis.DCSafeZones.safeArea([], 1080, 1920);
+  // The fixture connects nothing, so the box is the FLOOR -- TikTok and
+  // Shorts together, the two this product posts to whether or not either is
+  // connected while a template is designed (postingSet, 6 Sept 2026).
+  // Expectations are COMPUTED from the same table and the same set the
+  // adapter reads, so this test cannot drift from it when a platform moves
+  // its interface; what it pins is that the clamp honours the box.
+  const box = globalThis.DCSafeZones.safeArea(globalThis.DCSafeZones.postingSet({}, {}), 1080, 1920);
   const height = 533;
   const at = f => dragOn({ clientX: 150, clientY: f * height });
   // Dropped below the frame entirely, it stops at the safe edge.
@@ -2833,7 +2834,8 @@ test('the caption snaps to the lines the label promises', () => {
   // now written by the adapter, because a third can fall OUTSIDE the safe box
   // and is then not offered -- a snap point that drops the caption somewhere
   // the platform covers is worse than no snap point at all.
-  const box = globalThis.DCSafeZones.safeArea([], 1080, 1920);
+  // Nothing connected: the TikTok + Shorts floor, the same set the adapter draws.
+  const box = globalThis.DCSafeZones.safeArea(globalThis.DCSafeZones.postingSet({}, {}), 1080, 1920);
   const height = 533;
   const at = fraction => dragOn({ clientX: 150, clientY: fraction * height });
   // The upper third, snapped from just below it, measured down from the top.
@@ -2848,16 +2850,27 @@ test('the caption snaps to the lines the label promises', () => {
   assert.equal(free.captionPosition, 'bottom');
   assert.ok(Math.abs(free.captionMarginV - 1920 * (1 - loose)) < 12, 'lands where it was dropped');
 
-  // THE LOWER THIRD IS THE ONE THAT MOVED. With every platform connected the
-  // safe band ends above 2/3, so it is dropped rather than offered as a place
-  // that is quietly covered by Instagram's own caption block.
+  // THE LOWER THIRD IS OFFERED ONLY WHEN IT IS INSIDE THE BOX. The hint no
+  // longer lists the snap points (v3.132.0: they announce themselves while
+  // dragging), so the promise is checked by DRAGGING: from just below 2/3
+  // the caption snaps onto it on the TikTok + Shorts floor, where the band
+  // ends at 0.748; with a Meta platform connected the band ends above 2/3
+  // and the third is not offered as a place Instagram's caption block would
+  // cover. Computed from the box, so the test follows the table.
+  const third = at(2 / 3 + 0.012);
+  if (2 / 3 <= box.bottom) {
+    assert.equal(third.captionPosition, 'bottom');
+    assert.equal(third.captionMarginV, Math.round(1920 / 3), 'the lower third is offered on the floor');
+  } else {
+    assert.notEqual(third.captionMarginV, Math.round(1920 / 3), 'the lower third is withheld under a wider band');
+  }
+  // And the hint names what the shade is for.
   const label = StudioAdapter.bindings({
     projects: [], clips: [], tracks: [],
     templates: [{ id: 'x', name: 'X', height: 1920 }],
     selectedTemplate: { id: 'x', name: 'X', height: 1920 },
   }).safeHint;
-  assert.equal(/lower third/.test(label), 2 / 3 <= box.bottom,
-    'the label offers a third only when it is genuinely inside the box');
+  assert.match(label, /Shorts and TikTok/);
 });
 
 test('the caption margin is measured from the edge it is anchored to', () => {

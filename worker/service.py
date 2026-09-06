@@ -85,6 +85,21 @@ MIN_FREE_BYTES = max(1, int(os.getenv("WORKER_MIN_FREE_GB", "10"))) * 1024**3
 IMPORT_HEARTBEAT_SECONDS = 15
 
 JOB_TTL_SECONDS = max(3600, int(os.getenv("WORKER_TEMP_TTL_HOURS", "24")) * 3600)
+# A restart is a RESUME (JobStore.recover), and this is how many restarts one
+# job may survive before it is failed with a reason instead of retried at
+# every boot for ever, holding the only slot each time.
+MAX_RESUMES = 3
+RESUME_GIVE_UP = (
+    "This job was interrupted by a worker restart three times and could not be finished. "
+    "Retry it once the worker has been stable for a while."
+)
+TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
+# How long a stopped child gets to exit on SIGTERM before its whole process
+# group is SIGKILLed. ffmpeg flushes and exits in well under a second; a
+# Whisper session takes a little longer to unwind.
+KILL_GRACE_SECONDS = 8
+# Caches and aged job records are pruned this often, not only at boot.
+HOUSEKEEPING_SECONDS = 3600
 
 # Downloaded sources are cached across jobs. A re-render or a more-clips run
 # used to re-download the whole lecture -- minutes of waiting to change a
@@ -713,6 +728,80 @@ def failure_detail(code: int, reported: str, stderr_lines: list[str]) -> str:
             "The full output is in the worker's log on the box.")
 
 
+class JobInterrupted(Exception):
+    """The worker is going down; the job was not finished and did not fail."""
+
+
+def _signal_group(child: subprocess.Popen, sig: int) -> None:
+    """Signal the child's whole process group: the child and everything it started.
+
+    The child is started with start_new_session=True, so it LEADS its group
+    and the group id is its own pid -- which still names the group after the
+    child has been reaped, and that is exactly when it matters: a grandchild
+    left running keeps the group alive. A child that is somehow not leading
+    its own group would be sharing OURS, and killpg would take this service
+    down with it, so that case signals the child alone.
+    """
+    pgid = child.pid
+    try:
+        if os.getpgid(pgid) != pgid:
+            child.send_signal(sig)
+            return
+    except ProcessLookupError:
+        pass  # reaped already; its group may still hold what it started
+    except OSError:
+        pass
+    try:
+        os.killpg(pgid, sig)
+    except ProcessLookupError:
+        pass  # nothing left in the group
+    except (PermissionError, OSError):
+        try:
+            child.send_signal(sig)
+        except (ProcessLookupError, OSError):
+            pass
+
+
+def stop_child(child: subprocess.Popen, grace: float | None = None) -> None:
+    """Stop a clip_worker child AND everything it started.
+
+    clip_worker.py runs ffmpeg and Whisper as grandchildren, and a plain
+    terminate() reached only the child: the render or the transcription it
+    had started kept the cores and the memory for as long as it liked --
+    beside the next job, on a 3.7G box. The child is started in its own
+    session (Popen(start_new_session=True)), so one signal reaches the whole
+    group: SIGTERM first, which ffmpeg answers by flushing and exiting, then
+    SIGKILL to whatever is still there after `grace` seconds. The escalation
+    runs on a timer so a cancel returns to its caller at once; the reader loop
+    that owns the child still sees it exit.
+
+    THE ESCALATION IS UNCONDITIONAL. The first cut asked child.poll() before
+    the SIGKILL and skipped it when the child was gone -- but poll() REAPS a
+    child that died on the SIGTERM, and a grandchild that ignored it lived on
+    in the group, holding the stdout pipe the reader loop was blocked on.
+    CI's timing found it on the first run; a grandchild that ignores SIGTERM
+    now pins it. killpg on a group with nobody left in it is a
+    ProcessLookupError, swallowed above.
+    """
+    if grace is None:
+        grace = KILL_GRACE_SECONDS
+    _signal_group(child, signal.SIGTERM)
+
+    def _escalate() -> None:
+        _signal_group(child, signal.SIGKILL)
+
+    timer = threading.Timer(grace, _escalate)
+    timer.daemon = True
+    timer.start()
+
+
+def clip_order(item: dict[str, Any]) -> tuple[int, str]:
+    """Plan order from a clip id's `-NN` suffix; anything else sorts last."""
+    clip_id = str(item.get("id") or "")
+    tail = clip_id.rsplit("-", 1)[-1]
+    return (int(tail) if tail.isdigit() else 10 ** 6, clip_id)
+
+
 class JobStore:
     def __init__(self) -> None:
         JOBS_DIR.mkdir(parents=True, exist_ok=True)
@@ -809,10 +898,32 @@ class JobStore:
             # service used to emit; clip_worker's own prose now passes straight
             # through, so real stages like "Rendering clip 1 of 8" matched
             # nothing and a worker restart left those jobs frozen forever.
-            if status.get("status") not in {"completed", "failed", "cancelled"}:
-                status.update(status="queued", stage="queued", progress=min(5, int(status.get("progress") or 0)), error=None)
-                self.write(str(status["id"]), status)
-                recovered.append(str(status["id"]))
+            if status.get("status") in TERMINAL_STATUSES:
+                continue
+            job_id = str(status.get("id") or status_path.parent.name)
+            attempts = int(status.get("resumed") or 0) + 1
+            if attempts > MAX_RESUMES:
+                # THE CIRCUIT BREAKER. A job that dies every time it is picked
+                # up -- a source that crashes ffmpeg, a render the box cannot
+                # hold in memory -- would otherwise be retried at every boot
+                # for ever, holding the only slot each time. Three goes, then
+                # it is a failure with a reason, and the app hears why.
+                status.update(status="failed", stage="failed", error=RESUME_GIVE_UP, completedAt=now_ms())
+                self.write(job_id, status)
+                continue
+            # A restart is a RESUME, not a fresh run. The clips the earlier
+            # attempt already uploaded (partialClips) and the plan they came
+            # from stay on the record, so process() can hand them back to
+            # clip_worker and it renders only what is missing. The per-clip
+            # readouts are cleared because they describe a render that is no
+            # longer running.
+            status.update(
+                status="queued", stage="queued", progress=min(5, int(status.get("progress") or 0)),
+                error=None, resumed=attempts, resumedAt=now_ms(),
+                currentClip=None, clipPercent=None, etaSec=None, queuePosition=None,
+            )
+            self.write(job_id, status)
+            recovered.append(job_id)
         return recovered
 
 
@@ -884,7 +995,10 @@ class Processor:
 
     def start(self) -> None:
         for job_id in self.store.recover():
-            self.queue.put(job_id)
+            # Through submit(), so a preview render recovered after a restart
+            # goes back to the quick lane it came from rather than behind a
+            # fifty-minute lecture on the main slot.
+            self.submit(job_id)
             # A recovered job with no readable payload will fail properly in
             # process(); it must not take startup down with it here.
             try:
@@ -896,6 +1010,11 @@ class Processor:
         for thread in self.threads:
             thread.start()
         threading.Thread(target=self.queue_pulse, name="queue-pulse", daemon=True).start()
+        # Housekeeping ran ONCE, at boot. A worker that stays up for weeks --
+        # which is the point of deploys no longer restarting it needlessly --
+        # never pruned a cache or an aged job record again, and the source
+        # cache alone is a gigabyte and a half per lecture.
+        threading.Thread(target=self.housekeeping, name="housekeeping", daemon=True).start()
         # Tell the owner's feed the worker came up. Pairs with the web app's
         # own boot announcement: any processing gap around this moment was the
         # deploy switching over, not an outage. Fire-and-forget off-thread --
@@ -908,6 +1027,63 @@ class Processor:
         except (OSError, ValueError):
             lane = ""
         (self.quick_queue if lane == "quick" else self.queue).put(job_id)
+
+    def in_flight_ids(self) -> list[str]:
+        with self.lock:
+            return sorted(self.in_flight)
+
+    def halted(self, job_id: str) -> bool:
+        """Cancelled by the app, or this worker is going down: either way the work stops now."""
+        return self.stop.is_set() or self.cancelled(job_id)
+
+    def housekeeping(self) -> None:
+        while not self.stop.wait(HOUSEKEEPING_SECONDS):
+            try:
+                self.cleanup_abandoned()
+            except Exception as exc:  # noqa: BLE001 - a prune that fails must not end the thread
+                print(f"[worker] housekeeping failed: {clean_error(exc)}", file=sys.stderr, flush=True)
+
+    def shutdown(self, grace: float | None = None) -> list[str]:
+        """Stop for a restart WITHOUT losing the work in flight.
+
+        Docker sends SIGTERM and, stop_grace_period later, SIGKILL. Before
+        this the handler only closed the HTTP server: the child went on
+        rendering until the container died under it, and its job's record
+        was left saying "Rendering clip 2 of 4" -- which recover() read back
+        as a job to start again from the import. On 5 Sept 2026 two deploys
+        four minutes apart sent a customer's khutbah render back to its start
+        twice.
+
+        Now every job in flight is marked `interrupted` FIRST -- one write
+        each, before anything slow -- so whatever happens after that the
+        record on disk says exactly what it is: not finished, not failed, to
+        be RESUMED. Then the children are stopped, group and all, and the
+        consumer threads are told to stop picking up work. Returns the ids it
+        marked.
+        """
+        self.stop.set()
+        with self.lock:
+            in_flight = set(self.in_flight)
+            children = dict(self.running)
+        interrupted = []
+        for job_id in sorted(in_flight | set(children)):
+            try:
+                self.store.update(job_id, status="interrupted", stage="interrupted by a worker restart",
+                                  interruptedAt=now_ms(), error=None)
+                interrupted.append(job_id)
+            except Exception:  # noqa: BLE001 - a record that cannot be written must not stop the others
+                pass
+        for child in children.values():
+            stop_child(child, grace)
+        # Wait for the group to go, so the SIGKILL escalation has fired
+        # before this process exits and takes its timers with it.
+        deadline = (KILL_GRACE_SECONDS if grace is None else grace) + 2
+        for child in children.values():
+            try:
+                child.wait(timeout=deadline)
+            except subprocess.TimeoutExpired:
+                pass
+        return interrupted
 
     def cancelled(self, job_id: str) -> bool:
         # read() returns None for a job whose status file has gone or been
@@ -934,7 +1110,7 @@ class Processor:
         with self.lock:
             child = self.running.get(job_id)
         if child and child.poll() is None:
-            child.terminate()
+            stop_child(child)
         return status
 
     def import_pulse(self, job_id: str) -> Callable[[], bool]:
@@ -1002,7 +1178,7 @@ class Processor:
                     self.store.update(job_id, **fields)
                 except KeyError:
                     return True
-            return self.cancelled(job_id)
+            return self.halted(job_id)
 
         return pulse
 
@@ -1040,7 +1216,7 @@ class Processor:
             if not url.startswith("https://"):
                 continue
             destination = work / f"music-{index}.mp3"
-            download_https(url, destination, 100 * 1024 * 1024, 120, lambda: self.cancelled(str(payload["id"])))
+            download_https(url, destination, 100 * 1024 * 1024, 120, lambda: self.halted(str(payload["id"])))
             tracks.append({"name": str(track.get("name") or destination.name), "path": str(destination)})
         if not tracks and music_wanted:
             raise RuntimeError("No worker-accessible nasheed track was supplied.")
@@ -1054,7 +1230,7 @@ class Processor:
         if not url.startswith("https://"):
             return None
         destination = work / "background.mp4"
-        download_https(url, destination, 200 * 1024 * 1024, 180, lambda: self.cancelled(str(payload["id"])))
+        download_https(url, destination, 200 * 1024 * 1024, 180, lambda: self.halted(str(payload["id"])))
         return {"mode": str(background["mode"]), "path": str(destination),
                 "introSeconds": float(background.get("introSeconds") or 3), "name": str(background.get("name") or "")}
 
@@ -1093,9 +1269,12 @@ class Processor:
             "WHISPER_MODEL": CAPACITY["model"],
             "FFMPEG_THREADS": str(CAPACITY["ffmpegThreads"]),
         }
+        # ITS OWN SESSION, so the ffmpeg and Whisper it starts are one process
+        # group with it and stop_child() can reach all of them. See stop_child.
         child = subprocess.Popen(
             [sys.executable, str(ROOT / "worker" / "clip_worker.py"), str(job_file)],
             cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True,
         )
         with self.lock:
             self.running[job_id] = child
@@ -1117,8 +1296,7 @@ class Processor:
 
         def _expire() -> None:
             over_budget.set()
-            if child.poll() is None:
-                child.terminate()
+            stop_child(child)
 
         budget_timer = threading.Timer(budget, _expire)
         budget_timer.daemon = True
@@ -1132,6 +1310,12 @@ class Processor:
             writes happen constantly (a heartbeat every ten seconds), and none of
             them is worth killing the reader loop over.
             """
+            # During a shutdown the record already says "interrupted" and a
+            # buffered progress line must not overwrite that; the clips that
+            # finished are still worth recording, because they are what the
+            # resume skips.
+            if self.stop.is_set() and "partialClips" not in fields:
+                return
             try:
                 self.store.update(job_id, **fields)
             except KeyError:
@@ -1139,7 +1323,7 @@ class Processor:
 
         for line in child.stdout:
             if self.cancelled(job_id):
-                child.terminate()
+                stop_child(child)
                 break
             try:
                 event = json.loads(line)
@@ -1199,6 +1383,11 @@ class Processor:
             self.running.pop(job_id, None)
         if self.cancelled(job_id):
             raise ImportProviderError("Job cancelled.")
+        if self.stop.is_set():
+            # shutdown() marked the job and stopped the child; that exit code
+            # is the signal, not a failure, and the record must keep saying
+            # "interrupted" so the next boot resumes it.
+            raise JobInterrupted(job_id)
         if over_budget.is_set():
             raise RuntimeError(
                 f"Processing exceeded its time budget of {budget // 60} minutes and was stopped. "
@@ -1242,9 +1431,20 @@ class Processor:
         # upload band for nothing.
         uploaded = self.partial_uploads.get(job_id, {})
         clips = []
+        seen: set[str] = set()
         for clip in result.get("clips") or []:
-            cached = uploaded.get(str(clip.get("id")))
+            clip_id = str(clip.get("id"))
+            cached = uploaded.get(clip_id)
             clips.append(cached if cached else self.upload_clip(job_id, clip))
+            seen.add(clip_id)
+        # A resumed job renders only what its earlier attempt had not; the
+        # clips that attempt uploaded are not in this result and are put back
+        # here, in plan order, so the lecture comes back whole.
+        restored = [item for clip_id, item in uploaded.items() if clip_id not in seen]
+        if restored:
+            clips.extend(restored)
+            clips.sort(key=clip_order)
+            project["clipCount"] = len(clips)
         return {"project": project, "clips": clips}
 
     def disk_shortfall(self) -> int:
@@ -1265,6 +1465,21 @@ class Processor:
 
     def process(self, job_id: str) -> None:
         payload = self.store.payload(job_id)
+        # A job picked up after a restart carries what its earlier attempt got
+        # done: recover() left `resumed` and the clips already uploaded
+        # (partialClips) on the record. Seeding partial_uploads from them is
+        # what lets upload_result hand those clips back without the bytes,
+        # and naming their ids to clip_worker is what stops it rendering them
+        # a second time.
+        earlier = self.store.read(job_id) or {}
+        resumed = int(earlier.get("resumed") or 0)
+        uploaded_before: dict[str, dict[str, Any]] = {}
+        if resumed:
+            for item in earlier.get("partialClips") or []:
+                if isinstance(item, dict) and item.get("id") and item.get("clipUrl"):
+                    uploaded_before[str(item["id"])] = dict(item)
+            if uploaded_before:
+                self.partial_uploads[job_id] = dict(uploaded_before)
         work = TEMP_DIR / job_id
         if work.exists():
             shutil.rmtree(work)
@@ -1361,6 +1576,11 @@ class Processor:
                 "sourceFullDurationHintSec": imported.source_duration_sec,
                 "sourceTitle": payload.get("title") or imported.title,
                 "background": job_background,
+                # The plan checkpoint lives beside the job RECORD, not in the
+                # working directory: the directory is removed on every attempt
+                # and the record is what survives a restart.
+                "planFile": str(self.store.directory(job_id) / "plan.json"),
+                "resume": {"attempt": resumed, "uploadedIds": sorted(uploaded_before)} if resumed else None,
             }
             if mode == "rerender":
                 worker_job.update(
@@ -1390,9 +1610,18 @@ class Processor:
             try:
                 if self.cancelled(job_id):
                     status = self.store.update(job_id, status="cancelled", stage="cancelled", error=None)
+                    self.callback(payload, status)
+                elif self.stop.is_set() or isinstance(exc, JobInterrupted):
+                    # A RESTART, not a failure. shutdown() already wrote
+                    # "interrupted"; this keeps it that way whichever exception
+                    # the stopped child or the aborted import surfaced as, and
+                    # sends NO callback -- the app keeps polling and sees the
+                    # resume for itself. recover() picks the job up at boot.
+                    self.store.update(job_id, status="interrupted", stage="interrupted by a worker restart",
+                                      interruptedAt=now_ms(), error=None)
                 else:
                     status = self.store.update(job_id, status="failed", stage="failed", error=clean_error(exc), completedAt=now_ms())
-                self.callback(payload, status)
+                    self.callback(payload, status)
             except Exception as report_exc:  # noqa: BLE001
                 print(f"[worker] job {job_id} failed and the failure could not be recorded: {clean_error(report_exc)}", file=sys.stderr, flush=True)
         finally:
@@ -1546,6 +1775,9 @@ class Handler(BaseHTTPRequestHandler):
                 "ready": ready, "freeBytes": free,
                 "queueDepth": PROCESSOR.queue.qsize(), "quickQueueDepth": PROCESSOR.quick_queue.qsize(),
                 "running": len(PROCESSOR.running),
+                # Past the disk check and not yet finished: what a deploy
+                # waits for (worker/drain.sh) before recreating the container.
+                "inFlight": PROCESSOR.in_flight_ids(),
                 "capabilities": worker_capabilities(),
             })
         if self.command == "POST" and path == "/ai/advise":
@@ -1610,7 +1842,18 @@ def main() -> int:
         raise SystemExit("WORKER_SHARED_SECRET must contain at least 32 characters.")
     PROCESSOR.start()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    stop = lambda *_: threading.Thread(target=server.shutdown, daemon=True).start()
+    def stop(*_: Any) -> None:
+        # Off the signal-handling thread: server.shutdown() waits for
+        # serve_forever(), which is running right here. PROCESSOR.shutdown()
+        # goes first and is quick -- one status write per running job, then
+        # the signals -- so the records say "interrupted" before anything else
+        # happens, however the container is taken down after that.
+        def _stop() -> None:
+            try:
+                PROCESSOR.shutdown()
+            finally:
+                server.shutdown()
+        threading.Thread(target=_stop, daemon=True).start()
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     # The whole hardware decision, once, at startup. Without it nobody can tell

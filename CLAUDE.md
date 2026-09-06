@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1494 JS + 669 Python**
+- `npm test` and `npm run check` must pass. Currently **1544 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10046,12 +10046,246 @@ transcript the pipeline would have used, the options each retry carried, the
 warning emitted -- and were proven red against the unpatched worker (three
 failures and an import error).
 
-**What this does not yet say:** WHICH guard silenced this recording. The
-diagnose workflow's `diagnose_audio` input runs Whisper over the cached bytes
-in both variants and prints `duration_after_vad` and `no_speech_prob`; it
-loads the model on the box, so it waits for the box to be idle. The retry
-order above is the safer guess until then, and the entry below records the
-answer once it is in.
+**Which guard it was, measured on the box the same hour (v3.132.0).** The
+diagnose workflow's `diagnose_audio` input ran Whisper over the first 120s of
+the cached source (567s, AAC stereo, mean -18.6 dB, peak -2.8 dB -- a healthy
+file, so the download was never the fault):
+
+    as shipped (VAD on)          2 segments   0.0-28.4s   after vad 26.0s of 120
+    VAD off                     10 segments   0.0-119.8s  after vad 120.0s
+    VAD on, no-speech gate off   2 segments   0.0-28.4s
+    VAD off, gate off           10 segments   0.0-119.8s
+    language auto, VAD on        2 segments   0.0-28.4s
+
+**The voice-activity filter is what silences a recitation**: Silero handed the
+model 26 seconds of the first two minutes. The no-speech gate changed nothing
+in either direction and neither did the language (ar at 1.00 either way). So
+the retry order above was the right one, and the first retry is the one that
+lands -- and a recitation no longer pays for the wasted pass at all: a
+Quran-template job starts WITHOUT the filter (`vad_filter: False` from the
+first pass), keeping the no-speech gate so real silence is still refused.
+Both driven by the fake-Whisper tests and proven red first.
+
+**Youssef's retry never reached it.** Two worker deploys four minutes apart --
+this session's at 17:09 and the other session's v3.131.2 at 17:13 -- each
+restarted the container, and a restart sends a running job back to its start,
+so his khutbah render restarted twice and the queued recitation retry never
+ran before he cancelled both ("it was paused maybe cause the update"). That is
+the deploy, not the box: `deploy-worker.yml` has no drain. **A worker deploy
+while a customer's job runs costs them that job's progress**, and two sessions
+shipping worker/ changes in the same quarter-hour is how it happened twice.
+Check the box's queue (a diagnose dispatch) before pushing anything under
+worker/ when someone is importing.
+
+## The safe zone is drawn as what covers the frame, and the card is page length (v3.132.0, 5 Sept 2026)
+
+Youssef, on v3.131.2: "left side bar should be pae length, safe zone is
+horrible and its all broken now."
+
+- **The safe-zone NUMBERS are untouched.** `safe-zones.js` is the one table,
+  its tests hold it, and Clean Line's caption moved on his own instruction the
+  same day (the entry above). What was horrible was the DRAWING: a lone
+  dashed rectangle in the upper part of the frame, the caption glued to its
+  edge and a third of the picture open beneath it, which reads as a fault
+  rather than a rule. Every clip tool shows it the other way round, and so
+  does this one now: the parts of the frame the platform's OWN interface
+  covers are shaded, with the tab pill, the username and caption lines and
+  the like/comment/share stack ghosted in, and what is left is plainly where
+  text goes. `paintSafeChrome` in index.html draws four bands from the
+  adapter's new `safeBox` fractions -- the same box the design's dashed edge
+  is bound to, so the shade and the edge cannot disagree -- host-owned,
+  APPENDED to the frame (a host node at the front shifts every generated
+  sibling), z-index 1 under the dashed edge (2), the guides (6) and the
+  caption (8), pointer-events none. The colours are rgba(9,9,10) and
+  rgba(255,255,255) on purpose: the light-theme generator remaps hex and
+  rgba(0,0,0), and the stage is night in both themes. Measured in both.
+- **The hint is one line about the shade.** It listed the snap points and ran
+  to two lines under the preview, reading as a warning label; the snap points
+  announce themselves while dragging. "Your caption sits Npx into the shade"
+  stays -- that is the one thing the line exists to say -- and the other
+  session's test follows the wording rather than the old sentence.
+- **The settings card stretches to the row.** It was capped at the row's
+  height but not stretched, so it ended at its cap while the preview column
+  ran 20-60px past it and the two columns ended on different lines; the
+  preview column was also fitted against the SCROLLER's foot rather than the
+  row's content foot, so it was allowed into the row's 44px bottom padding.
+  `align-self: stretch`, the limit measured from the row, and the row's foot
+  padding evened to its head's 22px under the lock. Measured at 1440x900 and
+  1520x855 with the live bar up: both columns end at the same y, the card
+  runs to the row's foot in both themes.
+
+## The worker survives being stopped (v3.133.0 / v3.133.1, 6 Sept 2026)
+
+Youssef: "MAKE SURE THE AI WORKER IS WORKING COMPLETELY FINE FIX ALL ISSUES
+MAKE IT BULLETPROOF." The job lifecycle was mapped end to end -- service.py,
+clip_worker.py, the deploy, the app's polling loops -- before anything was
+built, and what the map showed is that the worker had been designed to RUN
+and never to be STOPPED. Every fault below is a stop going wrong.
+
+- **A stop reached the child and not what the child had started.** `cancel()`,
+  the wall-clock budget and the SIGTERM handler each sent one `terminate()` to
+  `clip_worker.py`; the ffmpeg or Whisper it had spawned was never signalled,
+  and went on holding the cores and the memory -- beside the next job, on a
+  3.7G box. The child runs in its own session now (`start_new_session=True`)
+  and every stop goes through `stop_child()`: SIGTERM to the whole GROUP,
+  then SIGKILL to whatever is still there after `KILL_GRACE_SECONDS` (8).
+  Proven with a grandchild that IGNORES SIGTERM: `terminate()` left it alive,
+  the group kill did not. `.terminate()` no longer appears in service.py and a
+  test fails if it returns.
+- **A restart was a fresh run, and that is what "it was paused maybe cause
+  the update" was.** The SIGTERM handler only closed the HTTP server; the
+  child rendered on until Docker killed the container under it, and
+  `recover()` requeued the job at progress 5 with nothing kept, so a render
+  three clips in started again from the import. Twice for one customer on
+  5 Sept, because two sessions deployed four minutes apart. Now
+  `Processor.shutdown()` runs FIRST on SIGTERM: every job in flight is marked
+  `interrupted` (one write each, before anything slow), the children are
+  stopped as groups, the consumer threads stand down, and the handler only
+  then closes the server. `process()` keeps that mark whichever exception the
+  dying child or the aborted import surfaced as, and sends NO failure
+  callback -- the app keeps polling and sees the resume itself. `recover()`
+  then RESUMES rather than restarts: `partialClips`, `clipPlan` and
+  `totalClips` stay on the record, `resumed` counts the restarts, and the
+  fourth is failed with a reason (`MAX_RESUMES` = 3) instead of being retried
+  at every boot for ever with the only slot held each time.
+- **The plan checkpoint.** Scoring is minutes of Ollama on a single-slot box,
+  and a job interrupted while RENDERING paid it again from the top.
+  `clip_worker` now writes the selected, snapped, titled clips to
+  `jobs/<id>/plan.json` -- beside the RECORD, which survives a restart; the
+  working directory is removed on every attempt -- and a resumed job reads
+  them back, re-derives the verse map from the same transcript (under a
+  second, and the map holds nested records the plan has no reason to carry),
+  and renders only the clips whose ids the service did not already upload.
+  `upload_result` puts the earlier attempt's clips back in plan order and
+  recounts. **Only a RESUMED job reads a plan**: a fresh run of the same id
+  after an edit must not pick up a plan made from other settings.
+- **The deploy waits for the slot to empty.** `worker/drain.sh` reads the job
+  records out of the RUNNING container with the python it already has -- no
+  HTTP, no secret, and nothing the NEW image has to contain, because the old
+  container is the one answering -- and waits up to `DEPLOY_DRAIN_MINUTES`
+  (20) for running jobs. Queued ones have not started and are not waited
+  for. On timeout it WARNS AND PROCEEDS: the resume covers that case, and a
+  job that never finishes must not hold a deploy hostage. `deploy.sh` runs it
+  before `docker compose up --build`; the compose file gives the container
+  `stop_grace_period: 45s` for the marking and the group stop; the workflow's
+  timeout moved 30 -> 55 minutes and takes `drain_minutes` (validated to
+  digits, the one value it interpolates into a remote command). `/readiness`
+  reports `inFlight`. **`DEPLOY_DRAIN_MINUTES=0` is the emergency override**
+  -- a fix that must land whatever is running.
+- **Housekeeping ran ONCE, at boot.** Pruning the caches and the aged job
+  records is on an hourly thread now, because a worker that stays up for
+  weeks -- the point of deploys no longer restarting it needlessly -- never
+  pruned again, and the source cache is a gigabyte and a half per lecture. A
+  recovered preview render also goes back through `submit()` to the quick
+  lane instead of behind the next lecture on the main slot.
+- **The app's half.** `runRemoteAux` had NO stall detection: a re-render or
+  more-clips job whose worker died mid-way sat at "processing" until the
+  six-hour job timeout, holding the app-side slot and the worker's own, which
+  it never told to stop. It watches the same stage|progress|heartbeat
+  signature `runRemoteProject` has always watched, and cancels on the worker
+  before failing here, on a stall and on the timeout. A **404** from the
+  worker for a job it was given -- a replaced data volume, a record that aged
+  out while the app still held it -- re-submits the SAME payload under the
+  SAME id ONCE: `JobStore.create` is idempotent, so a worker that holds the
+  job answers with its record and one that lost it starts it; a second 404 is
+  the failure it always was. `MAX_WORKER_RETRIES` 10 -> 20, so the outage
+  window (ten minutes) outlasts a rebuild that reinstalls the Python wheels.
+  And `agent.tick()` pumps the queue whenever `retryDue()` -- the 30s retry
+  timers were the only clock, and a timer is lost with the process, so a
+  lecture left queued with its retry due sat until something else changed.
+  Gated on an OVERDUE retry deliberately, so a test that seeds a queued job
+  never starts it by accident.
+- **Tests: `test_worker_resume.py` (11), `test_render_plan.py` (3),
+  `worker-resilience.test.mjs` (6)** -- the real service against a fake
+  clip_worker (with a real grandchild), the real engine against a fake worker
+  on a local port, the real job store. All twenty proven red in ONE stashed
+  run against the unpatched sources before being kept.
+- **CI's first run of v3.133.0 caught a real fault in the fix (v3.133.1).**
+  The escalation asked `child.poll()` before the SIGKILL and skipped it when
+  the child was gone -- but poll() REAPS a child that died on the SIGTERM,
+  and a grandchild that ignored it lived on in the group, holding the stdout
+  pipe the reader loop was blocked on. The runner's timing killed the fake
+  worker before its next heartbeat and the test sat on that pipe for ten
+  seconds; locally the SIGTERM had reached the grandchild during its own
+  interpreter start-up, before `SIG_IGN` was installed, so it died like any
+  process and the test passed against code that never reached it. Two
+  lessons: the group is signalled UNCONDITIONALLY now (killpg on an empty
+  group is a swallowed ProcessLookupError), and the fixture's grandchild
+  writes a READY marker once its handler is in, with heartbeats two seconds
+  apart so the loop cannot reach its own cancel check first. A grandchild
+  that is not provably ignoring the signal proves nothing about the kill.
+- **What is NOT proven here**: a real restart on the box mid-render. The next
+  worker deploy that lands while a job runs is the confirmation -- the job's
+  status should read `interrupted`, then `resumed: 1` with "Resuming from the
+  saved clip plan" in its stage, and the clip count should come back whole.
+  Until then the claim is the tests', not the box's.
+
+## The safe box is always TikTok and Shorts (v3.133.0, 6 Sept 2026)
+
+Youssef: "figure out the perfect safe social zone using TikTok and YouTube
+and use it for ours". `platformsFor` drew the box for the CONNECTED
+platforms, so a template designed with YouTube alone connected sat its
+caption under TikTok's caption block the day TikTok was connected -- the
+exact fault the table exists to prevent, one connection later. `postingSet()`
+in safe-zones.js is the floor now: always TikTok and Shorts together (top 150,
+right 140, bottom 484, left 60 -- 7.8% / 13.0% / 25.2% / 5.6% of a 9:16
+frame), WIDENED by any connected Meta platform and never narrowed below the
+pair. With nothing connected the hint names the pair.
+
+**And the shade now says BY WHAT it is covered.** "show a siloet where side
+buttons and text would go" -- `safeSilhouette()` in index.html draws the
+player's own chrome as one SVG in the frame's 1080x1920 space: the action
+rail up the right (avatar with its follow badge, like, comment, share, the
+sound disc, each with a count bar), the handle, two caption lines and the
+sound line above the tab bar at the foot, and the feed tabs at the head. It
+is positioned from the SAME box the bands are cut from -- the rail on the
+centre line of the right-hand band, its stack climbing from the bottom
+band's top edge -- so connecting a platform that covers more moves the
+silhouette with the shade (measured: the disc sits 70px above the band's
+edge on the floor and on the Meta-widened box alike). Ink only, rgba
+literals in the markup so the daylight generator, which remaps hex in CSS,
+never touches them; the stage is night in both themes. Ten `data-part`
+groups, and `test/safe-chrome.test.mjs` CALLS the function with two boxes
+and reads the SVG back. The two drag tests in studio-design that computed
+their box from "nothing connected = every platform" now compute it from
+`postingSet`, and the one assertion that read the hint for the words "lower
+third" -- words v3.132.0 took OUT of the hint on purpose -- checks by
+dragging instead, which is what the hint's promise had become.
+
+## A cancelled lecture was told to wait, and a retry would have doubled its clips (v3.132.1, 6 Sept 2026)
+
+Youssef, with Home showing both lectures CANCELLED (he had cancelled them
+during the two worker deploys) and a toast reading "Wait for the lecture to
+finish processing before generating more clips.": "Fix this cause I have
+nothing waiting but getting an error."
+
+- **`queueMoreClips` answered every non-finished status with the WAIT
+  sentence**, cancelled and failed included -- a sentence with no end, on a
+  lecture that will never finish. It names the way forward now (Retry this
+  lecture); a lecture still processing keeps the honest wait.
+- **The studio offered Retry for `failed` only**, though `retryProject` has
+  accepted a cancelled project all along. The card menu and the detail's
+  primary action offer it for both now. The library filed a cancelled lecture
+  as "Archived" while Home said "Cancelled" -- two screens disagreeing about
+  one lecture, the shape the audit fixed for `failed` one state over. The tab
+  and the chip say Cancelled; the detail's subline says "Cancelled before it
+  finished" and its hint says Retry adds to the clips already there.
+- **A retry would have DOUBLED the clips.** Clip ids are `<worker job id>-NN`
+  and a retry mints a fresh job id, so the khutbah cancelled at 69% with four
+  clips (two approved) would have had the same four moments cut again under
+  new ids, beside the originals. `remove_existing_moments` only ever ran on
+  the more-clips path. `existingRangesFor(projectId)` is one builder for the
+  three paths now (more clips, the remote run, the local retry); the remote
+  payload carries it at RUN time, so a first run holds nothing; the worker's
+  main path removes those moments BEFORE scoring (asking the model to rank
+  moments that will be discarded is a wasted generation); and a retry that
+  finds nothing left says so (`nothing_new_reason`) rather than blaming the
+  duration range. A completion counts every clip the lecture holds rather
+  than only the run's new ones -- it read "4 clips" beside eight cards.
+- Ten JS tests on executed output (the engine's own refusals, the adapter's
+  bindings, the card menu pressed, the detail's primary action pressed) and
+  three Python, the red probes proven. Worker change, so `deploy-worker.yml`
+  deploys it on push; the box was idle (diagnose run 64) before the push.
 
 ## The product audit: used, not read (v3.130.0 / v3.130.1, 5 Sept 2026)
 
@@ -10310,6 +10544,243 @@ checker the union rectangle's own edges were read out of the canvas pixels:
 they sit at the union's insets, and nowhere near where a centred box would be.
 All seven probes proven red first.
 
+## The dotted zone, and a caption that greyed in daylight (v3.134.1, 6 Sept 2026)
+
+Youssef, on the Templates preview: "That dotted zone is so bad btw."
+
+### Three dashed rectangles were on one frame
+
+The safe box, the caption's own drag outline and the mark's -- all gold, all
+the same weight. So the one that means "you may not draw here" read as one
+more handle, and the shade underneath it was already saying the same thing
+better. The safe box's outline is off; the two that ARE controls stay.
+
+- **Switched off from the BINDING, not by editing the export.** The design
+  writes `border: 1px dashed ...` and then interpolates `{{ safeBoxStyle }}`
+  in the SAME style attribute, so a later declaration wins -- no re-import,
+  and no hashed class name moves. **Both halves are pinned**, because the
+  order is what makes it work: the test reads the generated template and
+  fails if the binding is ever interpolated before that border. Restoring
+  the dashes is deleting three declarations.
+- **The shade was a FOG at `.46`, not a step.** The bands take 7.8% off the
+  top, 25.2% off the foot and 18.6% across, so at that alpha most of the
+  picture was dulled without any of it reading as covered. `.66` reads as a
+  deliberate step: the clear window is plainly the picture, the shade is
+  plainly the phone's own chrome, and the ghosted rail and caption lines sit
+  on top of it. The test pins a FLOOR with the reason rather than the value
+  -- tune it, but not back below the number that was called bad.
+- It is `rgba(9,9,10,...)`, deliberately not a themed token: the light
+  generator remaps hex and `rgba(0,0,0)` and leaves this alone, so the stage
+  stays night in both themes. Verified in both.
+
+### And the caption preview drew grey in daylight
+
+Found by looking at the same frame in the light theme, which is the only
+place it showed: **the caption read #FFFFFF in the dark and #BCBCC3 in
+daylight**, while the render draws `captionPrimary` in both. That is
+invariant 4 -- a preview disagreeing with the export -- in one theme only.
+
+- **The cause is the stage rule's own safety argument lapsing.**
+  `body.dc-light #studio *:has(> #studioPreviewPic) *` keeps the stage's ink
+  night in daylight, and its comment says the caption is safe from it
+  "because it carries an INLINE colour, which no stylesheet can outrank".
+  True of the BOX. **`*` reaches every DESCENDANT**, and the words live in a
+  host-owned span inside the box which had no colour of its own -- so the
+  box was out of reach and its children were not.
+- **`span.style.color = 'inherit'`, in BOTH caption painters** (index.html
+  has two: the editor's echo and the Templates sample). An inline style
+  outranks that rule exactly as the box does, and `inherit` follows the
+  template's own colour rather than pinning a second copy of it. Written on
+  every paint rather than at creation, so a span made before this comes
+  right too.
+- **The stale claim in studio-tokens.css was corrected rather than left
+  standing.** A comment that explains why a rule is safe becomes a trap the
+  day the markup underneath it changes: it now says the safety is a property
+  of the markup, names the lapse, and says anything else added inside the
+  caption or the mark needs the same.
+- Measured after, both themes: **rgb(255,255,255)**, from #FFFFFF / #BCBCC3.
+
+### Two probe lessons, both already in this file and both paid again
+
+- **A red probe that does not EDIT proves nothing.** The band-alpha probe
+  searched for `rgba(9,9,10,.66)` and the source reads
+  `rgba(9, 9, 10, .66)` -- zero replacements, suite green, and it would have
+  been reported as proof. Every probe here asserts its own replacement count
+  and prints the bytes it removed.
+- **Restarting the preview server is not optional after an index.html edit**
+  -- the CSP hash of the inline block is computed at server start. Seventh
+  recorded occurrence. And `pkill -f 'PORT=4173'` does not match a server
+  started with that as an ENVIRONMENT variable: scan `/proc/*/environ`.
+
+### Measured and NOT changed, so it is stated rather than assumed
+
+**A full-width caption line still runs under the action rail.** Clean Line's
+Side margin is 90px (8.33%) and the safe area's right inset is 12.96% (140px),
+so a line that fills the width overruns by ~50px. The safe-zone law
+(v3.131.0/1) pins the caption's ANCHOR, which is inside the box and correct;
+the horizontal margin is a different question and moving it re-wraps every
+line of every clip from that template. That is Youssef's call, like the
+MarginV move was.
+
+## Templates was rebuilt as its own screen (v3.134.0, 6 Sept 2026)
+
+Youssef: "I need the template to be REDONE same kinda thing a lot cleaner and
+just remake the whole layout and how it works NO ISSUES NO PRONLEMS PERFECTLY
+LOOKING SIMPLE NICE WITH MANY OPTIONS TO CHOOSE FROM AND SABING AND ETC
+WORKING" -- then "clean up sliders and options add drop boxes and etc make it
+look clean yet perfect with many configurations and sort out a new system if
+needed in terms of saving templates".
+
+### What was wrong, counted before anything was designed
+
+The screen offered **nine rows**, and every one of them opened a MODAL LIST:
+tap Caption style, a sheet covers the screen, pick one, the sheet closes.
+Nothing could be compared against anything, nothing showed its own value as a
+position, and the ~60 style fields the renderer actually reads were reachable
+through nine of them. It now draws **39-50 control rows over nine groups**,
+every field a select, a slider, a colour or a switch, in place.
+
+### It is a SECOND TEMPLATE over the same bindings
+
+`src/public/studio-templates.js` is the device `studio-mobile.js` established:
+a hand-written module authors a template in the runtime's own AST and renders
+it through the SAME `StudioRuntime` from the SAME `StudioAdapter.bindings()`
+object. No copied logic, no new state, no new route -- every write goes through
+the existing `saveStyle` funnel, so undo/redo, the debounce and the draft all
+work exactly as they did.
+
+- **The generated screen is HIDDEN IN PLACE, never removed.** Taking a node out
+  of `<main>` shortens the live child list against the rendered one and the
+  patcher pairs everything after it one across (the v3.124.5 lesson). It gets
+  `data-host-style` + `display:none`.
+- **The shell carries `data-tour="tpl-save"` itself**, so the walkthrough
+  spotlights a control a person can see -- and that is exactly why
+  `generatedScreen()` walks `main.children` and SKIPS its own node. A bare
+  `querySelector` for the anchor returns `#dcTemplates` (document order puts it
+  first), so the first cut walked up from it and hid the screen it had just
+  drawn.
+- **It never mounts where the phone draws its own** (`StudioMobile.query`).
+
+### The bug that made picking a caption mode unmount the whole screen
+
+The runtime stores handler indexes in an attribute and binds ONE delegated
+listener per event type on its mount root. A second runtime mounted INSIDE the
+studio writes the same `data-dc-h`, so a click on my `<select>` bubbled to the
+OUTER root, which read that attribute against its OWN handler table and called
+something unrelated -- `unmount()`. `StudioRuntime.mount(root, template, {attr})`
+takes the attribute now, and this screen mounts under `data-dct-h`. **Any
+future runtime mounted inside another must do the same.**
+
+### Alignment is by geometry, and it was measured
+
+One `--dct-line` (22px) is the height of the label, the control and the
+readout, on a three-column grid (`--dct-label` 160px / control / `--dct-value`
+64px) with `align-items: start`, so their centres coincide by construction
+rather than by a nudge. A select spans the last two columns so its right edge
+lands on the readouts'. A note is its own full-width grid row -- inside the
+label cell it made that cell two lines and the readout centred on the taller
+row (measured 15px out).
+
+Measured at **1100 / 1280 / 1366 / 1440 / 1920 in both themes**: one label left
+edge, one control left edge, one readout right edge, **0px** between every
+readout's centre and its label's, no wrapped labels, 0 elements overflowing, 0
+page scroll, **0 DOM operations on an unchanged repaint**, 0 page errors.
+
+### Three daylight faults, each invisible in night
+
+1. **Every `<select>` was a dark slab with a centred triangle.**
+   `build-light-theme` re-emits only the declarations whose value holds a hex
+   -- so a `background:` SHORTHAND came back on its own in daylight, RESETTING
+   `background-position`/`-size`/`-repeat` to their initial values, and the two
+   caret gradients drew at `0 0 / auto / repeat`. The ground is
+   `background-color` now (a longhand cannot reset a sibling longhand) and the
+   caret's colour is a bare `var()` with no fallback, so the generator finds no
+   hex in the gradients and the token flips the caret itself.
+2. **Save and apply rendered white on paper.** The base `.dct-btn` rule carried
+   hex fallbacks, so daylight re-emitted it as `body.dc-light #dcTemplates
+   .dct-btn` -- specificity (1,2,1), which beats `.dct-btn.dct-primary` at
+   (1,2,0) whatever the link order. **The escape hatch is the one v3.127.0
+   established: a rule written entirely in var() names has no hex to remap, so
+   the generator skips it and the tokens flip it themselves.**
+3. **The sliders had never drawn a track in NIGHT, and daylight hid it.**
+   index.html's inline block styles every studio slider at `#studio
+   input[type=range]::-webkit-slider-runnable-track` -- (1,1,1) -- and sets it
+   TRANSPARENT. `#dcTemplates .dct-range::…` is (1,1,0) and lost to it; the
+   daylight copy at (1,2,1) happened to win, which is why the same screen
+   looked right on paper and had bare floating thumbs on black. Every pseudo
+   carries `[type="range"]` now, taking it to (1,2,0).
+
+The track FILLS from the left: a native range has no pseudo-element for the
+part behind the thumb, so it is one gradient with a hard stop at `--dct-pct`,
+written by the adapter as an inline style beside the value it comes from.
+
+### The host brand panel was two switch languages in one card
+
+`paintWatermark` is shared machinery with its own paywall and its own account
+source, so it is not rewritten -- but it draws native checkboxes with INLINE
+styles, which no stylesheet outranks. Inside this screen's Brand group its two
+switches sat at the card's RIGHT edge (measured 908px) beside four that sat at
+the control column (455), at 17px square, in a different shape. `!important` on
+the layout, the size and the padding is what reaches an inline style (the
+standing lesson), and `justify-content: space-between` is inline too -- on a
+GRID it spreads the COLUMNS, so it had to be overridden as well or the switch
+stayed pinned right even once the grid applied. Measured after: **one left edge
+for every label (285) and every control (455) in the whole card.**
+
+### Saved looks, and putting a template back
+
+The catalogue is deliberately one template per content type -- `createTemplate`
+and `duplicateTemplate` throw, because copies once turned two templates into
+eight. So a saved LOOK is a snapshot of the style fields kept on the account
+(`state.userSettings[uid].stylePresets`), not a new template.
+
+- **Applying one loads it as the DRAFT** -- "Unsaved changes" -- so the one save
+  path persists and re-renders exactly as a hand edit does. Nothing new can
+  reach a render by a second road.
+- **A look carries neither brand switch.** `saveStylePreset` strips
+  `BRAND_FIELDS` after sanitising: those belong to the ACCOUNT, and a look that
+  carried them would turn the watermark off for every template the moment it
+  was applied -- straight around the paywall that guards that switch. It also
+  carries no `width`/`height` (the template's own frame) and no per-clip
+  framing.
+- **A name that already exists REPLACES its row**, because two rows with one
+  label is two things nobody can tell apart. The cap is 20 and a replacement is
+  still allowed at the cap, or a full list could not be edited.
+- **Restore DROPS the account's overrides** rather than writing a copy of
+  today's defaults, which would freeze the template at this deploy.
+- **`tplDirty` had never been cleared on a successful save**, so the screen read
+  "Unsaved changes" for ever once anything was touched.
+
+### Traps paid for, and one that was mine twice
+
+- **A row class must not collide with an element class.** `dct-row dct-select`
+  matched the `.dct-select` rule; the row classes are `dct-is-<kind>`.
+- **The frame is measured from the ROW and the column's other children**, never
+  from the frame's own box -- reading its height after fixing it feeds itself
+  (the v3.75.4 lesson). `.dct-right` needs `scrollbar-gutter: stable` or the
+  scrollbar narrows the column, the hint rewraps, the frame shrinks and the
+  scrollbar goes.
+- **`overflow-anchor: none` on the root.** Chrome's scroll anchoring ran the
+  settings column to the end after every change (v3.118.1, from a new door).
+- **A `<select>`'s options are built from a list of STRINGS** -- `tplList` is
+  not a list of objects, and `o.id`/`o.name` rendered eleven empty dropdowns.
+- **Two red probes came back green** and both were the test's own fault: the
+  AI-switch probe patched `tplAIRows` (the OLD screen's rows) while the test
+  drove `tplSwitch`, and the anchor probe matched the finder's own
+  `kid.querySelector`. Both are pinned properly now -- and the old screen's
+  pair, which really did share one key, has its own assertion.
+- **`state.json` lags a request by design** (the save is atomic and coalesced),
+  so a test that reads the FILE to check an override was dropped measures the
+  debounce. Read the live `state`.
+
+`test/studio-templates.test.mjs` (16) and `test/style-presets.test.mjs` (8, over
+HTTP with one real account -- the sign-up throttle is real). **All seventeen
+red probes proven**, against the missing fill, the visibility rules, the shared
+handler attribute, the shared toggle key, a brand switch in a look, the
+unqualified slider pseudos, a hex in the base button, the select's shorthand,
+the brand grid's `!important`, the finder's own-node skip, the cap, the
+same-name replacement, the empty-look refusal, the restore, and the state
+payload.
 ## The Templates preview only ever shrank (v3.132.0, 6 Sept 2026)
 
 Youssef: "The right side video should fill as much as the page can."

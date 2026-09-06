@@ -29,6 +29,7 @@
   var SAFE = global.DCSafeZones || {
     safeArea: function () { return { top: 0, right: 1, bottom: 1, left: 0, degenerate: false }; },
     platformsFor: function () { return []; },
+    postingSet: function () { return []; },
     describe: function () { return ''; },
     unionInsets: function () { return { top: 0, right: 0, bottom: 0, left: 0 }; },
   };
@@ -1334,15 +1335,23 @@
     fitMode: ['contain', 'blur', 'crop'],
     smartFramingBias: ['auto', 'left', 'center', 'right'],
     filterPreset: ['natural', 'crisp', 'vivid', 'warm', 'cinematic', 'teal',
-      'faded', 'night', 'monochrome', 'noir', 'silver', 'sepia'],
+      'faded', 'night', 'monochrome', 'noir', 'silver', 'sepia', 'custom'],
     overlayEffect: ['none', 'rain', 'snow', 'dust', 'bokeh'],
-    captionMode: ['phrase', 'word', 'dynamic-stack', 'stack-build', 'cards'],
+    // The SCHEMA's list (src/templates.js), in full: quran and fill were left
+    // off for a release, so the Quran template's own mode was one the picker
+    // could show but never choose back.
+    captionMode: ['phrase', 'word', 'dynamic-stack', 'quran', 'fill', 'stack-build', 'cards'],
     captionPosition: ['top', 'middle', 'bottom'],
     captionHorizontal: ['left', 'center', 'right'],
     watermarkPosition: ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'],
   };
   function titleCase(v) {
     return String(v || '').replace(/-/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); });
+  }
+  function modeLabelOf(mode) {
+    var names = { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines',
+      'stack-build': 'Building stack', cards: 'Phrase cards', fill: 'Fill in', quran: 'Quran ayah' };
+    return names[mode] || titleCase(mode);
   }
   // The lines a dragged overlay snaps to, drawn as dashes across the frame.
   // One element carrying five background layers, because the lines are not
@@ -1420,22 +1429,21 @@
     return margin < need ? Math.round(need - margin) : 0;
   }
 
+  // One line, about what is DRAWN. The covered areas are shaded on the frame
+  // now (paintSafeChrome in index.html), so the sentence names them and
+  // stops; the snap points announce themselves while dragging (pv-snap) and
+  // no longer need listing here -- the list ran to two lines under the
+  // preview and read as a warning label. The warning stays, because a caption
+  // sitting in the shade is the one thing this line exists to say.
   function safeHintText(platforms, points, over) {
     var names = SAFE.describe(platforms);
-    var lines = points.map(function (p) { return p.name.toLowerCase(); });
-    var snaps = lines.length
-      ? ' Drag snaps to ' + (lines.length > 1
-        ? lines.slice(0, -1).join(', ') + ' and ' + lines[lines.length - 1]
-        : lines[0]) + '.'
-      : '';
     var warn = over
-      ? ' Your caption sits ' + over + 'px outside it — drag it inside, or it is covered where it posts.'
+      ? ' Your caption sits ' + over + 'px into the shade — drag it up into the clear, or it is covered where it posts.'
       : '';
-    if (!platforms.length) {
-      return 'Keep captions inside the box — it clears every platform, because none is connected yet.'
-        + warn + snaps;
-    }
-    return 'Keep captions inside the box — it clears ' + names + '.' + warn + snaps;
+    var whose = platforms.length
+      ? names + '\u2019s own buttons and captions sit on screen'
+      : 'every platform\u2019s buttons and captions sit on screen, until one is connected';
+    return 'The shaded parts are where ' + whose + '. Keep text in the clear.' + warn;
   }
 
   // Grab, then grabbing. Without it the overlay gives no sign it can be moved.
@@ -2438,6 +2446,7 @@
         var dc = ctx.detailClips || [];
         if (!ctx.detailOpen) return 'Open a lecture from the library';
         if (ctx.detailWhy) return 'Import failed \u2014 ' + ctx.detailWhy.title;
+        if (ctx.detailCancelled) return 'Cancelled before it finished';
         if (!dc.length) return 'No clips from this lecture yet';
         var waiting = 0, kept = 0;
         dc.forEach(function (c) {
@@ -2790,6 +2799,10 @@
       // screen offered "Approve all remaining" on a lecture that never came
       // down. It is its own state, carrying the reason and the fix.
       if (p.status === 'failed') return 'failed';
+      // 'archived' is exactly "cancelled" -- nothing else reaches it. The
+      // library used to LABEL it Archived while Home said Cancelled, two
+      // screens disagreeing about one lecture; the key stays for the filter,
+      // the words say what happened.
       if (p.status === 'cancelled') return 'archived';
       return 'processing';
     }
@@ -2827,14 +2840,14 @@
             ? ' background-image: linear-gradient(to bottom, rgba(8,8,10,0) 40%, rgba(8,8,10,.82) 100%), url("' + cssUrl(p.sourceThumbUrl) + '");'
               + ' background-size: cover, cover; background-position: center, center 30%; --dc-on-photo: 1;'
             : ''),
-        stateChip: state === 'processing' ? 'Processing' : state === 'ready' ? 'Ready' : state === 'failed' ? 'Failed' : 'Archived',
+        stateChip: state === 'processing' ? 'Processing' : state === 'ready' ? 'Ready' : state === 'failed' ? 'Failed' : 'Cancelled',
         isFailed: state === 'failed',
         chipStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; border: 1px solid ' +
           (state === 'processing' ? 'rgba(217,180,120,.4); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-f0d6a6, var(--dc-n-f0d6a6, #F0D6A6));'
             : state === 'ready' ? 'rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));'
             : state === 'failed' ? 'rgba(227,146,140,.4); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-e3928c, var(--dc-n-e3928c, #E3928C));'
             : 'var(--dc-n-33333a, #33333A); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-a2a2aa, var(--dc-n-a2a2aa, #A2A2AA));'),
-        chipIcon: state === 'processing' ? 'ph ph-circle-notch' : state === 'ready' ? 'ph-fill ph-check-circle' : state === 'failed' ? 'ph-fill ph-warning-circle' : 'ph ph-archive',
+        chipIcon: state === 'processing' ? 'ph ph-circle-notch' : state === 'ready' ? 'ph-fill ph-check-circle' : state === 'failed' ? 'ph-fill ph-warning-circle' : 'ph ph-x',
         chipIconStyle: 'font-size: 11px;' + (state === 'processing' ? ' animation: dcSpin 1.1s linear infinite;' : ''),
         isProcessing: state === 'processing',
         barStyle: 'position: absolute; left: 0; bottom: 0; height: 3px; width: ' + Math.round(p.progress || 0) + '%; background: linear-gradient(90deg, var(--dc-gold, #D9B478), var(--dc-gold-lit, #F0D6A6)); transition: width .5s ease;',
@@ -2843,6 +2856,7 @@
         // clips having gone missing.
         metric: state === 'processing' ? (p.stage || 'working…')
           : state === 'failed' ? importWhy(p).title
+          : state === 'archived' ? (mine.length ? 'cancelled before it finished · ' + plural(mine.length, 'clip') + ' kept' : 'cancelled before it finished')
           : (p.clipsRequested && mine.length && mine.length < p.clipsRequested)
             ? mine.length + ' of ' + p.clipsRequested + ' asked for · the rest overlapped'
             : median ? 'median score ' + median : 'no clips yet',
@@ -2866,8 +2880,10 @@
           // Retry is offered on exactly the lectures it can help. The route has
           // always existed; its only button lived in a shell nothing links to,
           // while the failure messages went on telling people to "press Retry".
-          var failed = String(p.status || '') === 'failed';
-          var options = failed ? ['Retry this lecture'] : [];
+          // The route accepts a failed OR a cancelled lecture (retryProject),
+          // and a retry keeps the clips already made and adds to them.
+          var stopped = ['failed', 'cancelled'].indexOf(String(p.status || '')) >= 0;
+          var options = stopped ? ['Retry this lecture'] : [];
           options = options.concat(['Cut 4 more clips', 'Cut 8 more clips', 'Delete this lecture', 'Cancel']);
           global.StudioAdapter.onPickOption('This lecture', options, function (choice) {
             var n = choice === 'Cut 4 more clips' ? 4 : choice === 'Cut 8 more clips' ? 8 : 0;
@@ -2885,6 +2901,9 @@
     // The reason and the fix, when the open lecture never imported. Null
     // otherwise, so every reader below can branch on it.
     var detailWhy = detail && lecState(detail) === 'failed' ? importWhy(detail) : null;
+    // A lecture stopped by hand. Its clips (if any) are real; what it lacks is
+    // the rest of the run, and Retry is the one action that supplies it.
+    var detailCancelled = Boolean(detail && String(detail.status || '') === 'cancelled');
     // The header's subline is built by sublineFor, which is module-level and
     // cannot see these locals -- so they travel on ctx like everything else it
     // reads. The RAW clips, not the cards: decision() is the one place that
@@ -2892,6 +2911,7 @@
     ctx.detailOpen = Boolean(detail);
     ctx.detailClips = detailRaw;
     ctx.detailWhy = detailWhy;
+    ctx.detailCancelled = detailCancelled;
 
     // Schedule: the next seven days, filled from clips that already hold a slot.
     var DAY_MS = 86400000;
@@ -3575,6 +3595,238 @@
     }
     function defObj(k, v) { var o = {}; o[k] = v; return o; }
 
+    /*
+     * THE REBUILT TEMPLATES SCREEN'S CONTROLS (studio-templates.js draws them).
+     *
+     * Youssef, 6 Sept 2026: "clean up sliders and options add drop boxes and
+     * etc make it look clean yet perfect with many configurations". Every
+     * option is a <select> over the schema's own enum, every number a slider
+     * with a readout in the unit a person reads, every yes/no a switch. The
+     * SPECS live here rather than in the screen so the phone can draw the
+     * same list later and so a test can read the fields, the ranges and the
+     * visibility rules as executed output.
+     *
+     * Every write goes through saveStyle, the one funnel the whole editor
+     * already uses -- undo, the draft, the debounce and the per-clip routing
+     * come with it. `scale` maps slider units to the stored value (line
+     * spacing is stored 0.88 and dragged as 88), so what the slider shows is
+     * what the render reads.
+     *
+     * A control is drawn only when it can reach the export (invariant 9):
+     * the stack fields under a stacked mode, the grade sliders under the
+     * Custom look (the renderer applies brightness/contrast/saturation/gamma
+     * ONLY then -- filter_values in clip_worker.py), the blur strength under
+     * the blurred layout, the ayah fields on the Quran mode.
+     */
+    function tplSelect(field, label, opts, labels, note) {
+      var current = tpl[field];
+      var options = opts.map(function (o) {
+        return { value: String(o), label: (labels && labels[o]) || titleCase(o), on: String(o) === String(current) };
+      });
+      var chosen = options.filter(function (o) { return o.on; })[0];
+      return {
+        kind: 'select', isSelect: true, field: field, label: label, note: note || '',
+        value: chosen ? chosen.value : String(current == null ? '' : current),
+        valueLabel: chosen ? chosen.label : titleCase(current),
+        opts: options,
+        set: function (e) {
+          var raw = String(e && e.target ? e.target.value : '');
+          var ok = opts.some(function (o) { return String(o) === raw; });
+          if (!ok) return;
+          // The schema stores numbers as numbers; a select speaks strings.
+          var typed = typeof opts[0] === 'number' ? Number(raw) : raw;
+          saveStyle(defObj(field, typed));
+        },
+      };
+    }
+    function tplRange(field, label, min, max, step, o) {
+      o = o || {};
+      var scale = o.scale || 1;
+      var stored = Number(tpl[field]);
+      if (!isFinite(stored)) stored = Number(o.fallback) || 0;
+      var shown = Math.round(stored * scale);
+      shown = Math.max(min, Math.min(max, shown));
+      var fmt = o.fmt || function (v) { return String(v); };
+      /*
+       * The filled part of the track is drawn from the value, not from a
+       * second element. A native range gives no pseudo-element for "left of
+       * the thumb", so the track is a gradient with its stop at --dct-pct;
+       * this is the one number the CSS needs and it belongs here, where the
+       * bounds already are, rather than being re-derived in the browser.
+       */
+      var pct = max > min ? Math.round(((shown - min) / (max - min)) * 1000) / 10 : 0;
+      return {
+        kind: 'range', isRange: true, field: field, label: label, note: o.note || '',
+        min: String(min), max: String(max), step: String(step || 1), value: String(shown), readout: fmt(shown),
+        fillStyle: '--dct-pct: ' + pct + '%;',
+        set: function (e) {
+          var v = Number(e && e.target ? e.target.value : NaN);
+          if (!isFinite(v)) return;
+          v = Math.max(min, Math.min(max, v));
+          saveStyle(defObj(field, scale === 1 ? v : v / scale));
+        },
+      };
+    }
+    function tplColour(field, label, note) {
+      var raw = String(tpl[field] || '');
+      var hex = (/#[0-9a-fA-F]{6}/.exec(raw) || ['#FFFFFF'])[0].toUpperCase();
+      return {
+        kind: 'color', isColor: true, field: field, label: label, note: note || '',
+        value: hex, readout: hex,
+        swatchStyle: 'background: ' + hex + ';',
+        set: function (e) {
+          var v = String(e && e.target ? e.target.value : '').toUpperCase();
+          if (!/^#[0-9A-F]{6}$/.test(v)) return;
+          saveStyle(defObj(field, v));
+        },
+      };
+    }
+    function tplSwitch(field, label, note) {
+      var on = Boolean(tpl[field]);
+      return {
+        kind: 'switch', isSwitch: true, field: field, label: label, note: note || '', on: on,
+        onCls: on ? 'is-on' : '',
+        readout: on ? 'On' : 'Off',
+        toggle: function (e) { stop(e); saveStyle(defObj(field, !on)); },
+      };
+    }
+    var fmtPx = function (v) { return v + ' px'; };
+    var fmtPct = function (v) { return v + '%'; };
+    var fmtMs = function (v) { return v ? v + ' ms' : 'Off'; };
+    var fmtHundredths = function (unit) { return function (v) { return (v / 100).toFixed(2) + unit; }; };
+    function tplControlsFor() {
+      var mode = String(tpl.captionMode || '');
+      var isQuran = mode === 'quran';
+      var isStack = mode === 'dynamic-stack' || mode === 'stack-build';
+      var hasLiveWord = ['word', 'dynamic-stack', 'stack-build', 'fill'].indexOf(mode) > -1;
+      var lookLabels = {
+        natural: 'Natural', crisp: 'Crisp', vivid: 'Vivid', warm: 'Warm', cinematic: 'Cinematic',
+        teal: 'Teal & orange', faded: 'Faded film', night: 'Night', monochrome: 'Black & white',
+        noir: 'Noir \u00b7 hard B&W', silver: 'Silver \u00b7 soft B&W', sepia: 'Sepia', custom: 'Custom grade',
+      };
+      var modeLabels = {
+        phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines',
+        'stack-build': 'Building stack', cards: 'Phrase cards', fill: 'Fill in', quran: 'Quran ayah',
+      };
+      var fontNames = CAPTION_FONTS.map(function (f) { return f.name; });
+      var fontLabels = {};
+      CAPTION_FONTS.forEach(function (f) { fontLabels[f.name] = f.label; });
+      var arabicNames = ['Amiri', 'Scheherazade New', 'KFGQPC HAFS Uthmanic Script'];
+      var effect = String(tpl.overlayEffect || 'none');
+      function only(cond, control) { return cond ? control : null; }
+      function present(list) { return list.filter(Boolean); }
+      return {
+        layout: present([
+          tplSelect('fitMode', 'Clip layout', ENUMS.fitMode, { contain: 'Fit with blurred bars', blur: 'Blurred background', crop: 'Fill, face-tracked' }),
+          only(tpl.fitMode === 'blur', tplRange('blurStrength', 'Background blur', 0, 60, 1)),
+          only(tpl.fitMode === 'contain', tplColour('frameBackground', 'Bars colour')),
+          tplSwitch('smartFramingEnabled', 'Follow the speaker', 'the crop moves with the face'),
+          tplSelect('smartFramingBias', 'Framing bias', ENUMS.smartFramingBias, { auto: 'Automatic', left: 'Left', center: 'Centre', right: 'Right' }),
+          tplRange('smartFramingZoom', 'Crop zoom', 75, 250, 5, { scale: 100, fmt: fmtHundredths('\u00d7'), fallback: 1 }),
+          tplRange('smartFramingPadding', 'Air around the speaker', 0, 50, 1, { scale: 100, fmt: fmtPct, fallback: 0.18 }),
+          tplRange('framingSubjectBias', 'Push the speaker', -50, 50, 1, { fmt: function (v) { return v === 0 ? 'Centred' : (v > 0 ? 'Right ' : 'Left ') + Math.abs(v) + '%'; } }),
+        ]),
+        captions: present([
+          tplSelect('captionMode', 'Caption style', ENUMS.captionMode, modeLabels),
+          tplSelect('captionPosition', 'Position', ENUMS.captionPosition, { top: 'Top', middle: 'Middle', bottom: 'Bottom' }),
+          tplSelect('captionHorizontal', 'Alignment', ENUMS.captionHorizontal, { left: 'Left', center: 'Centre', right: 'Right' }),
+          tplRange('captionMarginV', 'Distance from the edge', 20, 960, 2, { fmt: fmtPx, fallback: 180 }),
+          tplRange('captionMarginH', 'Side margin', 20, 700, 2, { fmt: fmtPx, fallback: 60 }),
+          only(!isStack && !isQuran, tplRange('captionMaxWords', 'Words per line', 1, 12, 1, { fallback: 4 })),
+          only(isStack, tplRange('captionStackMaxWords', 'Words per line', 1, 6, 1, { fallback: 3 })),
+          only(isStack, tplRange('captionStackLines', 'Lines in the stack', 2, 6, 1, { fallback: 3 })),
+          only(isStack, tplRange('captionSizeVariation', 'Size variety', 0, 100, 1, { fmt: fmtPct })),
+          only(isStack, tplRange('captionBlockWidth', 'Block width', 30, 100, 1, { fmt: fmtPct, fallback: 80 })),
+          only(mode === 'dynamic-stack', tplRange('captionStackProbability', 'How often it stacks', 0, 100, 1, { scale: 100, fmt: fmtPct, fallback: 0.5 })),
+          only(isStack, tplRange('captionClearPause', 'Pause before clearing', 15, 200, 5, { scale: 100, fmt: fmtHundredths(' s'), fallback: 0.5 })),
+          tplRange('captionTimingOffsetMs', 'Timing nudge', -2000, 2000, 50, { fmt: function (v) { return v === 0 ? 'On time' : (v > 0 ? 'Later ' : 'Earlier ') + Math.abs(v) + ' ms'; } }),
+          only(isQuran, tplSelect('captionArabicFont', 'Arabic face', arabicNames, fontLabels)),
+          only(isQuran, tplSwitch('captionTranslation', 'Translation line', 'the ayah\u2019s meaning under it')),
+          only(isQuran && tpl.captionTranslation !== false, tplRange('captionTranslationSize', 'Translation size', 20, 90, 1, { fmt: fmtPx, fallback: 40 })),
+        ]),
+        text: present([
+          tplSelect('captionFont', 'Font', fontNames, fontLabels),
+          tplRange('captionFontSize', 'Size', 24, 240, 1, { fmt: fmtPx, fallback: 96 }),
+          tplSwitch('captionUppercase', 'Uppercase'),
+          tplColour('captionPrimary', 'Colour'),
+          tplRange('captionLetterSpacing', 'Letter spacing', -20, 40, 1, { fmt: function (v) { return v ? v + ' px' : 'Normal'; } }),
+          tplRange('captionLineHeight', 'Line spacing', 65, 140, 1, { scale: 100, fmt: fmtPct, fallback: 0.88 }),
+        ]),
+        outline: present([
+          tplColour('captionOutline', 'Outline colour'),
+          tplRange('captionOutlineWidth', 'Outline thickness', 0, 14, 1, { fmt: function (v) { return v ? v + ' px' : 'None'; } }),
+          tplRange('captionShadow', 'Drop shadow', 0, 8, 1, { fmt: function (v) { return v ? String(v) : 'None'; } }),
+          tplColour('captionBackground', 'Box colour'),
+          tplRange('captionBackgroundOpacity', 'Box opacity', 0, 100, 1, { fmt: function (v) { return v ? v + '%' : 'Off'; } }),
+        ]),
+        highlight: hasLiveWord ? present([
+          tplColour('captionHighlight', 'Colour'),
+          tplSelect('captionHighlightFont', 'Font', fontNames, fontLabels),
+          tplSwitch('captionHighlightItalic', 'Italic'),
+          tplRange('captionHighlightGlow', 'Glow', 0, 30, 1, { fmt: function (v) { return v ? String(v) : 'None'; } }),
+        ]) : [],
+        animation: (!isQuran && mode !== 'cards') ? present([
+          tplRange('captionPopScale', 'Word pop', 60, 140, 1, { fallback: 100, fmt: function (v) { return v === 100 ? 'Off' : v > 100 ? '+' + (v - 100) + '% pop' : (100 - v) + '% grow-in'; } }),
+          tplRange('captionPopMs', 'Pop speed', 0, 400, 10, { fmt: fmtMs }),
+          tplRange('captionFadeMs', 'Fade', 0, 600, 10, { fmt: function (v) { return v ? v + ' ms' : 'None'; } }),
+        ]) : [],
+        look: present([
+          tplSelect('filterPreset', 'Look', ENUMS.filterPreset, lookLabels),
+          only(tpl.filterPreset === 'custom', tplRange('brightness', 'Brightness', -100, 100, 1, { scale: 100, fmt: function (v) { return v === 0 ? 'Neutral' : (v > 0 ? '+' : '') + v; } })),
+          only(tpl.filterPreset === 'custom', tplRange('contrast', 'Contrast', 50, 200, 1, { scale: 100, fmt: fmtHundredths('\u00d7'), fallback: 1 })),
+          only(tpl.filterPreset === 'custom', tplRange('saturation', 'Saturation', 0, 300, 1, { scale: 100, fmt: fmtHundredths('\u00d7'), fallback: 1 })),
+          only(tpl.filterPreset === 'custom', tplRange('gamma', 'Gamma', 50, 200, 1, { scale: 100, fmt: fmtHundredths(''), fallback: 1 })),
+          tplRange('sharpen', 'Sharpen', 0, 200, 5, { scale: 100, fmt: fmtHundredths(''), fallback: 0.45 }),
+          tplRange('vignette', 'Vignette', 0, 100, 1, { scale: 100, fmt: fmtPct }),
+          tplRange('grain', 'Grain', 0, 100, 1, { fmt: fmtPct }),
+          tplRange('warm', 'Warmth', -100, 100, 1, { fmt: function (v) { return v === 0 ? 'Neutral' : (v > 0 ? 'Warm +' : 'Cool ') + Math.abs(v); } }),
+          tplSelect('overlayEffect', 'Atmosphere', ENUMS.overlayEffect, { none: 'None', rain: 'Rain', snow: 'Snow', dust: 'Dust motes', bokeh: 'Bokeh lights' }),
+          only(effect !== 'none', tplRange('overlayIntensity', 'Atmosphere strength', 10, 100, 5, { fmt: fmtPct, fallback: 55 })),
+          tplRange('overlayDarken', 'Darken video', 0, 80, 5, { fmt: function (v) { return v ? v + '%' : 'Off'; } }),
+        ]),
+        brand: present([
+          tplSelect('watermarkPosition', 'Watermark position', ENUMS.watermarkPosition),
+          tplColour('watermarkColor', 'Watermark colour'),
+          tplRange('watermarkFontSize', 'Watermark size', 12, 90, 1, { fmt: fmtPx, fallback: 28 }),
+          tplRange('watermarkMarginV', 'Watermark inset', 10, 500, 2, { fmt: fmtPx, fallback: 60 }),
+          tplRange('watermarkMarginH', 'Watermark side inset', 10, 500, 2, { fmt: fmtPx, fallback: 60 }),
+          tplSwitch('brandLineEnabled', 'Brand line', 'a rule along the bottom of the frame'),
+          only(Boolean(tpl.brandLineEnabled), tplColour('brandLineColor', 'Brand line colour')),
+          only(Boolean(tpl.brandLineEnabled), tplRange('brandLineHeight', 'Brand line height', 2, 30, 1, { fmt: fmtPx, fallback: 8 })),
+        ]),
+        processing: present([
+          tplSwitch('voiceEnhance', 'Voice enhancement', 'levels and clarity on speech'),
+          tplSwitch('captionBehindSubject', 'Captions behind the speaker', 'the speaker is cut out and laid over the text'),
+        ]),
+      };
+    }
+    // Every field the screen can write: the whole spec, whatever is shown.
+    // What a saved look carries (the brand switches are the ACCOUNT's, and
+    // width/height are the template's, so neither travels with a preset).
+    var PRESET_FIELDS = [
+      'fitMode', 'blurStrength', 'frameBackground', 'smartFramingEnabled', 'smartFramingBias', 'smartFramingZoom',
+      'smartFramingPadding', 'framingSubjectBias', 'captionMode', 'captionPosition', 'captionHorizontal',
+      'captionMarginV', 'captionMarginH', 'captionMaxWords', 'captionStackMaxWords', 'captionStackLines',
+      'captionSizeVariation', 'captionBlockWidth', 'captionStackProbability', 'captionClearPause',
+      'captionTimingOffsetMs', 'captionArabicFont', 'captionTranslation', 'captionTranslationSize',
+      'captionFont', 'captionFontSize', 'captionUppercase', 'captionPrimary', 'captionLetterSpacing',
+      'captionLineHeight', 'captionOutline', 'captionOutlineWidth', 'captionShadow', 'captionBackground',
+      'captionBackgroundOpacity', 'captionHighlight', 'captionHighlightFont', 'captionHighlightItalic',
+      'captionHighlightGlow', 'captionPopScale', 'captionPopMs', 'captionFadeMs', 'filterPreset',
+      'brightness', 'contrast', 'saturation', 'gamma', 'sharpen', 'vignette', 'grain', 'warm',
+      'overlayEffect', 'overlayIntensity', 'overlayDarken', 'watermarkPosition', 'watermarkColor',
+      'watermarkFontSize', 'watermarkMarginV', 'watermarkMarginH', 'brandLineEnabled', 'brandLineColor',
+      'brandLineHeight', 'voiceEnhance', 'captionBehindSubject',
+    ];
+    function presetFields() {
+      var out = {};
+      for (var i = 0; i < PRESET_FIELDS.length; i++) {
+        var k = PRESET_FIELDS[i];
+        if (tpl[k] !== undefined && tpl[k] !== null) out[k] = tpl[k];
+      }
+      return out;
+    }
+
     // Moves one step from one history stack to the other and applies it. Undo
     // and redo are the same operation with the stacks swapped, so `which` picks
     // the side of the step to replay.
@@ -3834,7 +4086,9 @@
      * picture. safe-zones.js does that arithmetic; see it for the numbers and
      * their sources.
      */
-    var SAFE_PLATFORMS = SAFE.platformsFor(DATA.publishingSettings, DATA.social);
+    // Always TikTok and Shorts, widened by anything else connected -- see
+    // postingSet in safe-zones.js for why the pair is the floor.
+    var SAFE_PLATFORMS = SAFE.postingSet(DATA.publishingSettings, DATA.social);
     var SAFE_BOX = SAFE.safeArea(SAFE_PLATFORMS, tpl.width, tpl.height);
     var SAFE_TOP = SAFE_BOX.top;
     var SAFE_BOTTOM = SAFE_BOX.bottom;
@@ -5573,7 +5827,7 @@
         { key: 'ready', label: 'Ready' },
         { key: 'processing', label: 'Processing' },
         { key: 'failed', label: 'Failed' },
-        { key: 'archived', label: 'Archived' },
+        { key: 'archived', label: 'Cancelled' },
       ].map(function (t) {
         return {
           key: t.key, on: UI.libFilter === t.key,
@@ -5599,6 +5853,8 @@
       detailHint: detailWhy
         ? detailWhy.cause + (detailWhy.fixes && detailWhy.fixes[0] ? ' ' + detailWhy.fixes[0] : '')
           + (detail.error ? ' \u2014 \u201c' + String(detail.error).slice(0, 220) + '\u201d' : '')
+        : detailCancelled
+        ? 'This lecture was cancelled before it finished' + (detailRaw.length ? ', so only some of its clips were cut' : '') + '. Retry runs the import again' + (detailRaw.length ? ' and adds to the clips already here' : '') + '.'
         : detail && lecState(detail) === 'processing'
         ? 'Still processing — clips appear here as the worker finishes them.'
         : 'Every clip cut from this lecture. Approving one queues it for the next open slot.',
@@ -5613,11 +5869,11 @@
       // On a lecture that never imported the only honest primary action is to
       // try the import again; "Approve all remaining" there was a button over
       // nothing.
-      bulkLabel: detailWhy ? 'Retry this lecture' : 'Approve all remaining',
-      bulkIcon: detailWhy ? 'ph ph-arrow-counter-clockwise' : 'ph ph-check',
+      bulkLabel: (detailWhy || detailCancelled) ? 'Retry this lecture' : 'Approve all remaining',
+      bulkIcon: (detailWhy || detailCancelled) ? 'ph ph-arrow-counter-clockwise' : 'ph ph-check',
       bulkAction: function (e) {
         stop(e);
-        if (detailWhy) { global.StudioAdapter.onRetryProject(detail.id, detail.title || 'this lecture'); return; }
+        if (detailWhy || detailCancelled) { global.StudioAdapter.onRetryProject(detail.id, detail.title || 'this lecture'); return; }
         detailClips.forEach(function (c) { if (c.stateChip === '') c.approve(e); });
       },
 
@@ -7496,13 +7752,13 @@
       tplStyleRows: tplRow([
         { icon: 'ph ph-layout', label: 'Clip layout', field: 'fitMode', opts: ENUMS.fitMode, labels: { contain: 'Fit with blurred bars', blur: 'Blurred background', crop: 'Fill, face-tracked' } },
         { icon: 'ph ph-crosshair', label: 'Framing bias', field: 'smartFramingBias', opts: ENUMS.smartFramingBias },
-        { icon: 'ph ph-closed-captioning', label: 'Caption', field: 'captionMode', opts: ENUMS.captionMode, labels: { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines', 'stack-build': 'Building stack', cards: 'Phrase cards' } },
+        { icon: 'ph ph-closed-captioning', label: 'Caption', field: 'captionMode', opts: ENUMS.captionMode, labels: { phrase: 'One phrase', word: 'Word by word', 'dynamic-stack': 'Stacked lines', 'stack-build': 'Building stack', cards: 'Phrase cards', fill: 'Fill in', quran: 'Quran ayah' } },
         { icon: 'ph ph-palette', label: 'Look', field: 'filterPreset', opts: ENUMS.filterPreset,
           labels: {
             natural: 'Natural', crisp: 'Crisp', vivid: 'Vivid', warm: 'Warm',
             cinematic: 'Cinematic', teal: 'Teal & orange', faded: 'Faded film',
             night: 'Night', monochrome: 'Black & white', noir: 'Noir · hard B&W',
-            silver: 'Silver · soft B&W', sepia: 'Sepia',
+            silver: 'Silver · soft B&W', sepia: 'Sepia', custom: 'Custom grade',
           } },
         // "Dark with rain drops, but still the video." The scrim and the
         // weather are separate rows because they are separate decisions --
@@ -7533,9 +7789,57 @@
           trackStyle: 'position: relative; margin-left: auto; width: 34px; height: 19px; flex: none; border-radius: 20px; cursor: pointer; transition: background .16s ease, border-color .16s ease; border: 1px solid ' +
             (on ? 'rgba(217,180,120,.5); background: rgba(217,180,120,.22);' : 'var(--dc-n-33333a, #33333A); background: var(--dc-bg-raised, #17171A);'),
           knobStyle: 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? 'var(--dc-gold-lit, #F0D6A6)' : 'var(--dc-ink-faint, #6E6E76)') + '; transition: left .16s ease, background .16s ease;',
-          toggle: function (e) { stop(e); saveStyle({ voiceEnhance: !on }); },
+          // Each row flips ITS OWN key. It wrote voiceEnhance for both, so
+          // "Captions behind speaker" switched the voice enhancement instead.
+          toggle: function (e) { stop(e); saveStyle(defObj(r.key, !on)); },
         };
       }),
+      tplControls: tplControlsFor(),
+      tplIsQuran: tpl.captionMode === 'quran',
+      tplIsCustomLook: tpl.filterPreset === 'custom',
+      tplName: activeTemplate ? String(activeTemplate.name || '') : '',
+      tplVersion: activeTemplate && activeTemplate.version ? 'v' + activeTemplate.version : '',
+      // The design's mark node carries a LITERAL "DEENCLIPPED"; the rebuilt
+      // frame shows the text that renders.
+      markText: String(tpl.watermark || 'DEENCLIPPED'),
+      ratioOpts: RATIO_PRESETS.map(function (r) {
+        return { value: r.label, label: r.label, on: Number(tpl.width) === r.width && Number(tpl.height) === r.height };
+      }),
+      setRatio: function (e) {
+        var picked = RATIO_PRESETS.filter(function (r) { return r.label === String(e && e.target ? e.target.value : ''); })[0];
+        if (picked) saveStyle({ width: picked.width, height: picked.height });
+      },
+      pvFillStyle: 'width: ' + ((SAMPLE_TOTAL ? Math.max(0, Math.min(1, UI.pvTime / SAMPLE_TOTAL)) : 0) * 100).toFixed(1) + '%;',
+      // ── Saved looks (v3.134.0) ──
+      // A preset is a snapshot of the style fields, kept on the account, and
+      // applying one loads it as the DRAFT -- "Unsaved changes" -- so the
+      // one save path persists and re-renders exactly as a hand edit does.
+      stylePresets: (DATA.stylePresets || []).map(function (p) {
+        var fields = p.fields || {};
+        return {
+          id: p.id, name: p.name,
+          note: (fields.captionMode ? (modeLabelOf(fields.captionMode) + ' \u00b7 ') : '') + (fields.filterPreset ? titleCase(fields.filterPreset) : '') + (fields.captionFont ? ' \u00b7 ' + fields.captionFont : ''),
+          apply: function (e) { stop(e); global.StudioAdapter.onPresetApply(p, tpl.captionMode === 'quran'); },
+          rename: function (e) { stop(e); global.StudioAdapter.onPresetRename(p.id, p.name); },
+          remove: function (e) { stop(e); global.StudioAdapter.onPresetDelete(p.id, p.name); },
+        };
+      }),
+      hasPresets: Boolean((DATA.stylePresets || []).length),
+      presetName: UI.presetName || '',
+      setPresetName: function (e) { UI.presetName = String(e && e.target ? e.target.value : ''); },
+      savePreset: function (e) {
+        stop(e);
+        var name = String(UI.presetName || '').trim();
+        if (!name) { toast('Give the look a name first.'); return; }
+        UI.presetName = '';
+        global.StudioAdapter.onPresetSave(name, presetFields());
+      },
+      tplCustomised: Boolean(activeTemplate && activeTemplate.customised),
+      restoreTpl: function (e) {
+        stop(e);
+        if (!activeTemplate) return;
+        global.StudioAdapter.onTemplateRestore(activeTemplate.id, activeTemplate.name);
+      },
       tplDirtyLabel: UI.tplDirty ? 'Unsaved changes' : 'All changes saved',
       tplDirtyDotStyle: 'width: 7px; height: 7px; border-radius: 50%; background: ' + (UI.tplDirty ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-n-7fd1a6, #7FD1A6)') + ';',
       saveTpl: function (e) {
@@ -7735,20 +8039,37 @@
        * this account's own destinations actually leave room, at this
        * template's own dimensions.
        *
-       * Only the GEOMETRY is bound: the border, the radius and the z-index
-       * stay in the export, because how it looks is the design's and where it
-       * sits is the product's.
+       * AND THE DASHED EDGE IS SWITCHED OFF FROM HERE, deliberately.
+       * v3.132.0 gave the shade its own edge -- the band ENDS where the clear
+       * area begins -- so the export's dashed rectangle became a second line
+       * saying the one thing, in the same gold, at the same weight, as the
+       * caption's own drag outline. Three dashed rectangles on one frame
+       * (safe zone, caption, and the watermark riding the top band) is what
+       * Youssef saw: "that dotted zone is so bad btw."
+       *
+       * It is neutralised through this binding rather than by editing the
+       * design export, because the export interpolates safeBoxStyle AFTER its
+       * own `border: 1px dashed ...` in the same style attribute, so a later
+       * declaration simply wins -- no re-import, and putting the dashes back
+       * is deleting three declarations here. The z-index stays the export's.
        */
       safeBoxStyle: 'left: ' + (SAFE_BOX.left * 100).toFixed(2) + '%;'
         + ' right: ' + ((1 - SAFE_BOX.right) * 100).toFixed(2) + '%;'
         + ' top: ' + (SAFE_BOX.top * 100).toFixed(2) + '%;'
-        + ' bottom: ' + ((1 - SAFE_BOX.bottom) * 100).toFixed(2) + '%;',
+        + ' bottom: ' + ((1 - SAFE_BOX.bottom) * 100).toFixed(2) + '%;'
+        + ' border: 0; border-radius: 0; box-shadow: none;',
       // The line under the preview used to promise "thirds, halves and the
       // safe-zone edges" -- which stopped being true the moment a third could
       // fall outside the box and be dropped. It says which platforms the box
       // is actually clearing instead, because a rectangle nobody can account
       // for is the thing that made this feel arbitrary.
       safeHint: safeHintText(SAFE_PLATFORMS, SNAP_POINTS, captionOutsideBox(tpl, SAFE_BOX)),
+      // The same box as fractions of the picture, for the host-drawn covered
+      // areas (paintSafeChrome). One source: the dashed edge the design draws
+      // and the shade the host draws cannot disagree about where the clear
+      // area is.
+      safeBox: { left: SAFE_BOX.left, right: SAFE_BOX.right, top: SAFE_BOX.top, bottom: SAFE_BOX.bottom, degenerate: Boolean(SAFE_BOX.degenerate) },
+      safePlatforms: SAFE_PLATFORMS,
       edSafe: true,
       // Output shape. The render pipeline has always been generic here -- every
       // fit mode scales to {width}:{height} and the subtitle canvas follows --
@@ -7884,7 +8205,7 @@
         if (!detail) return;
         // Nothing to re-cut from a lecture that never came down: the same
         // press retries the import instead of opening a menu of dead options.
-        if (detailWhy) { global.StudioAdapter.onRetryProject(detail.id, detail.title || 'this lecture'); return; }
+        if (detailWhy || detailCancelled) { global.StudioAdapter.onRetryProject(detail.id, detail.title || 'this lecture'); return; }
         global.StudioAdapter.onPickOption('More clips from this lecture',
           ['Cut 4 more clips', 'Cut 8 more clips', 'Cancel'], function (choice) {
             var n = choice === 'Cut 4 more clips' ? 4 : choice === 'Cut 8 more clips' ? 8 : 0;
@@ -8820,6 +9141,11 @@
     onBuyTokens: function () {},
     onSelectTemplate: function () {},
     onSaveTemplate: function () {},
+    onPresetApply: function () {},
+    onPresetSave: function () {},
+    onPresetRename: function () {},
+    onPresetDelete: function () {},
+    onTemplateRestore: function () {},
     onResetTemplate: function () {},
     onDuplicateTemplate: function () {},
     onTemplateField: function () {},

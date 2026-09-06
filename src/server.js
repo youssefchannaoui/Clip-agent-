@@ -96,6 +96,10 @@ const STUDIO_ASSETS = {
   // same bindings; the sheet lives entirely inside the 820px query).
   '/studio-mobile.css': { file: studioAsset('studio-mobile.css'), type: 'text/css; charset=utf-8' },
   '/studio-mobile.js': { file: studioAsset('studio-mobile.js'), type: JS_TYPE },
+  // The desktop Templates screen: a second template over the same bindings,
+  // mounted only on that screen and only above the phone seam.
+  '/studio-templates.css': { file: studioAsset('studio-templates.css'), type: 'text/css; charset=utf-8' },
+  '/studio-templates.js': { file: studioAsset('studio-templates.js'), type: JS_TYPE },
   /*
    * The push service worker, and it must be served from THE ROOT. A worker's
    * scope cannot rise above its own path, so at /studio-sw.js it could only
@@ -841,6 +845,10 @@ function appState(user = null) {
     // it selected the switches read 'off' for a setting that is on
     // everywhere else -- a control that looks broken and is not.
     brand: templates.brandSettings(user) || {},
+    // Saved looks ride the state payload rather than a fetch of their own:
+    // they are a handful of small rows and the Templates screen must not have
+    // to wait for them before it can draw.
+    stylePresets: templates.listStylePresets(user),
     // One shape, built in backgrounds.js beside the rules it depends on, so
     // the votes a card draws and the votes a route writes cannot disagree.
     backgrounds: backgrounds.listBackgrounds(user).map(entry => backgrounds.publicBackground(entry, user)),
@@ -2326,6 +2334,52 @@ async function route(req, res, url) {
   if (method === 'DELETE' && templateMatch) {
     try { templates.deleteTemplate(currentUser, decodeURIComponent(templateMatch[1])); return json(res, 200, { ok: true }); }
     catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  /*
+   * SAVED LOOKS. A snapshot of the style fields, kept on the account, loaded
+   * onto whichever template is open. Deliberately NOT a way to mint a
+   * template: the catalogue stays one per content type, and the write path a
+   * preset takes is the ordinary template save, so nothing here re-renders and
+   * nothing here can write a template.
+   */
+  if (method === 'GET' && pathname === '/api/style-presets') {
+    return json(res, 200, { presets: templates.listStylePresets(currentUser) });
+  }
+  if (method === 'POST' && pathname === '/api/style-presets') {
+    const body = await readBody(req);
+    try {
+      const preset = templates.saveStylePreset(currentUser, body.name, body.fields);
+      return json(res, 200, { ok: true, preset, presets: templates.listStylePresets(currentUser) });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  const presetMatch = pathname.match(/^\/api\/style-presets\/([^/]+)$/);
+  if (method === 'PATCH' && presetMatch) {
+    const body = await readBody(req);
+    try {
+      templates.renameStylePreset(currentUser, decodeURIComponent(presetMatch[1]), body.name);
+      return json(res, 200, { ok: true, presets: templates.listStylePresets(currentUser) });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  if (method === 'DELETE' && presetMatch) {
+    try {
+      templates.deleteStylePreset(currentUser, decodeURIComponent(presetMatch[1]));
+      return json(res, 200, { ok: true, presets: templates.listStylePresets(currentUser) });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  /*
+   * Put a built-in back to its shipped settings by DROPPING this account's
+   * overrides -- never by writing a copy of today's defaults, which would
+   * freeze the template at this deploy. It queues no render: the clips that
+   * exist keep the style they were made with, exactly as a save does for
+   * anything already approved.
+   */
+  const resetMatch = pathname.match(/^\/api\/templates\/([^/]+)\/reset$/);
+  if (method === 'POST' && resetMatch) {
+    try {
+      const template = templates.clearTemplateOverrides(currentUser, decodeURIComponent(resetMatch[1]));
+      log(`Restored template "${template.name}" to its shipped settings.`, 'info', currentUser.id);
+      return json(res, 200, { ok: true, template });
+    } catch (error) { return json(res, 400, { error: error.message }); }
   }
   if (method === 'POST' && pathname === '/api/templates/apply-all') {
     const body = await readBody(req);

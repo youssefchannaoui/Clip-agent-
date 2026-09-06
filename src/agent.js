@@ -965,6 +965,12 @@ export async function tick() {
       }
     }
     save();
+    // The queue's clock. pump() runs on state changes and on the 30s timers a
+    // worker outage arms -- and a timer is lost with the process, so a job
+    // left queued with its retry due sat until something else changed. Asked
+    // here every tick: retryDue() is a scan of the records, and pump() runs
+    // only when a retry is actually overdue.
+    if (engine.retryDue()) engine.pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
     if (Date.now() - lastNudgeSweep >= NUDGE_SWEEP_EVERY) {
       lastNudgeSweep = Date.now();
       // Off the clip loop's critical path and never allowed to fail it: a

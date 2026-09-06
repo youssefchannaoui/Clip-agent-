@@ -37,11 +37,19 @@ function jobFile(projectId) { return path.join(jobsDir, projectId, 'job.json'); 
 
 // Roughly five minutes of 30s retries before a lecture is failed with a message
 // rather than looping in silence.
-const MAX_WORKER_RETRIES = 10;
+// Twenty polls, thirty seconds apart: ten minutes. Ten polls was five, and
+// the one PLANNED outage this product has -- the worker deploy, which
+// recreates the container -- runs under a minute from a cached image and
+// several when the Python wheels are reinstalled, so a deploy that touched
+// requirements.txt could exhaust the retries on whatever was queued and file
+// it as "unreachable for several minutes". The window has to outlast it.
+const MAX_WORKER_RETRIES = 20;
 
 // The worker beats every 10s, so several minutes of total silence means it is
 // hung rather than busy. Generous, because a slow transcription is not a stall.
-const STALL_TIMEOUT_MS = 5 * 60_000;
+// WORKER_STALL_TIMEOUT_MS exists for the tests, which cannot wait five
+// minutes for a stall to be noticed; production leaves it unset.
+const STALL_TIMEOUT_MS = Math.max(1_000, Number(process.env.WORKER_STALL_TIMEOUT_MS) || 5 * 60_000);
 
 // Stages that run before clip_worker.py starts, and therefore before anything
 // heartbeats. The import is one long download, so it gets the import timeout
@@ -68,6 +76,30 @@ export function stallBudgetFor(stage) {
   return PRE_WORKER_STAGES.has(String(stage || '').toLowerCase())
     ? IMPORT_STALL_TIMEOUT_MS
     : STALL_TIMEOUT_MS;
+}
+
+/*
+ * A worker that answers 404 for a job it was given has LOST the record: its
+ * data volume was replaced, or the job aged out of its store while the app
+ * still held it. Re-submitting the SAME payload under the SAME id is safe in
+ * both directions -- a worker that does hold the job answers with the record
+ * it has (JobStore.create is idempotent), one that does not starts it -- and
+ * it happens once per run, so a worker that keeps forgetting cannot loop.
+ */
+function lostByWorker(error) { return Number(error?.status) === 404; }
+
+/**
+ * Is any queued job's retry overdue? pump() runs on every state change and on
+ * a 30s timer armed when the worker was unreachable -- and a timer is lost
+ * with the process, so a lecture left `queued` with its retry due sat until
+ * something else happened to change. agent.tick() asks this every fifteen
+ * seconds and pumps only when the answer is yes, so the poll costs nothing
+ * otherwise and a test seeding a queued job without a retry never starts it.
+ */
+export function retryDue(now = Date.now()) {
+  const due = item => Boolean(item) && item.status === 'queued'
+    && Number(item.nextRetryAt || 0) > 0 && Number(item.nextRetryAt) <= now;
+  return state.projects.some(item => due(item) || due(item.moreJob)) || state.rerenderJobs.some(due);
 }
 
 // Tokens are charged per source minute once the real duration is known. Until
@@ -853,7 +885,10 @@ function importResultObject(project, result, engine = 'self-hosted') {
   // this makes "socialkit failed, ytdlp carried it" answerable from the record.
   project.importProvider = result.project?.importProvider || project.importProvider || null;
   project.transcriptUrl = result.project?.transcriptUrl || null;
-  project.clipCount = imported.length;
+  // Every clip the lecture holds, not only this run's: a retry ADDS to the
+  // clips a cancelled run had already made, and counting only the new ones
+  // read "4 clips" beside eight cards.
+  project.clipCount = state.clips.filter(clip => clip.projectId === project.id).length;
   // Kept so the UI can explain a shortfall rather than leaving it unexplained.
   project.clipsRequested = Number(result.project?.clipsRequested || project.clipsRequested || 0);
   project.status = 'done'; project.stage = 'Clips are ready for review'; project.progress = 100;
@@ -1138,6 +1173,11 @@ async function runRemoteProject(project) {
   // new run. Everything server-side still keys off project.id.
   const workerJobId = project.workerJobId || project.id;
   payload.id = workerJobId;
+  // Read at RUN time, not at submit time: a first run holds nothing and this
+  // is an empty list; a retry of a lecture cancelled part-way carries the
+  // clips it already made, so the worker adds to them rather than cutting
+  // the same moments again under new ids.
+  payload.existingRanges = existingRangesFor(project.id);
   project.status = 'processing'; project.stage = 'Connecting to processing worker'; project.progress = Math.max(1, project.progress || 0); project.error = null; save();
   running.set(project.id, { remote: true });
   const started = Date.now();
@@ -1146,13 +1186,22 @@ async function runRemoteProject(project) {
     await workerClient.createJob(payload);
     let lastMovementAt = Date.now();
     let lastSignature = '';
+    let resubmitted = false;
     while (Date.now() - started < config.workerJobTimeoutMs) {
       // Cancelled from the app: stop polling and let go of the slot now,
       // rather than waiting for a worker that may never confirm it. This is
       // what left the next upload sitting on "Next in line" with nothing in
       // front of it -- the queue was empty and the slot was not.
       if (projectById(project.id)?.status === 'cancelled') return;
-      const update = await workerClient.getJob(workerJobId);
+      let update;
+      try { update = await workerClient.getJob(workerJobId); }
+      catch (error) {
+        if (!lostByWorker(error) || resubmitted) throw error;
+        resubmitted = true;
+        log(`The worker no longer holds "${project.title || project.id}" (job ${workerJobId}); submitting it again.`, 'warn', ownerOf(project));
+        await workerClient.createJob(payload);
+        continue;
+      }
       acceptRemoteUpdate(project.id, update);
       if (['completed', 'failed', 'cancelled'].includes(update.status)) return;
       // Any of these moving means the worker is alive. The heartbeat covers the
@@ -1220,8 +1269,24 @@ async function runRemoteAux(project, jobRecord, kind) {
   try {
     await workerClient.createJob(payload);
     const started = Date.now();
+    // The same three-way liveness signature runRemoteProject watches. This
+    // loop had NO stall detection: a re-render or a more-clips job whose
+    // worker died mid-way sat at "processing" until the six-hour job timeout,
+    // holding the app-side slot -- and the worker's own, which was never told
+    // to stop.
+    let lastMovementAt = Date.now();
+    let lastSignature = '';
+    let resubmitted = false;
     while (Date.now() - started < config.workerJobTimeoutMs) {
-      const update = await workerClient.getJob(jobRecord.id);
+      let update;
+      try { update = await workerClient.getJob(jobRecord.id); }
+      catch (error) {
+        if (!lostByWorker(error) || resubmitted) throw error;
+        resubmitted = true;
+        log(`The worker no longer holds job ${jobRecord.id}; submitting it again.`, 'warn', project ? ownerOf(project) : undefined);
+        await workerClient.createJob(payload);
+        continue;
+      }
       jobRecord.stage = String(update.stage || update.status || 'processing');
       jobRecord.progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
       jobRecord.status = update.status === 'queued' ? 'queued' : 'processing'; save();
@@ -1232,8 +1297,17 @@ async function runRemoteAux(project, jobRecord, kind) {
       }
       if (update.status === 'failed') throw new Error(update.error || 'The external worker failed.');
       if (update.status === 'cancelled') { jobRecord.status = 'cancelled'; jobRecord.stage = 'cancelled'; save(); return; }
+      const signature = `${update.stage || ''}|${update.progress || 0}|${update.heartbeatAt || 0}`;
+      if (signature !== lastSignature) { lastSignature = signature; lastMovementAt = Date.now(); }
+      else if (Date.now() - lastMovementAt > stallBudgetFor(update.stage)) {
+        await workerClient.cancelJob(jobRecord.id).catch(() => {});
+        throw new Error('The processing worker stopped responding partway through. The job can be retried safely.');
+      }
       await new Promise(resolve => setTimeout(resolve, config.workerPollIntervalMs));
     }
+    // Tell the worker to stop before giving up locally, as runRemoteProject
+    // does; a timed-out re-render otherwise kept the worker's slot.
+    await workerClient.cancelJob(jobRecord.id).catch(() => {});
     throw new Error('The processing worker exceeded the job timeout.');
   } catch (error) {
     // Bounded like project retries. An unreachable worker used to re-queue
@@ -1719,9 +1793,28 @@ function runRerender(jobRecord) {
   });
 }
 
+// The moments a lecture already holds, in the shape the worker's
+// remove_existing_moments reads. One builder for the three paths that must
+// agree about it: cutting more clips, and a retry of a lecture that was
+// cancelled or failed AFTER some clips had landed -- without this a retry
+// re-picked the same moments under new ids and the queue showed them twice.
+export function existingRangesFor(projectId) {
+  return state.clips
+    .filter(clip => clip.projectId === projectId)
+    .map(clip => ({ id: clip.id, startSec: Number(clip.startSec || 0), endSec: Number(clip.endSec || 0) }));
+}
+
 export function queueMoreClips(projectId, requestedCount = 8) {
   const project = projectById(projectId);
   if (!project) throw new Error('That lecture does not exist.');
+  // A lecture that STOPPED -- cancelled by hand, or failed -- will never
+  // "finish processing", so telling somebody to wait for it is a sentence
+  // with no end. Youssef cancelled two imports during a pair of worker
+  // deploys, pressed the one button the screen offered, and was told to
+  // wait. Name the way forward instead: the retry route accepts exactly
+  // these two states, and a retry carries the moments already cut.
+  if (project.status === 'cancelled') throw new Error('This lecture was cancelled before it finished, so there is nothing to cut more clips from yet. Retry this lecture to run the import again — it keeps the clips it already made and adds to them.');
+  if (project.status === 'failed') throw new Error('This lecture never finished importing, so there is nothing to cut more clips from. Retry this lecture to run the import again.');
   if (!['done', 'completed'].includes(project.status)) throw new Error('Wait for the lecture to finish processing before generating more clips.');
   if (project.moreJob && ['queued', 'processing'].includes(project.moreJob.status)) {
     throw new Error('This lecture is already generating more clips.');
@@ -1750,9 +1843,7 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   if (!tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
   const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile) ? JSON.parse(fs.readFileSync(project.transcriptFile, 'utf8')) : [];
   if (project.engine !== 'remote' && (!Array.isArray(transcriptSegments) || !transcriptSegments.length)) throw new Error('The saved transcript is empty.');
-  const existingRanges = state.clips
-    .filter(clip => clip.projectId === project.id)
-    .map(clip => ({ id: clip.id, startSec: Number(clip.startSec || 0), endSec: Number(clip.endSec || 0) }));
+  const existingRanges = existingRangesFor(project.id);
 
   const moreId = id('more');
   const dir = path.join(jobsDir, moreId);
@@ -2244,6 +2335,7 @@ export function retryProject(projectId) {
   if (!template?.id) throw new Error('Select a template before retrying.');
   if (!tracks.length) throw new Error('Upload at least one nasheed before retrying.');
   job.template = template; job.musicTracks = tracks; job.settings = sharedSettings(projectOwner);
+  job.existingRanges = existingRangesFor(projectId);
   fs.writeFileSync(jobFile(projectId), JSON.stringify(job, null, 2));
   fs.rmSync(resultFile(projectId), { force: true });
   Object.assign(project, {

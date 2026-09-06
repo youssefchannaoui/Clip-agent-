@@ -702,11 +702,21 @@ body.dc-light #studio *:has(> #studioPlayerVideo) {
    and stopped there, so in daylight the frame's own chrome took the paper ink
    and disappeared into it: the PREVIEW badge measured 10.26:1 -> 1.56:1 and the
    0:14 duration 14.77:1 -> 1.11:1. The two things that matter most on the stage
-   were already safe -- the caption stayed white at 18.71:1 and the DEENCLIPPED
-   watermark gold at 9.58:1 -- because both carry an INLINE colour, which no
-   stylesheet can outrank. That is exactly what makes this rule safe: it can
-   only reach the labels whose colour comes from a class, which is precisely the
-   set that flipped.
+   are safe -- the caption white and the DEENCLIPPED watermark gold -- because
+   both carry an INLINE colour, which no stylesheet can outrank. That is what
+   makes this rule safe: it can only reach the labels whose colour comes from a
+   class, which is precisely the set that flipped.
+
+   THAT SAFETY IS A PROPERTY OF THE MARKUP, NOT A LAW, AND IT LAPSED ONCE.
+   `*` reaches every DESCENDANT, so it is only the element carrying the inline
+   colour that is out of reach -- not its children. The caption's words live in
+   a host-owned span inside the box, and that span had no colour of its own: it
+   drew #FFFFFF in the dark and #BCBCC3 here, while the render drew
+   captionPrimary in both (found on the Templates preview, 6 Sept 2026 -- the
+   only symptom was one theme's preview disagreeing with the export, which is
+   invariant 4 and nothing tests for). index.html now writes `color: inherit`
+   on that span in both caption painters. Anything else added inside the
+   caption or the mark needs the same, or it silently takes this ink.
 
    ONE INK FOR BOTH, and that is a stated trade rather than an oversight. The
    two labels are a step apart in the dark (#BCBCC3 and #E9E9ED) and their
@@ -1455,3 +1465,24 @@ body.dc-livebar #studio main { padding-bottom: 92px; }
   }
   #studio article[data-clip] [data-dc-alabel] { font-size: 11.5px; line-height: 1; }
 }
+
+/* ── The covered areas of the preview frame (paintSafeChrome) ─────────────
+   Shaded where the platform's own interface sits, with its buttons and
+   caption lines ghosted in; the clear area is where text goes. Colours are
+   rgba(9,9,10) and rgba(255,255,255) rather than hex or rgba(0,0,0) on
+   purpose: the light-theme generator remaps those, and the stage is night in
+   both themes (the frame shows the clip as it posts). Positioned by inline
+   percentages from the adapter's safeBox; only the look lives here. */
+#dcSafeChrome { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+/* .46 was a FOG, not a step. Over a bright frame it lands as a mid grey, so
+   the picture read as dull rather than as partly covered -- and with the
+   bands taking 7.8% off the top, 25.2% off the foot and 18.6% across, most
+   of the preview was fogged. Deeper is what makes the CLEAR area the bright
+   part, which is the one thing this overlay exists to show. */
+#dcSafeChrome .dc-safe-band { position: absolute; pointer-events: none; background: rgba(9, 9, 10, .66); }
+/* The silhouette of the player's own chrome (safeSilhouette in index.html):
+   one SVG in the frame's 1080x1920 space, ink only, drawn from the same box
+   the bands are cut from. Its colours are rgba literals in the markup so the
+   daylight generator, which remaps hex in CSS, never touches them -- the
+   stage is night in both themes. */
+#dcSafeChrome .dc-safe-ui { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }

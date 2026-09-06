@@ -209,6 +209,32 @@
     return out;
   }
 
+  /*
+   * THE PLATFORMS THE BOX IS DRAWN FOR. Youssef, 6 Sept 2026: "figure out the
+   * perfect safe social zone using TikTok and YouTube and use it for ours".
+   * So the box always clears TikTok AND YouTube Shorts -- the two this product
+   * is actually posting to, whether or not either happens to be connected at
+   * the moment somebody is designing a template -- and a connected Meta
+   * platform WIDENS it (Reels covers more of the frame than either). Nothing
+   * ever narrows it below the pair: a template designed against a lone
+   * YouTube box lands its caption under TikTok's caption block the day TikTok
+   * is connected, and that is the fault the whole table exists to prevent.
+   *
+   * Union of the pair: top 150 (Shorts), right 140, bottom 484 (TikTok),
+   * left 60 (Shorts) -- 7.8% / 13.0% / 25.2% / 5.6% of a 9:16 frame.
+   */
+  var BASE_PLATFORMS = ['youtube', 'tiktok'];
+
+  function postingSet(publishingSettings, social) {
+    var connected = platformsFor(publishingSettings, social);
+    var out = [];
+    for (var i = 0; i < ORDER.length; i++) {
+      var key = ORDER[i];
+      if (BASE_PLATFORMS.indexOf(key) > -1 || connected.indexOf(key) > -1) out.push(key);
+    }
+    return out;
+  }
+
   /** "TikTok and Reels", for a sentence saying what the box clears. */
   function describe(keys) {
     var names = zoneList(keys).map(function (z) { return z.short; });
@@ -227,6 +253,8 @@
     unionInsets: unionInsets,
     safeArea: safeArea,
     platformsFor: platformsFor,
+    BASE_PLATFORMS: BASE_PLATFORMS,
+    postingSet: postingSet,
     describe: describe,
   };
 }(typeof globalThis !== 'undefined' ? globalThis : this));

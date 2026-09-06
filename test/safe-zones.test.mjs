@@ -124,6 +124,20 @@ test('only connected AND switched-on platforms narrow the box', () => {
   assert.deepEqual(SAFE.platformsFor(ps, {}), []);
 });
 
+test('the box the studio draws is never narrower than TikTok and Shorts together', () => {
+  // "use it for ours": the pair is the floor. Connected Meta widens it;
+  // nothing connected, or only one of the pair, still clears both.
+  assert.deepEqual(SAFE.BASE_PLATFORMS, ['youtube', 'tiktok']);
+  assert.deepEqual(SAFE.postingSet({}, {}), ['youtube', 'tiktok']);
+  const onlyTikTok = { providers: { tiktok: { connected: true } } };
+  assert.deepEqual(SAFE.postingSet({ tiktok: { enabled: true } }, onlyTikTok), ['youtube', 'tiktok']);
+  const meta = { providers: { instagram: { connected: true }, facebook: { connected: true } } };
+  assert.deepEqual(SAFE.postingSet({ instagram: { enabled: true }, facebook: { enabled: true } }, meta),
+    ['youtube', 'tiktok', 'instagram', 'facebook'], 'Meta widens it, in the table\u2019s own order');
+  const pair = SAFE.unionInsets(SAFE.postingSet({}, {}));
+  assert.deepEqual(pair, { top: 150, right: 140, bottom: 484, left: 60 }, 'Shorts\u2019 top and left, TikTok\u2019s bottom, the shared rail');
+});
+
 test('nothing outside the table restates a platform inset', () => {
   // The whole point. Every number lives in safe-zones.js; a second copy is
   // exactly how the six disagreeing answers came about.
@@ -206,16 +220,16 @@ test('a caption anchored inside the covered band is called out, not moved', () =
 
   const covered = StudioAdapter.bindings(state(
     { ...base, captionPosition: 'bottom', captionMarginV: 464 })).safeHint;
-  assert.match(covered, /sits \d+px outside it/, 'the shipped default is called out');
+  assert.match(covered, /sits \d+px into the shade/, 'the shipped default is called out');
 
   const clear = StudioAdapter.bindings(state(
     { ...base, captionPosition: 'bottom', captionMarginV: 700 })).safeHint;
-  assert.ok(!/outside it/.test(clear), 'a caption inside the box is not nagged');
+  assert.ok(!/sits \d+px/.test(clear), 'a caption inside the box is not nagged');
 
   // A centred caption is always inside, and must never be warned about.
   const middle = StudioAdapter.bindings(state(
     { ...base, captionPosition: 'middle', captionMarginV: 0 })).safeHint;
-  assert.ok(!/outside it/.test(middle));
+  assert.ok(!/sits \d+px/.test(middle));
 
   // And it is a WARNING, never a correction: nothing about the drawn box may
   // rewrite a saved caption position, because that changes how every clip from

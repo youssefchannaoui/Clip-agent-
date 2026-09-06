@@ -1,0 +1,513 @@
+/*
+ * studio-templates.css — the desktop Templates screen (studio-templates.js).
+ *
+ * HAND-WRITTEN, and it names no hashed class: every selector hangs off
+ * #dcTemplates or a literal dct- class, so a design re-import cannot renumber
+ * it away.
+ *
+ * COLOUR: night is declared here with a hex fallback on every var(), and
+ * scripts/build-light-theme.mjs re-emits each rule that names a colour under
+ * body.dc-light. Run it after touching a colour in this file -- nothing does
+ * it automatically. Anything sitting ON the gold uses --dc-gold-solid /
+ * --dc-on-gold, which are declared once for BOTH themes: a rule written
+ * entirely in var() names carries no hex for the generator to remap, which is
+ * the escape hatch as well as the definition.
+ *
+ * THE STAGE STAYS NIGHT in both themes. A caption is white text meant for
+ * video; lighting the frame behind it both hides it and shows a preview that
+ * disagrees with the render (invariant 4).
+ *
+ * ALIGNMENT IS BY GEOMETRY. --dct-line is the label's line box, the readout's
+ * line box and every control's height, so the three columns share one centre
+ * line by construction rather than by a margin that drifts the next time a
+ * font size moves. The leading is whole-pixel for the same reason.
+ */
+
+#dcTemplates {
+  --dct-line: 22px;
+  --dct-label: 160px;
+  --dct-value: 64px;
+  --dct-frame-h: 420px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  font-family: Outfit, Inter, system-ui, sans-serif;
+  color: var(--dc-ink, #F2F2F4);
+  /* Chrome shifts scrollTop to keep what you are looking at still when content
+     above it changes, and this screen repaints its panels through the patcher
+     on every poll -- which ran the settings column to the end of its range
+     after every change (v3.118.1). */
+  overflow-anchor: none;
+}
+
+/* ── toolbar ─────────────────────────────────────────────────────────────── */
+#dcTemplates .dct-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 40px;
+  border-bottom: 1px solid var(--dc-line-soft, #1E1E22);
+}
+#dcTemplates .dct-pick { display: flex; align-items: center; gap: 10px; }
+#dcTemplates .dct-pl {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--dc-ink-faint, #6E6E76);
+}
+#dcTemplates .dct-style { width: auto; min-width: 210px; height: 30px; }
+#dcTemplates .dct-sp { flex: 1; }
+#dcTemplates .dct-dirty {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 11.5px; color: var(--dc-ink-dim, #8B8B93);
+}
+#dcTemplates .dct-dirty i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+#dcTemplates .dct-dirty em {
+  font-style: normal; font-size: 10.5px; letter-spacing: .06em;
+  padding: 2px 7px; border-radius: 20px; line-height: 14px;
+  border: 1px solid var(--dc-line-soft, #1E1E22);
+  color: var(--dc-ink-faint, #6E6E76);
+}
+
+/* ── body ────────────────────────────────────────────────────────────────── */
+#dcTemplates .dct-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) minmax(300px, 420px);
+  gap: 26px;
+  padding: 22px 40px;
+}
+#dcTemplates .dct-left {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+#dcTemplates .dct-right {
+  min-height: 0;
+  overflow-y: auto;
+  /* The gutter is reserved whether or not it is used, so the column's width --
+     and therefore how the hint under the preview wraps -- cannot change when a
+     scrollbar appears. Without it the one measurement that sizes the frame
+     oscillates: a taller frame overflows, the scrollbar narrows the column,
+     the hint takes another line, the frame shrinks, the overflow goes. */
+  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── a settings group ────────────────────────────────────────────────────── */
+#dcTemplates .dct-sec {
+  flex: none;
+  border: 1px solid var(--dc-line-soft, #1E1E22);
+  border-radius: 13px;
+  background: var(--dc-bg, #121214);
+  padding: 14px 16px 16px;
+}
+#dcTemplates .dct-gh {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 0 0 10px;
+}
+#dcTemplates .dct-gh span {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+  line-height: 1;
+  color: var(--dc-n-7e7a82, #7E7A82);
+}
+#dcTemplates .dct-rows { display: flex; flex-direction: column; }
+
+/* ── one control row ─────────────────────────────────────────────────────── */
+/* EVERY CELL STARTS AT THE SAME y AND IS THE SAME HEIGHT, so their centres
+   coincide by construction rather than by a nudge. That is what keeps a row
+   carrying a second explanatory line lined up with its LABEL rather than with
+   the middle of a taller row -- measured 15px out before. */
+#dcTemplates .dct-row {
+  display: grid;
+  grid-template-columns: var(--dct-label) minmax(0, 1fr) var(--dct-value);
+  align-items: start;
+  column-gap: 10px;
+  padding: 7px 0;
+}
+#dcTemplates .dct-row > * { box-sizing: border-box; }
+#dcTemplates .dct-row + .dct-row { border-top: 1px solid var(--dc-n-161619, #161619); }
+#dcTemplates .dct-k { display: flex; flex-direction: column; min-width: 0; }
+#dcTemplates .dct-c, #dcTemplates .dct-v { height: var(--dct-line); }
+#dcTemplates .dct-kl {
+  font-size: 12.5px;
+  line-height: var(--dct-line);
+  color: var(--dc-ink-body, #BCBCC3);
+}
+/* Its own line across the whole row. Inside the label cell it wrapped three
+   deep in 160px and made one row two and a half times its neighbours. */
+#dcTemplates .dct-note {
+  grid-column: 1 / -1;
+  margin-top: 3px;
+  font-size: 10.5px;
+  line-height: 15px;
+  color: var(--dc-ink-faint, #6E6E76);
+}
+#dcTemplates .dct-c { display: flex; align-items: center; min-width: 0; }
+/* A select takes the readout's column too, so its right edge lands on the
+   readouts' right edge instead of stopping 74px short of it. */
+#dcTemplates .dct-is-select .dct-c { grid-column: 2 / 4; }
+#dcTemplates .dct-v {
+  font-size: 11.5px;
+  line-height: var(--dct-line);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--dc-ink-dim, #8B8B93);
+  white-space: nowrap;
+}
+
+/* ── the controls themselves ─────────────────────────────────────────────── */
+/*
+ * THE GROUND IS A LONGHAND AND THE CARET CARRIES NO HEX, and both halves are
+ * load-bearing. build-light-theme re-emits only the declarations of a rule
+ * whose value holds a hex -- so a `background:` SHORTHAND here came back in
+ * daylight on its own, resetting background-position/size/repeat to their
+ * initial values, and the two caret gradients then drew at 0 0, auto, repeat:
+ * every select rendered as a dark slab split diagonally down the middle.
+ * `background-color` cannot reset a sibling longhand; and the caret's colour
+ * is a bare var() with no fallback, so the generator finds no hex in the
+ * gradients, emits nothing for them, and the token flips the caret itself.
+ */
+#dcTemplates .dct-select {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--dct-line);
+  padding: 0 26px 0 9px;
+  border: 1px solid var(--dc-line, #26262A);
+  border-radius: 8px;
+  background-color: var(--dc-bg-raised, #17171A);
+  background-image: linear-gradient(45deg, transparent 50%, var(--dc-ink-dim) 50%),
+                    linear-gradient(135deg, var(--dc-ink-dim) 50%, transparent 50%);
+  background-position: right 12px center, right 7px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  color: var(--dc-ink, #F2F2F4);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+#dcTemplates .dct-select:hover { border-color: var(--dc-line-hover, #34343A); }
+
+#dcTemplates .dct-range {
+  appearance: none;
+  width: 100%;
+  height: var(--dct-line);
+  margin: 0;
+  background: none;
+  cursor: pointer;
+}
+/*
+ * EVERY PSEUDO CARRIES [type="range"], and that is not decoration.
+ * index.html's inline block styles the studio's sliders app-wide at
+ * `#studio input[type=range]::-webkit-slider-runnable-track` -- specificity
+ * (1,1,1), written for the old Templates screen -- and it sets the track
+ * TRANSPARENT. A plain `#dcTemplates .dct-range::...` is (1,1,0) and loses to
+ * it, so this screen's track never painted in night at all; daylight looked
+ * right only because the generated `body.dc-light` copy happens to outrank it.
+ * The attribute selector takes this to (1,2,0), above the app-wide rule in
+ * both themes.
+ *
+ * THE TRACK FILLS FROM THE LEFT. A native range has no pseudo-element for the
+ * part behind the thumb, so the track is one gradient with a hard stop at
+ * --dct-pct (written by the adapter beside the value it comes from). Both
+ * halves are bare hex on purpose -- the unfilled part is a neutral and must
+ * flip in daylight; the gold is the same in both themes and is a var().
+ */
+#dcTemplates .dct-range[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 3px;
+  background: linear-gradient(to right,
+    var(--dc-gold, #D9B478) 0 var(--dct-pct, 0%), #2C2C33 var(--dct-pct, 0%) 100%);
+}
+#dcTemplates .dct-range[type="range"]::-webkit-slider-thumb {
+  appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%;
+  background: var(--dc-gold, #D9B478);
+  border: 0;
+}
+#dcTemplates .dct-range[type="range"]::-moz-range-track {
+  height: 4px; border-radius: 3px;
+  background: linear-gradient(to right,
+    var(--dc-gold, #D9B478) 0 var(--dct-pct, 0%), #2C2C33 var(--dct-pct, 0%) 100%);
+}
+#dcTemplates .dct-range[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--dc-gold, #D9B478); }
+
+#dcTemplates .dct-swatch {
+  position: relative;
+  box-sizing: border-box;
+  width: 46px;
+  height: var(--dct-line);
+  border-radius: 6px;
+  border: 1px solid var(--dc-line, #26262A);
+  cursor: pointer;
+  overflow: hidden;
+}
+#dcTemplates .dct-colour {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; border: 0; padding: 0;
+}
+
+#dcTemplates .dct-switch {
+  position: relative;
+  box-sizing: border-box;
+  width: 34px;
+  height: var(--dct-line);
+  flex: none;
+  padding: 0;
+  border-radius: 20px;
+  cursor: pointer;
+  border: 1px solid var(--dc-n-33333a, #33333A);
+  background: var(--dc-bg-raised, #17171A);
+  transition: background .16s ease, border-color .16s ease;
+}
+#dcTemplates .dct-switch i {
+  position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--dc-ink-faint, #6E6E76);
+  transition: left .16s ease, background .16s ease;
+}
+#dcTemplates .dct-switch.is-on { border-color: rgba(217,180,120,.5); background: rgba(217,180,120,.22); }
+#dcTemplates .dct-switch.is-on i { left: 17px; background: var(--dc-gold-lit, #F0D6A6); }
+
+#dcTemplates .dct-text {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--dc-line, #26262A);
+  border-radius: 8px;
+  background: var(--dc-bg-raised, #17171A);
+  color: var(--dc-ink, #F2F2F4);
+  font-family: inherit;
+  font-size: 12.5px;
+}
+
+/* ── buttons ─────────────────────────────────────────────────────────────── */
+/*
+ * THE BASE BUTTON IS WRITTEN IN VAR() NAMES ALONE, and that is what keeps the
+ * primary button gold in daylight. A hex fallback here makes the generator
+ * re-emit this rule as `body.dc-light #dcTemplates .dct-btn` -- specificity
+ * (1,2,1), which outranks `.dct-btn.dct-primary` at (1,2,0) whatever the link
+ * order -- and Save and apply came out white on paper. No hex, nothing
+ * emitted, and the tokens flip the ordinary button by themselves. Same for
+ * :hover, or the gold hover loses to a lit border instead.
+ */
+#dcTemplates .dct-btn {
+  height: 30px;
+  padding: 0 13px;
+  border-radius: 8px;
+  border: 1px solid var(--dc-line);
+  background: var(--dc-bg-raised);
+  color: var(--dc-ink-body);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color .14s ease, background .14s ease;
+}
+#dcTemplates .dct-btn:hover { border-color: var(--dc-line-hover); }
+#dcTemplates .dct-btn.dct-primary {
+  border-color: var(--dc-gold-solid);
+  background: var(--dc-gold-solid);
+  color: var(--dc-on-gold);
+}
+#dcTemplates .dct-btn.dct-primary:hover { border-color: var(--dc-gold-hover); background: var(--dc-gold-hover); }
+#dcTemplates .dct-btn.dct-wide { width: 100%; flex: none; }
+#dcTemplates .dct-btn.dct-sm, #dcTemplates .dct-icon.dct-sm { height: 26px; }
+#dcTemplates .dct-icon {
+  width: 30px; height: 30px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--dc-line, #26262A);
+  background: var(--dc-bg-raised, #17171A);
+  color: var(--dc-ink-dim, #8B8B93);
+  font-size: 14px;
+  cursor: pointer;
+}
+#dcTemplates .dct-icon.dct-sm { width: 26px; }
+#dcTemplates .dct-icon:hover { border-color: var(--dc-line-hover, #34343A); color: var(--dc-ink, #F2F2F4); }
+
+/* ── saved looks ─────────────────────────────────────────────────────────── */
+#dcTemplates .dct-presets { display: flex; flex-direction: column; margin-bottom: 12px; }
+#dcTemplates .dct-preset {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 40px;
+}
+#dcTemplates .dct-preset + .dct-preset { border-top: 1px solid var(--dc-n-161619, #161619); }
+#dcTemplates .dct-pn { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#dcTemplates .dct-pn strong {
+  font-size: 12.5px; font-weight: 600; line-height: 18px;
+  color: var(--dc-ink-body, #BCBCC3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#dcTemplates .dct-pn span {
+  font-size: 10.5px; line-height: 15px;
+  color: var(--dc-ink-faint, #6E6E76);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#dcTemplates .dct-save { display: flex; align-items: center; gap: 8px; }
+#dcTemplates .dct-fine {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--dc-ink-faint, #6E6E76);
+}
+#dcTemplates .dct-slot:empty { display: none; }
+#dcTemplates .dct-slot { margin-bottom: 4px; }
+
+/* ── the preview column ──────────────────────────────────────────────────── */
+#dcTemplates .dct-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+/* Height comes from the host's one measurement; the width follows through the
+   template's own aspect ratio, so a square export previews square. */
+#dcTemplates .dct-frame {
+  position: relative;
+  flex: none;
+  height: var(--dct-frame-h);
+  width: auto;
+  max-width: 100%;
+  aspect-ratio: 9 / 16;
+  border-radius: 14px;
+  border: 1px solid var(--dc-line, #26262A);
+  background: #0B0B0D;
+  overflow: hidden;
+  box-shadow: 0 18px 40px rgba(0,0,0,.4);
+}
+#dcTemplates .dct-safe {
+  border: 1px dashed rgba(240,214,166,.55);
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px rgba(9,9,10,.35);
+}
+#dcTemplates .dct-cap, #dcTemplates .dct-mark { z-index: 8; }
+#dcTemplates .dct-play {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%;
+  max-width: 100%;
+  padding: 7px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--dc-line-soft, #1E1E22);
+  background: var(--dc-bg, #121214);
+  cursor: pointer;
+}
+#dcTemplates .dct-pi { font-size: 14px; color: var(--dc-gold-lit, #F0D6A6); }
+#dcTemplates .dct-track { flex: 1; height: 4px; border-radius: 3px; background: #232327; overflow: hidden; }
+#dcTemplates .dct-fill { display: block; height: 100%; border-radius: 3px; background: var(--dc-gold, #D9B478); }
+#dcTemplates .dct-time { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--dc-ink-dim, #8B8B93); }
+#dcTemplates .dct-layers { flex: none; display: flex; align-items: center; gap: 8px; }
+#dcTemplates .dct-ratio { width: auto; min-width: 108px; }
+#dcTemplates .dct-hint {
+  flex: none;
+  margin: 0;
+  display: flex; gap: 7px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--dc-ink-dim, #8B8B93);
+}
+#dcTemplates .dct-hint i { color: var(--dc-ink-faint, #6E6E76); margin-top: 2px; }
+
+/* Two columns need room. Below this the preview goes under the settings and
+   the screen scrolls as one, which is the honest fallback. */
+@media (max-width: 1080px) {
+  #dcTemplates .dct-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+  #dcTemplates .dct-left { overflow: visible; padding-right: 0; }
+  #dcTemplates .dct-right { overflow: visible; }
+  #dcTemplates .dct-frame { height: 420px; }
+}
+
+/* ── the two account-wide brand switches ─────────────────────────────────── */
+/*
+ * paintWatermark is a HOST panel and draws its own markup, so it arrives here
+ * with two native checkboxes -- and inside this group they sat beside four
+ * .dct-switch toggles, which is two switch languages in one card. It is not
+ * rewritten (it is shared machinery with its own paywall and its own account
+ * source); its checkboxes are given this screen's switch shape instead, from
+ * the same tokens, so the group reads as one control set.
+ *
+ * The knob is ::before because an <input> takes no children. `appearance:
+ * none` is what lets a checkbox be drawn at all -- without it the accent-color
+ * tick is still painted over the top.
+ */
+/*
+ * ITS ROWS ARE LAID ON THIS SCREEN'S GRID, and only !important reaches them:
+ * paintWatermark writes `display:flex;justify-content:space-between` as an
+ * INLINE style, which no stylesheet can outrank (the standing lesson -- when
+ * an override provably does not apply, look for an inline style). Left alone,
+ * its two switches sat hard against the card's right edge while every other
+ * switch in the same card sat at the control column's left edge: one card,
+ * two positions, which is the ragged column the alignment rule forbids.
+ * 160px + 10px is the row grid's own label column and gutter, so the switch
+ * lands on the SAME x as the four below it by construction rather than by a
+ * measurement that drifts.
+ */
+#dctBrandSlot #dcWatermark > label {
+  display: grid !important;
+  /* `justify-content: space-between` is inline too, and on a GRID it spreads
+     the COLUMNS -- so the switch was pinned to the card's right edge even once
+     the grid applied. Measured 908px against the control column's 455. */
+  justify-content: start !important;
+  grid-template-columns: var(--dct-label) auto;
+  column-gap: 10px !important;
+  align-items: center;
+  min-height: 34px;
+  /* Its own inline `padding: 0 2px` put this card's label and switch 2px
+     right of every other row's -- one card, two left edges. */
+  padding: 0 !important;
+}
+/* The notes and headings under those rows carry the same 2px. */
+#dctBrandSlot #dcWatermark > div { padding-left: 0 !important; padding-right: 0 !important; }
+#dctBrandSlot #dcWatermark > label > span {
+  font-size: 12.5px !important;
+  line-height: var(--dct-line);
+  color: var(--dc-ink-body, #BCBCC3) !important;
+}
+#dctBrandSlot #dcWatermark > label > span[style*="not-allowed"],
+#dctBrandSlot #dcWatermark > label:has(input:disabled) > span {
+  color: var(--dc-ink-dim, #8B8B93) !important;
+}
+#dctBrandSlot input[type="checkbox"] {
+  appearance: none;
+  position: relative;
+  /* 17px square, inline, from the same painter -- hence !important on the box
+     as well as on the layout. Without it the track stayed 17px wide and only
+     the knob drew, which reads as a stray dot rather than a switch. */
+  width: 34px !important;
+  height: var(--dct-line) !important;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border-radius: 20px;
+  border: 1px solid var(--dc-n-33333a, #33333A);
+  background: var(--dc-bg-raised, #17171A);
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease;
+}
+#dctBrandSlot input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 3px; left: 3px; width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--dc-ink-faint, #6E6E76);
+  transition: left .16s ease, background .16s ease;
+}
+#dctBrandSlot input[type="checkbox"]:checked {
+  border-color: rgba(217,180,120,.5);
+  background: rgba(217,180,120,.22);
+}
+#dctBrandSlot input[type="checkbox"]:checked::before {
+  left: 17px;
+  background: var(--dc-gold-lit, #F0D6A6);
+}
+/* Disabled is the free plan's locked watermark, and it must still read as ON
+   -- so it is dimmed, never redrawn as an off switch. */
+#dctBrandSlot input[type="checkbox"]:disabled { opacity: .55; cursor: not-allowed; }

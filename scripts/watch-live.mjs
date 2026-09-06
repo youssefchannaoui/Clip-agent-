@@ -91,10 +91,18 @@ note(/script-src[^;]*sha256-/.test(csp), 'CSP carries a script-src hash',
   csp ? 'script-src has no sha256- in it' : 'no Content-Security-Policy header at all');
 
 // 5. The studio's own assets. Each 404s in silence.
+//
+//    THIS LIST IS TYPED, unlike the sitemap walk below, and that is a known
+//    cost: an asset added to STUDIO_ASSETS and not added here is watched from
+//    INSIDE the app (selfcheck.js reads that table and alerts on a file that
+//    is not on disk) and not from outside. Add the new path when a release
+//    adds a studio asset the screen cannot do without.
 for (const asset of [
   '/studio-styles.generated.css', '/studio-tokens.css', '/studio-light.generated.css',
   '/studio-theme.generated.css', '/studio-runtime.js', '/studio-adapter.js',
   '/studio-template.generated.js', '/studio-mobile.js', '/sw.js', '/manifest.webmanifest',
+  // v3.134.0: the Templates screen is drawn by these two and by nothing else.
+  '/studio-templates.css', '/studio-templates.js',
 ]) {
   const res = await probe(asset);
   note(res.status >= 200 && res.status < 400, `GET ${asset}`,

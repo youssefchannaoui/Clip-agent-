@@ -128,6 +128,21 @@ class SecondListenTests(unittest.TestCase):
         codes = [e["code"] for e in events if e.get("type") == "warning"]
         self.assertEqual(codes, ["transcription_stopped_early"])
 
+    def test_a_recitation_never_pays_for_the_voice_filter(self):
+        # Measured on the box: the filter kept 26s of the first 120s of the
+        # recitation, and switching it off recovered 119s. A Quran-template job
+        # starts without it, so the first pass is the full one.
+        job = _job()
+        job["template"] = {"id": "quran-recitation", "captionMode": "quran"}
+        out = io.StringIO()
+        with redirect_stdout(out):
+            rows = cw._transcribe_with_faster_whisper(job, Path("/tmp/nothing.wav"), 568.0)
+        self.assertEqual(len(FakeWhisper.calls), 1, "one pass, no retry needed")
+        self.assertIs(FakeWhisper.calls[0].get("vad_filter"), False)
+        self.assertNotIn("vad_parameters", FakeWhisper.calls[0])
+        self.assertIsNotNone(FakeWhisper.calls[0].get("no_speech_threshold", 0.6), "the no-speech gate stays")
+        self.assertEqual(len(rows), 46)
+
     def test_a_cached_transcript_that_stopped_early_is_not_reused(self):
         # The failed run CACHED its 28-second transcript, so a Retry would
         # have reused it and failed again without ever listening twice.

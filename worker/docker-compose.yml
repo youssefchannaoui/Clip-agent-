@@ -4,6 +4,11 @@ services:
       context: ..
       dockerfile: worker/Dockerfile
     restart: unless-stopped
+    # Time for service.py's SIGTERM handler to mark every running job
+    # `interrupted` and stop its ffmpeg/Whisper process group before Docker
+    # SIGKILLs the container. The default ten seconds was enough for the
+    # marking and not always for the group.
+    stop_grace_period: 45s
     env_file: .env
     environment:
       WORKER_PORT: "8080"
