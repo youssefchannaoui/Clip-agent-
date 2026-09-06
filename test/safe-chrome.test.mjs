@@ -42,7 +42,7 @@ test('the shade is positioned from the same box the edge span is positioned from
   const v = sb.StudioAdapter.bindings(state({ youtube: { connected: true } }, { youtube: { enabled: true } }));
   // YouTube alone connected still draws the TikTok+Shorts pair (the floor);
   // what this test pins is that the shade and the edge span read ONE box.
-  const box = sb.DCSafeZones.safeArea(['youtube', 'tiktok'], 1080, 1920);
+  const box = sb.DCSafeZones.postingBox(['youtube', 'tiktok'], 1080, 1920);
   for (const k of ['left', 'right', 'top', 'bottom']) assert.ok(Math.abs(v.safeBox[k] - box[k]) < 1e-9, k);
   assert.equal(v.safeBox.degenerate, false);
   assert.deepEqual(Array.from(v.safePlatforms), ['youtube', 'tiktok']);
@@ -58,8 +58,8 @@ test('with nothing connected the shade is TikTok and Shorts, and says so', () =>
   // Meta platform widens it (the sibling test in safe-zones.test.mjs).
   const sb = load();
   const v = sb.StudioAdapter.bindings(state({}, {}));
-  const box = sb.DCSafeZones.safeArea(['youtube', 'tiktok'], 1080, 1920);
-  assert.ok(Math.abs(v.safeBox.bottom - box.bottom) < 1e-9, 'the bottom is TikTok\u2019s 484, not Meta\u2019s 670');
+  const box = sb.DCSafeZones.postingBox(['youtube', 'tiktok'], 1080, 1920);
+  assert.ok(Math.abs(v.safeBox.bottom - box.bottom) < 1e-9, 'the bottom is the always-on chrome, not Meta\u2019s 670');
   assert.ok(Math.abs(v.safeBox.top - box.top) < 1e-9, 'the top is Shorts\u2019 150');
   assert.deepEqual(Array.from(v.safePlatforms), ['youtube', 'tiktok']);
   assert.match(v.safeHint, /Shorts and TikTok/);
@@ -130,7 +130,7 @@ function silhouette() {
 }
 const boxFor = keys => {
   const sb = load();
-  return sb.DCSafeZones.safeArea(keys, 1080, 1920);
+  return sb.DCSafeZones.postingBox(keys, 1080, 1920);
 };
 const attr = (svg, part, name) => {
   const group = new RegExp(`<g data-part="${part}">([\\s\\S]*?)</g>`).exec(svg);
@@ -164,6 +164,17 @@ test('the silhouette draws the rail, the foot and the tabs from the same box as 
   assert.ok(attr(svg, 'nav', 'y') > attr(svg, 'handle', 'y'), 'the tab bar is under the handle');
   // The tabs sit inside the top band.
   assert.ok(attr(svg, 'tabs', 'y') + 46 <= Math.round(floor.top * 1920), 'the tabs are in the top band');
+  /* THE BAND'S TOP EDGE AND THE TOPMOST DRAWN ELEMENT ARE ONE NUMBER.
+     Youssef, 6 Sept 2026: "move the social safe zone down to shere my cursor
+     is" -- his cursor was 172px below the band's edge, at the top of the
+     handle bar, because the shade was cut at TikTok's published 484 while the
+     chrome drawn inside it starts at 312. POSTING_BOTTOM is that 312, so on
+     the floor box the two coincide exactly: a shade that claims more than it
+     shows is what made it read as arbitrary. */
+  assert.equal(attr(svg, 'handle', 'y'), 1920 - load().DCSafeZones.POSTING_BOTTOM,
+    'the handle sits exactly on the band edge');
+  assert.equal(Math.round(floor.bottom * 1920), 1920 - load().DCSafeZones.POSTING_BOTTOM);
+
   // Widened by Meta: the rail stack climbs with the bottom band.
   const wide = boxFor(['youtube', 'tiktok', 'instagram']);
   assert.ok(wide.bottom < floor.bottom, 'fixture: Meta covers more of the foot');

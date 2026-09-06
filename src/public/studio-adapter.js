@@ -4089,7 +4089,10 @@
     // Always TikTok and Shorts, widened by anything else connected -- see
     // postingSet in safe-zones.js for why the pair is the floor.
     var SAFE_PLATFORMS = SAFE.postingSet(DATA.publishingSettings, DATA.social);
-    var SAFE_BOX = SAFE.safeArea(SAFE_PLATFORMS, tpl.width, tpl.height);
+    // postingBox, not safeArea: the shade shows what the phone's interface
+    // actually covers, which is the same number the silhouette is drawn from.
+    // See POSTING_BOTTOM in safe-zones.js for why the two differ.
+    var SAFE_BOX = (SAFE.postingBox || SAFE.safeArea)(SAFE_PLATFORMS, tpl.width, tpl.height);
     var SAFE_TOP = SAFE_BOX.top;
     var SAFE_BOTTOM = SAFE_BOX.bottom;
     // The thirds and the half are only worth offering where they are actually

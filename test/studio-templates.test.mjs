@@ -416,3 +416,73 @@ test('the host brand panel is laid on this screen\'s own grid', () => {
   assert.match(src('src/public/index.html'), /id="dctBrandSlot"|dctBrandSlot/,
     'paintWatermark knows the slot');
 });
+
+test('Brand is the first group in the configurator', () => {
+  /* Youssef, 6 Sept 2026: "Brand should be at the top of the configurator".
+     The watermark and the promo bar belong to the ACCOUNT rather than to the
+     selected template, so they are what somebody checks before touching a
+     caption -- and they were the one group you had to scroll past six others
+     to reach. Asserted on the ORDER in the authored template rather than on a
+     screenshot: nothing else would notice it drifting back down. */
+  const js = src('src/public/studio-templates.js');
+  const body = js.slice(js.indexOf("h('div', { class: 'dct-body' }"));
+  const brand = body.indexOf("id: 'dctBrandSlot'");
+  const first = body.indexOf("group('Clip layout'");
+  assert.ok(brand > -1 && first > -1, 'both groups are still authored');
+  assert.ok(brand < first, 'Brand is drawn before every template group');
+});
+
+test('the two columns are an even split', () => {
+  /* Youssef, same message: "make the left side config smaller and make it
+     more spacious for the right side, 50% 50% ratio to look cleaner". The
+     settings column was minmax(360px, 1fr) against a preview capped at 420,
+     so every extra pixel of a wide screen went to the half that needed it
+     least -- at 1440 that was 648 against 420.
+
+     minmax(0, 1fr) twice, never `1fr 1fr`: a grid track's automatic minimum
+     is its content, and the frame plus the hint under it would push the
+     preview column past its half and the row past the screen. */
+  const css = src('src/public/studio-templates.css');
+  const rule = /#dcTemplates \.dct-body \{([\s\S]*?)\}/.exec(css);
+  assert.ok(rule, 'the body grid is still declared here');
+  const cols = /grid-template-columns:\s*([^;]+);/.exec(rule[1]);
+  assert.ok(cols, 'the body still sets its columns');
+  // Split on the gap BETWEEN tracks -- `minmax(0, 1fr)` has a space of its
+  // own inside it, so a naive split on whitespace cuts a track in half.
+  const tracks = cols[1].trim().match(/minmax\([^)]*\)|\S+/g) || [];
+  assert.equal(tracks.length, 2, `two tracks, got ${tracks.length}: ${cols[1].trim()}`);
+  assert.equal(tracks[0], tracks[1], 'both tracks take the same share');
+  assert.match(tracks[0], /^minmax\(\s*0\s*,\s*1fr\s*\)$/,
+    'a 1fr track floors at its content, which would push the preview past its half');
+});
+
+test('the preview fills its column, bounded only by the column\'s own width', () => {
+  /* The preview IS this screen, so a constant ceiling holds it short of the
+     room it has. Measured at 1920x1080 before this: 759px of room and a frame
+     pinned to 620 -- 139px of the right-hand half left empty. That is the same
+     fault the GENERATED screen's own sizing carried until v3.132.0 ("The right
+     side video should fill as much as the page can"), so shipping it on the
+     screen people actually see would have been that fix undone.
+
+     The width bound is the real constraint and is not interchangeable with a
+     number: a frame given the full height wants `height * ratio` of width, and
+     a WIDE template blows through the column -- a 16:9 export at 759px of room
+     asks for 1349px inside a 778px one. `max-width: 100%` does NOT save it:
+     with an explicit height AND an aspect-ratio, clamping the width breaks the
+     RATIO rather than the height, so the preview renders the wrong shape and
+     misrepresents the export. Measured both ways at 1920x1080 with a 16:9
+     aspect: bounded, 778x438 (shape 1.776); with a literal 620 in its place,
+     778x620 -- shape 1.255. */
+  const js = src('src/public/studio-templates.js');
+  const fit = js.slice(js.indexOf('function fitFrame()'));
+  const body = fit.slice(0, fit.indexOf('\n  }\n'));
+  assert.ok(body.includes('clientWidth'),
+    'the bound is derived from the column the frame has to fit inside');
+  const clamp = /var wanted = [^;]+;/.exec(body);
+  assert.ok(clamp, 'fitFrame still clamps to one wanted height');
+  assert.match(clamp[0], /Math\.min\(\s*byWidth\s*,/,
+    'the upper bound is the width-derived one, not a constant');
+  assert.ok(!/Math\.min\(\s*\d/.test(clamp[0]),
+    'a numeric ceiling here holds the preview short of the room it has');
+  assert.ok(!/FRAME_MAX/.test(js), 'the arbitrary ceiling is gone, not merely unused');
+});

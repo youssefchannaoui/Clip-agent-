@@ -205,11 +205,13 @@ test('the studio loads the table before the adapter that reads it', () => {
 });
 
 test('a caption anchored inside the covered band is called out, not moved', () => {
-  // Making the box accurate immediately showed that the SHIPPED DEFAULT is
-  // outside it: Clean Line anchors its caption 464px from the bottom and
-  // TikTok covers 484. Saying so is the point -- a correct rectangle with the
+  // Making the box accurate immediately showed that the SHIPPED DEFAULT was
+  // outside it: Clean Line anchored its caption 464px from the bottom against
+  // TikTok's 484. Saying so is the point -- a correct rectangle with the
   // caption plainly outside it and no explanation is worse than the wrong
-  // rectangle was.
+  // rectangle was. Clean Line moved to 680 the same day, and the studio's
+  // band moved to POSTING_BOTTOM (312) on 6 Sept, so the fixture names a
+  // margin that is inside TODAY'S band rather than a historical one.
   const state = tpl => ({
     projects: [], clips: [], tracks: [],
     templates: [tpl], selectedTemplate: tpl,
@@ -218,9 +220,10 @@ test('a caption anchored inside the covered band is called out, not moved', () =
   });
   const base = { id: 'x', name: 'X', width: 1080, height: 1920 };
 
+  const inBand = Math.round(1920 * (1 - SAFE.postingBox(['youtube', 'tiktok'], 1080, 1920).bottom)) - 100;
   const covered = StudioAdapter.bindings(state(
-    { ...base, captionPosition: 'bottom', captionMarginV: 464 })).safeHint;
-  assert.match(covered, /sits \d+px into the shade/, 'the shipped default is called out');
+    { ...base, captionPosition: 'bottom', captionMarginV: inBand })).safeHint;
+  assert.match(covered, /sits \d+px into the shade/, 'a caption in the band is called out');
 
   const clear = StudioAdapter.bindings(state(
     { ...base, captionPosition: 'bottom', captionMarginV: 700 })).safeHint;
@@ -236,7 +239,7 @@ test('a caption anchored inside the covered band is called out, not moved', () =
   // that template renders.
   const writes = [];
   StudioAdapter.onTemplateField = (...a) => writes.push(a);
-  StudioAdapter.bindings(state({ ...base, captionPosition: 'bottom', captionMarginV: 464 }));
+  StudioAdapter.bindings(state({ ...base, captionPosition: 'bottom', captionMarginV: inBand }));
   assert.deepEqual(writes, [], 'drawing the box saves nothing');
 });
 
