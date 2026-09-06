@@ -37,16 +37,16 @@ const state = (providers, publishing) => ({
   social: { providers }, publishingSettings: { enabled: true, ...publishing },
 });
 
-test('the shade is positioned from the same box the dashed edge is drawn from', () => {
+test('the shade is positioned from the same box the edge span is positioned from', () => {
   const sb = load();
   const v = sb.StudioAdapter.bindings(state({ youtube: { connected: true } }, { youtube: { enabled: true } }));
   // YouTube alone connected still draws the TikTok+Shorts pair (the floor);
-  // what this test pins is that the shade and the dashed edge read ONE box.
+  // what this test pins is that the shade and the edge span read ONE box.
   const box = sb.DCSafeZones.safeArea(['youtube', 'tiktok'], 1080, 1920);
   for (const k of ['left', 'right', 'top', 'bottom']) assert.ok(Math.abs(v.safeBox[k] - box[k]) < 1e-9, k);
   assert.equal(v.safeBox.degenerate, false);
   assert.deepEqual(Array.from(v.safePlatforms), ['youtube', 'tiktok']);
-  // And the design's own edge reads the identical numbers.
+  // And the design's own edge span reads the identical numbers.
   assert.match(v.safeBoxStyle, new RegExp(`top: ${(box.top * 100).toFixed(2)}%`));
   assert.match(v.safeBoxStyle, new RegExp(`bottom: ${((1 - box.bottom) * 100).toFixed(2)}%`));
 });
@@ -172,4 +172,78 @@ test('the silhouette draws the rail, the foot and the tabs from the same box as 
   assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(svg), 'no hex in the silhouette');
   assert.ok(!/var\(/.test(svg), 'no var() in an SVG attribute');
   assert.match(read('src/public/studio-tokens.css'), /#dcSafeChrome \.dc-safe-ui \{[^}]*pointer-events: none/);
+});
+
+
+test('the dashed rectangle is off, and it is off by outranking the export', () => {
+  /* Youssef, 6 Sept 2026: "That dotted zone is so bad btw."
+
+     THREE dashed rectangles were on one frame -- the safe box, the caption's
+     own drag outline and the mark's -- all gold, all the same weight, so the
+     one that meant "you may not draw here" read as one more handle. The
+     shaded bands say it already; the outline only competed with the two
+     outlines that ARE controls.
+
+     It is switched off from the BINDING rather than by editing the export.
+     The design writes `border: 1px dashed ...` and then interpolates
+     `{{ safeBoxStyle }}` in the SAME style attribute, so a later declaration
+     wins -- no re-import, and no hashed class name moves. Both halves are
+     pinned: the ORDER in the generated template, and the declarations in the
+     binding. Restoring the dashes is deleting the three below. */
+  const sb = load();
+  const v = sb.StudioAdapter.bindings(state({}, {}));
+  assert.match(v.safeBoxStyle, /border:\s*0\b/, 'the safe edge draws no border');
+  assert.match(v.safeBoxStyle, /box-shadow:\s*none/, 'and no halo under it');
+  assert.match(v.safeBoxStyle, /border-radius:\s*0/);
+  // Positioning still comes first, so the span is still the box.
+  assert.ok(v.safeBoxStyle.indexOf('top:') < v.safeBoxStyle.indexOf('border:'), 'position, then the switch-off');
+
+  const design = read('design/studio-dashboard.dc.html');
+  const spans = design.split('\n').filter(l => l.includes('{{ safeBoxStyle }}'));
+  assert.ok(spans.length >= 1, 'the export still draws the safe edge span');
+  for (const line of spans) {
+    const border = line.indexOf('border:');
+    const binding = line.indexOf('{{ safeBoxStyle }}');
+    assert.ok(border === -1 || border < binding,
+      'the binding must be interpolated AFTER the export’s own border, or the dashes win');
+  }
+});
+
+test('the covered bands read as a step, not as a fog', () => {
+  /* .46 dulled most of the picture without ever reading as "covered": the
+     bands take 7.8% off the top, 25.2% off the foot and 18.6% across, so at
+     that alpha the whole frame simply looked washed. The floor is stated
+     rather than the value pinned -- tune it, but not back below the number
+     that was called bad. */
+  const css = read('src/public/studio-tokens.css');
+  const rule = css.match(/#dcSafeChrome \.dc-safe-band \{[^}]*\}/);
+  assert.ok(rule, 'the band rule is still here');
+  const alpha = rule[0].match(/rgba\(\s*9\s*,\s*9\s*,\s*10\s*,\s*([.\d]+)\s*\)/);
+  assert.ok(alpha, 'the band is a near-black wash, never a themed token: the stage is night in both themes');
+  assert.ok(Number(alpha[1]) >= 0.6, `the shade must read as a step, not a fog (got ${alpha[1]})`);
+});
+
+test('the caption words take the caption box’s own colour in both themes', () => {
+  /* studio-tokens.css keeps the stage night in daylight by repainting every
+     DESCENDANT of the three video frames. Its comment said the caption was
+     safe "because it carries an INLINE colour" -- true of the BOX, and not of
+     the host-owned span the words live in, which had none: measured on the
+     Templates preview, #FFFFFF in the dark and #BCBCC3 in daylight while the
+     render drew captionPrimary in both. That is invariant 4 in one theme
+     only, which is why nothing caught it.
+
+     Both halves are pinned, because either alone hides the other: the rule
+     still uses a universal descendant, and both painters answer it. */
+  const css = read('src/public/studio-tokens.css');
+  const stage = css.match(/body\.dc-light #studio \*:has\(> #studioPreviewPic\) \*[^{]*\{[^}]*\}/);
+  assert.ok(stage, 'the stage rule still repaints every descendant');
+  assert.match(stage[0], /color:/);
+
+  const html = read('src/public/index.html');
+  const painters = html.split("let span=box.querySelector(':scope > [data-host-owned]');").slice(1);
+  assert.equal(painters.length, 2, 'the editor echo and the Templates sample, both of them');
+  for (const [i, body] of painters.entries()) {
+    assert.match(body.slice(0, 1600), /span\.style\.color\s*=\s*'inherit'/,
+      `caption painter ${i + 1} must hand the words the box’s own colour`);
+  }
 });

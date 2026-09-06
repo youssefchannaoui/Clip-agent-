@@ -4001,6 +4001,24 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         span.setAttribute('data-host-owned','');
         box.appendChild(span);
       }
+      /* THE WORDS TAKE THE CAPTION BOX'S OWN COLOUR, EXPLICITLY.
+
+         studio-tokens.css keeps the stage night in daylight by repainting
+         every descendant of the three video frames -- `...:has(> video) *` --
+         and its comment says the caption is safe from that "because it
+         carries an INLINE colour, which no stylesheet can outrank". True of
+         the BOX, and it stopped being true the moment the words moved into
+         this host-owned span, which has no colour of its own. Measured on
+         the Templates preview: the caption drew #FFFFFF in the dark and
+         #BCBCC3 in daylight, while the render draws captionPrimary in both.
+         That is invariant 4 -- a preview disagreeing with the export -- in
+         one theme only, which is why nothing caught it.
+
+         `inherit` is an inline style, so it outranks that rule exactly as
+         the box does, and it follows the template's own colour instead of
+         pinning a second copy of it here. Written on every paint rather
+         than at creation, so a span made before this comes right too. */
+      if(span.style.color!=='inherit')span.style.color='inherit';
       let want=scaleAyahMarks((vals.edCapWords||[]).map(w=>w.style
         ? `<span style="${esc(w.style)}">${esc(w.text)}</span>`
         : esc(w.text)).join(' '),vals.edCapMarkScale);
@@ -4773,6 +4791,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         span.setAttribute('data-host-owned','');
         box.appendChild(span);
       }
+      /* Inherit the box's caption colour explicitly -- see the note beside
+         the editor's echo above: the stage's daylight rule repaints every
+         descendant of the frame, and only an inline colour outranks it. */
+      if(span.style.color!=='inherit')span.style.color='inherit';
       let want=scaleAyahMarks((vals.capWords||[]).map(w=>w.style
         ? `<span style="${esc(w.style)}">${esc(w.text)}</span>`
         : esc(w.text)).join(' '),vals.capMarkScale);

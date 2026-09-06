@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1541 JS + 687 Python**
+- `npm test` and `npm run check` must pass. Currently **1544 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10543,6 +10543,84 @@ The drawn box matches the table to within the 1px border, at 9:16, 1:1 and
 checker the union rectangle's own edges were read out of the canvas pixels:
 they sit at the union's insets, and nowhere near where a centred box would be.
 All seven probes proven red first.
+
+## The dotted zone, and a caption that greyed in daylight (v3.134.1, 6 Sept 2026)
+
+Youssef, on the Templates preview: "That dotted zone is so bad btw."
+
+### Three dashed rectangles were on one frame
+
+The safe box, the caption's own drag outline and the mark's -- all gold, all
+the same weight. So the one that means "you may not draw here" read as one
+more handle, and the shade underneath it was already saying the same thing
+better. The safe box's outline is off; the two that ARE controls stay.
+
+- **Switched off from the BINDING, not by editing the export.** The design
+  writes `border: 1px dashed ...` and then interpolates `{{ safeBoxStyle }}`
+  in the SAME style attribute, so a later declaration wins -- no re-import,
+  and no hashed class name moves. **Both halves are pinned**, because the
+  order is what makes it work: the test reads the generated template and
+  fails if the binding is ever interpolated before that border. Restoring
+  the dashes is deleting three declarations.
+- **The shade was a FOG at `.46`, not a step.** The bands take 7.8% off the
+  top, 25.2% off the foot and 18.6% across, so at that alpha most of the
+  picture was dulled without any of it reading as covered. `.66` reads as a
+  deliberate step: the clear window is plainly the picture, the shade is
+  plainly the phone's own chrome, and the ghosted rail and caption lines sit
+  on top of it. The test pins a FLOOR with the reason rather than the value
+  -- tune it, but not back below the number that was called bad.
+- It is `rgba(9,9,10,...)`, deliberately not a themed token: the light
+  generator remaps hex and `rgba(0,0,0)` and leaves this alone, so the stage
+  stays night in both themes. Verified in both.
+
+### And the caption preview drew grey in daylight
+
+Found by looking at the same frame in the light theme, which is the only
+place it showed: **the caption read #FFFFFF in the dark and #BCBCC3 in
+daylight**, while the render draws `captionPrimary` in both. That is
+invariant 4 -- a preview disagreeing with the export -- in one theme only.
+
+- **The cause is the stage rule's own safety argument lapsing.**
+  `body.dc-light #studio *:has(> #studioPreviewPic) *` keeps the stage's ink
+  night in daylight, and its comment says the caption is safe from it
+  "because it carries an INLINE colour, which no stylesheet can outrank".
+  True of the BOX. **`*` reaches every DESCENDANT**, and the words live in a
+  host-owned span inside the box which had no colour of its own -- so the
+  box was out of reach and its children were not.
+- **`span.style.color = 'inherit'`, in BOTH caption painters** (index.html
+  has two: the editor's echo and the Templates sample). An inline style
+  outranks that rule exactly as the box does, and `inherit` follows the
+  template's own colour rather than pinning a second copy of it. Written on
+  every paint rather than at creation, so a span made before this comes
+  right too.
+- **The stale claim in studio-tokens.css was corrected rather than left
+  standing.** A comment that explains why a rule is safe becomes a trap the
+  day the markup underneath it changes: it now says the safety is a property
+  of the markup, names the lapse, and says anything else added inside the
+  caption or the mark needs the same.
+- Measured after, both themes: **rgb(255,255,255)**, from #FFFFFF / #BCBCC3.
+
+### Two probe lessons, both already in this file and both paid again
+
+- **A red probe that does not EDIT proves nothing.** The band-alpha probe
+  searched for `rgba(9,9,10,.66)` and the source reads
+  `rgba(9, 9, 10, .66)` -- zero replacements, suite green, and it would have
+  been reported as proof. Every probe here asserts its own replacement count
+  and prints the bytes it removed.
+- **Restarting the preview server is not optional after an index.html edit**
+  -- the CSP hash of the inline block is computed at server start. Seventh
+  recorded occurrence. And `pkill -f 'PORT=4173'` does not match a server
+  started with that as an ENVIRONMENT variable: scan `/proc/*/environ`.
+
+### Measured and NOT changed, so it is stated rather than assumed
+
+**A full-width caption line still runs under the action rail.** Clean Line's
+Side margin is 90px (8.33%) and the safe area's right inset is 12.96% (140px),
+so a line that fills the width overruns by ~50px. The safe-zone law
+(v3.131.0/1) pins the caption's ANCHOR, which is inside the box and correct;
+the horizontal margin is a different question and moving it re-wraps every
+line of every clip from that template. That is Youssef's call, like the
+MarginV move was.
 
 ## Templates was rebuilt as its own screen (v3.134.0, 6 Sept 2026)
 

@@ -8039,14 +8039,25 @@
        * this account's own destinations actually leave room, at this
        * template's own dimensions.
        *
-       * Only the GEOMETRY is bound: the border, the radius and the z-index
-       * stay in the export, because how it looks is the design's and where it
-       * sits is the product's.
+       * AND THE DASHED EDGE IS SWITCHED OFF FROM HERE, deliberately.
+       * v3.132.0 gave the shade its own edge -- the band ENDS where the clear
+       * area begins -- so the export's dashed rectangle became a second line
+       * saying the one thing, in the same gold, at the same weight, as the
+       * caption's own drag outline. Three dashed rectangles on one frame
+       * (safe zone, caption, and the watermark riding the top band) is what
+       * Youssef saw: "that dotted zone is so bad btw."
+       *
+       * It is neutralised through this binding rather than by editing the
+       * design export, because the export interpolates safeBoxStyle AFTER its
+       * own `border: 1px dashed ...` in the same style attribute, so a later
+       * declaration simply wins -- no re-import, and putting the dashes back
+       * is deleting three declarations here. The z-index stays the export's.
        */
       safeBoxStyle: 'left: ' + (SAFE_BOX.left * 100).toFixed(2) + '%;'
         + ' right: ' + ((1 - SAFE_BOX.right) * 100).toFixed(2) + '%;'
         + ' top: ' + (SAFE_BOX.top * 100).toFixed(2) + '%;'
-        + ' bottom: ' + ((1 - SAFE_BOX.bottom) * 100).toFixed(2) + '%;',
+        + ' bottom: ' + ((1 - SAFE_BOX.bottom) * 100).toFixed(2) + '%;'
+        + ' border: 0; border-radius: 0; box-shadow: none;',
       // The line under the preview used to promise "thirds, halves and the
       // safe-zone edges" -- which stopped being true the moment a third could
       // fall outside the box and be dropped. It says which platforms the box
