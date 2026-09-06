@@ -62,7 +62,10 @@
     termB: '',
     blockerDismissed: false,
     tplLayer: 'caption',
-    tplDirty: false,
+    // There is no `tplDirty` flag: "are there unsaved changes" is answered by
+    // comparing this draft against the template it was laid over (draftChanges).
+    // A flag beside it was a second answer to one question, and it was the
+    // wrong one after an Undo -- see the note above draftChanges().
     tplDraft: null,
     tplTimer: null,
     // Real edit history for the Templates screen. Each entry is
@@ -3477,12 +3480,38 @@
       voiceEnhance: true,
     }, activeTemplate || {}, clipStyle || UI.tplDraft || {});
 
+    /*
+     * "Unsaved changes" is a QUESTION, not a flag, and the flag was answering it
+     * wrongly in the one direction that costs work: Undo back to the saved value
+     * left it set, and pressing Save there bumped the template's version AND
+     * queued a re-render of every unposted clip -- minutes of a single-slot
+     * worker for a change that was not one. Measured 6 Sept 2026: v3 -> v4 with
+     * nothing pending.
+     *
+     * So the draft is COMPARED against the template it was laid over. A key
+     * written back to the value it already had is not a change, and `saveTpl`
+     * refuses when nothing differs. Brand fields never enter the draft at all
+     * (they are account-wide and apply on the spot), so they cannot make this
+     * read dirty.
+     */
+    function draftChanges() {
+      var draft = UI.tplDraft;
+      if (!draft || !activeTemplate) return null;
+      var out = null;
+      for (var key in draft) {
+        if (!Object.prototype.hasOwnProperty.call(draft, key)) continue;
+        if (JSON.stringify(draft[key]) === JSON.stringify(activeTemplate[key])) continue;
+        (out = out || {})[key] = draft[key];
+      }
+      return out;
+    }
+    var tplPending = draftChanges();
+
     // Slider writes land on every `input` event. Sending each one meant a PUT
     // per pixel of travel, and each PUT used to queue a re-render for every
     // unposted clip. The value is applied locally at once so the control feels
     // live, and the write is trailing-debounced.
     function saveTemplate(patch) {
-      UI.tplDirty = true;
       UI.tplDraft = Object.assign({}, UI.tplDraft, patch);
       refresh();
       if (UI.tplTimer) global.clearTimeout(UI.tplTimer);
@@ -3537,6 +3566,50 @@
       else refresh();
     }
 
+    /* Mirrors templates.js's BRAND_FIELDS. It is a second copy of a list, which
+       this repo normally refuses -- but the adapter is a browser script that
+       cannot import the server module, and the SERVER is still the authority:
+       `setBrandSettings` writes only the keys it recognises, so a key that
+       drifted out of this list would simply be ignored rather than mis-stored.
+       `test/brand-account-wide.test.mjs` compares the two and fails on drift. */
+    var BRAND_KEYS = [
+      'watermark', 'watermarkOpacity', 'watermarkPosition', 'watermarkColor',
+      'watermarkFontSize', 'watermarkMarginV', 'watermarkMarginH',
+      'promoBarEnabled', 'promoBarStartSec', 'promoBarSeconds',
+      'brandLineEnabled', 'brandLineColor', 'brandLineHeight',
+    ];
+
+    /* Applied to every template on the spot and written to the account behind
+       it. Optimistic for the same reason the clip-length chips are (v3.99.2):
+       a slider writes on every `input` event, so waiting for a round trip
+       before the preview moves is what "clunky" means.
+
+       Scripture is skipped: nothing is drawn over an ayah, so the server
+       refuses brand values there and painting them would show a change that
+       the fold-back then takes away. An account override that switched an
+       ordinary template into quran mode is skipped here too and corrected by
+       the server's own answer -- a delayed paint, never a hole in the rule,
+       which is decided server-side from the SHIPPED file. */
+    function saveBrandFields(patch) {
+      var apply = function (t) {
+        if (!t || t.captionMode === 'quran') return;
+        for (var k in patch) if (Object.prototype.hasOwnProperty.call(patch, k)) t[k] = patch[k];
+      };
+      apply(DATA.selectedTemplate);
+      (DATA.templates || []).forEach(apply);
+      refresh();
+      if (UI.brandTimer) global.clearTimeout(UI.brandTimer);
+      UI.brandPending = Object.assign({}, UI.brandPending, patch);
+      UI.brandTimer = global.setTimeout(function () {
+        UI.brandTimer = null;
+        var pending = UI.brandPending;
+        UI.brandPending = null;
+        /* Window-pinned in index.html; absent in the test realm, where the
+           optimistic apply above is the whole of the behaviour under test. */
+        if (typeof global.dcSaveBrand === 'function') global.dcSaveBrand(pending);
+      }, 450);
+    }
+
     function saveStyle(patch) {
       var ctx = (UI.screen === 'editor' && UI.edClipId)
         ? 'clip:' + UI.edClipId
@@ -3560,7 +3633,19 @@
         }
       }
       if (UI.screen === 'editor' && UI.edClipId) return saveClipStyle(patch);
-      return saveTemplate(patch);
+      /* THE BRAND GROUP BELONGS TO THE ACCOUNT, so it never enters the
+         template draft and never marks the toolbar dirty. Split rather than
+         branch: one control writes one field, but undo/redo replays a whole
+         step and a step can hold both kinds. */
+      var brandPatch = null, stylePatch = null;
+      for (var bk in patch) {
+        if (!Object.prototype.hasOwnProperty.call(patch, bk)) continue;
+        if (BRAND_KEYS.indexOf(bk) > -1) { (brandPatch = brandPatch || {})[bk] = patch[bk]; }
+        else { (stylePatch = stylePatch || {})[bk] = patch[bk]; }
+      }
+      if (brandPatch) saveBrandFields(brandPatch);
+      if (!stylePatch) return;
+      return saveTemplate(stylePatch);
     }
 
     // Builds a settings row whose options come from the schema's enum, so a
@@ -3814,9 +3899,9 @@
       'captionBackgroundOpacity', 'captionHighlight', 'captionHighlightFont', 'captionHighlightItalic',
       'captionHighlightGlow', 'captionPopScale', 'captionPopMs', 'captionFadeMs', 'filterPreset',
       'brightness', 'contrast', 'saturation', 'gamma', 'sharpen', 'vignette', 'grain', 'warm',
-      'overlayEffect', 'overlayIntensity', 'overlayDarken', 'watermarkPosition', 'watermarkColor',
-      'watermarkFontSize', 'watermarkMarginV', 'watermarkMarginH', 'brandLineEnabled', 'brandLineColor',
-      'brandLineHeight', 'voiceEnhance', 'captionBehindSubject',
+      'overlayEffect', 'overlayIntensity', 'overlayDarken',
+
+      'voiceEnhance', 'captionBehindSubject',
     ];
     function presetFields() {
       var out = {};
@@ -7843,20 +7928,26 @@
         if (!activeTemplate) return;
         global.StudioAdapter.onTemplateRestore(activeTemplate.id, activeTemplate.name);
       },
-      tplDirtyLabel: UI.tplDirty ? 'Unsaved changes' : 'All changes saved',
-      tplDirtyDotStyle: 'width: 7px; height: 7px; border-radius: 50%; background: ' + (UI.tplDirty ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-n-7fd1a6, #7FD1A6)') + ';',
+      tplDirtyLabel: tplPending ? 'Unsaved changes' : 'All changes saved',
+      tplDirtyDotStyle: 'width: 7px; height: 7px; border-radius: 50%; background: ' + (tplPending ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-n-7fd1a6, #7FD1A6)') + ';',
+      // Nothing to save is not something to press. The indicator beside it
+      // already reads "All changes saved", so the disabled state explains
+      // itself rather than needing a refusal nobody asked for.
+      tplSaveDisabled: !tplPending,
       saveTpl: function (e) {
         stop(e);
         // Flush anything still debounced, then ask for propagation explicitly.
         if (UI.tplTimer) { global.clearTimeout(UI.tplTimer); UI.tplTimer = null; }
-        var pending = UI.tplDraft; UI.tplDraft = null;
+        var pending = tplPending;
+        UI.tplDraft = null;
+        if (!pending) { refresh(); return; }
         global.StudioAdapter.onSaveTemplate(activeTemplate && activeTemplate.id, pending);
       },
       resetTpl: function (e) {
         stop(e);
         if (UI.tplTimer) { global.clearTimeout(UI.tplTimer); UI.tplTimer = null; }
         UI.tplDraft = null;
-        setUI({ tplDirty: false });
+        refresh();
         global.StudioAdapter.onResetTemplate();
       },
       // Opens the newest clip actually built on this template, rather than only
@@ -8112,7 +8203,7 @@
         if (UI.screen === 'editor') { toast('Nothing to undo.'); return; }
         if (UI.tplTimer) { global.clearTimeout(UI.tplTimer); UI.tplTimer = null; }
         UI.tplDraft = null;
-        setUI({ tplDirty: false });
+        refresh();
         global.StudioAdapter.onResetTemplate();
       },
       // Was a button that existed only to explain why it did nothing.
@@ -9277,7 +9368,6 @@
     // snapped back to its old value 450ms after every change.
     keepDraft: function (patch) {
       UI.tplDraft = Object.assign({}, UI.tplDraft, patch || {});
-      UI.tplDirty = true;
       refresh();
     },
 

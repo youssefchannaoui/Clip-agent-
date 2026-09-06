@@ -559,7 +559,29 @@ function builtInOverrides(user) {
  * one function every template read already passes through, so there is
  * nothing to keep in step and nothing to save.
  */
-export const BRAND_FIELDS = ['watermark', 'watermarkOpacity', 'promoBarEnabled', 'promoBarStartSec', 'promoBarSeconds'];
+/*
+ * EVERY FIELD UNDER BRAND, not only the two switches (Youssef, 6 Sept 2026:
+ * "EVERYTHING UNDER BRAND does nto need to be saved to work, once its
+ * configured it works for all clips").
+ *
+ * The two switches moved here at v3.113.0 and the eight settings BESIDE them
+ * did not, so the screen had two save models in one card: flicking the
+ * watermark on wrote to the account instantly and applied everywhere, while
+ * moving it to the top-left marked "Unsaved changes" and, once saved, changed
+ * the one selected template. Measured before this: a Watermark position change
+ * left all five templates on `top-center` and the toolbar dirty.
+ *
+ * Where the mark sits, what colour it is, how big it is and whether the brand
+ * line is drawn are the same KIND of decision as whether it appears at all --
+ * they are the account's branding, not a caption style -- so they belong to
+ * the account for the same reason.
+ */
+export const BRAND_FIELDS = [
+  'watermark', 'watermarkOpacity', 'watermarkPosition', 'watermarkColor',
+  'watermarkFontSize', 'watermarkMarginV', 'watermarkMarginH',
+  'promoBarEnabled', 'promoBarStartSec', 'promoBarSeconds',
+  'brandLineEnabled', 'brandLineColor', 'brandLineHeight',
+];
 
 export function brandSettings(user) {
   const id = userIdOf(user);
@@ -571,9 +593,19 @@ export function brandSettings(user) {
 export function setBrandSettings(user, patch = {}) {
   const id = userIdOf(user);
   if (!id) throw new Error('Changing this needs an account.');
+  /*
+   * SANITISED ON THE WAY IN, not only on the way out. withBrand() runs the
+   * merged template through sanitiseTemplate, so a junk value was always
+   * clamped before it reached a render -- but the STORED record kept it, and
+   * the panel reads the stored record, so the screen could show a number the
+   * export would never use. The patch is passed as sanitiseTemplate's own
+   * `input` so an empty watermark still reads as the deliberate choice it is
+   * rather than falling back to DEENCLIPPED.
+   */
+  const clean = sanitiseTemplate(patch, { id: 'brand', builtIn: false, userId: '' });
   const next = { ...(brandSettings(user) || {}) };
   for (const key of BRAND_FIELDS) {
-    if (Object.prototype.hasOwnProperty.call(patch, key)) next[key] = patch[key];
+    if (Object.prototype.hasOwnProperty.call(patch, key)) next[key] = clean[key];
   }
   writeUserSetting(state, id, 'brand', next);
   save();

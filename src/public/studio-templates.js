@@ -166,7 +166,15 @@
         h('button', { type: 'button', class: 'dct-icon', title: 'Undo', 'aria-label': 'Undo', on: { click: 'undoEdit' } }, [ph('ph ph-arrow-counter-clockwise')]),
         h('button', { type: 'button', class: 'dct-icon', title: 'Redo', 'aria-label': 'Redo', on: { click: 'redoEdit' } }, [ph('ph ph-arrow-clockwise')]),
         h('button', { type: 'button', class: 'dct-btn', on: { click: 'resetTpl' } }, 'Reset'),
-        h('button', { type: 'button', class: 'dct-btn dct-primary', 'data-tour': 'tpl-save', on: { click: 'saveTpl' } }, 'Save and apply'),
+        // Disabled with nothing to save. A save is the one action that bumps the
+        // template's version AND re-renders every unposted clip, so pressing it
+        // on an unchanged template spends a single-slot worker for nothing --
+        // measured 6 Sept 2026, v3 -> v4 with no pending edit. The runtime omits
+        // an attribute bound to `false`, so this is a real boolean.
+        h('button', {
+          type: 'button', class: 'dct-btn dct-primary', 'data-tour': 'tpl-save',
+          disabled: b('tplSaveDisabled'), on: { click: 'saveTpl' },
+        }, 'Save and apply'),
       ]),
 
       // ── body ─────────────────────────────────────────────────────────────

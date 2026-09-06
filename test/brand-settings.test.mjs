@@ -85,8 +85,17 @@ test('BRAND_FIELDS is the whole list, and nothing else rides along', () => {
   // A field that reaches this setter without being in the list would be a
   // template edit wearing a brand switch's clothes -- applied to every
   // template, account-wide, with no version bump and no save.
+  // Widened from five to thirteen on 6 Sept 2026 -- EVERY field under Brand,
+  // not only the two switches (Youssef: "EVERYTHIG UNDER BRAND does nto need
+  // to be saved to work"). The placement rows, the colour and the brand line
+  // were template DRAFT fields until then: they needed a save and they landed
+  // on the one template you happened to be looking at.
   assert.deepEqual(Array.from(templates.BRAND_FIELDS).sort(), [
-    'promoBarEnabled', 'promoBarSeconds', 'promoBarStartSec', 'watermark', 'watermarkOpacity',
+    'brandLineColor', 'brandLineEnabled', 'brandLineHeight',
+    'promoBarEnabled', 'promoBarSeconds', 'promoBarStartSec',
+    'watermark', 'watermarkColor', 'watermarkFontSize',
+    'watermarkMarginH', 'watermarkMarginV', 'watermarkOpacity',
+    'watermarkPosition',
   ]);
   templates.setBrandSettings(user, { captionFontSize: 999 });
   const tpl = templates.listTemplates(user).find(t => !templates.isScriptureTemplate(t.id));

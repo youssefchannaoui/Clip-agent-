@@ -340,6 +340,20 @@
   color: var(--dc-on-gold);
 }
 #dcTemplates .dct-btn.dct-primary:hover { border-color: var(--dc-gold-hover); background: var(--dc-gold-hover); }
+/*
+ * A disabled Save. Written in var() names and `opacity` alone, for the reason
+ * the block above gives: a hex here makes the generator emit a daylight twin at
+ * a specificity that outranks .dct-primary and the button loses its gold.
+ * :hover is neutralised too, or the gold hover still lights a dead control.
+ */
+#dcTemplates .dct-btn[disabled],
+#dcTemplates .dct-btn[disabled]:hover {
+  opacity: .45;
+  cursor: default;
+  border-color: var(--dc-line);
+  background: var(--dc-bg-raised);
+  color: var(--dc-ink-body);
+}
 #dcTemplates .dct-btn.dct-wide { width: 100%; flex: none; }
 #dcTemplates .dct-btn.dct-sm, #dcTemplates .dct-icon.dct-sm { height: 26px; }
 #dcTemplates .dct-icon {

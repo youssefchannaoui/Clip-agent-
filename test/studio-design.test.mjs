@@ -3055,7 +3055,7 @@ const TPL_STATE = {
 
 function templatesScreen(extra = {}) {
   Object.assign(StudioAdapter.ui, {
-    screen: 'templates', tplDraft: null, tplDirty: false, tplTimer: null,
+    screen: 'templates', tplDraft: null, tplTimer: null,
     tplPast: [], tplFuture: [], tplReplaying: false, ...extra,
   });
   StudioAdapter.onTemplateField = () => {};
@@ -3064,10 +3064,14 @@ function templatesScreen(extra = {}) {
 }
 
 test('Undo discards unsaved template edits when there is no history', () => {
-  templatesScreen({ tplDraft: { captionFontSize: 42 }, tplDirty: true });
+  // The `tplDirty` flag is gone (v3.136.0): "are there unsaved changes" is
+  // answered by comparing the draft against the template, so clearing the
+  // draft IS clearing the dirty state. A flag beside it was a second answer to
+  // one question, and it was wrong in the direction that costs work.
+  templatesScreen({ tplDraft: { captionFontSize: 42 } });
   StudioAdapter.bindings(TPL_STATE).undoEdit({ preventDefault() {} });
   assert.equal(StudioAdapter.ui.tplDraft, null);
-  assert.equal(StudioAdapter.ui.tplDirty, false);
+  assert.equal(StudioAdapter.bindings(TPL_STATE).tplDirtyLabel, 'All changes saved');
 });
 
 test('Undo steps back through edits, and Redo puts them back', () => {

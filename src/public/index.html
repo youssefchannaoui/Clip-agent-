@@ -6911,11 +6911,9 @@ function renderStudio(){
       if(r&&r.forked&&r.template&&r.template.id){
         StudioAdapter.ui.jobTplId=r.template.id;
         StudioAdapter.ui.tplDraft=null;
-        StudioAdapter.ui.tplDirty=false;
         StudioAdapter.showToast(`"${r.forkedFrom}" is built in — saved as "${r.template.name}" and switched you to it`);
         return;
       }
-      StudioAdapter.ui.tplDirty=false;
       StudioAdapter.ui.tplDraft=null;
       StudioAdapter.showToast(n?`Saved — re-rendering ${n} clip${n===1?'':'s'}`:'Template saved')})};
 
@@ -6959,7 +6957,6 @@ function renderStudio(){
       if(!confirm(`Put “${name}” back to its shipped settings? Your changes to it are discarded.`))return;
       studioDo(async()=>{
         StudioAdapter.ui.tplDraft=null;
-        StudioAdapter.ui.tplDirty=false;
         await api(`/api/templates/${encodeURIComponent(id)}/reset`,{method:'POST',body:'{}'});
       },`“${name}” restored`);
     };
@@ -8292,6 +8289,14 @@ StudioAdapter.onProbeSource=async url=>{try{
       if(DATA&&out){ if(out.brand)DATA.brand=out.brand; if(out.templates)DATA.templates=out.templates; if(out.selectedTemplate)DATA.selectedTemplate=out.selectedTemplate; }
       return out;
     }
+    /* WINDOW-PINNED, because studio-adapter.js is a separate <script src> and
+       cannot see anything declared in this block -- the scope trap this file
+       records eight times over, and it fails SILENTLY here: saveBrandFields
+       guards on `typeof global.dcSaveBrand === 'function'`, so without the pin
+       every Brand row would apply locally, look right, and never reach the
+       server. The Templates screen's Brand ROWS reach it through this; the two
+       switches below call saveBrand directly. */
+    window.dcSaveBrand=saveBrand;
 
       const paintWatermark=()=>{
         try{

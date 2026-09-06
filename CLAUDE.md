@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1556 JS + 687 Python**
+- `npm test` and `npm run check` must pass. Currently **1574 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10219,6 +10219,115 @@ and never to be STOPPED. Every fault below is a stop going wrong.
   status should read `interrupted`, then `resumed: 1` with "Resuming from the
   saved clip plan" in its stage, and the clip count should come back whole.
   Until then the claim is the tests', not the box's.
+
+## Brand belongs to the account; the toolbar stopped charging for nothing (v3.136.0, 6 Sept 2026)
+
+Youssef: "REMEMBER EVERYTHIG UNDER BRAND does nto need to be saved to work,
+once its configured it works for all clips. top bar of saving about everything
+in terms of templates, save as new template should ALL WORK PERECTLY."
+
+### The Brand group had TWO save models in one column
+
+The two SWITCHES (Show watermark, Show promo bar) have belonged to the account
+since v3.113.0 -- one write, every template, nothing to save. The seven
+PLACEMENT rows sitting directly under them went into the template DRAFT. So
+moving the watermark left the toolbar reading "Unsaved changes" and, once
+saved, applied to the one template you happened to be looking at -- in a group
+whose own copy says it applies to all of them. **Measured before the change: a
+Watermark position change left all five templates on `top-center` with the
+account's brand record empty and the bar dirty.**
+
+- **`BRAND_FIELDS` went from 5 to 13** -- position, colour, size, both insets,
+  and the brand line's switch, colour and height join the two switches and the
+  promo bar's three. It is the one definition of what belongs to the account,
+  and `saveStyle` now SPLITS its patch against it: brand keys go to
+  `POST /api/brand` and apply on the spot, everything else becomes the draft.
+- **The browser mirrors that list as `BRAND_KEYS`, and the drift between the
+  two is what the test guards hardest.** A field missing from it silently goes
+  back to being a per-template draft -- no error, no failing render, just a
+  control that needs a save in the group documented as needing none.
+- **`window.dcSaveBrand` -- the scope trap, for the EIGHTH time.**
+  studio-adapter.js is a separate `<script src>` and cannot see anything
+  declared in index.html's inline block, and here it fails SILENTLY:
+  `saveBrandFields` guards on `typeof global.dcSaveBrand === 'function'`, so
+  without the pin every Brand row would apply locally, look right, and never
+  reach the server.
+- **Scripture is still exempt and it is not the account's to waive** --
+  `withBrand` returns the template untouched for the quran template, read from
+  the SHIPPED file so an override cannot mint an exemption. Measured after:
+  four templates take the account's value, quran-recitation keeps its own.
+- **The paywall did not move.** `POST /api/brand` runs `assertWatermarkAllowed`
+  and only refuses when `watermark` or `watermarkOpacity` are in the body and
+  would remove the mark -- which is the host panel's switch, not these rows. A
+  free account can place and colour the mark and still cannot delete it.
+- **Sanitised on the way IN, not only on the way out.** `withBrand` already
+  clamped on read, so a junk value could never reach a render -- but the panel
+  reads the STORED record, so the screen could show a number the export would
+  never use. The patch is passed as `sanitiseTemplate`'s own `input` so an
+  empty watermark still reads as the deliberate choice it is.
+- **Eight fields left `PRESET_FIELDS` with them.** A saved look carrying the
+  watermark's placement would move it on every template the moment it was
+  applied -- and applying a look is not a brand decision.
+
+### "Save and apply" was spending a worker on nothing
+
+`saveTemplate` bumps the version unconditionally and the route propagates with
+`propagate: true`, so pressing Save with nothing pending re-rendered every
+unposted clip. **Measured in a browser: v3 -> v4 with no pending edit.** On a
+single-slot box that is minutes of real work for a change that was not one.
+
+- **`tplDirty` was a stored FLAG answering a question it could not see.** Undo
+  back to the value already on the template left it set, so the bar read
+  "Unsaved changes" beside a template with none -- and Save was armed. The flag
+  is GONE; the draft is COMPARED against the template it was laid over
+  (`draftChanges`), and that one answer drives the label, the dot, and whether
+  the button can be pressed at all. A second answer to one question is how
+  every drift in this file started, and this one was wrong in the direction
+  that costs money.
+- **Only what actually moved is sent.** A draft holding six keys of which one
+  differs sends that one.
+- **The button is genuinely `disabled`, not styled to look it.** The runtime
+  omits an attribute bound to `false` and emits a bare one for `true`, so this
+  is a real boolean rather than the string "false", which HTML reads as
+  disabled for ever. The indicator beside it already says "All changes saved",
+  so the state explains itself.
+- **The disabled rule is written in `var()` names and `opacity` alone**, the
+  escape hatch v3.127.0 established: a hex would make `build-light-theme`
+  re-emit it at a specificity that outranks `.dct-primary`, and the button
+  would lose its gold in daylight. Re-running the generator produced a
+  byte-identical file, which is the proof.
+- **Reset and "Restore the shipped defaults" stay two different controls.**
+  Reset drops unsaved changes; Restore clears the account's overrides. A test
+  asserts Reset asks the server to restore nothing.
+
+### Driven, in both themes, and every probe proven red
+
+Undo/Redo/Reset/Save, Save look/Apply/Rename/Delete, Restore the shipped
+defaults, and all seven Brand rows were driven with real controls at 1440x900
+in night and daylight: one label left edge (273), one control left edge (443),
+one readout right edge (726) across the Brand group, 0 elements overflowing, no
+page scroll, 0 page errors, and **0 DOM operations on an unchanged repaint** on
+Templates, Home and the queue. Eleven red probes, all proven.
+
+**Three faults in the probes themselves, each already in this file:**
+
+- **`git checkout <file>` during a red probe DESTROYED uncommitted work.**
+  Restoring index.html that way wiped the whole Brand change out of it, and the
+  suite then reported a failure that looked like the fix being wrong. Copy the
+  file to the scratchpad first and restore from that; never `git checkout` a
+  file carrying work in progress.
+- **A red probe that COMMENTS a line out is not a red probe when the assertion
+  is a regex over the source** -- the text is still there. Eighth occurrence.
+  The assertion strips block comments now, and the probe deletes the line.
+- **A probe that measures nothing reports clean.** The first toolbar probe
+  looked for a row labelled `/Caption size|Text size|Font size/`; the row is
+  called **Size**, under **Caption text**, so `row: null` and steps 1-5 tested
+  nothing and printed nothing wrong. A row finder that returns null must fail
+  the probe, not pass it.
+  Two more selector traps in the same screen: a colour row contains a
+  `<label class="dct-swatch">` wrapping its input, so `querySelector('label')`
+  finds an EMPTY label rather than the row's name -- read `.dct-kl`; and a
+  switch is a `<button role="switch">`, not a checkbox.
 
 ## The safe box is always TikTok and Shorts (v3.133.0, 6 Sept 2026)
 

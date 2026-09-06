@@ -273,7 +273,11 @@ test('a saved look carries the style and neither brand switch', () => {
   for (const key of ['id', 'name', 'width', 'height']) {
     assert.ok(!(key in fields), `a look carries "${key}"`);
   }
-  assert.ok(Object.keys(fields).length >= 55, 'a look is the whole screen: ' + Object.keys(fields).length);
+  // 47, not 55: the eight brand fields left PRESET_FIELDS on 6 Sept 2026 when
+  // the whole Brand group became the account's. A look that carried the
+  // watermark's placement would move it on every template the moment it was
+  // applied -- and applying one is not a brand decision.
+  assert.ok(Object.keys(fields).length >= 47, 'a look is the whole screen: ' + Object.keys(fields).length);
 });
 
 // ── mounting: the two ways this screen erased itself ────────────────────────
