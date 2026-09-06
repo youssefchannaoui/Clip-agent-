@@ -4922,6 +4922,15 @@ function studioWanted(){return window.STUDIO_SHELL===true}
     /* A 9:16 frame under this is a thumbnail, not a preview; past it the
        preview column scrolls itself rather than shrinking further. */
     const FRAME_MIN_HEIGHT=300;
+    /* Breathing room under the preview column's last row.
+       Filling to the scroller's exact foot put the "Preview on a real clip"
+       row hard against the bottom of the window with nothing under it, which
+       reads as cut off whether or not a pixel is actually lost -- and the
+       scroller the walk settles on does not always carry the design's own
+       bottom padding, so "the foot" is not reliably where the design meant the
+       page to end. A fixed gap is honest about that instead of trusting a
+       measurement that varies by which ancestor was claimed first. */
+    const FRAME_BOTTOM_GAP=28;
     function clearTemplatesLayout(){
       if(!tplLayout)return;
       for(const [node,props] of tplLayout){
@@ -5007,19 +5016,57 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          overflow past the scroller's foot comes off the frame's height, the
          width following through its own aspect-ratio. Below FRAME_MIN_HEIGHT
          the column scrolls on its own instead -- still never the page. */
-      const limit=scroller.getBoundingClientRect().bottom-(parseFloat(getComputedStyle(scroller).paddingBottom)||0);
-      const over=previewCol.getBoundingClientRect().bottom-limit;
-      if(over>0.5){
+      /* IT GROWS AS WELL AS SHRINKS, and until v3.132.0 it only ever shrank.
+         `if(over>0.5)` meant the frame kept the design's 264px whenever it
+         fitted -- so on any screen with room to spare the preview sat at a
+         third of the width of its own column with the rest empty. Measured at
+         1440x950: a 770px column holding a 264px frame, and 107px of vertical
+         room going unused. Youssef, 6 Sept 2026: "The right side video should
+         fill as much as the page can."
+
+         `over` is signed, so one subtraction serves both directions: positive
+         is overflow to take off the frame, negative is spare room to give it.
+
+         RUN TWICE, AND THE SECOND PASS IS NOT BELT AND BRACES. The content
+         BELOW the frame is not a constant: the safe-zone hint is a sentence
+         whose length depends on how many platforms are connected, so it wraps
+         to one line or two and the column's foot moves 19px with it. Measured
+         while building this: a single pass read 88px of content below the
+         frame, sized the frame to fill 906, and the hint then wrapped to two
+         lines and pushed the CTA row 42px past the cut -- which is exactly the
+         fault v3.126.0 fixed, reintroduced by the fix for something else. The
+         second pass measures the reflowed column and corrects; it is a no-op
+         whenever the first pass was already right, because it is gated on the
+         same half-pixel test. */
+      const fitFrame=()=>{
+        const limit=scroller.getBoundingClientRect().bottom
+          -(parseFloat(getComputedStyle(scroller).paddingBottom)||0);
+        const over=previewCol.getBoundingClientRect().bottom-(limit-FRAME_BOTTOM_GAP);
         const fr=frame.getBoundingClientRect();
         const ratio=fr.height>0?fr.width/fr.height:9/16;
-        const height=fr.height-over;
+        /* CAPPED BY THE COLUMN'S OWN WIDTH, which is what stops a WIDE
+           template running out of it: a 16:9 frame given the full height wants
+           to be 1.78x as wide as it is tall, so at 576px of room it asks for
+           1024px inside a 770px column and overflows sideways. A 9:16 frame
+           never reaches this -- it would need 1369px of height -- so the cap
+           does nothing on the common case and everything on the uncommon one. */
+        const cs=getComputedStyle(previewCol);
+        const usableW=Math.max(0,previewCol.clientWidth
+          -(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0));
+        const height=Math.min(fr.height-over, usableW/ratio);
+        if(Math.abs(height-fr.height)<=0.5)return false;
+        /* The width is FLOORED, never rounded: `over` is measured to a
+           fractional boundary and rounding up puts the CTA row back over the
+           cut. Growing is never worth re-breaking that. */
         if(height>=FRAME_MIN_HEIGHT){
           set(frame,{'width':Math.floor(height*ratio)+'px'});
         }else{
           set(frame,{'width':Math.floor(FRAME_MIN_HEIGHT*ratio)+'px'});
           set(previewCol,{'max-height':'100%','overflow-y':'auto','min-height':'0'});
         }
-      }
+        return true;
+      };
+      if(fitFrame())fitFrame();
       /* A resize changes both answers and does not repaint the studio, so the
          lock would survive into a viewport that cannot hold it. */
       if(!window.__dcTplResize){
