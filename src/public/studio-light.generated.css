@@ -598,6 +598,8 @@ body.dc-light #dcTasks .dctk-tab-n{color:#6A6A72}
 body.dc-light #dcTasks .dctk-tab.is-on .dctk-tab-n{color:#8A6425}
 body.dc-light #dcTasks .dctk-tab-dot{background:#8A6425}
 body.dc-light #dcTasks .dctk-gnote{color:#62626B}
+body.dc-light #dcTasks .dctk-gnote.dctk-nopay{border:1px solid rgba(162, 118, 44, 0.253);background:rgba(162, 118, 44, 0.057);color:#33333A}
+body.dc-light #dcTasks .dctk-foot{border-top:1px solid #E2E2E6;color:#6A6A72}
 body.dc-light #dcTasks .dctk-row{border-top:1px solid #E2E2E6}
 body.dc-light #dcTasks .dctk-row:hover{background:#FFFFFF}
 body.dc-light #dcTasks .dctk-row.is-now{background:rgba(162, 118, 44, 0.069)}

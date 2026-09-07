@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1719 JS + 741 Python**
+- `npm test` and `npm run check` must pass. Currently **1721 JS + 741 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -13415,3 +13415,65 @@ unchanged, the rules setting no colour.
 above the fix quotes the old line verbatim, so the assertion matched the
 comment rather than the code. Comments are stripped before the match. Strip,
 never reword.
+
+## The tasks panel was offering rewards nobody could collect (v3.147.3, 8 Sept 2026)
+
+Youssef: "improve that task thing, it looks so bad, and idk if tokens can be
+regiven it should be a 1 time thing ... the opening ui i like the sidebar."
+
+### The rewards cannot be given twice, and both guards are now proven alone
+
+Answered by driving it rather than by reading. Two independent guards:
+
+1. **`task.claimed`**, read from `user.taskRewards[id]` -- a per-rung stamp that
+   never expires and that only the eight rungs can ever write to.
+2. **`billing.grantBonusTokens`**, keyed `task:<id>` in
+   `billing.processedBonusGrants`.
+
+A test already drove a double claim over HTTP and a third wiped the DISPLAY
+record to prove billing refuses on its own. The missing case was the mirror,
+and it matters because **`processedBonusGrants` is `unshift`ed and then
+`slice(0, 200)`** -- the oldest keys fall off, so a long-lived account's rung
+key can age out and the keyed guard stops recognising the repeat. The new test
+empties that list and asserts the display record refuses the claim by itself.
+**Proven red by deleting the `task.claimed` line: two failures.** So each guard
+holds with the other gone.
+
+### The panel was drawing dead controls on the operator's own account
+
+MEASURED on Youssef's account before designing anything, and this is the whole
+of "it looks so bad": **all ten rungs `done`, four of them worth 5 tokens each,
+`claimable: 0`, `earned: 0`.** `isUnlimited` makes a grant a no-op, so an
+operator's rungs come back finished and unclaimable for ever -- and every one
+of them was drawing a **"5 tokens" chip that no press could ever collect**.
+Twenty tokens' worth of dead controls, which is invariant 9 wearing a reward's
+clothes.
+
+- `tasks()` already returns `unlimited`, so the panel says it ONCE at the top
+  ("Your plan has unlimited tokens, so these rewards are not paid to this
+  account. The rungs still track what you have done.") and draws no per-row
+  chip at all. The empty `is-none` slot still holds the column open, so the
+  rows do not go ragged.
+- **A bar only while there is progress LEFT.** A full gold bar under a row that
+  already carries a gold tick says the same thing twice, and four of the ten
+  rows were drawing one -- most of the clutter.
+- **"Each reward is paid once."** on the panel, because that is where the
+  question gets asked, and only where a reward can actually be paid.
+
+**The sidebar card is untouched** -- he likes it, and it was not the complaint.
+
+### Measured after, at a REAL viewport
+
+The first reading came back with 105px rows, a 163px right edge and ticks 21px
+off their titles, which reads as a wrecked layout. **`innerWidth` was 0** --
+the Browser pane was hidden, so every number was a fiction, and the body still
+carried `dcm-on dcm-own` because a 0px viewport is a phone. Sized to 1440x900
+first, the panel measures: **every tick and every chip 0px off its title**, one
+chip width (80), one right edge (954), and row heights differing only where a
+progress bar is genuinely present (62/63 done, 73 in progress). The 8px the
+body "overflows" is the rows' deliberate bleed into the card padding.
+**Print `innerWidth` beside any layout measurement** -- this file has now paid
+for that twice.
+
+Three probes proven red: the unlimited guard removed, the bar's `!done` guard
+removed, and the footnote shown to everyone.

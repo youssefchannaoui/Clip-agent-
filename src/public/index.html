@@ -10063,19 +10063,31 @@ function paintTasksPanel(){
       +'</button>';
   }).join('')+'</div>';
 
+  /* THE REWARDS DO NOT APPLY TO EVERY ACCOUNT, AND THE PANEL HAS TO SAY SO.
+     `isUnlimited` makes a grant a no-op, so an operator's rungs come back done
+     with `claimable: false` for ever -- and the panel was drawing a "5 tokens"
+     chip on every one of them. Measured on the operator's own account: 10 of
+     10 rungs, four of them finished and worth 5 each, `claimable: 0`,
+     `earned: 0`. Twenty tokens' worth of chips that no press could ever
+     collect, which is invariant 9 wearing a reward's clothes. Said once, at
+     the top, and the per-row chips stand down below. */
   const head='<p class="dctk-gnote">'+esc(group.locked
     ? 'Opens once you have finished '+(group.needsTitle||'the group before it')+'.'
-    : group.note)+'</p>';
+    : group.note)+'</p>'
+    +(rows.unlimited?'<p class="dctk-gnote dctk-nopay">Your plan has unlimited tokens, so these rewards are not paid to this account. The rungs still track what you have done.</p>':'');
 
   const list=group.tasks.map(task=>{
-    const bar=task.progress&&task.progress.of
+    /* A bar only while there is progress LEFT to show. A full gold bar under a
+       row that already carries a gold tick says the same thing twice and was
+       most of the clutter -- four of the ten rows were drawing one. */
+    const bar=task.progress&&task.progress.of&&!task.done
       ? '<div class="dctk-bar"><i style="width:'+Math.round((task.progress.at/task.progress.of)*100)+'%"></i></div>'
       : '';
     const count=task.progress?' \u00b7 '+task.progress.at+' of '+task.progress.of:'';
     /* Three states for the reward, and only one of them is a button. A rung
        with no reward draws nothing rather than "+0 tokens", which would read
        as a fault. */
-    const prize=task.reward>0
+    const prize=(task.reward>0&&!rows.unlimited)
       ? (task.claimed
           ? '<span class="dctk-prize is-claimed">Claimed</span>'
           : task.claimable
@@ -10091,7 +10103,13 @@ function paintTasksPanel(){
       +prize+'</div>';
   }).join('');
 
-  const html=tabs+head+'<div class="dctk-list">'+list+'</div>';
+  /* Youssef, 8 Sept 2026: "idk if tokens can be regiven it should be a 1 time
+     thing". It is -- two independent guards, each proven to hold with the
+     other removed (test/task-ladder.test.mjs). Worth saying on the screen so
+     nobody has to wonder, and only where a reward can actually be paid. */
+  const foot=(!rows.unlimited&&group.tasks.some(t=>t.reward>0))
+    ? '<p class="dctk-foot">Each reward is paid once.</p>' : '';
+  const html=tabs+head+'<div class="dctk-list">'+list+'</div>'+foot;
   if(body.innerHTML!==html)body.innerHTML=html;
 }
 

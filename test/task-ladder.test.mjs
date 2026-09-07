@@ -220,6 +220,27 @@ test('the grant is refused even if the display record is lost', async () => {
   assert.ok(me.taskRewards?.three, 'and the display record was restored');
 });
 
+test('and refused even if the BILLING key has aged off its 200-entry cap', async () => {
+  /*
+   * The mirror of the test above, and the one case where the keyed dedupe
+   * cannot help: `processedBonusGrants` is `unshift`ed and then
+   * `slice(0, 200)`, so the OLDEST keys fall off. If a task rung's key ever
+   * ages out, `grantBonusTokens` no longer recognises the repeat and the only
+   * thing standing between the customer and a second payment is
+   * `task.claimed`, read from `user.taskRewards` — a per-rung stamp that never
+   * expires and that only eight rungs can ever write to.
+   *
+   * Youssef asked outright whether tokens can be given twice. Between this and
+   * the test above, each guard is proven to hold with the other one gone.
+   */
+  const held = balance();
+  me.billing.processedBonusGrants = [];   // as if the key had aged out
+  const res = await claim('three');
+  assert.equal(res.status, 400, 'the display record refuses it on its own');
+  assert.match((await res.json()).error, /already claimed/i);
+  assert.equal(balance(), held, 'and nothing is paid');
+});
+
 test('an operator is offered nothing, because an operator cannot be paid', async () => {
   const billing = await import('../src/billing.js');
   assert.equal(billing.isUnlimited({ id: 'op-1', role: 'owner' }), true);
@@ -666,4 +687,41 @@ test('the tasks card rides down with the tail, and its seat is asserted every pa
     'the seat is asserted by POSITION, not by mere presence in the nav');
   assert.doesNotMatch(body, /nav\.contains\(slot\)\)return slot/,
     'the presence-only early return is what let the card drift past the tail');
+});
+
+test('the panel offers nothing to an account that cannot be paid', () => {
+  /*
+   * Youssef, 8 Sept 2026: "improve that task thing, it looks so bad."
+   *
+   * MEASURED ON HIS OWN ACCOUNT before touching anything, and the panel was
+   * telling him something untrue: all ten rungs `done`, four of them worth 5
+   * tokens each, and `claimable: 0`, `earned: 0`. `isUnlimited` makes a grant
+   * a no-op, so an operator's rungs can never be claimed — and every one of
+   * them was drawing a "5 tokens" chip that no press could ever collect.
+   * Twenty tokens' worth of dead controls, which is invariant 9 wearing a
+   * reward's clothes.
+   *
+   * `tasks()` already returns `unlimited`, so the panel can say it once at the
+   * top and draw no per-row chip at all.
+   */
+  const host = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  const at = host.indexOf('function paintTasksPanel()');
+  assert.ok(at > 0);
+  const fn = host.slice(at, host.indexOf('\n}\n', at));
+  const code = fn.replace(/\/\*[\s\S]*?\*\//g, '');   // never match our own explanation
+
+  assert.match(code, /task\.reward>0&&!rows\.unlimited/,
+    'an unlimited account is offered no reward chip at all');
+  assert.match(code, /dctk-nopay/, 'and is told once, at the top, why');
+
+  // A full gold bar under a row that already carries a gold tick says the same
+  // thing twice — four of the ten rows were drawing one.
+  assert.match(code, /task\.progress&&task\.progress\.of&&!task\.done/,
+    'the progress bar is drawn only while there is progress left to show');
+
+  // The answer to "can tokens be re-given", said where the question is asked,
+  // and only where a reward can actually be paid.
+  assert.match(code, /Each reward is paid once/);
+  assert.match(code, /!rows\.unlimited&&group\.tasks\.some\(t=>t\.reward>0\)/,
+    'the footnote is not shown to an account no reward applies to');
 });
