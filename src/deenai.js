@@ -511,6 +511,124 @@ export function askContext(user) {
   };
 }
 
+/*
+ * ANSWERED WITHOUT THE MODEL, where the answer is arithmetic this module has
+ * already done.
+ *
+ * Measured on production before this was written: a cold ask took 25.6s and a
+ * warm one 6.8s, and the warm answer INVENTED two things -- "the most
+ * efficient rate is 80%" (no such figure exists anywhere in the context) and
+ * that the kept titles "are popular and well-received", which is an audience
+ * claim this product cannot make because no platform sends audience data back
+ * and the privacy policy says so. Both are forbidden by the prompt in as many
+ * words, and qwen3:1.7b did them anyway -- which is this repo's oldest lesson
+ * about that model: a negative instruction is a suggestion, and anything that
+ * must not happen belongs in code.
+ *
+ * The three chips are strings the APP put in the box (AI_PROMPTS in
+ * studio-adapter.js), so intent is certain -- no classifier and no possible
+ * misfire -- and two of them ask for something insights() already computes.
+ * The fastest, truest answer is the one with no model in it: it is instant, it
+ * cannot hallucinate, and it reads the SAME arithmetic as the cards below it,
+ * so the answer and the screen can never contradict each other.
+ *
+ * "How do I grow on TikTok?" is deliberately NOT here. It is advice rather
+ * than arithmetic, and answering it from a table would be inventing the very
+ * thing this exists to prevent.
+ */
+function tidy(text) { return String(text || '').trim().toLowerCase().replace(/\s+/g, ' '); }
+
+function clipNextAnswer(user) {
+  const cards = insights(user);
+  const best = cards.find(c => c.kicker === 'Clip more from');
+  const waiting = ownClips(user).filter(c => c.status === 'waiting').length;
+  const lines = [];
+  if (best) {
+    lines.push(`Clip more of “${best.title}”. It is your best keep rate at ${best.figure} — `
+      + 'more sections of a lecture already imported cost minutes rather than bandwidth, '
+      + 'because the source is cached.');
+  }
+  if (waiting) {
+    lines.push(`Before that, ${waiting} ${waiting === 1 ? 'clip is' : 'clips are'} waiting in the review queue. `
+      + 'Nothing posts until you approve it, so those are finished clips sitting still.');
+  }
+  if (!lines.length) return null;
+  return lines.join('\n\n');
+}
+
+function bestLectureAnswer(user) {
+  const clips = ownClips(user);
+  const projects = ownProjects(user);
+  const byProject = new Map();
+  for (const c of clips) {
+    const bucket = byProject.get(c.projectId) || { total: 0, kept: 0 };
+    bucket.total += 1;
+    if (decided(c) === 'approved') bucket.kept += 1;
+    byProject.set(c.projectId, bucket);
+  }
+  // Four DECIDED clips before a keep rate is a rate rather than one shrug
+  // wearing a percentage sign -- the same floor the library sidebar uses.
+  const ranked = [...byProject.entries()]
+    .filter(([, b]) => b.total >= 3)
+    .map(([id, b]) => ({ id, ...b, rate: b.kept / b.total }))
+    .sort((a, b) => b.rate - a.rate);
+  if (!ranked.length) return null;
+  const name = id => String(projects.find(p => p.id === id)?.title || 'that lecture').slice(0, 80);
+  const top = ranked[0];
+  const lines = [`“${name(top.id)}” — you kept ${top.kept} of ${top.total} clips from it, `
+    + `${Math.round(top.rate * 100)}%, your best of ${ranked.length} lectures with enough decided clips to compare.`];
+  const worst = ranked[ranked.length - 1];
+  // Only when it is a DIFFERENT answer: one lecture is not a comparison, and
+  // printing the same lecture as both best and worst reads as broken.
+  if (ranked.length > 1 && worst.id !== top.id && worst.rate < top.rate) {
+    lines.push(`For contrast, “${name(worst.id)}” gave you ${worst.kept} of ${worst.total}. `
+      + 'Re-importing another range of the stronger one is the cheaper next lecture.');
+  }
+  return lines.join('\n\n');
+}
+
+// The chips, keyed on the exact strings the app itself writes into the box.
+const ANSWERABLE = Object.freeze({
+  'what should i clip next?': clipNextAnswer,
+  'which lecture is worth more clips?': bestLectureAnswer,
+});
+
+/*
+ * A destination question, answered from the record rather than guessed at.
+ * Fires only when the question NAMES a platform this account has failures on
+ * AND is plainly about them -- three conditions, so an ordinary question that
+ * happens to say "TikTok" still reaches the model.
+ */
+function refusalAnswer(user, question) {
+  const q = tidy(question);
+  if (!/fail|refus|reject|error|not post|didn.t post|won.t post|blocked/.test(q)) return null;
+  const clips = ownClips(user);
+  const failures = [...failedByProvider(clips)];
+  if (!failures.length) return null;
+  const hit = failures.find(([provider]) => q.includes(String(provider).toLowerCase())
+    || q.includes(providerName(provider).toLowerCase()));
+  if (!hit) return null;
+  const [provider, n] = hit;
+  const name = providerName(provider);
+  return `${name} has refused ${n} ${n === 1 ? 'post' : 'posts'} from this account. `
+    + 'That is reach you have already paid to render, and it is almost always one '
+    + `connection or platform rule rather than ${n} bad clips — open the row on the `
+    + 'Schedule and read its explanation, which names the platform’s own reason.';
+}
+
+export function answerLocally(user, question) {
+  const computed = ANSWERABLE[tidy(question)];
+  if (computed) {
+    const answer = computed(user);
+    // No answer means this account has nothing true to say yet, and a padded
+    // one would be worse than sending the question on to the model.
+    if (answer) return { answer, source: 'computed' };
+  }
+  const refusal = refusalAnswer(user, question);
+  if (refusal) return { answer: refusal, source: 'computed' };
+  return null;
+}
+
 export async function ask(user, question) {
   const q = String(question || '').trim();
   if (!q) throw Object.assign(new Error('Ask a question first.'), { statusCode: 400 });
@@ -518,11 +636,18 @@ export async function ask(user, question) {
   if (!deenaiAskAccess(user)) {
     throw Object.assign(new Error('Asking DeenAI is a ' + deenaiAskTierName() + ' feature.'), { statusCode: 403 });
   }
+  // Answered here when the answer is arithmetic this module has already done:
+  // instant, incapable of inventing a figure, and reading the same numbers the
+  // cards on screen read. Checked BEFORE the worker gate, so a deployment with
+  // no box still answers the three chips rather than refusing every question.
+  const local = answerLocally(user, q);
+  if (local) return local;
+
   if (config.processingMode !== 'remote') {
     throw Object.assign(new Error('DeenAI answers run on the render worker, which this deployment does not have connected.'), { statusCode: 503 });
   }
   const result = await workerClient.advise({ question: q, context: askContext(user) });
   const answer = String(result?.answer || '').trim();
   if (!answer) throw Object.assign(new Error('DeenAI had no answer. Try rephrasing the question.'), { statusCode: 502 });
-  return answer;
+  return { answer, source: 'ai' };
 }

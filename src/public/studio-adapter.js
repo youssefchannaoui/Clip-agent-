@@ -150,6 +150,7 @@
     // this sitting, and a state poll must not wipe a reply mid-read.
     aiQ: '',
     aiAnswer: '',
+    aiSource: '',
     aiBusy: false,
     // Approving is a round trip. Until /api/state comes back the card would snap
     // back to "needs review", so the decision is held here and layered over the
@@ -5782,6 +5783,21 @@
         : 'Answers use your numbers, never your transcripts.',
       aiHasAnswer: Boolean(UI.aiAnswer),
       aiAnswer: UI.aiAnswer,
+      // A counted answer and a written one are not the same claim, and the
+      // prose does not say which it is. Measured on production before this
+      // existed: the model answered "the most efficient rate is 80%" -- a
+      // figure that appears nowhere in the account -- and there was nothing on
+      // screen to tell that apart from a real number.
+      aiSourceLabel: UI.aiAnswer
+        ? (UI.aiSource === 'computed' ? 'Counted from your own clips' : 'Written by DeenAI on our own server')
+        : '',
+      aiSourceStyle: UI.aiAnswer
+        ? ('display: inline-flex; align-items: center; gap: 6px; margin-bottom: 9px; padding: 3px 9px; border-radius: 999px; '
+          + 'font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; '
+          + (UI.aiSource === 'computed'
+            ? 'border: 1px solid rgba(127,209,166,.34); color: var(--dc-n-7fd1a6, #7FD1A6); background: rgba(127,209,166,.08);'
+            : 'border: 1px solid rgba(217,180,120,.34); color: var(--dc-gold-lit, #F0D6A6); background: rgba(217,180,120,.08);'))
+        : 'display: none;',
 
       // ── Home ──
       needsCount: needsCount,

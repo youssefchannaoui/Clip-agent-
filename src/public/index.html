@@ -5614,6 +5614,34 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        the literal the design puts in it. data-host-style is the one attribute
        family the patcher never strips, and the runtime honours it by leaving
        the node's style alone. */
+    /* WHICH KIND OF ANSWER THIS IS. A figure counted from the account's own
+       records and a sentence a 1.7B model wrote read identically as prose, and
+       they are not the same claim -- measured on production, the model
+       answered "the most efficient rate is 80%", a number that appears nowhere
+       in this account. The badge sits beside the export's own DEENAI label.
+
+       Host-rendered because adding a span to the design export regenerates
+       every hashed class name in the app; anchored on that literal label
+       rather than on a class, so a re-import cannot renumber it away. */
+    function paintAiAnswerSource(vals){
+      const label=[...document.querySelectorAll('#studio span')]
+        .find(n=>(n.textContent||'').trim()==='DEENAI');
+      const row=label&&label.parentElement;
+      if(!row||!vals.aiSourceLabel){
+        const old=document.querySelector('#studio [data-host-aisrc]');
+        if(old)old.remove();
+        return;
+      }
+      let chip=row.querySelector(':scope > [data-host-aisrc]');
+      if(!chip){
+        chip=document.createElement('span');
+        chip.setAttribute('data-host-owned','');
+        chip.setAttribute('data-host-aisrc','');
+        label.insertAdjacentElement('afterend',chip);
+      }
+      if(chip.textContent!==vals.aiSourceLabel)chip.textContent=vals.aiSourceLabel;
+      if(chip.getAttribute('style')!==vals.aiSourceStyle)chip.setAttribute('style',vals.aiSourceStyle);
+    }
     function paintEditorTrackLane(){
       if(StudioAdapter.ui.screen!=='editor')return;
       const wave=[...document.querySelectorAll('#studio span')]
@@ -8959,6 +8987,12 @@ StudioAdapter.onProbeSource=async url=>{try{
       try{
         const r=await api('/api/deenai/ask',{method:'POST',body:JSON.stringify({question:q})});
         StudioAdapter.ui.aiAnswer=String(r.answer||'');
+        /* Which KIND of answer this is. 'computed' means every figure in it
+           was counted from this account's own records with no model involved,
+           so it cannot be wrong in the way a small model is wrong; 'ai' means
+           the box's Ollama wrote it. The reader cannot tell them apart from
+           the prose, and they deserve different amounts of trust. */
+        StudioAdapter.ui.aiSource=String(r.source||'ai');
       }catch(e){toast(e.message,'bad')}
       finally{StudioAdapter.ui.aiBusy=false;renderAll()}
     };
@@ -10630,6 +10664,7 @@ function paintStudio(){
   if(StudioAdapter.ui.screen!=='editor'){paintEditorMusic({});}
   paintEditorLayout(vals);
   paintEditorTrackLane();
+  paintAiAnswerSource(vals);
   paintTrimTools(vals);
   paintEditorLook(vals);
   paintEditorScrub();

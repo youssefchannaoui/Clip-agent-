@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1617 JS + 691 Python**
+- `npm test` and `npm run check` must pass. Currently **1617 JS + 698 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -11789,3 +11789,91 @@ survived three days.
   correct fix, which is the eighth time this repo has recorded that shape. It
   asserts the sentence is BUILT from the table now, and lets the table decide
   the word.
+
+## DeenAI answers from arithmetic where it can, and is checked in code where it cannot (v3.142.0, 7 Sept 2026)
+
+Youssef: "make DEEN AI AMAZING ... IMPROVED SOO WELL THAT HELP USERS TO DO SO
+MANY THINGS IN THE WBEISTE". Measured on production first, because the Ask had
+never been read against the real model from the app:
+
+    cold ask                                   25.6s
+    warm ask                                    6.8s
+    "Which lecture should I clip more of?"     never named the lecture
+    invented, in one warm answer               "the most efficient rate is 80%"
+                                               titles "are popular and well-received"
+
+Both inventions are forbidden by the system prompt in as many words. The 80% is
+a figure that appears nowhere in the account; "popular and well-received" is an
+audience claim **no platform sends this app** -- the privacy policy states it
+and the Performance screen carries a footnote saying why those columns are
+absent. That is this repo's oldest lesson about qwen3:1.7b arriving on a new
+path: a negative instruction is a suggestion, and what must not happen belongs
+in code.
+
+### Where the answer is arithmetic, there is no model in it
+
+`answerLocally` (src/deenai.js) answers the three prompt chips from the same
+`insights()`/`metrics()` the cards below the box are drawn from -- so the
+answer and the screen cannot contradict each other, which is the reason
+`metrics()` lives in that module at all. Keyed on the EXACT strings
+`AI_PROMPTS` puts in the box, so intent is certain: no classifier, no misfire.
+
+    "What should I clip next?"           -> names the lecture, its keep rate,
+                                            and what is waiting in the queue
+    "Which lecture is worth more clips?" -> ranks the account's lectures and
+                                            names the weakest for contrast
+    a question naming a platform it has
+    failures on, and plainly about them  -> the count, and where the reason is
+
+**"How do I grow on TikTok?" is deliberately NOT answerable locally.** It is
+advice rather than arithmetic, and answering it from a table would be inventing
+the thing this layer exists to prevent. A computed answer that comes back empty
+(a young account with nothing true to say) falls through to the model rather
+than padding.
+
+- **It is checked BEFORE the worker gate**, so a deployment with no box still
+  answers the chips instead of refusing every question. Two existing tests went
+  red on exactly that and were corrected rather than weakened -- a chip now
+  returns 200 where it used to 503.
+- **The reply carries `source`** (`computed` | `ai`) and the screen wears it:
+  "Counted from your own clips" in green, "Written by DeenAI on our own server"
+  in gold. A counted figure and a sentence a 1.7B wrote read identically as
+  prose and are not the same claim. Host-rendered beside the export's own
+  DEENAI label, anchored on that literal rather than a hashed class.
+
+### Where a model is needed, its answer is REJECTED in code
+
+`advise_with_ollama` was the only Ollama caller in this repo with no validation
+at all -- a `<think>` strip and a truncation. It now carries the device the
+title path already proved:
+
+- **The rules are restated LAST, immediately before the data** ("BEFORE YOU
+  ANSWER, CHECK EACH OF THESE"), the technique measured twice here. They sat
+  ~1,500 characters ahead of a 4,000-character blob.
+- **Every percentage in the answer must appear verbatim in the context handed
+  to the model**, or it is refused by name. That is the 80%.
+- **Audience claims are refused outright** (popular, well received, viral,
+  performed well, trending), because this app is told none of it.
+- **This prompt's own furniture coming back is refused**, the LEAKED check with
+  Ask's own headings.
+- **Three shots, warmer each time (0.35 / 0.6 / 0.85), each retry NAMING the
+  rejection.** Driven with the two real production failures: attempt one is
+  refused as *"it stated 80%, which is not a figure in this account"*, attempt
+  two as *"it claimed the clips were well received, which no platform tells
+  this app"*, and the third clean answer ships.
+- **Three bad answers return the FIRST rather than nothing.** A blank box is
+  worse than a flawed answer, and the app's own 502 says "DeenAI had no
+  answer", which would not be what happened.
+- A percentage that IS in the context is kept -- a test drives that, or the
+  guard would throw away every honest answer with a figure in it.
+
+**A trap this file already records, paid again:** the fence-order test used
+`prompt.index("BEGIN UNTRUSTED")` and the SAFETY paragraph MENTIONS the marker
+before the real fence opens. `rindex`, as `test_deenai_advise` already knew.
+
+Three red probes proven: the percentage guard removed, the audience guard
+removed, the computed layer removed.
+
+**Worker change, so `deploy-worker.yml` deploys it on push.** The rejection
+gate has been driven against a scripted model, not the box; the first real ask
+after the deploy is what confirms it there.

@@ -185,8 +185,13 @@ test('a Pro account gets its insights AND the ask it was sold', async () => {
   // This deployment has no worker, so the honest answer is 503 with a sentence
   // -- NOT a 403. What matters is that the plan is no longer the refusal.
   assert.notEqual(answered.status, 403, 'a Pro account is never refused for its plan');
-  assert.equal(answered.status, 503);
-  assert.doesNotMatch((await answered.json()).error, /Studio|Pro feature/, 'and the reason is the worker, not the plan');
+  // And this question is one of the three the app itself puts in the box, so
+  // it is answered from the account's own arithmetic with no model involved --
+  // which is why it succeeds on a deployment that has no worker at all.
+  assert.equal(answered.status, 200);
+  const body = await answered.json();
+  assert.equal(body.source, 'computed');
+  assert.ok(body.answer.length > 20, 'and it is a real answer, not an empty string');
 });
 
 test('ask refuses an empty question, an over-long one, and a deployment with no worker', async () => {
@@ -203,10 +208,18 @@ test('ask refuses an empty question, an over-long one, and a deployment with no 
   assert.equal((await post({ question: '   ' })).status, 400);
   assert.equal((await post({ question: 'x'.repeat(501) })).status, 400);
   // This test runs in local mode, where there is no Ollama to hand the
-  // question to. The honest answer is 503 with a sentence, not a hang.
-  const noWorker = await post({ question: 'What should I clip next?' });
+  // question to. The honest answer is 503 with a sentence, not a hang -- but
+  // only for a question that NEEDS the model. "How do I grow on TikTok?" is
+  // advice rather than arithmetic and is deliberately not answerable locally;
+  // answering it from a table would be inventing the very thing the computed
+  // layer exists to prevent.
+  const noWorker = await post({ question: 'How do I grow on TikTok?' });
   assert.equal(noWorker.status, 503);
   assert.match((await noWorker.json()).error, /render worker/);
+  // While a question the account's own records can answer still succeeds.
+  const local = await post({ question: 'What should I clip next?' });
+  assert.equal(local.status, 200);
+  assert.equal((await local.json()).source, 'computed');
 });
 
 test('the ask context is numbers and titles, never transcript text', () => {
