@@ -371,3 +371,59 @@ class RerenderTests(unittest.TestCase):
         self.assertIsNotNone(candidate.ayat, "a lecture-less re-render still walks its own segments")
         self.assertEqual([hit["ayah"]["ayah"] for hit in candidate.ayat], [71])
         self.assertTrue(candidate.ayat[0]["words"], "with the aligned words for paging")
+
+    def test_an_edited_clip_still_walks_whisper_s_own_transcript(self):
+        """The choice, driven through process_rerender rather than asserted.
+
+        An edited clip's segments are REFLOWED -- the customer's words laid
+        back over the real boundaries with NO word timings, deliberately. The
+        walk used to take those, so an edited recitation was paged on a ruler
+        while Whisper's measured times sat on the same job object unread. The
+        edit cannot help the walk anyway: the corpus supplies every Arabic
+        letter and an edit does not change what the audio said.
+
+        Pinned here because a test of ayah_walk_segments alone passes while the
+        renderer goes on calling something else -- which is exactly what a
+        probe of the call site found.
+        """
+        handed = {}
+
+        def fake_render(job, candidate, index, source, track, output_dir):
+            handed["candidate"] = candidate
+            return {"id": "c1"}
+
+        quran_module._CORPUS = corpus()
+        worker.quran = quran_module
+        timed = [
+            dict(LECTURE[0], words=[{"word": w, "start": 0.0 + i * 0.4, "end": 0.4 + i * 0.4}
+                                    for i, w in enumerate(AYAHS[0]["arabic"].split())]),
+            dict(LECTURE[1], words=[{"word": w, "start": 6.0 + i * 0.4, "end": 6.4 + i * 0.4}
+                                    for i, w in enumerate(AYAHS[1]["arabic"].split())]),
+            dict(LECTURE[2], words=[{"word": w, "start": 11.0 + i * 0.5, "end": 11.5 + i * 0.5}
+                                    for i, w in enumerate(DAMAGED.split())]),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            src = pathlib.Path(tmp) / "source.mp4"
+            src.write_bytes(b"not really a video")
+            job = {
+                "id": "job1", "resultPath": str(pathlib.Path(tmp) / "result.json"),
+                "outputDir": tmp, "sourceFile": str(src),
+                "settings": {"musicEnabled": False},
+                "template": {"id": "quran-recitation", "captionMode": "quran"},
+                # The editor rewrote the words AND said so.
+                "clip": {"startSec": 11.0, "endSec": 18.0, "transcript": "a rewritten line",
+                         "transcriptEdited": True, "title": "t"},
+                "transcriptSegments": timed,
+            }
+            with mock.patch.object(worker, "render_clip", fake_render), \
+                 mock.patch.object(worker, "apply_source_window", lambda job, path: path), \
+                 mock.patch.object(worker, "relisten_for_word_times", lambda *a, **k: None), \
+                 mock.patch.object(worker, "emit", lambda *a, **k: None), \
+                 mock.patch.object(worker, "progress", lambda *a, **k: None):
+                worker.process_rerender(job, pathlib.Path(tmp) / "job.json")
+        candidate = handed["candidate"]
+        self.assertTrue(candidate.ayat, "the edited clip still found its verse")
+        self.assertTrue(any(hit.get("heard") and any(hit["heard"]) for hit in candidate.ayat),
+                        "an edited clip was paged on a ruler while the real times sat unread")
+        self.assertEqual(candidate.text, "a rewritten line",
+                         "and the editor's words still win for the captions")

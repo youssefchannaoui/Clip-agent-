@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1721 JS + 761 Python**
+- `npm test` and `npm run check` must pass. Currently **1721 JS + 765 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -7517,6 +7517,26 @@ A hit is split into one entry PER CONTIGUOUS RUN of surviving words now. Each
 run is contiguous by construction, carries its own `wordFrom`, and keeps the
 verse total -- so the existing model is exactly right for each piece and no
 reader had to learn a new shape.
+
+### An edited clip walks Whisper's original now (v3.148.1)
+
+`process_rerender` chose the walk with `segments if transcriptEdited else
+(all_segments or segments)` -- sound reasoning for the LECTURE captions and
+exactly wrong for scripture. `reflow_segments` lays the customer's text back
+over the real boundaries and deliberately carries NO word timings, so an edited
+recitation was paged on a ruler while Whisper's measured times sat on the very
+same job object, in `all_segments`, unread. The edit cannot help the walk in
+any case: the corpus supplies every Arabic letter, an edit does not change what
+the audio said, and a rewrite of the English can only make the match worse.
+
+`ayah_walk_segments` is the named answer now, so the choice can be CALLED. That
+mattered: a probe restoring the old inline expression at the call site left the
+suite green, because the only test drove the helper. `test_lecture_ayat.py`
+drives `process_rerender` itself and asserts the candidate's verses come back
+with heard times while `candidate.text` is still the editor's words.
+
+This removes the biggest of the three degraded paths outright, so the re-listen
+above is left for genuinely old transcripts rather than for every edit.
 
 ### What is still NOT perfect, said plainly
 

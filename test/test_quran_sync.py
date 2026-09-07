@@ -742,6 +742,71 @@ class CutVerseTests(unittest.TestCase):
         self.assertEqual(len(out), 1, "nothing to split on")
 
 
+class EditedClipWalkTests(unittest.TestCase):
+    """AN EDITED CLIP WALKS WHISPER'S ORIGINAL, NOT THE EDIT.
+
+    reflow_segments lays the customer's text back over the real segment
+    boundaries and deliberately carries NO word timings -- "a wrong word timing
+    is worse than none", which is right. But process_rerender then walked those
+    reflowed segments for the AYAH map too, so an edited clip's scripture was
+    paged on a ruler while Whisper's measured times sat on the same job object,
+    unread.
+
+    The split is by QUESTION, not by clip: the editor's words win for the
+    LECTURE captions, and scripture never comes from them -- the corpus
+    supplies every Arabic letter, and an edit cannot change what the audio
+    said.
+    """
+
+    def test_reflowed_segments_really_do_carry_no_word_times(self):
+        # The premise, asserted rather than assumed: if this ever stops being
+        # true, the walk below is solving a problem that has gone away.
+        out = worker.reflow_segments(
+            [{"start": 0.0, "end": 4.0, "text": "one two",
+              "words": [{"word": "one", "start": 0.0, "end": 2.0},
+                        {"word": "two", "start": 2.0, "end": 4.0}]}],
+            "ONE TWO")
+        self.assertTrue(out)
+        for segment in out:
+            self.assertFalse(segment.get("words"),
+                             "reflow drops word times, which is why the walk must not use it")
+
+    def test_the_ayah_map_is_walked_over_the_original(self):
+        # The choice itself, driven. Named rather than left inline so it can be
+        # called: the earlier version of this class pinned the PREMISE (reflow
+        # drops word times) and the DIFFERENCE (the two lists disagree) and
+        # asserted nothing about which one the renderer picks.
+        original = [{"start": 0.0, "end": 4.0, "text": "one two", "words": [
+            {"word": "one", "start": 0.0, "end": 1.2}]}]
+        reflowed = [{"start": 0.0, "end": 4.0, "text": "ONE TWO", "words": []}]
+        self.assertIs(worker.ayah_walk_segments(original, reflowed), original)
+        # And with no original -- an older job that never carried the lecture --
+        # the clip's own segments are all there is.
+        self.assertIs(worker.ayah_walk_segments([], reflowed), reflowed)
+
+    def test_the_walk_prefers_the_original_transcript(self):
+        """Driven through the real timeline builder rather than by reading.
+
+        A reflowed segment yields spread times (heard False); the original
+        yields measured ones. Walking the right list is the difference between
+        the two, and it is visible in the flags.
+        """
+        original = [{"start": 0.0, "end": 4.0, "text": "one two",
+                     "words": [{"word": "one", "start": 0.0, "end": 1.2},
+                               {"word": "two", "start": 3.1, "end": 4.0}]}]
+        reflowed = worker.reflow_segments(original, "ONE TWO")
+
+        from_original = worker.lecture_word_timeline(original)
+        from_reflow = worker.lecture_word_timeline(reflowed)
+        self.assertTrue(all(row[3] for row in from_original), "the original was heard")
+        self.assertFalse(any(row[3] for row in from_reflow), "the reflow is a ruler")
+        # And the times themselves differ, so this is not a distinction without
+        # a difference: the ruler puts the second word at 2.0s where the
+        # reciter began it at 3.1s.
+        self.assertAlmostEqual(from_original[1][1], 3.1, places=3)
+        self.assertAlmostEqual(from_reflow[1][1], 2.0, places=3)
+
+
 class RelistenTests(unittest.TestCase):
     """A RE-RENDER CAN NOW FIX A CLIP THAT IS ALREADY ON THE CHANNEL.
 

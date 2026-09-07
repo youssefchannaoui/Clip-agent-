@@ -6198,6 +6198,33 @@ def reflow_segments(segments: list[dict[str, Any]], text: str) -> list[dict[str,
     return out
 
 
+def ayah_walk_segments(
+    all_segments: list[dict[str, Any]],
+    clip_segments: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Which transcript the AYAH MAP is walked over on a re-render.
+
+    Always Whisper's original, where there is one.
+
+    This used to be `clip_segments if transcriptEdited else ...`, on the sound
+    reasoning that the editor's words win over Whisper's -- true for the
+    LECTURE captions, and exactly wrong for scripture. reflow_segments lays the
+    customer's text back over the real segment boundaries and deliberately
+    carries NO word timings ("a wrong word timing is worse than none", and it
+    is), so an edited clip walked the lecture on a RULER while Whisper's
+    measured times sat on the very same job object, in `all_segments`, unread.
+
+    The edit cannot help the walk in any case: the displayed Arabic comes from
+    the corpus, an edit does not change what the audio said, and a customer's
+    rewrite of the English can only make the match worse.
+
+    So the split is by QUESTION, not by clip. `clip_segments` still supplies
+    candidate.text and every lecture caption, so nothing the editor typed is
+    lost; only "when was this verse recited" stops asking them.
+    """
+    return all_segments or clip_segments
+
+
 def relisten_for_word_times(
     job: dict[str, Any], source_file: Path, start: float, end: float,
     work_dir: Path,
@@ -6385,7 +6412,7 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
     # already on the channel the moment they are re-rendered. An EDITED clip
     # walks its reflowed text instead, because the editor's words win over
     # Whisper's there, and the renderer's per-segment match covers the rest.
-    walk = segments if clip.get("transcriptEdited") else (all_segments or segments)
+    walk = ayah_walk_segments(all_segments, segments)
     corpus = quran.load() if quran else None
     attach_lecture_ayat([candidate], lecture_ayat(walk, corpus))
     # AND IF THAT SCRIPTURE HAS NO TIMES ANYBODY HEARD, LISTEN AGAIN.
