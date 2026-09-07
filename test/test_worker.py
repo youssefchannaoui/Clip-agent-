@@ -404,12 +404,20 @@ class CaptionAnimationTests(unittest.TestCase):
         self.assertTrue(caption_events, "the caption modes emit events")
         for event in caption_events:
             self.assertIn("{fade_tag}", event, event[:90])
-        # Scripture fades between phrases and does nothing else: ayah_events()
-        # builds its own gentle \\fad and must never gain the pop/transform the
-        # spoken captions have.
-        ayah_builder = re.search(r"def ayah_events\([\s\S]*?\n    return events", source).group(0)
-        self.assertIn("\\\\fad(", ayah_builder, "phrases fade out and in")
-        self.assertNotIn("\\\\t(", ayah_builder, "no pop or transform on scripture")
+        # Scripture arrives and leaves and does nothing else. Asserted on the
+        # EVENTS ayah_events really emits rather than on its source: the
+        # arrival is built by a helper now, so a source scan of the builder
+        # would find neither the tag nor the ban and pass for free.
+        emitted = worker.ayah_events(
+            {"arabic": "\u0628\u0650\u0630\u0650\u0643\u0652\u0631\u0650 \u0627\u0644\u0644\u0651\u0647\u0650", "translation": ""},
+            ornament="\u06dd", start=0.0, end=8.0, latin_font="DejaVu Serif",
+            translation_size=40, show_translation=False, ayah_size=96)
+        self.assertTrue(emitted)
+        for event in emitted:
+            self.assertRegex(event, r"\\alpha&H[0-9A-F]{2}&", "phrases arrive and leave")
+            for payload in re.findall(r"\\t\([^)]*\)", event):
+                self.assertRegex(payload, r"\\alpha&H[0-9A-F]{2}&\)$",
+                                 f"only opacity may be animated: {payload}")
 
 
 class QuranCaptionTests(unittest.TestCase):
@@ -941,27 +949,48 @@ class AyahEventTests(unittest.TestCase):
             visible = arabic.split("}")[-1]
             self.assertLessEqual(len(visible.split()), worker.AYAH_MAX_WORDS, visible)
 
-    def test_each_phrase_fades_out_and_the_next_fades_in(self):
-        # A gentle fad and nothing else. No pop, no per-word highlight:
-        # scripture does not do word animations.
-        for event in self._events(self.LONG):
-            self.assertIn("\\fad(", event)
-            self.assertNotIn("\\t(", event, "no pop or transform on scripture")
+    def test_each_phrase_changes_only_its_opacity(self):
+        """A gentle arrival and nothing else -- scripture does no animations.
 
-    def test_the_ayah_fade_matches_the_reference_timing(self):
+        This used to be spelled "contains \\fad and never \\t", which pinned the
+        MECHANISM. \\fad ramps from nothing at the event's own start, and
+        measured from the pixels of a real render that left every page
+        unreadable for 291ms; expressing the arrival in two stages needs \\t,
+        which the old spelling banned outright. The property it was really
+        protecting is the one asserted here: the only thing that may move is
+        the opacity. No pop, no scale, no travel, no colour change and no
+        per-word highlight.
+        """
+        for event in self._events(self.LONG):
+            self.assertRegex(event, r"\\alpha&H[0-9A-F]{2}&", "the phrase arrives and leaves")
+            for payload in re.findall(r"\\t\([^)]*\)", event):
+                self.assertRegex(payload, r"\\alpha&H[0-9A-F]{2}&\)$",
+                                 f"only opacity may be animated: {payload}")
+            for banned in ("\\k", "\\move(", "\\frz", "\\fscx", "\\fscy", "\\pos("):
+                self.assertNotIn(banned, event, f"{banned} has no place on scripture")
+
+    def test_the_ayah_arrival_matches_the_reference_timing(self):
         # Measured from the reference recitation clip: ~550ms in, ~450ms out.
-        # A chunk on screen long enough must use exactly those; a short chunk
-        # caps each side at a third of its own screen time.
+        # A phrase on screen long enough must still take those; a short one
+        # caps every stage inside its own screen time.
         events = worker.ayah_events(
             {"arabic": "\u0628\u0650\u0630\u0650\u0643\u0652\u0631\u0650 \u0627\u0644\u0644\u0651\u0647\u0650", "translation": "in the remembrance of Allah"},
             ornament="\u06dd", start=0.0, end=8.0, latin_font="DejaVu Serif",
             translation_size=40, show_translation=True, ayah_size=96)
-        self.assertIn("\\fad(550,450)", events[0])
+        settle = re.search(r"\\t\(\d+,(\d+),\\alpha&H00&\)", events[0])
+        self.assertIsNotNone(settle, events[0])
+        self.assertEqual(int(settle.group(1)), worker.AYAH_FADE_IN_MS)
+        leaves = re.search(r"\\t\((\d+),(\d+),\\alpha&HFF&\)", events[0])
+        self.assertIsNotNone(leaves, events[0])
+        self.assertEqual(int(leaves.group(2)) - int(leaves.group(1)), worker.AYAH_FADE_OUT_MS)
+
         short = worker.ayah_events(
             {"arabic": "\u0628\u0650\u0630\u0650\u0643\u0652\u0631\u0650", "translation": ""},
             ornament="\u06dd", start=0.0, end=0.9, latin_font="DejaVu Serif",
             translation_size=40, show_translation=False, ayah_size=96)
-        self.assertIn("\\fad(300,300)", short[0], "a third of 900ms per side")
+        for a, b in re.findall(r"\\t\((-?\d+),(-?\d+),", short[0]):
+            self.assertGreaterEqual(int(a), 0, short[0])
+            self.assertLessEqual(int(b), 900, "a 900ms phrase is not all fade")
 
     def test_the_verse_mark_ends_the_sentence_and_only_the_sentence(self):
         # Hard-spaced to the ayah's final word -- a mushaf never wraps the

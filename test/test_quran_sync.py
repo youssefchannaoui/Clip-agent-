@@ -40,6 +40,7 @@ changed underneath it.
 from __future__ import annotations
 
 import os
+import re
 import sys
 import unittest
 
@@ -65,6 +66,17 @@ def page_times(arabic: str, words, *, start: float, end: float,
         parts = event.split(",", 4)
         out.append((round(ass_seconds(parts[1]), 3), round(ass_seconds(parts[2]), 3)))
     return out
+
+
+def page_overrides(arabic: str, words, *, start: float, end: float,
+                   heard=None, offset: int = 0, count: int = 0):
+    """The override block ayah_events writes in front of each page's text."""
+    events = worker.ayah_events(
+        {"arabic": arabic, "translation": ""}, ornament="\u06dd",
+        start=start, end=end, latin_font="Outfit", translation_size=40,
+        show_translation=False, ayah_size=120, mark_size=60, ayah_font="Amiri",
+        word_times=words, word_heard=heard, word_offset=offset, word_count=count)
+    return [event.split(",", 9)[9].split("{\\q0}")[0] for event in events]
 
 
 def verse(count: int) -> str:
@@ -420,5 +432,445 @@ class WrongMatchTests(unittest.TestCase):
                          "every word drawn is the corpus's, in the corpus's order")
 
 
-if __name__ == "__main__":
+
+class ArrivalTests(unittest.TestCase):
+    """WHEN A PAGE BECOMES READABLE, which is not when its event starts.
+
+    The anchors were already within 140ms of the reciter and every page was
+    still late, because a \\fad ramps from nothing at the event's own start.
+    Measured from the pixels of a real render (An-Nisaa 4:94, 1080x1920, real
+    libass, real Amiri, against a click track of the reciter's own word
+    onsets): half the ink at 291ms and full ink at 509ms, on ELEVEN OF ELEVEN
+    pages. The earlier pass missed it because matching each frame to the page
+    it most RESEMBLES flips at the crossover -- a caption at 8% opacity
+    resembles itself perfectly and cannot be read.
+    """
+
+    def test_a_page_is_readable_within_the_knee_not_half_a_second_later(self):
+        tags = page_overrides(verse(12), [(i * 1.0, i * 1.0 + 1.0) for i in range(12)],
+                              start=0.0, end=12.0, heard=[True] * 12, count=12)
+        self.assertTrue(tags)
+        for tag in tags:
+            rise = re.search(r"\\t\(0,(\d+),\\alpha&H([0-9A-F]{2})&\)", tag)
+            self.assertIsNotNone(rise, f"no first stage in {tag}")
+            knee_ms, alpha = int(rise.group(1)), int(rise.group(2), 16)
+            self.assertLessEqual(knee_ms, worker.AYAH_FADE_KNEE_MS)
+            # Readable means most of the way there, not merely non-zero.
+            self.assertLessEqual(alpha, 0x50, "the knee must be plainly legible")
+
+    def test_the_arrival_still_takes_about_half_a_second(self):
+        # The point of two stages is that the fix costs nothing visually. A
+        # page that snapped straight to full would pass the test above and
+        # read as abrupt next to the reference clips.
+        tags = page_overrides(verse(12), [(i * 1.0, i * 1.0 + 1.0) for i in range(12)],
+                              start=0.0, end=12.0, heard=[True] * 12, count=12)
+        for tag in tags:
+            settle = re.search(r"\\t\(\d+,(\d+),\\alpha&H00&\)", tag)
+            self.assertIsNotNone(settle, f"no settle stage in {tag}")
+            self.assertGreaterEqual(int(settle.group(1)), 300)
+
+    def test_the_ayah_never_uses_a_plain_fade_again(self):
+        # \fad and \alpha drive the same channel, so one \fad anywhere on an
+        # ayah page puts the third of a second straight back.
+        tags = page_overrides(verse(12), [(i * 1.0, i * 1.0 + 1.0) for i in range(12)],
+                              start=0.0, end=12.0, heard=[True] * 12, count=12)
+        for tag in tags:
+            self.assertNotIn("\\fad(", tag)
+
+    def test_a_page_still_leaves_softly(self):
+        tags = page_overrides(verse(12), [(i * 1.0, i * 1.0 + 1.0) for i in range(12)],
+                              start=0.0, end=12.0, heard=[True] * 12, count=12)
+        for tag in tags:
+            self.assertRegex(tag, r"\\t\(\d+,\d+,\\alpha&HFF&\)")
+
+    def test_a_short_page_is_not_all_fade(self):
+        # Every stage is clamped to the page's own length, so a phrase on
+        # screen for four tenths of a second does not spend it arriving and
+        # leaving. The first version of this only checked the stages it could
+        # PARSE, so removing the clamp -- which pushes the out-fade to a
+        # NEGATIVE start that the digits-only pattern then skipped -- left it
+        # green. Match an optional minus, or a probe walks straight past the
+        # thing it exists to catch.
+        page_ms = 400
+        tag = worker.ayah_fade_tag(page_ms, worker.AYAH_FADE_IN_MS, worker.AYAH_FADE_OUT_MS)
+        stages = re.findall(r"\\t\((-?\d+),(-?\d+),", tag)
+        self.assertTrue(stages, f"no stages at all in {tag}")
+        for raw_a, raw_b in stages:
+            a, b = int(raw_a), int(raw_b)
+            self.assertGreaterEqual(a, 0, f"{tag} starts a stage before the page")
+            self.assertLessEqual(a, b, f"{tag} has a stage running backwards")
+            self.assertLessEqual(b, page_ms, f"{tag} runs past the page")
+
+    def test_each_page_is_sized_from_its_own_length(self):
+        # Real pages differ by seconds -- 12.32s against 1.98s on the verse
+        # this was measured on -- so one tag sized from the AVERAGE gives a
+        # short page a fade built for a long one. Driven through ayah_events,
+        # because the first version called ayah_fade_tag directly with two
+        # different numbers: it proved the function can tell them apart and
+        # nothing at all about what the caller hands it.
+        words = [(0.0, 0.12), (0.12, 0.24), (0.24, 0.36), (0.36, 0.5),
+                 (0.5, 2.5), (2.5, 4.5), (4.5, 6.5), (6.5, 8.5)]
+        tags = page_overrides(verse(8), words, start=0.0, end=8.5,
+                              heard=[True] * 8, count=8)
+        self.assertEqual(len(tags), 2, "expected two pages of four words")
+        self.assertNotEqual(tags[0], tags[1],
+                            "a half-second page and an eight-second one got the same fade")
+
+
+class RendererWiringTests(unittest.TestCase):
+    """THE RENDERER MUST ACTUALLY BE TOLD WHICH TIMES WERE HEARD.
+
+    Every other test in this file drives ayah_page_plan or ayah_events with the
+    flags handed straight in, and all 25 of them passed while the production
+    path never carried them: write_ass builds its hits with an EXPLICIT key
+    list, and `heard` was not in it. `hit.get("heard")` was None on every real
+    render, the plan's `index < len(flags) else True` fallback counted every
+    spread word as measured, and the half of v3.147.0 that draws fewer pages
+    when the times are a ruler was inert from the day it shipped.
+
+    So this drives write_ass itself. A unit test one layer down cannot see a
+    key that is never copied.
+    """
+
+    def _clip(self, arabic, words, heard):
+        clip = worker.Candidate(
+            start=100.0, end=100.0 + 24.0, text="x",
+            segments=[{"start": 100.0, "end": 124.0, "text": "x", "words": []}],
+            score=70, reasons=[], quote_risk=True)
+        clip.ayat = [{
+            "start": 0.0, "end": 24.0,
+            "ayah": {"surah": 1, "ayah": 1, "arabic": arabic, "translation": "",
+                     "surahName": "Test", "confidence": 0.99},
+            "words": words, "heard": heard, "wordFrom": 0, "wordCount": len(words),
+        }]
+        return clip
+
+    @staticmethod
+    def _with_corpus():
+        """The quran path stands down without a corpus, so give it one.
+
+        Nothing here reads the corpus for TEXT -- the hits already carry the
+        verse -- but write_ass refuses the mode outright when quran.load()
+        answers None, which is correct behaviour and would otherwise make every
+        assertion in this class pass against an empty file.
+        """
+        class _Corpus:
+            def match(self, *args, **kwargs):
+                return None
+
+            def match_sequence(self, *args, **kwargs):
+                return []
+
+        real = worker.quran
+
+        class _Quran:
+            @staticmethod
+            def load():
+                return _Corpus()
+
+            @staticmethod
+            def ornament_for(ayah):
+                # The real ornament where the module is present, a plain mark
+                # where it is not: this class exists to supply a corpus, not to
+                # reimplement one.
+                if real is not None and hasattr(real, "ornament_for"):
+                    return real.ornament_for(ayah)
+                return "\u06dd"
+
+        return _Quran()
+
+    def _pages(self, heard):
+        import tempfile
+        arabic = verse(14)
+        words = [(i * 24.0 / 14, (i + 1) * 24.0 / 14) for i in range(14)]
+        clip = self._clip(arabic, words, heard)
+        template = {"captionMode": "quran", "width": 1080, "height": 1920,
+                    "captionFont": "DejaVu Sans", "captionArabicFont": "Amiri",
+                    "captionTranslation": False, "captionFontSize": 60}
+        original, worker.quran = worker.quran, self._with_corpus()
+        try:
+            with tempfile.NamedTemporaryFile("r+", suffix=".ass", delete=True) as handle:
+                worker.write_ass(clip, template, worker.Path(handle.name))
+                body = worker.Path(handle.name).read_text(encoding="utf-8")
+        finally:
+            worker.quran = original
+        return [line for line in body.splitlines() if ",Ayah,," in line]
+
+    def test_a_verse_whose_times_were_all_spread_draws_fewer_pages_through_write_ass(self):
+        # Fourteen words. Heard: four pages of at most AYAH_MAX_WORDS. Spread:
+        # the weak ceiling, so two pages of at most AYAH_MAX_WORDS_WEAK -- a
+        # correctly timed phrase instead of four confidently mistimed ones.
+        measured = self._pages([True] * 14)
+        ruler = self._pages([False] * 14)
+        self.assertEqual(len(measured), 4, "a heard verse should page normally")
+        self.assertEqual(len(ruler), 2, "a spread verse should draw fewer pages")
+        self.assertLess(len(ruler), len(measured))
+
+    def test_a_lecture_template_carries_the_flags_too(self):
+        # Scripture is captioned on EVERY template (invariant 7), so the
+        # non-quran branch is the COMMON path for a verse quoted inside an
+        # ordinary lecture -- and it omitted word_heard entirely, so those
+        # pages were divided evenly and presented as audio.
+        import tempfile
+        arabic = verse(14)
+        words = [(i * 24.0 / 14, (i + 1) * 24.0 / 14) for i in range(14)]
+        template = {"captionMode": "phrase", "width": 1080, "height": 1920,
+                    "captionFont": "DejaVu Sans", "captionArabicFont": "Amiri",
+                    "captionTranslation": False, "captionFontSize": 60}
+
+        def pages(heard):
+            original, worker.quran = worker.quran, self._with_corpus()
+            try:
+                with tempfile.NamedTemporaryFile("r+", suffix=".ass") as handle:
+                    worker.write_ass(self._clip(arabic, words, heard), template,
+                                     worker.Path(handle.name))
+                    body = worker.Path(handle.name).read_text(encoding="utf-8")
+            finally:
+                worker.quran = original
+            return [line for line in body.splitlines() if ",Ayah,," in line]
+
+        self.assertEqual(len(pages([True] * 14)), 4)
+        self.assertEqual(len(pages([False] * 14)), 2,
+                         "a lecture template ignored the ruler flags")
+
+    def test_the_diagnostic_says_which_pages_a_word_placed(self):
+        # The row write_ass records is how a sync complaint on a shipped clip
+        # is answered, so it must not report a ruler as a measurement.
+        arabic = verse(14)
+        words = [(i * 24.0 / 14, (i + 1) * 24.0 / 14) for i in range(14)]
+        import tempfile
+        template = {"captionMode": "quran", "width": 1080, "height": 1920,
+                    "captionFont": "DejaVu Sans", "captionArabicFont": "Amiri",
+                    "captionTranslation": False, "captionFontSize": 60}
+        original, worker.quran = worker.quran, self._with_corpus()
+        try:
+            with tempfile.NamedTemporaryFile("r+", suffix=".ass") as handle:
+                rows = worker.write_ass(self._clip(arabic, words, [False] * 14),
+                                        template, worker.Path(handle.name))
+        finally:
+            worker.quran = original
+        self.assertTrue(rows)
+        self.assertEqual(rows[0].get("pagesAnchored"), 0,
+                         "a verse with no heard word must not report anchored pages")
+        self.assertFalse(any(page.get("anchored") for page in rows[0].get("pages") or []))
+
+
+class CutVerseTests(unittest.TestCase):
+    """A CUT THROUGH THE MIDDLE OF A VERSE MUST NOT PUT THE WRONG WORDS UP.
+
+    Everything downstream reads a hit's surviving words as a CONTIGUOUS run of
+    the verse beginning at `wordFrom` -- that is what ayah_page_plan's
+    `have_from, have_to = word_offset, word_offset + len(timed)` means. Drop
+    the words a cut removed from the middle and the run stops being
+    contiguous while wordFrom still says it starts where it did, so surviving
+    word k is read as verse word wordFrom + k, which it is not: the pages
+    chosen and the times they are anchored to both slide, and an ayah is drawn
+    against audio that is not it.
+
+    A comment in retime_for_cuts said the two "never meet (cuts arrive only on
+    a re-render, which has no lecture map)". True when written; false since
+    v3.101.0 gave re-renders the walk -- which is the same release that made
+    the editor's section cuts reachable on a recitation.
+    """
+
+    def _cut(self, keeps):
+        # Twelve verse words, one per second, media time 100..112.
+        clip = worker.Candidate(
+            start=100.0, end=112.0, text="x",
+            segments=[{"start": 100.0, "end": 112.0, "text": "x", "words": []}],
+            score=70, reasons=[], quote_risk=True)
+        clip.ayat = [{
+            "start": 0.0, "end": 12.0,
+            "ayah": {"surah": 1, "ayah": 1, "arabic": verse(12), "translation": "",
+                     "surahName": "Test", "confidence": 0.99},
+            "words": [(float(i), float(i + 1)) for i in range(12)],
+            "heard": [True] * 12, "wordFrom": 0, "wordCount": 12,
+        }]
+        return worker.retime_for_cuts(clip, keeps).ayat
+
+    def test_a_cut_through_the_middle_splits_the_verse_at_its_real_indices(self):
+        # Keep 0-4s and 8-12s: verse words 0-3 and 8-11 survive, 4-7 do not.
+        out = self._cut([(100.0, 104.0), (108.0, 112.0)])
+        self.assertEqual(len(out), 2, "the two surviving stretches are separate runs")
+        self.assertEqual(out[0]["wordFrom"], 0)
+        self.assertEqual(len(out[0]["words"]), 4)
+        # THE ASSERTION THAT MATTERS. The second run holds verse words 8-11, so
+        # it must SAY 8. Before this it said 0, and those four words were drawn
+        # as the opening of the verse.
+        self.assertEqual(out[1]["wordFrom"], 8,
+                         "the second run was read as the start of the verse")
+        self.assertEqual(len(out[1]["words"]), 4)
+        for run in out:
+            self.assertEqual(run["wordCount"], 12, "the verse total never changes")
+
+    def test_the_surviving_words_stay_in_step_with_their_heard_flags(self):
+        clip = worker.Candidate(
+            start=100.0, end=112.0, text="x",
+            segments=[{"start": 100.0, "end": 112.0, "text": "x", "words": []}],
+            score=70, reasons=[], quote_risk=True)
+        # Only the last four were heard; the rest are a ruler.
+        clip.ayat = [{
+            "start": 0.0, "end": 12.0,
+            "ayah": {"surah": 1, "ayah": 1, "arabic": verse(12), "translation": "",
+                     "surahName": "Test", "confidence": 0.99},
+            "words": [(float(i), float(i + 1)) for i in range(12)],
+            "heard": [False] * 8 + [True] * 4, "wordFrom": 0, "wordCount": 12,
+        }]
+        out = worker.retime_for_cuts(clip, [(100.0, 104.0), (108.0, 112.0)]).ayat
+        self.assertEqual(out[0]["heard"], [False] * 4)
+        self.assertEqual(out[1]["heard"], [True] * 4,
+                         "a flag must travel with the word it belongs to")
+
+    def test_a_cut_that_removes_nothing_leaves_one_run(self):
+        out = self._cut([(100.0, 112.0)])
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["wordFrom"], 0)
+        self.assertEqual(len(out[0]["words"]), 12)
+
+    def test_a_verse_with_no_word_times_still_moves_as_one(self):
+        clip = worker.Candidate(
+            start=100.0, end=112.0, text="x",
+            segments=[{"start": 100.0, "end": 112.0, "text": "x", "words": []}],
+            score=70, reasons=[], quote_risk=True)
+        clip.ayat = [{
+            "start": 0.0, "end": 12.0,
+            "ayah": {"surah": 1, "ayah": 1, "arabic": verse(12), "translation": "",
+                     "surahName": "Test", "confidence": 0.99},
+            "words": [], "heard": [], "wordFrom": 0, "wordCount": 12,
+        }]
+        out = worker.retime_for_cuts(clip, [(100.0, 104.0), (108.0, 112.0)]).ayat
+        self.assertEqual(len(out), 1, "nothing to split on")
+
+
+class RelistenTests(unittest.TestCase):
+    """A RE-RENDER CAN NOW FIX A CLIP THAT IS ALREADY ON THE CHANNEL.
+
+    A re-render captions the stored transcript and does not re-transcribe, so a
+    lecture transcribed before word timings existed -- or an edited clip, whose
+    reflowed segments deliberately carry none -- had nothing for the paging to
+    follow however many times it was re-rendered. On the scripture path
+    Whisper's TEXT is never used (the corpus supplies every letter), so a fresh
+    listen for TIMES ALONE cannot change a word anybody reads.
+    """
+
+    def _candidate(self, ayat):
+        candidate = worker.Candidate(
+            start=10.0, end=40.0, text="x", segments=[], score=70,
+            reasons=[], quote_risk=True)
+        candidate.ayat = ayat
+        return candidate
+
+    def test_a_clip_with_no_scripture_is_never_re_transcribed(self):
+        # [] means a lecture WAS walked and found nothing here; None means
+        # nobody walked one. Neither can be improved by listening again.
+        self.assertTrue(worker.clip_ayat_are_timed(self._candidate([])))
+        self.assertTrue(worker.clip_ayat_are_timed(self._candidate(None)))
+
+    def test_scripture_whose_times_were_all_spread_asks_for_another_listen(self):
+        self.assertFalse(worker.clip_ayat_are_timed(self._candidate(
+            [{"heard": [False, False, False]}])))
+
+    def test_scripture_with_one_heard_word_is_left_alone(self):
+        self.assertTrue(worker.clip_ayat_are_timed(self._candidate(
+            [{"heard": [False, True, False]}])))
+
+    def test_a_fresh_listen_is_converted_to_media_time_exactly_once(self):
+        # The audio began at the clip's own start, so everything it reports is
+        # clip-local. Adding the offset twice is the fault invariant 5 exists
+        # to prevent, and it is invisible: every caption is simply late by the
+        # clip's start.
+        calls = {}
+
+        def fake_transcribe(job, audio_file, duration):
+            calls["duration"] = duration
+            return [{"start": 0.0, "end": 5.0, "text": "a b",
+                     "words": [{"word": "a", "start": 0.0, "end": 2.0},
+                               {"word": "b", "start": 2.0, "end": 5.0}]}]
+
+        def fake_run(cmd, **kwargs):
+            calls["cmd"] = cmd
+            return None
+
+        original_transcribe, original_run = worker.transcribe, worker.run
+        worker.transcribe, worker.run = fake_transcribe, fake_run
+        try:
+            out = worker.relisten_for_word_times(
+                {"ffmpeg": "ffmpeg"}, worker.Path("/tmp/x.mp4"), 10.0, 40.0,
+                worker.Path("/tmp"))
+        finally:
+            worker.transcribe, worker.run = original_transcribe, original_run
+
+        self.assertEqual(calls["duration"], 30.0)
+        self.assertEqual(out[0]["start"], 10.0)
+        self.assertEqual(out[0]["end"], 15.0)
+        self.assertEqual([(w["start"], w["end"]) for w in out[0]["words"]],
+                         [(10.0, 12.0), (12.0, 15.0)])
+        # It cut the clip's own window, not the whole lecture.
+        self.assertIn("-ss", calls["cmd"])
+        self.assertIn("30.000", calls["cmd"])
+
+    def test_the_stored_transcript_is_never_what_answers_a_re_listen(self):
+        """The trap that would have made this change worse than the fault.
+
+        transcribe() short-circuits on job["transcriptSegments"] and returns
+        the saved segments verbatim -- correct everywhere else, and exactly
+        what a re-listen exists to escape. Left in, it hands back the stored
+        MEDIA-time transcript, the clip-local shift adds the clip's start to it
+        a SECOND time, the walk then looks for the verses outside the clip and
+        finds none, and a recitation loses its ayah captions altogether on
+        re-render. Silently.
+
+        Stubbing transcribe() cannot see this, because the stub replaces the
+        very short-circuit that causes it. So this asserts on the JOB the
+        transcriber is handed.
+        """
+        seen = {}
+
+        def fake_transcribe(job, audio_file, duration):
+            seen["job"] = job
+            return [{"start": 0.0, "end": 3.0, "text": "a",
+                     "words": [{"word": "a", "start": 0.0, "end": 3.0}]}]
+
+        original, worker.transcribe = worker.transcribe, fake_transcribe
+        original_run, worker.run = worker.run, lambda *a, **k: None
+        try:
+            worker.relisten_for_word_times(
+                {"ffmpeg": "ffmpeg",
+                 "transcriptSegments": [{"start": 100.0, "end": 130.0, "text": "stored"}]},
+                worker.Path("/tmp/x.mp4"), 10.0, 40.0, worker.Path("/tmp"))
+        finally:
+            worker.transcribe, worker.run = original, original_run
+
+        self.assertNotIn("transcriptSegments", seen["job"],
+                         "the stored transcript would have answered instead of the audio")
+        self.assertEqual(seen["job"]["ffmpeg"], "ffmpeg", "the rest of the job travels")
+
+    def test_a_listen_that_hears_no_word_boundaries_changes_nothing(self):
+        original = worker.transcribe
+        worker.transcribe = lambda *a, **k: [{"start": 0.0, "end": 5.0, "text": "a", "words": []}]
+        original_run, worker.run = worker.run, lambda *a, **k: None
+        try:
+            self.assertIsNone(worker.relisten_for_word_times(
+                {"ffmpeg": "ffmpeg"}, worker.Path("/tmp/x.mp4"), 10.0, 40.0,
+                worker.Path("/tmp")))
+        finally:
+            worker.transcribe, worker.run = original, original_run
+
+    def test_a_failed_listen_never_fails_the_render(self):
+        # A clip is worth minutes on a single-slot box. Losing it because an
+        # optimisation could not run would be far worse than the timing it was
+        # trying to improve.
+        def boom(*args, **kwargs):
+            raise RuntimeError("ffmpeg fell over")
+
+        original_run, worker.run = worker.run, boom
+        try:
+            self.assertIsNone(worker.relisten_for_word_times(
+                {"ffmpeg": "ffmpeg"}, worker.Path("/tmp/x.mp4"), 10.0, 40.0,
+                worker.Path("/tmp")))
+        finally:
+            worker.run = original_run
+
+
+if __name__ == "__main__":  # pragma: no cover
     unittest.main()

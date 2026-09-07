@@ -14,6 +14,7 @@ It never calls Opus or a paid AI API.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import html
 import importlib.util
@@ -2610,6 +2611,36 @@ AYAH_MIN_PAGE_SEC = 0.35
 # read as abrupt next to it.
 AYAH_FADE_IN_MS = 550
 AYAH_FADE_OUT_MS = 450
+# ...AND WHY A PLAIN \fad WAS STILL 291ms OF DELAY ON EVERY PAGE.
+#
+# A \fad ramps opacity from nothing at the event's own start, so a page drawn
+# ON its anchor is invisible at the moment its first word sounds. Measured from
+# the pixels of a real render (An-Nisaa 4:94, 1080x1920, real libass, real
+# Amiri, against a click track of the reciter's own word onsets): each of the
+# eleven pages reached half its ink 291ms after the word it shows and full ink
+# at 509ms -- ELEVEN OF ELEVEN over the 250ms bar, on the path whose anchors
+# are otherwise within 140ms. The anchors were right and nobody could read them
+# yet, which is why the earlier measurement missed it: matching each frame to
+# the page it most RESEMBLES flips at the crossover, and a caption at 8%
+# opacity resembles itself perfectly and cannot be read.
+#
+# Shortening the fade fixes the delay and loses the look -- CLAUDE.md already
+# records that 300ms symmetric "read as abrupt" next to the reference clips. So
+# the arrival is in two stages instead: a fast rise to a READABLE level, then a
+# slow settle to full over the rest of the same half second. Rendered and
+# measured, the three candidates:
+#
+#     treatment            50% lit   75% lit   90% lit   over 250ms   arrival
+#     \fad(550,450)          291ms     429ms     509ms      11/11       520ms
+#     \fad(120,450)           91ms     109ms     131ms       0/11       140ms
+#     two-stage (this)        91ms     109ms     389ms       0/11       400ms
+#
+# -- the legibility of the short fade with an arrival that still takes about
+# four tenths of a second rather than snapping in.
+AYAH_FADE_KNEE_MS = 90
+# &H3F is 63/255 transparent, so three quarters opaque: plainly readable, and
+# still visibly on its way in.
+AYAH_FADE_KNEE_ALPHA = "&H3F&"
 # Why the ayah size is multiplied by three:
 #
 # libass sizes text the way VSFilter did -- the requested font size maps to the
@@ -2962,6 +2993,32 @@ def ayah_page_plan(
             "evidence": evidence}
 
 
+def ayah_fade_tag(page_ms: int, fade_in: int, fade_out: int) -> str:
+    """The two-stage arrival, as an ASS override.
+
+    \\t times are milliseconds from the event's own start, so this says: begin
+    invisible, be readable within AYAH_FADE_KNEE_MS, settle to full by the end
+    of the same fade the reference clips use, and leave over fade_out.
+
+    It replaces \\fad rather than joining it -- \\fad and \\alpha both drive the
+    same channel and combining them is undefined. Everything is clamped to the
+    page's own length, so a phrase on screen for half a second is not all fade.
+    """
+    page_ms = max(1, int(page_ms))
+    settle = max(1, min(int(fade_in), page_ms))
+    knee = max(1, min(AYAH_FADE_KNEE_MS, settle))
+    leave = max(0, min(int(fade_out), page_ms - settle))
+    if leave <= 0:
+        # No room to fade out without eating the arrival: keep the arrival,
+        # which is the half a viewer is reading, and cut on the way out.
+        return (f"{{\\alpha&HFF&\\t(0,{knee},\\alpha{AYAH_FADE_KNEE_ALPHA})"
+                f"\\t({knee},{settle},\\alpha&H00&)}}")
+    out_at = page_ms - leave
+    return (f"{{\\alpha&HFF&\\t(0,{knee},\\alpha{AYAH_FADE_KNEE_ALPHA})"
+            f"\\t({knee},{settle},\\alpha&H00&)"
+            f"\\t({out_at},{page_ms},\\alpha&HFF&)}}")
+
+
 def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: float,
                 latin_font: str, translation_size: int, show_translation: bool,
                 ayah_size: int = 0, mark_size: int = 0, ayah_font: str = "",
@@ -3013,17 +3070,18 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
     complete = plan["complete"]
 
     gloss_words = str(found.get("translation") or "").split() if show_translation else []
-    span = max(0.4, end - start)
 
-    # Still capped by the page's own length so a short phrase is not all fade:
-    # each side may use at most a third of the time it is on screen. Counted
-    # over the LIVE pages, not every page the verse has -- a lone surviving
-    # page holding the whole window would otherwise be given a third of the
-    # fade it has room for.
-    per_chunk_ms = span / max(1, len(live)) * 1000
-    fade_in = min(AYAH_FADE_IN_MS, int(per_chunk_ms / 3))
-    fade_out = min(AYAH_FADE_OUT_MS, int(per_chunk_ms / 3))
-    fade_tag = f"{{\\fad({fade_in},{fade_out})}}"
+    # Each side may use at most a third of the time the page is on screen, and
+    # it is the PAGE'S OWN length that decides -- pages differ by several
+    # seconds on a real verse (12.32s against 1.98s on the verse this was
+    # measured on), so one tag sized from the average gives a short page a fade
+    # built for a long one.
+    fade_of = {
+        index: ayah_fade_tag(
+            int((page_times[index][1] - page_times[index][0]) * 1000),
+            AYAH_FADE_IN_MS, AYAH_FADE_OUT_MS)
+        for index in live
+    }
 
     # The translation is shared out over EVERY page, live or not, and only the
     # live ones are drawn -- so the gloss of a stretch nobody recited here is
@@ -3047,6 +3105,7 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
         # page's end is the fault this release exists to fix: it put the NEXT
         # page on screen for the whole of a reciter's breath.
         chunk_start, chunk_end = page_times[index]
+        fade_tag = fade_of[index]
 
         text = ass_escape(" ".join(chunk))
         if index == chunk_count - 1 and complete:
@@ -3852,6 +3911,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     lecture_hits = [
         {"start": float(hit["start"]), "end": float(hit["end"]), "found": hit["ayah"],
          "words": hit.get("words") or [],
+         # WHICH OF THOSE TIMES A RECITER ACTUALLY SET, and the reason this
+         # line exists at all: the dict is built from an EXPLICIT key list, so
+         # a key nobody copies is a key that silently becomes None downstream.
+         # `heard` was computed by lecture_ayat, carried by attach_lecture_ayat
+         # and read by ayah_page_plan -- and never copied here, so
+         # `hit.get("heard")` was None on every render and the plan's
+         # `index < len(flags) else True` fallback counted every spread word as
+         # measured. The half of v3.147.0 that draws FEWER pages when the times
+         # are a ruler was therefore inert in production from the day it
+         # shipped, and the "anchored" diagnostic reported every page as placed
+         # by a word. Anything added to the plan's inputs must be added here
+         # too; the test drives this dict rather than the function beneath it.
+         "heard": hit.get("heard") or [],
          # How much of the verse this clip actually holds. A verse it opens or
          # closes half way through draws only the pages recited inside it.
          "wordFrom": int(hit.get("wordFrom") or 0),
@@ -4327,6 +4399,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             show_translation=bool(template.get("captionTranslation", True)), ayah_size=ayah_size,
             mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
             ayah_font=ayah_font, word_times=span.get("words"),
+            # AND WHICH OF THOSE TIMES WERE HEARD. Omitted here for the same
+            # reason the quran branch dropped it: the keyword simply was not
+            # passed, so ayah_page_plan's `else True` fallback counted every
+            # spread word as measured. Scripture is captioned on EVERY template
+            # (invariant 7), so this branch is the common path rather than the
+            # rare one -- a quoted verse in an ordinary lecture came through
+            # here, and its pages were divided evenly and presented as audio.
+            word_heard=span.get("heard"),
             word_offset=int(span.get("wordFrom") or 0),
             word_count=int(span.get("wordCount") or 0),
         ))
@@ -5328,10 +5408,26 @@ def retime_for_cuts(candidate: Candidate, keeps: list[tuple[float, float]]) -> C
     # The lecture's ayat move with everything else, or they do not move at all.
     # `dataclasses.replace` would carry them through UNTOUCHED, which after a
     # cut means scripture drawn at the wrong second -- silently, because
-    # nothing downstream can tell a stale time from a fresh one. Today the two
-    # never meet (cuts arrive only on a re-render, which has no lecture map),
-    # so this is here for the release that changes that rather than for one
-    # that has already shipped.
+    # nothing downstream can tell a stale time from a fresh one.
+    #
+    # AND A CUT THROUGH THE MIDDLE OF A VERSE PUTS THE WRONG WORDS ON SCREEN.
+    # Everything downstream reads a hit's surviving words as a CONTIGUOUS run
+    # of the verse starting at `wordFrom` -- that is what ayah_page_plan's
+    # `have_from, have_to = word_offset, word_offset + len(timed)` means. Drop
+    # the words a cut removed from the middle and the run stops being
+    # contiguous, while wordFrom still says it starts where it did: surviving
+    # word k is then read as verse word wordFrom + k, which it is not. The
+    # pages chosen and the words they are anchored to both slide, so an ayah is
+    # drawn against audio that is not it. That is the worst thing this product
+    # can do, and an earlier note here said the two "never meet (cuts arrive
+    # only on a re-render, which has no lecture map)" -- true when it was
+    # written and false since v3.101.0 gave re-renders the walk, which is
+    # exactly when the editor's section cuts became reachable.
+    #
+    # So a hit is split into one entry PER CONTIGUOUS RUN of surviving words.
+    # Each run is contiguous by construction, carries its own wordFrom, and the
+    # verse total is unchanged -- so the existing model is exactly right for
+    # each piece and no reader had to learn a new shape.
     ayat: list[dict[str, Any]] | None = None
     if candidate.ayat is not None:
         ayat = []
@@ -5342,26 +5438,49 @@ def retime_for_cuts(candidate: Candidate, keeps: list[tuple[float, float]]) -> C
             if kept < 0.05:
                 continue
             moved_a, moved_b = remap_clamped(media_a), remap_clamped(media_b)
-            if moved_b - moved_a > 0.05:
-                moved_words = []
-                moved_heard = []
-                flags = list(hit.get("heard") or [])
-                for index, (wa, wb) in enumerate(hit.get("words") or []):
-                    ma, mb = remap_clamped(wa + candidate.start), remap_clamped(wb + candidate.start)
-                    if mb > ma:
-                        moved_words.append((ma, mb))
-                        # In step with the word it belongs to, or a page would
-                        # be anchored to a heard word that a cut removed.
-                        moved_heard.append(bool(flags[index]) if index < len(flags) else True)
+            if moved_b - moved_a <= 0.05:
+                continue
+            base = int(hit.get("wordFrom") or 0)
+            total = int(hit.get("wordCount") or 0)
+            flags = list(hit.get("heard") or [])
+            raw = list(hit.get("words") or [])
+            if not raw:
+                # No word times to split on: the whole hit moves as one, which
+                # is what it always did.
                 ayat.append({
                     "start": moved_a, "end": moved_b, "ayah": hit["ayah"],
-                    "words": moved_words, "heard": moved_heard,
-                    # Carried rather than dropped. Without them ayah_events
-                    # reads the clip's own surviving words as the whole verse,
-                    # so a verse the clip holds half of is drawn as if it held
-                    # all of it -- the v3.118.1 fault, reintroduced by a cut.
-                    "wordFrom": int(hit.get("wordFrom") or 0),
-                    "wordCount": int(hit.get("wordCount") or 0),
+                    "words": [], "heard": [], "wordFrom": base, "wordCount": total,
+                })
+                continue
+            runs: list[list[tuple[int, tuple[float, float], bool]]] = []
+            previous = None
+            for index, (wa, wb) in enumerate(raw):
+                ma, mb = remap_clamped(wa + candidate.start), remap_clamped(wb + candidate.start)
+                if mb <= ma:
+                    # Removed by the cut. It ends the run, so the next
+                    # surviving word starts a new entry at its own index.
+                    previous = None
+                    continue
+                heard_flag = bool(flags[index]) if index < len(flags) else True
+                if previous is not None and index == previous + 1:
+                    runs[-1].append((index, (ma, mb), heard_flag))
+                else:
+                    runs.append([(index, (ma, mb), heard_flag)])
+                previous = index
+            for run in runs:
+                ayat.append({
+                    # The run's own span, so its pages land on it rather than
+                    # on the whole verse's remapped envelope.
+                    "start": run[0][1][0], "end": run[-1][1][1], "ayah": hit["ayah"],
+                    "words": [times for _, times, _ in run],
+                    "heard": [flag for _, _, flag in run],
+                    # WHERE IN THE VERSE THIS RUN REALLY STARTS. Carried rather
+                    # than dropped, or ayah_events reads the clip's own
+                    # surviving words as the whole verse and a verse the clip
+                    # holds half of is drawn as if it held all of it -- the
+                    # v3.118.1 fault, reintroduced by a cut.
+                    "wordFrom": base + run[0][0],
+                    "wordCount": total,
                 })
     from dataclasses import replace
     return replace(candidate, start=0.0, end=total, segments=segments, cuts=None, ayat=ayat)
@@ -6079,6 +6198,101 @@ def reflow_segments(segments: list[dict[str, Any]], text: str) -> list[dict[str,
     return out
 
 
+def relisten_for_word_times(
+    job: dict[str, Any], source_file: Path, start: float, end: float,
+    work_dir: Path,
+) -> list[dict[str, Any]] | None:
+    """Listen to a clip's own audio again, purely to find out WHEN.
+
+    THE CLIPS ALREADY ON THE CHANNEL COULD NOT BE FIXED BEFORE THIS. A
+    re-render captions the STORED transcript and does not re-transcribe, so a
+    lecture transcribed before word timings existed -- or an edited clip, whose
+    reflowed segments deliberately carry none -- had nothing for the paging to
+    follow and fell back to sharing the verse out evenly, however many times it
+    was re-rendered. Measured on a real verse: mean 365ms, worst 5020ms,
+    against 27ms and 140ms where the times were heard.
+
+    This is safe to do here for one reason and it is worth stating plainly: on
+    the scripture path Whisper's TEXT is never used. The displayed Arabic and
+    its translation come from the canonical corpus, matched by the walk; all
+    that is wanted from the audio is the clock. So a fresh listen cannot change
+    a single word a viewer reads -- only when it appears.
+
+    Returns segments in MEDIA time (the caller's timebase), or None when it
+    could not help, in which case the render carries on exactly as before. A
+    clip is worth minutes on a single-slot box; a failed listen must never cost
+    it.
+    """
+    window = max(0.0, float(end) - float(start))
+    if window <= 0.5:
+        return None
+    audio_file = work_dir / "relisten.wav"
+    try:
+        run([
+            job["ffmpeg"], "-y", "-ss", f"{max(0.0, float(start)):.3f}",
+            "-i", str(source_file), "-t", f"{window:.3f}",
+            "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(audio_file),
+        ], timeout=15 * 60)
+        # THE STORED TRANSCRIPT MUST NOT ANSWER THIS. transcribe() short-
+        # circuits on job["transcriptSegments"] and hands the saved segments
+        # straight back -- which is right everywhere else and is exactly what
+        # this call exists to escape. Left in, it would return the stored
+        # MEDIA-time transcript, the shift below would add the clip's start to
+        # it a second time, and the walk would then look for the verses outside
+        # the clip and find none: a recitation would lose its ayah captions
+        # altogether on re-render. Worse than the timing it set out to fix, and
+        # silent.
+        listen_job = {key: value for key, value in job.items() if key != "transcriptSegments"}
+        fresh = transcribe(listen_job, audio_file, window)
+    except Exception as error:  # noqa: BLE001 - a listen is an optimisation
+        emit("warning", code="relisten_failed",
+             warning=f"Could not listen again for word timings, so this clip keeps "
+                     f"the timing it had: {error}")
+        return None
+    finally:
+        with contextlib.suppress(OSError):
+            audio_file.unlink()
+    if not fresh:
+        return None
+    # ONE CONVERSION, HERE. The audio began at the clip's own start, so every
+    # time it reports is clip-local and every caller downstream speaks media
+    # time. Adding the offset in two places is the fault invariant 5 exists to
+    # prevent, so it is added once, on the way out.
+    shifted: list[dict[str, Any]] = []
+    for segment in fresh:
+        words = []
+        for word in segment.get("words") or []:
+            words.append({
+                **word,
+                "start": float(word.get("start", 0)) + float(start),
+                "end": float(word.get("end", 0)) + float(start),
+            })
+        shifted.append({
+            **segment,
+            "start": float(segment.get("start", 0)) + float(start),
+            "end": float(segment.get("end", 0)) + float(start),
+            "words": words,
+        })
+    if not any(segment.get("words") for segment in shifted):
+        # It listened and still heard no word boundaries. Nothing gained, and
+        # saying so is better than handing the paging a second ruler.
+        return None
+    return shifted
+
+
+def clip_ayat_are_timed(candidate: Candidate) -> bool:
+    """Did the walk give this clip's scripture times a reciter actually set?
+
+    `ayat` is None when no lecture was walked at all and [] when one was walked
+    and found nothing -- neither is a clip whose paging could be improved by
+    listening again, so both answer True and nothing is re-transcribed.
+    """
+    hits = getattr(candidate, "ayat", None)
+    if not hits:
+        return True
+    return any(any(hit.get("heard") or []) for hit in hits)
+
+
 def process_rerender(job: dict[str, Any], job_file: Path) -> None:
     result_file = Path(job["resultPath"])
     output_dir = Path(job["outputDir"])
@@ -6172,7 +6386,28 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
     # walks its reflowed text instead, because the editor's words win over
     # Whisper's there, and the renderer's per-segment match covers the rest.
     walk = segments if clip.get("transcriptEdited") else (all_segments or segments)
-    attach_lecture_ayat([candidate], lecture_ayat(walk, quran.load() if quran else None))
+    corpus = quran.load() if quran else None
+    attach_lecture_ayat([candidate], lecture_ayat(walk, corpus))
+    # AND IF THAT SCRIPTURE HAS NO TIMES ANYBODY HEARD, LISTEN AGAIN.
+    #
+    # Gated on the walk's own answer rather than on the template or a guess:
+    # the walk is cheap (measured 0.07s over Arabic, 0.53s over an eight
+    # thousand word English lecture) and it is the only thing that knows
+    # whether this clip holds scripture at all. So a re-render of an ordinary
+    # lecture clip transcribes nothing, and one of a recitation whose stored
+    # transcript predates word timings -- or whose words were reflowed by the
+    # editor -- pays one listen over its own thirty to ninety seconds and gets
+    # the reciter's real clock.
+    #
+    # The fresh audio supplies TIMES ONLY. `candidate.text` and
+    # `candidate.segments` are untouched, so the editor's words still win for
+    # the lecture captions and the corpus still supplies every Arabic letter a
+    # viewer reads.
+    if corpus is not None and not clip_ayat_are_timed(candidate):
+        progress("Listening again for the reciter's timing", 20)
+        heard_again = relisten_for_word_times(job, source_file, start, end, output_dir)
+        if heard_again:
+            attach_lecture_ayat([candidate], lecture_ayat(heard_again, corpus))
     seed = int(hashlib.sha256(str(job.get("clipIdOverride") or job["id"]).encode()).hexdigest()[:12], 16)
     track = tracks[seed % len(tracks)] if tracks else None
     progress("Re-rendering clip with the saved template", 25)

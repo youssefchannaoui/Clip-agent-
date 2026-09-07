@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1721 JS + 741 Python**
+- `npm test` and `npm run check` must pass. Currently **1721 JS + 761 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -7389,6 +7389,165 @@ different flavour of the same mistake:
 Both repaired assertions were re-proven RED: a hand-typed "4-90" in place of the
 table's numbers fails the first, and `classList.add('on')` in place of the
 toggle fails the second.
+
+## The captions were on time and nobody could read them (v3.148.0, 7 Sept 2026)
+
+Youssef, after v3.147.0: "can you make it perfect?" It was not, and the reason
+the last release could not see it is the entry worth reading here.
+
+### THE ANCHORS WERE RIGHT AND EVERY PAGE WAS STILL LATE
+
+v3.147.0 closed with "27ms mean, 140ms worst, 0 of 35 words over 250ms" on the
+normal path. That measurement matched each frame to the page it most
+RESEMBLES, and a caption at 8% opacity resembles itself perfectly -- so the
+classifier flipped at the crossover, which is where the ANCHOR is, and said
+nothing about when a human could read the words.
+
+Measured again from the ink itself (the caption band's own luma per frame, on
+the same real render -- An-Nisaa 4:94, 1080x1920, real libass, real Amiri):
+
+    every page reached half its ink 291ms after the word it shows
+    and full ink at 509ms -- ELEVEN OF ELEVEN over the 250ms bar
+
+`\fad` ramps from nothing at the event's own START, so a page drawn ON its
+anchor is invisible at the moment its first word sounds. The fix is not to
+shorten it -- this file already records that 300ms symmetric "read as abrupt"
+next to the reference clips. **The arrival is two stages now**: a fast rise to
+a readable level, then a slow settle to full over the rest of the same half
+second. Rendered and measured, all three candidates:
+
+    treatment            50% lit   75% lit   90% lit   over 250ms   arrival
+    \fad(550,450)          291ms     429ms     509ms      11/11       520ms
+    \fad(120,450)           91ms     109ms     131ms       0/11       140ms
+    two-stage (this)        91ms     109ms     389ms       0/11       400ms
+
+-- the legibility of the short fade with an arrival that still takes about
+four tenths of a second. `ayah_fade_tag` builds it; `\fad` and `\alpha` drive
+the same channel, so it REPLACES the fad rather than joining it, and every
+stage is clamped to the PAGE'S OWN length (pages differ by seconds on a real
+verse -- 12.32s against 1.98s -- and one tag sized from the average gave a
+short page a fade built for a long one).
+
+**A LEAD WAS BUILT FIRST AND THROWN AWAY, and the reason is worth keeping.**
+The obvious fix is to start the page early so the fade lands on the word. It
+was implemented and measured: **faster-whisper reports words back-to-back with
+ZERO gaps** -- 56 of 57 within-verse gaps on the box's own data are exactly
+0ms -- so there is no breath in its word times to run a fade in, and the lead
+computed 0 on every page of a real verse. Shipping it would have been machinery
+that never fires. Only real audio-onset detection could feed it, and that is
+not built (see below).
+
+### AND THE v3.147.0 FIX WAS INERT IN PRODUCTION THE WHOLE TIME
+
+`write_ass` builds its hits from `candidate.ayat` with an EXPLICIT KEY LIST,
+and `heard` was not in it. So `hit.get("heard")` was None on every real render,
+`ayah_page_plan`'s `index < len(flags) else True` fallback counted every spread
+word as measured, and the half of that release which draws FEWER pages when the
+times are a ruler never ran. The diagnostic reported every page as anchored to
+audio nobody had heard. **The same keyword was missing again on the non-quran
+branch** -- and scripture is captioned on EVERY template (invariant 7), so that
+is the COMMON path, not the rare one.
+
+Measured through `write_ass` -- the production path -- on the same verse:
+
+                  pages  readable  fully lit  >250ms  words wrong  mean wait
+    shipped, heard   11     291ms      509ms   11/11         9/35       29ms
+    NOW,     heard   11      91ms      411ms    0/11         9/35       22ms
+    shipped, spread  11     295ms      516ms   11/11        19/35      690ms
+    NOW,     spread   6      90ms      410ms     0/6         9/35      298ms
+
+The shipped row draws ELEVEN pages on spread times where it should draw six,
+which is the bug in one number. (The "9/35 wrong" on the NOW rows is the
+crossfade fooling the classifier; the WAIT column is the one to read.)
+
+**Twenty-five passing tests could not have caught it**, because every one of
+them hands `word_heard` straight to `ayah_page_plan` -- the exact keyword the
+production path was dropping. `RendererWiringTests` drives `write_ass` instead.
+A unit test one layer down cannot see a key that is never copied.
+
+### A RE-RENDER CAN NOW FIX A CLIP THAT IS ALREADY ON THE CHANNEL
+
+This file has said since 3 Sept that "the sync on an OLD clip cannot be fixed
+by re-rendering it". That is no longer true. `relisten_for_word_times` listens
+to the clip's own thirty-to-ninety seconds again, purely to find out WHEN.
+
+**It is safe for exactly one reason, and it is worth stating plainly: on the
+scripture path Whisper's TEXT is never used.** The displayed Arabic and its
+translation come from the canonical corpus, so a fresh listen for TIMES ALONE
+cannot change a single word a viewer reads. `candidate.text` and
+`candidate.segments` are untouched, so the editor's words still win for the
+lecture captions.
+
+- **Gated on the walk's own answer** (`clip_ayat_are_timed`), not on the
+  template or a guess. The walk is cheap (0.07s over Arabic, 0.53s over an
+  eight-thousand-word English lecture) and is the only thing that knows whether
+  this clip holds scripture, so an ordinary lecture re-render transcribes
+  nothing. `ayat = []` (a lecture was walked, no scripture here) and `None`
+  (nobody walked one) both answer "leave it alone".
+- **THE TRAP THAT WOULD HAVE MADE THIS WORSE THAN THE FAULT.**
+  `_transcribe_with_faster_whisper` SHORT-CIRCUITS on
+  `job["transcriptSegments"]` and hands the saved segments straight back --
+  right everywhere else, and exactly what this call exists to escape. Left in,
+  it returns the stored MEDIA-time transcript, the clip-local shift adds the
+  clip's start to it a SECOND time, the walk then looks for the verses outside
+  the clip and finds none, and **a recitation loses its ayah captions
+  altogether on re-render**. Silently. The listen job is a copy with that key
+  removed, and the test asserts on the JOB the transcriber is handed -- a stub
+  of `transcribe()` replaces the very short-circuit that causes it.
+- **It fails open.** A clip is worth minutes on a single-slot box; a failed
+  listen warns and leaves the timing exactly as it was.
+
+### A CUT THROUGH THE MIDDLE OF A VERSE PUT THE WRONG WORDS ON SCREEN
+
+Everything downstream reads a hit's surviving words as a CONTIGUOUS run of the
+verse beginning at `wordFrom` -- that is what `have_from, have_to =
+word_offset, word_offset + len(timed)` means. `retime_for_cuts` dropped the
+words a cut removed and carried `wordFrom` through unchanged, so surviving word
+k was read as verse word `wordFrom + k`, which it is not: the pages chosen and
+the times they are anchored to both slide, and **an ayah is drawn against audio
+that is not it.** That is the worst thing this product can do.
+
+A comment in that function said the two "never meet (cuts arrive only on a
+re-render, which has no lecture map)". True when written and **false since
+v3.101.0 gave re-renders the walk** -- the same release that made the editor's
+section cuts reachable on a recitation. A stale comment is how a live bug reads
+as a note for later.
+
+A hit is split into one entry PER CONTIGUOUS RUN of surviving words now. Each
+run is contiguous by construction, carries its own `wordFrom`, and keeps the
+verse total -- so the existing model is exactly right for each piece and no
+reader had to learn a new shape.
+
+### What is still NOT perfect, said plainly
+
+- **The degraded path is better and not fixed**: 690ms -> 298ms mean, which is
+  still over the bar. The re-listen turns that path INTO the normal path where
+  the audio is available, which is the real answer; where it is not, fewer
+  pages is the honest floor.
+- **Whisper's own word-time error is the ceiling** and it has never been
+  measured against the audio on this project -- the 22ms figure compares the
+  renderer to Whisper, not Whisper to the reciter. `medium` is blocked on the
+  box rescale (open item 5).
+- **Audio-onset refinement is NOT built.** It is the one thing that could beat
+  Whisper's timing and feed the lead above, and it needs a real recitation to
+  validate against; every acoustic number available here was synthetic. Do not
+  ship it unproven.
+- **Not yet seen on a clip rendered by the real box.** Every frame here came
+  from the real `write_ass` through real libass on this machine, on the box's
+  own corpus text and word times. One Quran import settles it there.
+
+Fifteen probes proven red, including two that came back GREEN first: one
+assertion parsed only digits and so walked straight past a NEGATIVE stage the
+missing clamp produced, and one called `ayah_fade_tag` directly with two
+different numbers -- proving the function can tell them apart and nothing about
+what the caller hands it.
+
+**Three existing tests pinned `\fad` and were repinned to the property.** The
+property they protect is real -- scripture only ever changes opacity, never
+pops, scales, travels or highlights per word -- and the two-stage arrival needs
+`\t`, which the old spelling banned outright. They assert "every `\t` payload
+is an `\alpha`" now, which is the honest statement of it.
+
 
 ## The Qur'an captions follow the reciter, not a ruler (v3.147.0, 7 Sept 2026)
 
