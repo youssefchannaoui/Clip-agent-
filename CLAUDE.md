@@ -12559,11 +12559,29 @@ is not documentation -- a sync APPLIES it. It described this:
     mountPath /var/data              /app/data
     DATA_DIR /var/data               /app/data
 
-**`DATA_DIR` is the one that matters.** The entire database is one `state.json`
-on that disk, so pointing it at a mount that does not exist boots the app with
-an EMPTY one -- every account, clip, connection and stored token gone from its
-view. The rest would merely have failed the build, which is the failure you
-want.
+**`DATA_DIR` is the one that matters** -- the entire database is one
+`state.json` on that disk, and a Render env var OVERRIDES the Dockerfile's own
+`ENV DATA_DIR=/app/data`. Pointed at a mount that does not exist, the app boots
+with an EMPTY state: every account, clip, connection and stored token gone from
+its view.
+
+**BUT IT WAS LATENT, NOT ACTIVE, AND SAYING OTHERWISE WOULD BE THE OVERCLAIM
+THIS FILE KEEPS PUNISHING.** Measured after the fix rather than assumed: the
+deploy list shows `trigger: blueprint_sync` on pushes, so the blueprint HAS
+been syncing all along with `DATA_DIR: /var/data` in it -- and `DATA_DIR` does
+not appear in the dashboard's ~96 variables at all, while the app has always
+run on the Dockerfile's `/app/data`. So Render was NOT pushing this
+blueprint's `envVars` onto the already-existing service. Nothing was ever
+damaged, and nothing was about to be.
+
+What the drift was, honestly: a file that would build the WRONG SERVICE if one
+were ever created from it, and a standing bet that Render's sync behaviour
+never changes. Neither is worth keeping when the fix is free.
+
+**The corrected file is proven, not hoped**: the push triggered a
+`blueprint_sync` that went LIVE, and afterwards the service is still Docker
+with `deenclipped-data` 10GB at `/app/data`, all five self-checks pass, and the
+account still holds its 31 clips, 5 lectures and 4 connections.
 
 Two values were also actively wrong: `OLLAMA_MODEL: qwen3:4b` (2.5G against a
 2G container cap -- it OOM-kills, and `dmesg` on the box has five of them; the
