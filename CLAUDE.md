@@ -7702,23 +7702,57 @@ starting before the count climbs rather than after.
    `dashboard.stripe.com/acct_1U1p3tKKpFy0S4he/account/status`.
 5. **Hetzner CPX41 rescale.** Once done: worker retune (4 jobs, whisper medium,
    `qwen3:4b`), ETA recalibration, an end-to-end run with before/after numbers.
-6. ~~**Reconnect YouTube.**~~ **NOT TRUE, and had not been for some time.**
-   Read off the Render logs on 7 Sept 2026 rather than assumed: "Published
-   'The Relationship with Allah' to youtube (DeenClipped)" at 04:00 and
-   "Balance optimism and pessimism" at 06:30 the same morning, each followed
-   by "posted to youtube (DeenClipped), instagram (eurotrimau), facebook
-   (DeenClipped)". YouTube, Instagram and Facebook are all publishing on
-   schedule. Kept rather than deleted because this line sent two sessions
-   looking for an expired token that was working.
-   **RECONNECT TIKTOK INSTEAD, and it is the live one.** Every scheduled clip
-   for at least four days has failed on `TikTok error: Refresh token is
-   invalid or expired` -- fifteen of the twenty-five most recent error lines,
-   roughly every seventy-five minutes since 4 Sept. It is a refresh token, so
-   it cannot heal itself: Connections -> TikTok -> Disconnect, then Connect.
-   Nothing in the repo can do it; the credential belongs to the account.
+6. **RECONNECT BOTH YOUTUBE AND TIKTOK.** Two reconnects now, not one, and
+   the YouTube half changed DURING 7 Sept -- so read this whole entry before
+   acting on any single line of it.
+
+   **TikTok** has been dead since at least 4 Sept: every scheduled clip fails
+   on `TikTok error: Refresh token is invalid or expired`. A refresh token
+   cannot heal itself, so it is Connections -> TikTok -> Disconnect, then
+   Connect. Nothing in the repo can do it; the credential belongs to the
+   account.
+
+   **YouTube was working and stopped at 12:30 on 7 Sept, and the likely cause
+   was a reconnect attempt.** Read off the Render logs rather than assumed,
+   and the order is what matters:
+
+       12:02  Could not connect youtube: No YouTube channel was found for
+              this Google account.
+       12:17  Published "Surah Al-Baqara 58-59" to youtube (DeenClipped).
+       12:30  youtube (DeenClipped) publishing failed: The YouTube connection
+              has expired: YouTube returned 400: Token has been expired or
+              REVOKED. Reconnect the channel in Connections.
+
+   So the old credential was still publishing thirteen minutes before it was
+   revoked, and the one thing that happened in between is a connect attempt
+   against a **Google account that owns no YouTube channel**. "Revoked" is
+   Google's word, not an expiry. **Reconnect with the Google account that owns
+   the DeenClipped channel** -- picking a different one is what appears to
+   have cost the working connection, and doing it again will not fix it.
+
+   The 12:30 clip still went out on Facebook and Instagram and the row reads
+   "posted to instagram (eurotrimau), facebook (DeenClipped)", which is the
+   partial-publish rule (v3.28.0 / v3.29.1) behaving.
+
+   **v3.144.5 IS CONFIRMED LIVE BY THIS SAME LOG**, which is the first read of
+   it from production rather than from a test. Every failure earlier on 7 Sept
+   is the bare platform sentence ("TikTok error: Refresh token is invalid or
+   expired."); the 12:30 and 12:34 ones carry the wrapper -- "The YouTube
+   connection has expired: ... Reconnect the channel in Connections." -- which
+   is `youtubeToken`/`tiktokToken`'s own string, thrown with
+   `retryable: false` after `markCredentialDead` has raised `lastTestError`.
+   So the channel now reads "Needs reconnecting" in Connections without
+   anybody having pressed Test, and a dead credential no longer burns five
+   attempts a clip.
+
    **The Facebook length failures in that same log STOPPED after 6 Sept
-   12:30**, which is v3.135.0's `healImpossibleTargets` landing -- the first
-   confirmation of that fix from production rather than from a test.
+   12:30**, which is v3.135.0's `healImpossibleTargets` landing -- likewise
+   confirmed from production rather than from a test.
+
+   *(This entry used to read "~~Reconnect YouTube~~ -- NOT TRUE", because on
+   the morning of 7 Sept YouTube genuinely was publishing on schedule. Kept as
+   history: it sent two sessions looking for an expired token that was
+   working, and it is now stale in the other direction.)*
 7. **A stranger test** — someone who has never seen the product signs up and
    uses it. Claude cannot create an account, so this one needs a real person.
 8. **Bing Webmaster Tools** (`BING_SITE_VERIFICATION` on Render, ~2 min). Once
@@ -12979,6 +13013,17 @@ channel it already knew was dead, one red row at a time, saying nothing.**
 
 Both probes proven red. **Ships for YouTube as well as TikTok** -- the same
 shape, and YouTube's stored token has expired on this account once already.
+
+**CONFIRMED FROM PRODUCTION THE SAME DAY, and by YouTube as well.** Every
+failure earlier on 7 Sept is the bare platform sentence; at 12:30 and 12:34 the
+Render log carries this release's own wrapper instead -- *"The YouTube
+connection has expired: YouTube returned 400: Token has been expired or
+revoked. Reconnect the channel in Connections."* and the TikTok twin. That is
+`youtubeToken`/`tiktokToken` throwing with `retryable: false` after
+`markCredentialDead` has raised `lastTestError`, so the channel says "Needs
+reconnecting" without anybody having pressed Test. See open item 6 -- the same
+log is also how the YouTube half of that item was found to have gone stale
+within the hour.
 
 ## render.yaml described a service that has not existed for months (v3.144.6, 7 Sept 2026)
 
