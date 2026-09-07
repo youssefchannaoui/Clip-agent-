@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1717 JS + 741 Python**
+- `npm test` and `npm run check` must pass. Currently **1718 JS + 741 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -13318,3 +13318,51 @@ Each case runs in its own process now.
 Four probes proven red: the shape check removed (the production bug restored),
 the greyed button restored, the divider drawn unconditionally, and the honesty
 note reworded away.
+
+## The hero's "Posting to" row, and a test that watched the clock (v3.147.1, 7 Sept 2026)
+
+Youssef, on the Home hero: "move posting too closer to that border on the
+bottom of hero."
+
+- **The row already carried `margin-top: auto`** in the design export, written
+  to push it to the foot of the left column -- and it was **INERT**. The hero
+  is `align-items: flex-start`, so the left column is only as tall as its own
+  content (**374px** measured on production) while the collage beside it is
+  **430**: there is no free space for an auto margin to spend. Measured: the
+  row's bottom sat **97px** above the section's, against the **40px** of
+  padding the section actually ends with.
+- **Stretching the columns gives that margin something to take.** Measured
+  after: gap **97 -> 41**, and the hero's own height is **UNCHANGED at 517** --
+  nothing else on the page moves, the row simply drops to the foot of its
+  column. Checked at 1100, 900 and 780, where the hero wraps and the collage
+  drops below it: the row stays inside the section, nothing overflows, no page
+  scroll.
+- **Selected through `#dcHeroFloaters`**, an id the export carries, rather than
+  the hero's own hashed class (`.s2a` today) which a re-import renumbers.
+- **It is a SECTION, not a div.** The first cut wrote `div`, matched nothing,
+  and measured as "the fix does nothing" -- which is indistinguishable from a
+  wrong diagnosis, and nearly sent this looking for a second cause. **Check
+  what the element IS before concluding a rule failed**; `el.matches(selector)`
+  answers it in one line.
+- The rule sets no colour, so `build-light-theme.mjs` re-emits nothing and the
+  generated sheet is byte-identical.
+
+### AN HOUR FROM NOW IS NOT ALWAYS TODAY
+
+Found because the branch was **already red** on `audit-fixes` before this
+change touched anything -- upstream too, so both sessions had pushed onto it.
+
+The test seeded a clip at `Date.now() + 3600000` and read the **day** view,
+which `dayItemsAt` buckets by `startOfDay` anchored on today. Run between
+**23:00 and midnight**, an hour from now is TOMORROW: the day view is empty,
+no card is found, and the assertion fails. Caught at **23:51**, and confirmed
+by stepping the clock -- 09:51, 15:51 and 22:51 all land today, 23:51 does not.
+
+**One hour in every 24**, on any machine in the app's timezone and on CI in
+its own -- so roughly 4% of runs, at an hour nobody is watching, on a branch a
+phone session has to be able to trust. The day view is anchored to the clip's
+own day now (`schedAnchor: clip.scheduledAt`), so the clock cannot reach it.
+
+**Any test that seeds a time relative to `Date.now()` and then reads a
+DAY-bucketed view has this shape.** Anchor the view to the seeded time rather
+than hoping the two land in the same day.

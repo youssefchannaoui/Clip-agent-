@@ -1654,3 +1654,26 @@ body.dcm-light #dcMobile {
      own on/off colour and owes nothing to the icon font. */
   display:block;flex:none;
 }
+
+/* THE HERO'S "POSTING TO" ROW SITS ON THE SECTION'S OWN BOTTOM EDGE.
+ *
+ * The row already carries `margin-top: auto` in the design export -- written to
+ * push it to the foot of the left column -- and it was INERT. The hero is
+ * `align-items: flex-start`, so the left column is only as tall as its content
+ * (374px measured on production) while the collage beside it is 430: there is
+ * no free space for an auto margin to spend. The row's bottom sat 97px above
+ * the section's, against the 40px of padding the section actually ends with.
+ *
+ * Stretching the columns gives that auto margin something to take. Measured
+ * after: gap 97 -> 41, and the hero's own height is UNCHANGED at 517 -- nothing
+ * else on the page moves, the row simply drops to the foot of its column. At
+ * 780px the hero wraps and the collage goes below it, which is the designed
+ * layout; the row stays inside the section and nothing overflows.
+ *
+ * Selected through `#dcHeroFloaters`, an id the export carries, rather than the
+ * hero's own hashed class (`.s2a` today) which a re-import renumbers. It is a
+ * SECTION, not a div -- the first cut wrote `div`, matched nothing, and
+ * measured as "the fix does nothing", which is indistinguishable from a wrong
+ * diagnosis. Check what the element IS before concluding a rule failed.
+ */
+#studio section:has(> #dcHeroFloaters) { align-items: stretch; }

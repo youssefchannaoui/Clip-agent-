@@ -223,8 +223,16 @@ test('"Save as new style" is gone, the fake storage bar is hidden, and the accou
 
 /* ── 8. Group 2: the chips, the nasheed claim, the free account's portal buttons, the phone's Approve ── */
 test('a schedule card lists only the checks that FAIL, worded as what is missing', () => {
+  // AN HOUR FROM NOW IS NOT ALWAYS TODAY. This seeded the clip at
+  // `Date.now() + 3600000` and read the DAY view, which `dayItemsAt` buckets by
+  // `startOfDay`, anchored on today — so between 23:00 and midnight the clip
+  // landed on tomorrow, the day view was empty and this went red. One hour in
+  // every 24, on any machine in the app's timezone and on CI in its own.
+  // Caught at 23:51 with the branch already red upstream. Anchoring the view to
+  // the clip's own day removes the clock from the test entirely.
   const clip = { id: 'c1', title: 'A clip', status: 'approved', approvedAt: 1, scheduledAt: Date.now() + 3600000, transcript: 'words', templateId: 'clean-line', musicVerified: true, renderVerified: false, targets: [] };
-  const { v } = bindings({ clips: [clip], tracks: nasheeds(1), music: nasheeds(1) }, { screen: 'schedule', schedView: 'day' });
+  const { v } = bindings({ clips: [clip], tracks: nasheeds(1), music: nasheeds(1) },
+    { screen: 'schedule', schedView: 'day', schedAnchor: clip.scheduledAt });
   // Wherever the schedule filed it (today, overdue, a week cell): the first
   // card carrying a checks list.
   const findCard = (o, depth = 0) => {

@@ -4346,3 +4346,33 @@ test('reporting a bug lives in Help, and carries the release', () => {
   assert.match(html, /window\.openBug\s*=\s*openBug/, 'pinned across script scopes');
   assert.doesNotMatch(html, /dcBugRow/, 'and no longer injected into the account menu');
 });
+
+test('the hero\'s "Posting to" row is pushed to the foot of its column', () => {
+  /*
+   * The design export already gives that row `margin-top: auto`, and it was
+   * INERT: the hero is `align-items: flex-start`, so the left column is only
+   * as tall as its content (374px measured on production) while the collage
+   * beside it is 430 — no free space for an auto margin to spend. The row's
+   * bottom sat 97px above the section's own edge, against 40px of padding.
+   * Measured after stretching: 97 -> 41, hero height unchanged at 517.
+   *
+   * CI has no browser, so this pins the shape: the rule exists, it is reached
+   * through an id rather than a hashed class, and it names the right TAG —
+   * the first cut wrote `div` (the hero is a `section`), matched nothing, and
+   * measured exactly like a wrong diagnosis.
+   */
+  const tokens = fs.readFileSync(path.join(ROOT, 'src/public/studio-tokens.css'), 'utf8');
+  const rule = /#studio section:has\(> #dcHeroFloaters\)\s*\{([^}]*)\}/.exec(tokens);
+  assert.ok(rule, 'the hero stretch rule exists and selects a section, not a div');
+  assert.match(rule[1], /align-items:\s*stretch/);
+
+  // The auto margin this depends on has to stay in the design export.
+  const design = fs.readFileSync(path.join(ROOT, 'design/studio-dashboard.dc.html'), 'utf8');
+  const at = design.indexOf('>Posting to<');
+  assert.ok(at > 0, 'the row is still in the design');
+  const row = design.slice(design.lastIndexOf('<div', at), at);
+  assert.match(row, /margin-top:\s*auto/, 'the row still relies on an auto margin');
+
+  // #dcHeroFloaters is the hook; a hashed class would renumber on re-import.
+  assert.match(design, /id="dcHeroFloaters"/);
+});
