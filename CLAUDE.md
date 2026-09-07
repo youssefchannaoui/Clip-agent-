@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1613 JS + 691 Python**
+- `npm test` and `npm run check` must pass. Currently **1617 JS + 691 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -11731,3 +11731,61 @@ bit slow as well".
 
 Four red probes, each proven: the paging removed, the checkerboard restored,
 the sharpen reference deleted, the lane painter unhooked. 1603 JS + 691 Python.
+
+## DeenAI's Ask was sold at Pro and refused at Studio (v3.141.3, 7 Sept 2026)
+
+Found by a design workflow reading DeenAI end to end before rebuilding it --
+all four independent designers flagged the same thing, and it is a live
+billing fault, not a design opinion.
+
+**`FEATURES.deenaiAsk` says `tier: 'pro'`. `deenaiAskAccess()` said
+`billing.atLeast(user, 'studio')`.** So since v3.122.0 (4 Sept 2026) a Pro
+subscriber was:
+
+  - SOLD "Ask DeenAI anything" on the pricing page (built from the table),
+  - shown the Ask box UNLOCKED in the studio (`aiAskOn` reads
+    `current.features.deenaiAsk`, which reads the table),
+  - and refused by the route with **"Asking DeenAI is a Studio feature"** the
+    moment they pressed it.
+
+**Proven by execution, not by reading**: for a `pro_monthly` account
+`planFeatures().deenaiAsk` returned `true` and `deenaiAskAccess()` returned
+`false`.
+
+This is the v3.72.10 fault -- a button naming the wrong plan -- inverted and
+made worse, because the customer has already paid. The comment ON THE VERY
+LINE that moved the feature says *"Two gates at two tiers is what let a button
+sell the wrong plan in v3.72.10; one tier cannot."* The table moved; the gate
+did not.
+
+- **Both gates read the table now** (`billing.FEATURES.deenai.tier` /
+  `.deenaiAsk.tier`), and a literal tier string is banned inside them by test.
+  That is the whole point of the FEATURES table and it was being bypassed.
+- **The refusal names the tier the gate enforces**, from
+  `deenaiAskTierName()`, rather than a typed "Studio" that outlived the gate.
+
+### THE THREE LAW TESTS ALL PASSED, AND THAT IS THE LESSON
+
+`plan-gating`, `studio-design` and `pro-and-blockers` each assert the "one
+tier" rule, and every one of them reads `billing.featuresForTier(...)` -- **the
+table reflected back at itself.** A test that reads the table to check the
+table can only ever agree with itself; the drift lives BETWEEN the table and
+the function, so that is where the comparison has to be.
+
+Measured with the bug deliberately restored: **`test/deenai-gate.test.mjs`
+fails 3 of its 4, and 297 existing law tests all pass.** That is why it
+survived three days.
+
+- The new file CALLS both gates against `planFeatures()` at free, Pro and
+  Studio, and asserts the two halves unlock together -- against the GATES,
+  where the older tests assert it against the table.
+- **`test/deenai.test.mjs` was PINNING the bug.** It asserted `view.ask ===
+  false` for Pro and a 403 matching /Studio feature/ -- correct when written,
+  and left agreeing with the fault when the feature moved. It now asserts a Pro
+  account is never refused for its plan, and that a refusal here is the WORKER
+  (503), not the tier.
+- **`pro-and-blockers` demanded the literal "Asking DeenAI is a Studio
+  feature"** -- a source-string test that would have gone RED against the
+  correct fix, which is the eighth time this repo has recorded that shape. It
+  asserts the sentence is BUILT from the table now, and lets the table decide
+  the word.

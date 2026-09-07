@@ -2507,8 +2507,11 @@ async function route(req, res, url) {
     // screen can show a Studio prompt beside real insights instead of a demo.
     if (!deenai.deenaiAskAccess(currentUser)) {
       return json(res, 403, {
+        // Named from the FEATURES table, never typed: a refusal that names a
+        // tier the gate does not read is how a paying customer is told to buy
+        // something they already have.
         error: deenai.deenaiAccess(currentUser)
-          ? 'Asking DeenAI is a Studio feature. Pro shows the insights; Studio answers questions.'
+          ? 'Asking DeenAI is a ' + deenai.deenaiAskTierName() + ' feature.'
           : 'DeenAI is a Pro feature. Upgrade to see your own numbers.',
       });
     }

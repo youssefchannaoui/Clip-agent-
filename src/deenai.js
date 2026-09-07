@@ -35,12 +35,39 @@ import { config } from './config.js';
  * gate would have meant either giving Studio's compute away with Pro or taking
  * back something Pro already shipped with.
  */
+/*
+ * BOTH GATES READ THE TABLE, NEVER A TYPED TIER.
+ *
+ * They did not, and it cost a paying customer the feature they had bought.
+ * v3.122.0 moved Ask to Pro in `FEATURES` -- with a comment on that very line
+ * saying "Two gates at two tiers is what let a button sell the wrong plan in
+ * v3.72.10; one tier cannot" -- and left `deenaiAskAccess` reading a literal
+ * 'studio'. So from 4 Sept 2026 a Pro subscriber was SOLD Ask on the pricing
+ * page, shown the Ask box unlocked in the studio (the screen reads
+ * `planFeatures().deenaiAsk`, which reads the table), and refused by the route
+ * with "Asking DeenAI is a Studio feature" when they pressed it. Proven by
+ * execution rather than by reading: for a pro_monthly account the table
+ * answered true and the gate answered false.
+ *
+ * The FEATURES table exists precisely so a feature cannot be sold at one tier
+ * and enforced at another. Reading it here is what makes that true, and
+ * `test/deenai-gate.test.mjs` calls both halves rather than reflecting the
+ * table back at itself -- which is why three existing law tests passed green
+ * over this for three days.
+ */
 export function deenaiAccess(user) {
-  return billing.atLeast(user, 'pro');
+  return billing.atLeast(user, billing.FEATURES.deenai.tier);
 }
 
 export function deenaiAskAccess(user) {
-  return billing.atLeast(user, 'studio');
+  return billing.atLeast(user, billing.FEATURES.deenaiAsk.tier);
+}
+
+// The plan that WOULD unlock asking, named from the same table, so a refusal
+// can never name a tier the gate does not use.
+export function deenaiAskTierName(billingModule = billing) {
+  const tier = billingModule.FEATURES.deenaiAsk.tier;
+  return tier.charAt(0).toUpperCase() + tier.slice(1);
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -489,7 +516,7 @@ export async function ask(user, question) {
   if (!q) throw Object.assign(new Error('Ask a question first.'), { statusCode: 400 });
   if (q.length > 500) throw Object.assign(new Error('Keep the question under 500 characters.'), { statusCode: 400 });
   if (!deenaiAskAccess(user)) {
-    throw Object.assign(new Error('Asking DeenAI is a Studio feature. Pro shows the insights; Studio answers questions.'), { statusCode: 403 });
+    throw Object.assign(new Error('Asking DeenAI is a ' + deenaiAskTierName() + ' feature.'), { statusCode: 403 });
   }
   if (config.processingMode !== 'remote') {
     throw Object.assign(new Error('DeenAI answers run on the render worker, which this deployment does not have connected.'), { statusCode: 503 });

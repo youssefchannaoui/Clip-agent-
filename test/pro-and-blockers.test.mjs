@@ -28,7 +28,11 @@ test('every feature the table sells is enforced server-side, tier by tier', () =
   assert.match(server, /Removing the DeenClipped watermark is a Pro feature/);
   assert.match(server, /is a Pro template/);
   assert.match(server, /DeenAI is a Pro feature/);
-  assert.match(server, /Asking DeenAI is a Studio feature/);
+  // Named from the FEATURES table rather than typed, so this asserts the
+  // SHAPE and the table decides the word. It used to demand the literal
+  // "Studio", which is the tier the gate wrongly enforced -- a source-string
+  // test that would have gone red against the correct fix.
+  assert.match(server, /Asking DeenAI is a ' \+ deenai\.deenaiAskTierName\(\) \+ ' feature/);
   // The two Studio features that are not a route read DIFFERENT tiers, and the
   // difference is whether anyone else pays for it.
   //
