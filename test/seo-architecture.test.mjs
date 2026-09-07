@@ -342,14 +342,18 @@ test('breadcrumb schema matches breadcrumbs a person can see', async () => {
 
 // ── the claims themselves ───────────────────────────────────────────────────
 
-test('no public page advertises the editor as available', async () => {
-  // It is gated behind a "coming soon" notice. Selling it would be selling
-  // something a new customer cannot use.
+test('no public page advertises frame-level editing, or still calls the editor gated', async () => {
+  // The editor shipped in v3.78.0 with trim, section cuts and caption edits.
+  // What it does NOT have -- overlays, extra media, keyframes -- must not be
+  // sold, and the old "coming soon" claim about the editor itself must not
+  // survive anywhere either: a stale limitation is the same lie in reverse.
   for (const page of seo.SEO_PAGES) {
     const { body } = await get(page.path);
     const main = body.slice(body.indexOf('<main'), body.indexOf('</main>'));
-    assert.ok(!/\beditor is (now )?(available|live|ready)\b/i.test(main),
-      `${page.path} advertises the editor as available while it is gated`);
+    assert.ok(!/\b(overlays?|keyframes?) (are|is) (now )?(available|live|ready|built)\b/i.test(main),
+      `${page.path} advertises frame-level tools that do not exist`);
+    assert.ok(!/editor is (behind|held behind|gated)|editor .{0,40}coming-soon (gate|notice)/i.test(main),
+      `${page.path} still says the editor is gated`);
   }
 });
 

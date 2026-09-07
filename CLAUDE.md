@@ -199,8 +199,8 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1598 JS + 687 Python**
-  (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
+- `npm test` and `npm run check` must pass. Currently **1609 JS + 691 Python**
+  (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -216,8 +216,8 @@ These were each a real bug and each has a test named after it.
   for a file CI has never seen. Before writing a count, check nothing under
   `scratchpad/` matches node's test patterns (`*.test.*`, `*-test.*`,
   `*_test.*`, `test-*.*`, or anything inside a directory called `test`).
-- **The 8 skips are `SpeakerTrackingTests` (7) and `AtmosphereFrameTests` (1),
-  and they skip ONLY where ffmpeg is absent** (v3.101.2, v3.118.0). They build their own fixture with ffmpeg and run
+- **The 9 skips are `SpeakerTrackingTests` (7), `AtmosphereFrameTests` (1) and
+  `RenderPlateTests` (1, v3.140.0), and they skip ONLY where ffmpeg is absent** (v3.101.2, v3.118.0). They build their own fixture with ffmpeg and run
   wherever it exists -- all seven pass here in 0.9s -- but the CI runner has
   no working ffmpeg, so there they skip, counted as seven skips with the
   reason in each. The crop ARITHMETIC is therefore exercised by anyone running
@@ -522,6 +522,10 @@ Habits the tests now enforce, and why:
 ---
 
 ## The editor is gated for launch (27 Aug 2026, Youssef's call)
+
+**SHIPPED 7 Sept 2026 (v3.139.0) -- see *The editor shipped* at the foot of this
+file. The two gate files are deleted; everything below is the record of why it
+was held and what it was held behind.**
 
 **Un-gated in v3.78.0 and RE-GATED in v3.78.3, both on 2 Sept 2026.** The
 "fix all" pass on the week-one gaps shipped the editor with section cuts;
@@ -2430,6 +2434,16 @@ to 3.100.0. The guard diffs against the FIRST parent, and because my side
 already held the higher number the merge kept 3.101.0 -- unchanged against my
 parent -- while pulling in four of their `src/` files. Their `src/` diff, no
 version movement, red branch.
+
+**AND IT HAPPENED THE OTHER WAY ON 7 SEPT 2026: both sides independently
+minted 3.138.0.** This session shipped the confirmation screen as v3.138.0
+while the other session shipped the editor's timeline as v3.138.0 and carried
+on to 3.140.0. Neither did anything wrong -- they simply could not see each
+other -- but the number that is meant to identify a release then named two
+different trees, which is what the worker deploy compares the running container
+against. The merge resolved to **3.141.0**: new against either parent, higher
+than both, and unambiguous. **When you merge, check whether the other side has
+already used YOUR number, not just whether theirs is higher.**
 
 **The rule: when you merge and YOUR side already had the higher version, bump
 again ON the merge commit.** When theirs is higher the merge moves the number
@@ -11404,3 +11418,234 @@ destination that is certain to refuse is not a destination.**
 **Not built, and worth considering:** the clip length BANDS still offer lengths
 Facebook cannot take, so this keeps happening and is only ever caught at the
 destination. A warning where the band is chosen would stop it at source.
+
+## Two things the editor promised and did not do (v3.138.0, 7 Sept 2026)
+
+Youssef: "open up the editor or all so i can see if its any good." So it was
+un-gated locally, seeded with a clip carrying real sentence timings, and driven
+control by control. It is good -- all five panels, the timeline, the section
+cuts and the unsaved-caption ghost all behave -- and two things did not.
+
+**Both are invisible without opening it**, which is the whole reason they had
+survived: the editor is behind the coming-soon gate, so nothing routine looks at
+it, and a green suite says nothing about either.
+
+### The timeline's own hint was a lie from four of the five tabs
+
+The strip under the timeline reads *"Click a caption block to edit its words"*.
+Clicking one set `edBlock` and moved the playhead -- and the words loaded into
+the **Captions panel, which is not on screen** unless that tab already happened
+to be showing. Measured from Export: `edBlock: 2`, the right sentence in the
+textarea, and nothing a person could see had changed. From Framing, Audio, Look
+or Export the block took its gold outline and that was all.
+
+That is invariant 9 on the one gesture the timeline advertises. `select()` now
+sets `edTab: 'captions'` with the rest of the selection, so the sentence the
+screen prints is true from wherever you are standing.
+
+### The screen named "Look" was the one place the looks were missing
+
+v3.118.0 put **twelve graded looks and four weather effects** (rain, snow, dust,
+bokeh, with strength and a darken slider) on Templates → Style. The editor's Look
+tab predates that release and still offered grain, warmth, vignette and the
+watermark -- so **per clip the half that actually changes the picture could not
+be reached at all**, on the tab named after it.
+
+- **It is the Templates screen's OWN group, not a second set of rows.**
+  `edLookControls` is `tplControlsFor().look`, so the options come from the
+  schema's ENUMS, the four custom-eq sliders appear on the same condition, and
+  the strength slider hides with `overlayEffect: none` in both places. Two
+  hand-written copies would drift the first time a look is added.
+- **They already wrote to the right place.** `saveStyle` routes to
+  `saveClipStyle` while the editor is open, so a change lands on the clip's own
+  `styleOverrides` exactly as grain and vignette beside it do. Verified by
+  reading the record back: `{filterPreset: 'custom', overlayEffect: 'rain'}` on
+  the clip, `renderVersion` unmoved -- nothing re-renders.
+- **WHAT THE EXPORT ALREADY DRAWS IS FILTERED OUT, and only counting the
+  rendered rows found it.** Passing the group through whole put a SECOND Grain,
+  Warmth and Vignette slider directly under the export's own three. Reading the
+  group would not have shown it; the browser did. That is the fault this file
+  has recorded three times (two watermark positions, two onboarding systems, two
+  tour buttons), and it is why the filter is keyed on the FIELD, not the label.
+- **Host-rendered**, so no design re-import: four rows in the export regenerates
+  every hashed class name in the app. `data-host-owned`, `dcSetHtml`, in
+  paintStudio's list, and the mount is found by the panel's own **"DeenClipped
+  watermark"** text -- never a class, every one of which is hashed.
+- A `range` is dragged, so its value is written back **in place**; only a
+  structural change (choosing an effect, revealing the strength slider) redraws.
+  Rewriting the markup mid-drag drops the thumb.
+
+Measured at 1440x900 in both themes: rows and sliders land on the export's own
+edges (1141/283 and 1143/283), **zero duplicates**, **0 DOM operations on an
+unchanged repaint**, same node across three repaints, no page overflow. In
+daylight the select takes a white ground and dark ink from the tokens while the
+stage stays night -- the rows are inline `var()` styles, which the light-theme
+generator does not process and does not need to.
+
+### Traps paid for again
+
+- **A red probe whose edit does not MATCH proves nothing.** Probe 5 searched for
+  a `setAttribute` line at the wrong indentation, replaced zero bytes, and the
+  suite passed against unmodified code. It asserts its own replacement count
+  now, and was redone by line number. Fifth recorded occurrence.
+- **`\.s[0-9a-z]{2,3}` matches `c.set(`.** The "names no hashed class" assertion
+  went red on my own painter's `c.set(e)`. A generated class is `.s` + a DIGIT
+  (`.s29`, `.s4j`); requiring the digit is what tells one from ordinary code.
+- **`Array.from` before `deepEqual`** on anything built in the vm realm. Fourth
+  time.
+- **Guessing a binding name costs a run**: it is `edCapBlocks` and `edSelText`,
+  not `edCaptionBlocks`/`edBlockText`. Read the binding, do not infer it.
+
+### The other session was in the same file at the same time
+
+`origin` had moved to **v3.137.0, "The clip editor, driven control by control,
+so the gate can come off"** -- the same screen, the same afternoon. Checked
+before committing, per this file's own rule, and the two passes are
+complementary: they did the beta labelling, the watermark switch, Preview,
+Export's claims and the unsaved-words guard, and touched **neither** of the two
+faults above (`edBlock: i, edBlockDraft: null` was still unchanged at their
+line 4391, and `edLookControls` appears zero times). One conflict, in the
+bindings object, where their watermark comment and my Look group had landed on
+the same line -- **both sides kept**, which is what reading them rather than
+picking one gives you.
+
+**The gate is untouched and still on**, at origin and here: this is built
+BEHIND it, like the section cuts were.
+
+## The editor shipped (v3.139.0, 7 Sept 2026)
+
+Youssef, with a screenshot of production still reading "The clip editor lands
+in the next update", asked whether to settle the one remaining unknown first or
+take the gate off now: **"Take the gate off now."** So it is off. Held from
+27 Aug (re-gated once on 2 Sept), and behind it two sessions had fixed
+everything he complained about (v3.137.0 and v3.138.0).
+
+**What "the gate" was, and every piece of it that went:** `editor-gate.js` and
+`studio-editor-gate.css` (`git rm`'d, not unlinked -- a file nothing serves is
+a file the next person re-links), their `<link>` and `<script>` in index.html,
+the two server allowlist lines, and the phone rule's `:not(#dcEditorSoon)`
+exemption. The copy moved with it in **five places**, using the wording that
+shipped briefly in v3.78.0 (`8a07833`, applied as a patch where it still
+applied): the help article "The clip editor says coming soon", the terms'
+"currently marked coming soon", the features chapter's headline, the
+`/alternatives` honest-limits list and the landing page's "behind a coming
+soon gate". The concept image of frame-level tools KEEPS its "Concept preview"
+badge -- overlays, media and AI tools are still not built, and CLAUDE.md's
+rule that `editor-premium.webp` is never shown untagged stands; only its alt
+stopped calling the editor itself coming soon.
+
+- **`test/editor-gate.test.mjs` proves the gate is GONE now** (both files
+  absent, both routes 404, no tags, no allowlist lines, the phone rule with
+  nothing to exempt, no BETA, and the six retired sentences absent) -- half a
+  gate is the worst of both. Its first cut matched a bare `.inert = true` and
+  went red on the dialogs' focus trap, a different feature that must stay; it
+  names the gate's own identifiers now. And it pins the SPECIFIC retired
+  sentences rather than "editor near coming soon": the concept badge is a
+  legitimate "coming soon" eighty characters from the word "editor".
+- **`test/notify-dock.test.mjs` had the deleted sheet in a typed list** of
+  files to scan for z-index -- the one typed list in a test whose comment says
+  "read from the files rather than listed by hand". Dropped.
+- Driven on the real build with no local hacks, in from the queue card's own
+  Edit button: no overlay, not inert, no blur, both gate files 404, title
+  "Clip editor" with v3.137.0's honest subtitle. At 390 the phone shows the
+  wider-screen message alone. 1593 JS + 687 Python.
+
+**THE ONE THING NOT PROVEN, said here because he chose to ship past it:** no
+preview or save has been WATCHED landing from the real Hetzner worker
+(v3.137.0's own closing line). Every render request is proven by the bindings
+and the engine's tests; the dev box has no worker. **The first Preview press on
+production is now a customer's** -- or Youssef's, and it is worth being his:
+open any clip on deenclipped.online, press Preview, and see "Rendering preview"
+come back as a playable window. If it does not, that is the first thing to
+look at, and `runRemoteAux`'s stall detection (v3.133.0) is what bounds it.
+
+
+## The editor plays a PLATE and draws every layer live (v3.140.0, 7 Sept 2026)
+
+Youssef, on the editor: "ZERO of those buttons work its super annoying you say
+you fix them but they still dont work i want a redo a actaul redo, ALL BUTTONS
+MUST WORK captions moving must be live ... make a loading screen".
+
+**He was right, and the cause was invariant 4 as extended on 21 Aug.** The
+editor played the finished RENDER -- the same bytes the queue plays -- so a
+slider changed a number and never the picture, and the ghost caption only
+appeared once the clip was "dirty". Measured on production before anything was
+built: caption size, colour, position, framing, look and watermark controls all
+wrote their value and left the frame byte-identical. That is what "zero
+buttons work" meant, and no green suite could have said otherwise.
+
+### The design, and the decision it reverses
+
+**Youssef's instruction reverses the "never draw over a file that exists" half
+of invariant 4 for the EDITOR.** The render is still the truth and still what
+the Queue and Preview play; the editor now plays a **plate** -- the clip window
+cut untouched by the worker (`render_plate`: no captions, no mark, no brand, no
+promo, no grade, no framing, no music; long edge bounded to
+`PLATE_MAX_EDGE`, crf 22, faststart, plus a thumb) -- and draws every layer
+over it LIVE from the same `tpl` object the sliders write: the caption in its
+real face (`captionFaceStyle`/`capInkStyle`/`captionHighlightStyle`), the
+framing as object-fit/position, the grade as `lookFilter`, darken/weather/
+vignette/grain as `fxLayersStyle`, the watermark, and the nasheed as a synced
+`<audio>` at the account's level. The chip says "Live preview · Save clip
+renders the exact video". Two rendering engines exist again, on purpose, with
+the split stated: the editor shows the CHANGE, the render is the FILE.
+
+- **The plate is a re-render job with `plate: true`**, on the quick lane at
+  priority 0 (forced in the engine whatever the caller passed), output id
+  `<clip>-plate` so it overwrites rather than collecting, and it WAIVES the
+  nasheed (`waivesMusic`) -- the worker's plate branch runs BEFORE the music and
+  template checks, because a plate lacks both by definition. `latestRerender`,
+  the live list, the bell and both supersede sweeps exclude it, and a queued
+  plate never pairs with a queued render (`Boolean(stale.plate) ===
+  Boolean(plate)`). It lands on `clip.plate {url, thumbUrl, clipFile, thumbFile,
+  startSec, endSec, at}`; the self-hosted engine streams it from
+  `/api/clips/:id/plate` and `/plate-thumb`, the remote worker hands back a URL.
+- **The editor asks for a plate itself** (`paintEditorVideo`, once per
+  `id@start-end` key, never while one is queued/processing) and shows a
+  loading screen with the job's own stage and progress until plate + fonts +
+  `canplay`; 90s offers "Keep waiting" / "Show the last render", a failure
+  offers "Try again". A trimmed clip gets a fresh plate because the key moves.
+- **Word and card timing follow the worker's own rules.** `clipCaptionParts`
+  groups by `captionMaxWords` (cards, word, fill) or `captionStackMaxWords`
+  (the stacks), cards also break on a sentence end exactly as `caption_cards`
+  does, and word mode redraws the SAME group with the live word lit -- it
+  never shows one word alone. **`edCaptionBlocks` had dropped `start`, `end`
+  and `words`**, so the chunker saw every block as 0..0 and the caption sat on
+  chunk one from 1.4s to 3.7s; they are carried now. Measured in real
+  playback: chunk one to 3.15s, chunk two from 3.41s, the sentence break
+  honoured.
+- **rAF stops in an OCCLUDED window while the video plays on.** Measured:
+  the clip at 6.9s with the playhead and caption still at 3.3s. `timeupdate`
+  keeps firing there and stands in for `follow()` whenever the frame loop has
+  been quiet for 300ms. A hidden Browser pane reproduces it exactly, so a
+  "caption stuck during playback" reading in the harness is this before it is
+  the app.
+- **The render notice is silenced over the plate** -- "saved, not rendered
+  yet" is not about a picture that is drawn from the current values, and a
+  failed style-preview's ffmpeg dump covered the whole frame.
+
+### Traps paid for
+
+- `store.musicSatisfied` passes on `musicEnabled === false`, which is what
+  lets a plate land; `upload_clip` refuses an item without a thumb.
+- The nasheed library is `DATA_DIR/music/library.json` and the payload's
+  tracks carry NO url -- stream by id from `/api/music/:id/audio`; the level
+  is `musicSettings.volumePercent`, not `musicVolumePercent`.
+- The dashed box around a live caption was the four `edCapHandle` spans;
+  they are `display: none` while live.
+- Sharpening cannot be previewed (a filter the browser does not have); the
+  row says so rather than pretending.
+- The runtime binds `input`, not `change`, on selects; the template select
+  refuses Pro templates with a toast on a free account.
+- A black screenshot before the first frame paints is the harness (luminance
+  127 measured after play); `fetch` handed around unbound throws Illegal
+  invocation; `location.reload()` kills the evaluation that called it.
+
+`test/editor-plate.test.mjs` (6) drives the queue record, the landing through
+`importRerenderResultObjectForTests`, the supersede pairing and the adapter's
+live layers; `test/test_editor_plate.py` (4) drives the worker's plate branch
+past the nasheed guard and cuts a real window where ffmpeg exists. **Worker
+change, so `deploy-worker.yml` deploys it on push**; the box was idle
+(diagnose run, every job completed) before the push. The plate has not yet
+been seen landing from the REAL worker -- the first editor open on production
+is that proof.

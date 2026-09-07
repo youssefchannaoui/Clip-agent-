@@ -64,12 +64,11 @@
      body.dc-light, so loading it costs a dark session nothing. -->
 <link rel="stylesheet" href="/studio-theme.generated.css">
 <link rel="stylesheet" href="/studio-light.generated.css">
-<!-- The clip editor is held back for launch (Youssef, 27 Aug 2026, reaffirmed
-     2 Sept 2026: "just keep editor as coming soon"). This sheet blurs it and
-     editor-gate.js makes it inert under a notice. Shipping the editor is
-     removing this link, the script below, and the two server allowlist lines;
-     the section-cut controls underneath are already built. -->
-<link rel="stylesheet" href="/studio-editor-gate.css">
+<!-- The clip editor SHIPPED on 7 Sept 2026 (Youssef, asked whether to settle
+     the last unknown first or take the gate off now: "Take the gate off now").
+     It was held back from 27 Aug behind studio-editor-gate.css + editor-gate.js;
+     both files, their two links here, the two server allowlist lines and the
+     phone rule's exemption for its notice are all deleted. -->
 <!-- The phone dashboard: a second template over the same bindings, mounted
      only under the 820px query. Every rule in the sheet sits inside that
      query, so a desktop render is byte-for-byte unchanged. -->
@@ -2729,7 +2728,6 @@ select:focus{outline:none;border-color:var(--blue)}
 <script src="/studio-runtime.js"></script>
 <script src="/safe-zones.js"></script>
 <script src="/studio-adapter.js"></script>
-<script src="/editor-gate.js"></script>
 <script src="/studio-mobile.js"></script>
 <script src="/studio-templates.js"></script>
 <script src="/studio-notify.js"></script>
@@ -3445,11 +3443,32 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         edVideoClip=StudioAdapter.ui.edClipId;
         StudioAdapter.ui.edSourceFallback=false;
         StudioAdapter.ui.edVideoMissing=false;
+        StudioAdapter.ui.edPlateFailed=false;
+        edPlateAsked='';edPlateAskedAt=0;
         /* The template picked for the previous clip must not leak onto this
            one -- the override only bridges pick-to-render for one clip. */
         StudioAdapter.ui.edTplId=null;
       }
-      const onEditor=StudioAdapter.ui.screen==='editor'&&vals.edVideoUrl;
+      /* THE PLATE (v3.139.0). The editor draws its captions, framing, grade
+         and mark LIVE over the bare clip window the worker cuts for it
+         (render_plate). Asked for ONCE per clip window, the moment the editor
+         opens; the state poll brings the job's progress and then the file.
+         While it is on its way the frame shows a loading screen rather than
+         the finished render -- drawing live captions over a file that already
+         has captions burned in would put two sets of words on screen. */
+      if(StudioAdapter.ui.screen==='editor'&&vals.edPlateWanted&&vals.edPlateKey&&edPlateAsked!==vals.edPlateKey
+         &&!(vals.edPlateJob&&['queued','processing'].includes(vals.edPlateJob.status))){
+        edPlateAsked=vals.edPlateKey;edPlateAskedAt=Date.now();
+        api(`/api/clips/${encodeURIComponent(StudioAdapter.ui.edClipId)}/rerender`,{method:'POST',body:JSON.stringify({plate:true})})
+          .then(()=>refresh())
+          .catch(err=>{
+            /* No worker, or the worker refused: the render is what there is.
+               Said on the frame rather than left as a spinner for ever. */
+            StudioAdapter.ui.edPlateFailed=true;StudioAdapter.ui.edPlateError=String(err&&err.message||err);
+            paintStudio();
+          });
+      }
+      const onEditor=StudioAdapter.ui.screen==='editor'&&(vals.edVideoUrl||vals.edPlateWanted);
       if(!onEditor){
         if(edVideoNode){edVideoNode.pause();edVideoNode.remove();edVideoNode=null;StudioAdapter.setEditorVideo(null)}
         if(edVideoTick){cancelAnimationFrame(edVideoTick);edVideoTick=null}
@@ -3492,7 +3511,25 @@ function studioWanted(){return window.STUDIO_SHELL===true}
            under a millisecond; the full repaint runs only when the active
            caption block changes (a few times per clip) or as a once-a-second
            safety net for anything else that watches the clock. */
-        let edFastRefs=null,edLastBlock=-2;
+        let edFastRefs=null,edLastBlock=-2,edLastWord=-2;
+        /* Which word of the block the playhead is on: the worker's own word
+           times where it stored them, an even split of the block otherwise
+           (the same rule the adapter's clipCaptionParts lays the words out by). */
+        const edActiveWord=(t,block)=>{
+          if(block<0)return -1;
+          const seg=((clipDetailCache&&clipDetailCache.captionSegments)||[])[block];
+          if(!seg)return -1;
+          const words=String(seg.text||'').split(/\s+/).filter(Boolean);
+          if(!words.length)return -1;
+          const a=Number(seg.start??seg.startSec??0),b=Number(seg.end??seg.endSec??a);
+          const timed=Array.isArray(seg.words)&&seg.words.length===words.length;
+          for(let i=0;i<words.length;i++){
+            const ws=timed?Number(seg.words[i].start):a+(b-a)*(i/words.length);
+            const we=timed?Number(seg.words[i].end):a+(b-a)*((i+1)/words.length);
+            if(t>=ws&&t<we)return i;
+          }
+          return -1;
+        };
         const edFindFast=()=>{
           /* The line is a SPAN in the generated tree -- checked against the
              live DOM before shipping, because a div-only query found zero. */
@@ -3531,8 +3568,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           }
           return -1;
         };
+        let edFollowAt=0;
         const follow=()=>{
           edVideoTick=null;
+          edFollowAt=Date.now();
           if(!edVideoNode||!edVideoNode.isConnected)return;
           if(edVideoNode.paused)return;
           const base=Number(edVideoNode.dataset.offset)||0;
@@ -3553,11 +3592,27 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           edFastPaint(t,span);
           const block=edActiveBlock(t);
           const now=Date.now();
-          if(block!==edLastBlock){edLastBlock=block;lastPaint=now;paintStudio();edFastRefs=null}
+          /* Live captions highlight the word being spoken, so the caption
+             span has to be redrawn when the WORD changes, not only the
+             block. Throttled to 8fps: speech runs at two or three words a
+             second, so this is two or three repaints a second in practice. */
+          const word=edVideoNode.dataset.live==='1'?edActiveWord(t,block):-1;
+          if(block!==edLastBlock){edLastBlock=block;edLastWord=word;lastPaint=now;paintStudio();edFastRefs=null}
+          else if(word!==edLastWord&&now-lastPaint>=125){edLastWord=word;lastPaint=now;paintStudio();edFastRefs=null}
           else if(now-lastPaint>=1000){lastPaint=now;paintStudio();edFastRefs=null}
           edVideoTick=requestAnimationFrame(follow);
         };
         edVideoNode.addEventListener('play',()=>{lastPaint=0;if(!edVideoTick)edVideoTick=requestAnimationFrame(follow)});
+        /* rAF stops in a window Chrome thinks is occluded -- another window
+           over this one -- while the video plays on. Measured: the clip at
+           6.9s with the playhead and the caption still at 3.3s. timeupdate
+           keeps firing there, so it stands in whenever the frame loop has
+           gone quiet for longer than a couple of ticks. */
+        edVideoNode.addEventListener('timeupdate',()=>{
+          if(edVideoNode.paused||Date.now()-edFollowAt<300)return;
+          if(edVideoTick){cancelAnimationFrame(edVideoTick);edVideoTick=null}
+          follow();
+        });
         /* Ended is not a pause, so without this the button stays on "pause"
            after the clip runs out. */
         edVideoNode.onended=()=>{StudioAdapter.ui.edPlaying=false;paintStudio()};
@@ -3568,6 +3623,15 @@ function studioWanted(){return window.STUDIO_SHELL===true}
            A one-way latch: the export must not then fail back to the source it
            just replaced. */
         edVideoNode.onerror=()=>{
+          /* The plate failed to play: fall back to the finished render and
+             say so on the frame. Never to the clean source -- that is what a
+             self-hosted lecture has and a remote one does not. */
+          if(edVideoNode.dataset.live==='1'){
+            StudioAdapter.ui.edPlateFailed=true;
+            StudioAdapter.ui.edPlateError='The live preview file would not play';
+            paintStudio();
+            return;
+          }
           if(StudioAdapter.ui.edSourceFallback){
             /* The fallback failed too: no clean plate AND no rendered export.
                Silence here was a black box; say so, and offer the way out. */
@@ -3603,6 +3667,16 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       /* The clip's window inside whatever source is playing. */
       edVideoNode.dataset.offset=String(Number(vals.edStartSec)||0);
       edVideoNode.dataset.span=String(Number(vals.edDurationSec)||0);
+      edVideoNode.dataset.live=vals.edLive?'1':'';
+      paintEditorLoading(vals,frame);
+      if(vals.edPlateWanted&&!vals.edLive){
+        /* Loading: keep the poster up, hand the element no source yet. The
+           render must not play here -- see the plate note above. */
+        if(edVideoNode.dataset.src){edVideoNode.dataset.src='';edVideoNode.removeAttribute('src');edVideoNode.load()}
+        if(vals.edPoster&&edVideoNode.poster!==(/^https?:/i.test(vals.edPoster)?vals.edPoster:withPw(vals.edPoster)))edVideoNode.poster=/^https?:/i.test(vals.edPoster)?vals.edPoster:withPw(vals.edPoster);
+        paintEditorSourceNote(vals,frame);
+        return;
+      }
       if(edVideoNode.dataset.src!==vals.edVideoUrl){
         edVideoNode.dataset.src=vals.edVideoUrl;
         /* The password only means anything to this server. A rendered clip
@@ -3622,12 +3696,22 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          template's fit, zoom, blur backdrop, filter, vignette and grain on top
          of it would double every one of them. Those treatments exist to
          approximate the render on the CLEAN SOURCE, so they only run there. */
-      const onRender=!vals.edSourceFallback;
+      /* LIVE (v3.139.0): on the plate every treatment the renderer applies
+         is echoed here from the same style object the sliders write --
+         framing, zoom, crop position, grade, vignette, grain, darken and
+         weather -- so a control moves the picture the instant it moves. On
+         the finished render they are all already baked in and would double. */
+      const live=Boolean(vals.edLive);
+      const onRender=!vals.edSourceFallback&&!live;
       const fit=onRender?'contain':(vals.edVideoFit||'cover');
       const zoom=onRender?1:(Number(vals.edVideoZoom)||1);
       if(edVideoNode.style.objectFit!==fit)edVideoNode.style.objectFit=fit;
+      const pos=onRender?'50% 50%':(vals.edVideoPos||'50% 50%');
+      if(edVideoNode.style.objectPosition!==pos)edVideoNode.style.objectPosition=pos;
       const want=zoom===1?'':`scale(${zoom})`;
       if(edVideoNode.style.transform!==want)edVideoNode.style.transform=want;
+      paintEditorFx(onRender?'':(vals.edVideoFx||''),frame);
+      paintEditorMusic(vals);
       /* The Look grade on the real footage -- the same preset+warmth maths the
          renderer runs, as CSS. Without this every Look control read as dead in
          the editor: the export changed, the preview never did.
@@ -3641,6 +3725,122 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(edVideoNode.style.filter!==filt)edVideoNode.style.filter=filt;
       paintEditorGrade(onRender?{...vals,edVideoBlurBg:false,edVideoVignette:approx?vals.edApproxVignette:0,edVideoGrain:approx?vals.edApproxGrain:0}:vals,frame);
       paintEditorSourceNote(vals,frame);
+    }
+
+    /* ── The live preview's own furniture (v3.139.0) ──────────────────────
+       Youssef: "when first opening it, it can take some time to load in the
+       exact captions and style looking perfectly the same ... make a loading
+       screen but ALL buttons MUST work."
+
+       The loading screen holds the frame until the plate the worker is
+       cutting arrives AND is playable AND the caption fonts are in -- then
+       it lifts and every layer is drawn live. It reports the job's own stage
+       and progress rather than a bare spinner; past ninety seconds it offers
+       the finished render instead, and a failed job says why. */
+    let edPlateAsked='',edPlateAskedAt=0,edLoadingEl=null,edFxEl=null,edMusicEl=null,edLiveChipEl=null,edFontsReady=false;
+    if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{edFontsReady=true;if(StudioAdapter&&StudioAdapter.ui.screen==='editor')paintStudio()});
+    else edFontsReady=true;
+    function paintEditorLoading(vals,frame){
+      const job=vals.edPlateJob;
+      const waiting=Boolean(vals.edPlateWanted&&!vals.edLive);
+      const playable=edVideoNode&&edVideoNode.isConnected&&edVideoNode.readyState>=2;
+      const settling=Boolean(vals.edLive)&&(!playable||!edFontsReady)&&!(edVideoNode&&edVideoNode.error);
+      const on=StudioAdapter.ui.screen==='editor'&&frame&&(waiting||settling);
+      if(!on){if(edLoadingEl){edLoadingEl.remove();edLoadingEl=null}return}
+      if(!edLoadingEl||!edLoadingEl.isConnected||edLoadingEl.parentElement!==frame){
+        if(edLoadingEl)edLoadingEl.remove();
+        edLoadingEl=document.createElement('div');
+        edLoadingEl.setAttribute('data-host-owned','');
+        edLoadingEl.style.cssText='position:absolute;inset:0;z-index:12;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;'
+          +'text-align:center;padding:22px;border-radius:inherit;background:rgba(9,9,10,.82);backdrop-filter:blur(6px);color:var(--dc-n-e8e8ec, #E8E8EC)';
+        frame.appendChild(edLoadingEl);
+      }
+      const failed=job&&job.status==='failed';
+      const slow=edPlateAskedAt&&Date.now()-edPlateAskedAt>90000;
+      const pct=job&&isFinite(Number(job.progress))?Math.max(0,Math.min(100,Number(job.progress))):0;
+      const line=failed?('The live preview could not be prepared'+(job.error?' \u2014 '+job.error:''))
+        :settling?'Loading the picture and the caption fonts\u2026'
+        :job?(String(job.stage||'Cutting the clip window')+(pct?' \u00b7 '+pct+'%':''))
+        :'Asking the worker to cut the clip window\u2026';
+      const spinner='<span style="width:26px;height:26px;border:2.5px solid rgba(217,180,120,.28);border-top-color:var(--dc-gold-lit, #F0D6A6);border-radius:50%;display:inline-block;animation:dcSpin .9s linear infinite"></span>';
+      const html=(failed?'<i class="ph ph-warning-diamond" style="font-size:26px;color:var(--dc-gold-lit, #F0D6A6)"></i>':spinner)
+        +'<div style="font:600 14px Outfit,Inter,sans-serif">'+(failed?'Live preview unavailable':'Preparing your live preview')+'</div>'
+        +'<div data-line style="font:400 11.5px Outfit,Inter,sans-serif;color:var(--dc-ink-dim, #8B8B93);max-width:250px;line-height:1.4">'+obEsc(line)+'</div>'
+        +(failed?'':'<span style="width:150px;height:3px;border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden"><span data-fill style="display:block;height:100%;width:'+pct+'%;background:var(--dc-gold, #D9B478);transition:width .4s"></span></span>')
+        +'<div style="font:400 10.5px Outfit,Inter,sans-serif;color:var(--dc-ink-faint, #6E6E76);max-width:250px;line-height:1.4">Captions, framing and the look are then drawn live as you change them. Save clip renders the exact video.</div>'
+        +((failed||slow)?'<div style="display:flex;gap:8px;margin-top:4px">'
+            +'<button data-retry style="padding:7px 12px;border-radius:8px;border:1px solid rgba(217,180,120,.45);background:rgba(217,180,120,.12);color:var(--dc-gold-lit, #F0D6A6);font:600 11.5px Outfit,Inter,sans-serif;cursor:pointer">'+(failed?'Try again':'Keep waiting')+'</button>'
+            +'<button data-render style="padding:7px 12px;border-radius:8px;border:1px solid var(--dc-line, #26262A);background:transparent;color:var(--dc-ink, #E9E9ED);font:600 11.5px Outfit,Inter,sans-serif;cursor:pointer">Show the last render</button></div>':'');
+      if(!document.getElementById('dcSpinKeyframes')){const st=document.createElement('style');st.id='dcSpinKeyframes';st.textContent='@keyframes dcSpin{to{transform:rotate(360deg)}}';document.head.appendChild(st)}
+      if(edLoadingEl.dataset.html!==html){
+        edLoadingEl.dataset.html=html;edLoadingEl.innerHTML=html;
+        const retry=edLoadingEl.querySelector('[data-retry]');
+        if(retry)retry.onclick=e=>{e.preventDefault();if(failed){edPlateAsked='';StudioAdapter.ui.edPlateFailed=false}else{edPlateAskedAt=Date.now()}paintStudio()};
+        const render=edLoadingEl.querySelector('[data-render]');
+        if(render)render.onclick=e=>{e.preventDefault();StudioAdapter.ui.edPlateFailed=true;StudioAdapter.ui.edPlateError='';paintStudio()};
+      }
+    }
+    /* The darken scrim, weather, vignette and grain as one background stack
+       over the plate -- the adapter's fxLayersStyle, the same builder the
+       Templates sample uses, so the two frames agree. */
+    function paintEditorFx(css,frame){
+      if(!css||!frame){if(edFxEl){edFxEl.remove();edFxEl=null}return}
+      if(!edFxEl||!edFxEl.isConnected||edFxEl.parentElement!==frame){
+        if(edFxEl)edFxEl.remove();
+        edFxEl=document.createElement('div');
+        edFxEl.setAttribute('data-host-owned','');
+        edFxEl.style.cssText='position:absolute;inset:0;z-index:2;pointer-events:none;border-radius:inherit';
+        frame.appendChild(edFxEl);
+      }
+      if(edFxEl.dataset.fx!==css){edFxEl.dataset.fx=css;edFxEl.style.cssText='position:absolute;inset:0;z-index:2;pointer-events:none;border-radius:inherit;'+css}
+    }
+    /* The nasheed, heard. The plate carries the voice alone; this plays the
+       account's track beside it at the Audio slider's level, following the
+       video's play, pause, seek and mute, so the slider is heard rather than
+       only written. It is a preview of the MIX, not of the render's own
+       ducking curve, which is why the frame's chip still says live preview. */
+    function paintEditorMusic(vals){
+      const m=vals.edMusic;
+      const v=edVideoNode;
+      if(!m||!vals.edLive||!v||!v.isConnected){if(edMusicEl){edMusicEl.pause();edMusicEl.remove();edMusicEl=null}return}
+      if(!edMusicEl){
+        edMusicEl=document.createElement('audio');
+        edMusicEl.setAttribute('data-host-owned','');
+        edMusicEl.loop=true;edMusicEl.preload='auto';
+        document.body.appendChild(edMusicEl);
+        const sync=()=>{if(!edMusicEl||!edVideoNode)return;const base=Number(edVideoNode.dataset.offset)||0;const t=Math.max(0,edVideoNode.currentTime-base);if(edMusicEl.duration&&isFinite(edMusicEl.duration))try{edMusicEl.currentTime=t%edMusicEl.duration}catch{}};
+        v.addEventListener('play',()=>{if(edMusicEl){sync();const p=edMusicEl.play();if(p&&p.catch)p.catch(()=>{})}});
+        v.addEventListener('pause',()=>{if(edMusicEl)edMusicEl.pause()});
+        v.addEventListener('seeked',sync);
+        v.addEventListener('volumechange',()=>{if(edMusicEl)edMusicEl.muted=edVideoNode.muted});
+      }
+      const src=/^https?:/i.test(m.url)?m.url:withPw(m.url);
+      if(edMusicEl.dataset.src!==src){edMusicEl.dataset.src=src;edMusicEl.src=src;edMusicEl.load()}
+      const vol=m.wanted?Math.max(0,Math.min(1,Number(m.level)||0)):0;
+      if(Math.abs(edMusicEl.volume-vol)>0.001)edMusicEl.volume=vol;
+      edMusicEl.muted=v.muted;
+      if(!v.paused&&edMusicEl.paused){const p=edMusicEl.play();if(p&&p.catch)p.catch(()=>{})}
+      if(v.paused&&!edMusicEl.paused)edMusicEl.pause();
+    }
+    /* The safe-zone shade, on the editor frame too. The design's dashed box
+       is switched off (v3.134.1) and the shade is what says where the
+       platforms cover the picture -- so the Social safe zones toggle in the
+       editor drew nothing at all until this. */
+    const edSafeChromeEl=document.createElement('div');
+    edSafeChromeEl.className='dc-safe-chrome';edSafeChromeEl.setAttribute('data-host-owned','');
+    function paintEditorSafe(vals,frame){
+      const box=vals&&vals.safeBox;
+      const on=StudioAdapter.ui.screen==='editor'&&frame&&vals.edSafe&&box&&!box.degenerate;
+      if(!on){if(edSafeChromeEl.parentElement)edSafeChromeEl.remove();return}
+      if(edSafeChromeEl.parentElement!==frame)frame.appendChild(edSafeChromeEl);
+      const pct=v=>(Math.max(0,Math.min(1,v))*100).toFixed(2)+'%';
+      const L=pct(box.left),R=pct(1-box.right),T=pct(box.top),B=pct(1-box.bottom);
+      dcSetHtml(edSafeChromeEl,
+        `<span class="dc-safe-band dc-safe-top" style="left:0;right:0;top:0;height:${T}"></span>`
+        +`<span class="dc-safe-band dc-safe-bottom" style="left:0;right:0;bottom:0;height:${B}"></span>`
+        +`<span class="dc-safe-band dc-safe-left" style="left:0;width:${L};top:${T};bottom:${B}"></span>`
+        +`<span class="dc-safe-band dc-safe-rail" style="right:0;width:${R};top:${T};bottom:${B}"></span>`
+        +safeSilhouette(box));
     }
 
     /* The fallback's own label. When the render cannot be played the editor
@@ -3979,6 +4179,27 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       }
     }
 
+    /* One line at the frame's head while the live layer is up, so nobody
+       mistakes what they are looking at for the export: "Live preview · Save
+       clip renders the exact video". Or, when the plate could not be made,
+       that the finished render is showing and sliders will not move it. */
+    function paintEditorLiveChip(vals,frame){
+      const text=vals.edLive?vals.edLiveLabel:(StudioAdapter.ui.edPlateFailed?'Showing the last render \u2014 live preview unavailable'+(StudioAdapter.ui.edPlateError?' ('+StudioAdapter.ui.edPlateError+')':''):'');
+      if(!text||!frame){if(edLiveChipEl){edLiveChipEl.remove();edLiveChipEl=null}return}
+      if(!edLiveChipEl||!edLiveChipEl.isConnected||edLiveChipEl.parentElement!==frame){
+        if(edLiveChipEl)edLiveChipEl.remove();
+        edLiveChipEl=document.createElement('div');
+        edLiveChipEl.setAttribute('data-host-owned','');
+        edLiveChipEl.style.cssText='position:absolute;top:8px;left:8px;z-index:9;padding:3px 8px;border-radius:999px;pointer-events:none;'
+          +'background:rgba(9,9,10,.72);border:1px solid rgba(240,214,166,.3);color:var(--dc-gold-lit, #F0D6A6);'
+          +'font:700 8.5px Outfit,Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis';
+        frame.appendChild(edLiveChipEl);
+      }
+      const dot=vals.edLive?'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#E08770;margin-right:6px;vertical-align:middle;animation:dcLivePulse 1.4s ease-in-out infinite"></span>':'';
+      if(!document.getElementById('dcLivePulseKf')){const st=document.createElement('style');st.id='dcLivePulseKf';st.textContent='@keyframes dcLivePulse{50%{opacity:.35}}@media (prefers-reduced-motion:reduce){@keyframes dcLivePulse{50%{opacity:1}}}';document.head.appendChild(st)}
+      const html=dot+obEsc(text);
+      if(edLiveChipEl.dataset.html!==html){edLiveChipEl.dataset.html=html;edLiveChipEl.innerHTML=html}
+    }
     function paintEditorCaption(vals){
       if(StudioAdapter.ui.screen!=='editor')return;
       const box=nodeFor(vals.dragEdCap);
@@ -4038,6 +4259,22 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       if(vals.edCapIsAyah&&vals.edCapTranslation){
         want+=`<span style="${esc(vals.edCapGlossStyle||'display:block;font-size:.46em;opacity:.92;margin-top:.35em')}">${esc(vals.edCapTranslation)}</span>`;
       }
+      /* LIVE (v3.139.0): over the plate the box IS the caption, in the
+         template's own face, colour, outline and box -- edCapFace is built
+         by the same helpers the Templates sample draws with. No
+         "approximate" tag: the frame's chip says live preview once, at the
+         top, rather than on every caption. */
+      if(vals.edLive){
+        const liveCss='display:block;width:100%;pointer-events:none;'+(vals.edCapFace||'');
+        if(span.dataset.echo!==liveCss){span.dataset.echo=liveCss;span.style.cssText=liveCss}
+        if(span.dataset.words!==want){span.dataset.words=want;span.innerHTML=want}
+        const stale=box.querySelector(':scope > [data-host-approx]');if(stale)stale.remove();
+        paintEditorLiveChip(vals,frame);
+        paintEditorSafe(vals,frame);
+        return;
+      }
+      paintEditorLiveChip(vals,frame);
+      paintEditorSafe(vals,frame);
       /* The ghost's only text: what is being positioned, shown while the
          drag is live. Never the caption's own words -- those belong to the
          render underneath. */
@@ -9389,6 +9626,78 @@ function paintTrimTools(vals){
   }
 }
 
+/* ── The editor's Look tab gets the looks and the weather ─────────────────
+   v3.118.0 put twelve graded looks and four atmosphere effects on Templates →
+   Style and never taught the editor about them, so the editor's own Look tab
+   offered grain, warmth, vignette and the watermark -- everything except the
+   controls that actually change how the picture reads. Per clip, the good half
+   was unreachable.
+
+   HOST-RENDERED, so this costs no design re-import: adding four rows to the
+   export regenerates every hashed class name in the app. The rows are the
+   adapter's `edLookControls`, which IS `tplControlsFor().look` -- the same
+   objects the Templates screen renders -- so the two screens cannot drift
+   about what a look is called or which sliders a given effect reveals.
+
+   The mount is found by the panel's own WATERMARK ROW text, never by a class:
+   every class in this markup is hashed and renumbers on re-import. The rows
+   are appended to that row's parent -- the Look panel's flex column -- so they
+   sit under Vignette, in the column's own gap.
+
+   Marked `data-host-owned` (the patcher pairs a container's children by index
+   and would otherwise shift every generated sibling), redrawn only when the
+   markup actually changed (a rebuild on every state poll throws focus out of
+   an open select), and swept the moment the tab is not Look. */
+function paintEditorLook(vals){
+  const ID='dcEdLook';
+  const rows=Array.isArray(vals.edLookControls)?vals.edLookControls:[];
+  const gone=()=>{const n=document.getElementById(ID); if(n) n.remove()};
+  if(!vals.isEditor||!vals.isLook||!rows.length){ gone(); return }
+  /* The watermark row is the Look panel's first child and the only node in it
+     carrying that phrase, so it identifies the column without naming a class. */
+  const editor=document.querySelector('#studio [data-dc-editor]');
+  if(!editor){ gone(); return }
+  const wmLabel=[...editor.querySelectorAll('span')]
+    .find(s=>s.childNodes.length&&s.firstChild.nodeType===3&&s.firstChild.nodeValue.trim()==='DeenClipped watermark');
+  const col=wmLabel?wmLabel.closest('div').parentElement:null;
+  if(!col){ gone(); return }
+  let box=document.getElementById(ID);
+  if(!box||box.parentElement!==col){
+    if(box) box.remove();
+    box=document.createElement('div'); box.id=ID;
+    box.setAttribute('data-host-owned','');
+    box.style.cssText='display:flex;flex-direction:column;gap:13px;';
+    col.appendChild(box);
+  }
+  const esc2=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const lab=(text,readout)=>`<span style="display:flex;align-items:center;font-size:11.5px;color:var(--dc-n-bcbcc3, #BCBCC3)">${esc2(text)}<strong style="margin-left:auto;font-weight:500;color:var(--dc-gold-lit, #F0D6A6)">${esc2(readout)}</strong></span>`;
+  const html=rows.map((c,i)=>{
+    if(c.isSelect){
+      const opts=(c.opts||[]).map(o=>`<option value="${esc2(o.value)}"${o.on?' selected':''}>${esc2(o.label)}</option>`).join('');
+      return `<div style="display:flex;flex-direction:column;gap:5px">${lab(c.label,'')}`
+        +`<select data-edlook="${i}" aria-label="${esc2(c.label)}" style="width:100%;padding:6px 8px;border:1px solid var(--dc-line, #26262A);border-radius:7px;background:var(--dc-bg-raised, #17171A);color:var(--dc-ink, #E9E9ED);font-family:inherit;font-size:11.5px;cursor:pointer">${opts}</select>`
+        +(c.note?`<span style="font-size:10.5px;color:var(--dc-ink-faint, #6E6E76)">${esc2(c.note)}</span>`:'')
+        +`</div>`;
+    }
+    return `<div style="display:flex;flex-direction:column;gap:5px">${lab(c.label,c.readout)}`
+      +`<input type="range" data-edlook="${i}" aria-label="${esc2(c.label)}" min="${esc2(c.min)}" max="${esc2(c.max)}" step="${esc2(c.step)}" value="${esc2(c.value)}" style="width:100%;accent-color:var(--dc-gold, #D9B478);cursor:pointer">`
+      +(c.note?`<span style="font-size:10.5px;color:var(--dc-ink-faint, #6E6E76)">${esc2(c.note)}</span>`:'')
+      +`</div>`;
+  }).join('');
+  /* A `range` is dragged, so its VALUE is written back in place rather than
+     through a rebuild -- re-writing the markup mid-drag drops the thumb. Only a
+     genuine structural change (an effect chosen, revealing or hiding the
+     strength slider) redraws. */
+  if(window.dcSetHtml) window.dcSetHtml(box,html); else if(box.innerHTML!==html) box.innerHTML=html;
+  box.querySelectorAll('[data-edlook]').forEach(el=>{
+    const c=rows[Number(el.getAttribute('data-edlook'))];
+    if(!c) return;
+    if(el.tagName==='SELECT'){ if(el.value!==c.value) el.value=c.value; el.onchange=e=>c.set(e); return }
+    if(document.activeElement!==el&&el.value!==String(c.value)) el.value=String(c.value);
+    el.oninput=e=>c.set(e);
+  });
+}
+
 /* Its own escaper, like paintAccount's: the top-of-file `esc` is in a
    DIFFERENT inline script scope and is not reachable from here. */
 const obEsc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -10249,8 +10558,10 @@ function paintStudio(){
   paintDeckVideo(vals);
   paintEditorVideo(vals);
   paintEditorPlayer(vals);
+  if(StudioAdapter.ui.screen!=='editor'){paintEditorMusic({});}
   paintEditorLayout(vals);
   paintTrimTools(vals);
+  paintEditorLook(vals);
   paintEditorScrub();
   stepDirection();
   paintJobStyleRow(vals);

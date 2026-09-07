@@ -1641,6 +1641,26 @@ function importRerenderResultObject(jobRecord, result) {
   if (!rendered?.renderVerified || !musicSatisfied(rendered)) throw new Error('The re-render did not pass verification.');
   const original = clipById(jobRecord.clipId);
   if (!original) throw new Error('The original clip was removed before the re-render completed.');
+  if (jobRecord.plate) {
+    // A plate replaces NOTHING either: it parks on its own slot for the
+    // editor to draw over, keyed on the window it was cut from so a trimmed
+    // clip gets a fresh one. The fixed output id overwrites the last in
+    // storage rather than collecting plates.
+    original.plate = {
+      // The remote worker uploads and hands back a URL; the self-hosted engine
+      // leaves the file on disk and the app streams it from /api/clips/:id/plate.
+      url: rendered.clipUrl || '', thumbUrl: rendered.thumbUrl || '',
+      clipFile: rendered.clipFile || '', thumbFile: rendered.thumbFile || '',
+      clipObjectKey: rendered.clipObjectKey || '', thumbObjectKey: rendered.thumbObjectKey || '',
+      startSec: Number(rendered.startSec ?? original.startSec) || 0,
+      endSec: Number(rendered.endSec ?? original.endSec) || 0,
+      at: Date.now(),
+    };
+    original.updatedAt = Date.now();
+    jobRecord.status = 'done'; jobRecord.stage = 'Live preview ready'; jobRecord.progress = 100; jobRecord.completedAt = Date.now();
+    save();
+    return;
+  }
   if (jobRecord.preview) {
     // A preview replaces NOTHING: it parks on its own slot for the editor to
     // play, and the fixed output id means each new preview overwrites the
@@ -1651,7 +1671,7 @@ function importRerenderResultObject(jobRecord, result) {
     save();
     return;
   }
-  const newer = state.rerenderJobs.find(item => item.clipId === jobRecord.clipId && !item.asVariant && !item.socialVariant && item.createdAt > jobRecord.createdAt && ['queued', 'processing', 'done'].includes(item.status));
+  const newer = state.rerenderJobs.find(item => item.clipId === jobRecord.clipId && !item.asVariant && !item.socialVariant && !item.plate && item.createdAt > jobRecord.createdAt && ['queued', 'processing', 'done'].includes(item.status));
   if (!jobRecord.asVariant && !jobRecord.socialVariant && newer) {
     jobRecord.status = 'superseded';
     jobRecord.stage = 'A newer template render replaced this result';
@@ -1920,14 +1940,14 @@ export function withImportNetwork(source) {
 // it was hardcoded to outrank everything, and production runs one worker slot:
 // one account keeping a re-render queued could hold a paying customer's lecture
 // behind it indefinitely. Level with a submitted lecture, ahead of nothing.
-export function queueClipRerender(clipId, templateId, { asVariant = false, priority = 1, quality = '', preview = null, socialVariant = '' } = {}) {
+export function queueClipRerender(clipId, templateId, { asVariant = false, priority = 1, quality = '', preview = null, socialVariant = '', plate = false } = {}) {
   const clip = clipById(clipId);
   if (!clip) throw new Error('That clip does not exist.');
   // A social variant changes NOTHING about the clip -- it renders a separate
   // derivative onto clip.socialVariants -- so a clip already live on YouTube
   // may still need its TikTok copy rendered. Refusing here is what would
   // strand the TikTok leg of a partly-posted clip.
-  if (clip.status === 'posted' && !asVariant && !socialVariant) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
+  if (clip.status === 'posted' && !asVariant && !socialVariant && !plate) throw new Error('A posted video cannot be changed. Create a re-post variant instead.');
   // Unapproved clips keep the fast draft loop -- an editor tweak should not
   // cost a full 1080p render nobody has approved yet. Anything approved or
   // beyond renders final, and approve itself asks for final explicitly.
@@ -1976,7 +1996,10 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   // nasheed could never be edited again. Moving any slider reported the failure
   // four seconds later and Save said "Render not started", with nothing on
   // screen pointing at the library.
-  const waivesMusic = clip.musicEnabled === false;
+  // A PLATE (see render_plate in the worker) is the bare clip window the
+  // editor draws over live: no nasheed, no captions, no marks. Waiving music
+  // here is what lets it exist at all.
+  const waivesMusic = clip.musicEnabled === false || plate;
   const tracks = waivesMusic ? [] : workerMusicTracks(owner);
   if (!waivesMusic && !tracks.length) throw new Error('Music is mandatory. Upload at least one nasheed first.');
   const transcriptSegments = project.transcriptFile && fs.existsSync(project.transcriptFile)
@@ -1987,6 +2010,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
   const resultPath = path.join(dir, 'result.json');
   const outputDir = path.join(clipsDir, project.id, 'rerenders');
   const outputClipId = socialVariant ? `${clip.id}-${socialVariant}-safe`
+    : plate ? `${clip.id}-plate`
     : preview ? `${clip.id}-preview`
     : asVariant ? `${clip.id}-variant-${Date.now().toString(36)}` : `${clip.id}-render-${Date.now().toString(36)}`;
   // The stored source object is the already-trimmed window; a URL re-import is
@@ -2007,8 +2031,9 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     // without a nasheed still could not be re-rendered, it just failed one
     // step later with "No worker-accessible nasheed track was supplied."
     settings: { ...sharedSettings(owner, { musicEnabled: !waivesMusic }), renderQuality },
-    ...(preview ? { lane: 'quick' } : {}),
+    ...((preview || plate) ? { lane: 'quick' } : {}),
     clip: {
+      ...(plate ? { plate: true } : {}),
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
       transcriptEdited: Boolean(clip.transcriptEdited),
       startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
@@ -2025,8 +2050,9 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     sourceFile, outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
     background: jobBackground(project, owner),
     template, musicTracks: tracks, settings: { ...sharedSettings(owner, { musicEnabled: !waivesMusic }), renderQuality }, transcriptSegments,
-    ...(preview ? { lane: 'quick' } : {}),
+    ...((preview || plate) ? { lane: 'quick' } : {}),
     clip: {
+      ...(plate ? { plate: true } : {}),
       id: clip.id, title: clip.title, description: clip.description, transcript: clip.transcript,
       transcriptEdited: Boolean(clip.transcriptEdited),
       startSec: clip.startSec, endSec: clip.endSec, score: clip.score, scoreReasons: clip.scoreReasons,
@@ -2045,8 +2071,11 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     id: rerenderId, clipId: clip.id, templateId: template.id, templateName: template.name,
     // 0 = someone is watching (the editor); 1 = a deliberate single action;
     // 2 = batch sweeps. The queue serves the person at the screen first.
-    priority: Math.max(0, Math.min(2, Number(priority) || 0)),
+    // A plate is only ever asked for by an editor waiting on a loading
+    // screen, so it is 0 whatever the caller passed.
+    priority: plate ? 0 : Math.max(0, Math.min(2, Number(priority) || 0)),
     preview: Boolean(preview),
+    plate: Boolean(plate),
     asVariant: Boolean(asVariant), socialVariant: socialVariant || '',
     // Stamped at QUEUE time, not at import: this variant renders the style
     // that is current NOW, so if the clip itself re-renders while this is in
@@ -2055,6 +2084,7 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     forRenderVersion: Number(clip.renderVersion || 1),
     status: 'queued',
     stage: socialVariant ? `Rendering a ${PLATFORM_LABEL[socialVariant] || socialVariant}-safe copy`
+      : plate ? 'Cutting the live-preview plate'
       : preview ? 'Rendering a preview window' : 'Waiting to re-render',
     progress: 0, engine: project.engine === 'remote' ? 'remote' : 'self-hosted',
     createdAt: Date.now(), jobFile: file, resultPath,
@@ -2067,7 +2097,10 @@ export function queueClipRerender(clipId, templateId, { asVariant = false, prior
     if (stale.clipId === clip.id && !stale.asVariant && !asVariant
         && (stale.socialVariant || '') === (socialVariant || '')
         && stale.status === 'queued'
-        && Boolean(stale.preview) === Boolean(preview)) {
+        && Boolean(stale.preview) === Boolean(preview)
+        // A queued plate and a queued render are different things for one
+        // clip; neither replaces the other.
+        && Boolean(stale.plate) === Boolean(plate)) {
       stale.status = 'superseded'; stale.stage = 'Replaced by a newer edit'; stale.completedAt = Date.now();
     }
   }
@@ -2519,3 +2552,8 @@ export function recoverInterruptedJobs() {
   save(); pump().catch(error => log(`Worker queue failed: ${error.message}`, 'error'));
 }
 export function activeJobCount() { return running.size; }
+
+// The landing step alone, for tests: the queue's own pump spawns a real render
+// child, and "what does a finished plate do to the clip" is a question about
+// this function, not about ffmpeg. The same device as enableOnConnectForTests.
+export const importRerenderResultObjectForTests = importRerenderResultObject;

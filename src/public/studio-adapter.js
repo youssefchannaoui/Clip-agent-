@@ -1671,6 +1671,64 @@
     };
   }
 
+  /*
+   * THE CLIP'S OWN CAPTION, LAID OUT THE WAY ITS MODE LAYS IT OUT, at a moment.
+   *
+   * The live editor (v3.139.0) draws the current block over the plate in the
+   * template's real face, so it needs the same three shapes the sample engine
+   * gives the Templates preview -- one word, the whole line, or a chunk of
+   * `max` words -- but from the clip's OWN block and time. Word times come
+   * from the block when the worker stored them and are spread evenly across
+   * the block when it did not; the render uses Whisper's real times, which is
+   * one of the two reasons the frame is labelled a live preview rather than
+   * the export.
+   */
+  function clipCaptionParts(block, tLocal, mode, max) {
+    if (!block) return { words: [], liveIndex: -1 };
+    var text = String(block.text || '');
+    var raw = text.split(/\s+/).filter(Boolean);
+    if (!raw.length) return { words: [], liveIndex: -1 };
+    var start = Number(block.start) || 0, end = Number(block.end) || start;
+    var timed = Array.isArray(block.words) && block.words.length === raw.length
+      && block.words.every(function (w) { return isFinite(Number(w && w.start)) && isFinite(Number(w && w.end)); });
+    var times = timed
+      ? block.words.map(function (w) { return { start: Number(w.start), end: Number(w.end) }; })
+      : raw.map(function (_, i) {
+        var span = Math.max(0.001, end - start);
+        return { start: start + span * (i / raw.length), end: start + span * ((i + 1) / raw.length) };
+      });
+    var now = -1;
+    for (var i = 0; i < times.length; i++) if (tLocal >= times[i].start && tLocal < times[i].end) { now = i; break; }
+    var live = now >= 0;
+    if (!live) {
+      // Between words, hold the last one said rather than blanking.
+      for (var j = times.length - 1; j >= 0; j--) if (times[j].end <= tLocal) { now = j; break; }
+      if (now < 0) now = 0;
+    }
+    var shown, offset = 0;
+    if (mode === 'phrase' || mode === 'quran') { shown = raw; offset = 0; }
+    else {
+      // The same grouping the worker draws: a fixed count of words per
+      // group (captionMaxWords for cards, word and fill; captionStackMaxWords
+      // for the stacks), and cards also break on a sentence ending so a full
+      // stop never lands mid-card (caption_cards in clip_worker.py). Word
+      // mode redraws the SAME group once per word with the live one lit --
+      // it does not show one word alone.
+      var n = Math.max(1, Math.min(12, Number(max) || 4));
+      var groups = [], current = [];
+      for (var g = 0; g < raw.length; g++) {
+        current.push(g);
+        if (current.length >= n || (mode === 'cards' && /[.!?\u2026]["']?$/.test(raw[g]))) { groups.push(current); current = []; }
+      }
+      if (current.length) groups.push(current);
+      var pick = groups[0];
+      for (var k = 0; k < groups.length; k++) if (groups[k].indexOf(now) >= 0) { pick = groups[k]; break; }
+      offset = pick[0];
+      shown = pick.map(function (idx) { return raw[idx]; });
+    }
+    return { words: shown, liveIndex: live ? now - offset : -1 };
+  }
+
   function sampleCaptionAt(seconds, mode, stackMax) {
     if (!SAMPLE_WORDS.length) return '';
     var now = SAMPLE_WORDS.filter(function (w) { return seconds >= w.start && seconds < w.end; })[0];
@@ -1718,6 +1776,29 @@
   // Outline, shadow, background box and line height, drawn the way the render
   // will. The outline is a ring of text-shadows because -webkit-text-stroke
   // draws inside the glyph and thins the letter; ASS draws it outside.
+  /*
+   * The picture treatments that are NOT a filter on the video element itself:
+   * the darken scrim, the weather field, the vignette and the grain. One
+   * builder for the Templates sample and the live editor, so the two frames
+   * cannot disagree about what "rain at 55%" looks like. The scrim is the
+   * renderer's own arithmetic (a flat black at a fraction); the weather is a
+   * static field carrying the effect's real colour, size and density.
+   */
+  function fxLayersStyle(t) {
+    var vignette = Math.max(0, Math.min(1, Number(t.vignette) || 0));
+    var grain = Math.max(0, Math.min(100, Number(t.grain) || 0)) / 100;
+    var dark = Math.max(0, Math.min(80, Number(t.overlayDarken) || 0)) / 100;
+    var weather = atmosLayers(t);
+    if (!vignette && !grain && !dark && !weather) return '';
+    var layers = [], sizes = [], spots = [];
+    function layer(image, size, spot) { layers.push(image); sizes.push(size || 'auto'); spots.push(spot || '0 0'); }
+    if (dark) layer('linear-gradient(rgba(0,0,0,' + dark.toFixed(3) + '), rgba(0,0,0,' + dark.toFixed(3) + '))');
+    if (weather) { for (var w = 0; w < weather.image.length; w++) layer(weather.image[w], weather.size[w], weather.position[w]); }
+    if (vignette) layer('radial-gradient(ellipse at center, rgba(0,0,0,0) 42%, rgba(0,0,0,' + (vignette * 0.85).toFixed(3) + ') 100%)');
+    if (grain) layer('repeating-conic-gradient(rgba(255,255,255,' + (grain * 0.16).toFixed(3) + ') 0% 25%, rgba(0,0,0,' + (grain * 0.16).toFixed(3) + ') 0% 50%)', '3px 3px');
+    return 'background-image: ' + layers.join(', ') + '; background-size: ' + sizes.join(', ') + '; background-position: ' + spots.join(', ') + ';';
+  }
+
   function capInkStyle(t) {
     var out = '';
     var lineHeight = Math.max(0.65, Math.min(1.4, Number(t.captionLineHeight) || 0.88));
@@ -3863,7 +3944,11 @@
           only(tpl.filterPreset === 'custom', tplRange('contrast', 'Contrast', 50, 200, 1, { scale: 100, fmt: fmtHundredths('\u00d7'), fallback: 1 })),
           only(tpl.filterPreset === 'custom', tplRange('saturation', 'Saturation', 0, 300, 1, { scale: 100, fmt: fmtHundredths('\u00d7'), fallback: 1 })),
           only(tpl.filterPreset === 'custom', tplRange('gamma', 'Gamma', 50, 200, 1, { scale: 100, fmt: fmtHundredths(''), fallback: 1 })),
-          tplRange('sharpen', 'Sharpen', 0, 200, 5, { scale: 100, fmt: fmtHundredths(''), fallback: 0.45 }),
+          // The one look control no preview can echo: a browser has no
+          // sharpen filter, and inventing one with contrast would be a lie.
+          // Said on the row rather than left as the one slider that moves
+          // nothing (invariant 9 -- a control must say what it reaches).
+          tplRange('sharpen', 'Sharpen', 0, 200, 5, { scale: 100, fmt: fmtHundredths(''), fallback: 0.45, note: 'Applied at render — the preview cannot show sharpening.' }),
           tplRange('vignette', 'Vignette', 0, 100, 1, { scale: 100, fmt: fmtPct }),
           tplRange('grain', 'Grain', 0, 100, 1, { fmt: fmtPct }),
           tplRange('warm', 'Warmth', -100, 100, 1, { fmt: function (v) { return v === 0 ? 'Neutral' : (v > 0 ? 'Warm +' : 'Cool ') + Math.abs(v); } }),
@@ -4366,6 +4451,12 @@
           + String((verse ? verse.arabic : block.text) || ''),
         ayah: verse || null,
         translation: verse ? verse.translation : '',
+        // The block's own seconds and the worker's per-word times, carried so
+        // the live caption can lay the words out against the playhead. Without
+        // them every block read as 0..0 and the chunk never advanced.
+        start: timed ? block.start : null,
+        end: timed ? block.end : null,
+        words: Array.isArray(block.words) ? block.words : null,
         // A block with real timings can say when it is; a fallback one cannot.
         time: timed ? secsToClock(block.start) + ' – ' + secsToClock(block.end) : '',
         // Placed by its own start and duration, so the lane reads as a timeline
@@ -4388,7 +4479,14 @@
         // moment you cannot see is the thing that made this editor feel dead.
         select: function (e) {
           stop(e);
-          var next = { edBlock: i, edBlockDraft: null };
+          // ...and it opens the panel that edits it. The timeline's own hint
+          // says "Click a caption block to edit its words", and the words DO
+          // load -- into the Captions panel, which is not on screen unless
+          // that tab already happened to be the one showing. So from Framing,
+          // Audio, Look or Export the promise read as a dead control: the
+          // block took its gold outline and nothing else moved. Switching the
+          // tab is what makes the sentence true.
+          var next = { edBlock: i, edBlockDraft: null, edTab: 'captions' };
           if (timed) { next.edTime = block.start; next.edPlayhead = block.start / edDuration; }
           setUI(next);
           if (timed) seekHost(block.start);
@@ -4589,6 +4687,15 @@
     function endTour() { markTourSeen(); setUI({ tourStep: -1, tourAwait: null }); }
     // Set by the host only when the rendered file fails to play.
     var edSourceFallback = Boolean(UI.edSourceFallback);
+    // The plate is only trusted for the window it was cut from: a saved trim
+    // changes startSec/endSec and the host then asks for a fresh one.
+    var edPlate = (function () {
+      if (!edClipRecord || !edClipRecord.plate || !edClipRecord.plate.url || UI.edPlateFailed) return null;
+      var pl = edClipRecord.plate;
+      var same = Math.abs(Number(pl.startSec) - Number(edClipRecord.startSec)) < 0.05
+        && Math.abs(Number(pl.endSec) - Number(edClipRecord.endSec)) < 0.05;
+      return same ? pl : null;
+    }());
     // The account's watermark, read the way the Templates screen reads it: the
     // brand record first, the template (which the server has already laid the
     // brand over) when the record has nothing to say.
@@ -4745,6 +4852,9 @@
       // work, and this one would read "Editing clip" at somebody who edited
       // nothing.
       if (j.socialVariant) return;
+      // Nor is the editor's plate: the editor draws its own loading screen
+      // for it, and "Editing clip" here is about a render.
+      if (j.plate) return;
       if (['queued', 'processing'].indexOf(j.status) > -1) {
         var c = clips.filter(function (x) { return x.id === j.clipId; })[0];
         jobsLive.push({ kind: 'render', id: j.id, queued: j.status === 'queued', boosted: j.priority === 0, title: 'Editing ' + ((c && c.title) || 'clip'), stage: j.stage || j.status, progress: Number(j.progress || 0), etaSec: flatEta(150, j.progress), at: j.startedAt || j.createdAt });
@@ -4952,6 +5062,9 @@
       // one, with the destination named and its own guidance entry. Here it
       // would read "Edit failed" about an edit nobody made.
       if (j.socialVariant) return;
+      // A failed plate is reported by the editor's own loading screen ("Try
+      // again"); here it would read "Edit failed" about an edit nobody made.
+      if (j.plate) return;
       var c = clips.filter(function (x) { return x.id === j.clipId; })[0];
       // Only the clip's current job: once a newer render succeeded, the old
       // failure is history, not a task -- it sat in the bell regardless.
@@ -6238,6 +6351,23 @@
           });
         }
         var echoBlock = overlayBlock || selectedBlock;
+        /*
+         * LIVE (v3.139.0): over the plate the box IS the caption -- the block
+         * under the playhead, laid out by the template's mode, the live word
+         * in its highlight colour, face and pop. Nothing is gated on an edit
+         * having been made: that gate is what made the same slider move the
+         * picture on one press and nothing on the next.
+         *
+         * An ayah is drawn whole and unanimated from the corpus text the
+         * export burns in, never from a typed draft -- invariant 7.
+         */
+        if (edPlate && echoBlock) {
+          if (echoBlock.ayah) return [{ text: String(echoBlock.text || ''), style: '' }];
+          var parts = clipCaptionParts(echoBlock, edTime, tpl.captionMode, /stack/.test(String(tpl.captionMode)) ? (tpl.captionStackMaxWords || 4) : (tpl.captionMaxWords || 5));
+          return parts.words.map(function (text, i) {
+            return { text: text, style: i === parts.liveIndex && tpl.captionMode !== 'phrase' && tpl.captionMode !== 'cards' ? captionHighlightStyle(tpl) : '' };
+          });
+        }
         if (UI.edDirty && echoBlock && !echoBlock.ayah) {
           return String(echoBlock.sourceText || echoBlock.text || '').split(/\s+/).filter(Boolean).map(function (word) {
             return { text: word, style: '' };
@@ -6245,6 +6375,13 @@
         }
         return [];
       }()),
+      // The real face for the live box: colour, family, weight, size, tracking,
+      // case, outline, box and fade -- the same helpers the Templates sample
+      // draws with, so the two frames agree by construction. Empty off the
+      // plate, where the ghost keeps its own approximate dress.
+      edCapFace: edPlate
+        ? ((overlayBlock && overlayBlock.ayah) ? ayahFaceStyle(tpl) : captionFaceStyle(tpl)) + capInkStyle(tpl) + capFadeStyle(tpl, UI.edPlaying)
+        : '',
       // The echo's geometry: the draft's size, tracking, line-height and
       // case, sized against the frame exactly as captionFaceStyle sizes the
       // render's text -- but in the ghost's own face and colour, claiming
@@ -6319,9 +6456,14 @@
       // those questions are answered by the render underneath it.
       edCapOverlayStyle: 'z-index: 8; ' + captionPlacementStyle(tpl, edCapDragY)
         + ' box-sizing: border-box; border-radius: 10px; pointer-events: auto; cursor: grab;'
-        + (UI.dragKind === 'caption'
-          ? ' border: 1.5px solid rgba(240,214,166,.95); background: rgba(217,180,120,.16); box-shadow: 0 0 0 3px rgba(240,214,166,.12); min-height: 46px;'
-          : ' border: 1px dashed rgba(240,214,166,.34); background: transparent; min-height: 40px;'),
+        + (edPlate
+          // Live: the box is the caption. Only a drag rings it.
+          ? (UI.dragKind === 'caption'
+            ? ' outline: 1px dashed rgba(240,214,166,.85); outline-offset: 4px; min-height: 0;'
+            : ' min-height: 0;')
+          : (UI.dragKind === 'caption'
+            ? ' border: 1.5px solid rgba(240,214,166,.95); background: rgba(217,180,120,.16); box-shadow: 0 0 0 3px rgba(240,214,166,.12); min-height: 46px;'
+            : ' border: 1px dashed rgba(240,214,166,.34); background: transparent; min-height: 40px;')),
       // The translation line under an ayah, styled the way the render's own
       // \fn+\fs override styles it. The painter used to hardcode .46em in a
       // face the template never chose.
@@ -6333,6 +6475,12 @@
       // the video reads as the editor being broken.
       edRenderNotice: (function () {
         if (!edClipRecord) return '';
+        // Over the plate the picture IS current -- the layers are drawn from
+        // the same object the sliders write -- so "saved, not rendered yet" and
+        // a render's progress are not about what is on screen. The live chip
+        // already says Save renders the exact video; a second banner covered
+        // the caption band.
+        if (edPlate) return '';
         var job = edClipRecord.rerender;
         // The preview IS the render now, so this reports the only thing that
         // matters while it is behind: how long until what you see is what you
@@ -6356,7 +6504,13 @@
         }
         return '';
       }()),
-      edCapHandle: 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
+      // The dashed positioning frame around the ghost. Off while the layer is
+      // live: the caption itself is what you pick up, and a drag rings it
+      // through edCapOverlayStyle -- four dashed rectangles around a real
+      // caption read as a fault, and did.
+      edCapHandle: edPlate
+        ? 'display: none;'
+        : 'position: absolute; inset: -5px; border: 1px dashed rgba(240,214,166,.7); border-radius: 8px; pointer-events: none;',
       dragEdCap: dragCaptionFrom,
 
       // captionFontSize, range 24-140 in the schema.
@@ -6518,6 +6672,42 @@
       edCropNote: tpl.smartFramingEnabled
         ? 'Only used where the speaker cannot be found — face tracking wins when it succeeds.'
         : 'Where the 9:16 window sits over the wider source.',
+
+      /*
+       * THE EDITOR'S LOOK TAB IS THE TEMPLATES SCREEN'S OWN LOOK GROUP, not a
+       * second set of controls that means the same thing.
+       *
+       * v3.118.0 gave Templates twelve graded looks and four weather effects
+       * (rain, snow, dust, bokeh) with their strength and a darken slider. The
+       * editor's Look tab was written before that and still offered grain,
+       * warmth, vignette and the watermark -- so per CLIP you could not reach
+       * the half of the look controls that actually changes the picture, and
+       * the one screen named "Look" was the one place they were missing.
+       *
+       * Reusing `tplControlsFor().look` rather than rebuilding those rows is
+       * the whole point: the options come from the schema's own ENUMS, the
+       * custom-eq sliders appear on exactly the same condition, and the
+       * strength slider hides with `overlayEffect: none` in both places. Two
+       * hand-written copies would drift the first time a look is added, which
+       * is the fault this file has recorded more often than any other.
+       *
+       * They write through the SAME `saveStyle`, which already routes to
+       * `saveClipStyle` while the editor is open -- so a change here lands on
+       * the clip's own overrides, exactly as grain and vignette beside them
+       * do, and nothing about what a row means changes with the screen.
+       *
+       * WHAT THE EXPORT ALREADY DRAWS IS FILTERED OUT, and that was found by
+       * counting the rendered rows rather than by reading the group: the Look
+       * panel's own markup carries Grain, Warmth and Vignette, so passing the
+       * group through whole put a SECOND slider for each of the three directly
+       * under the first. Two controls for one setting is worse than none --
+       * this repo has shipped that bug three times (two watermark positions,
+       * two onboarding systems, two tour buttons) and it is the reason the
+       * filter is keyed on the FIELD rather than on the label.
+       */
+      edLookControls: (tplControlsFor().look || []).filter(function (c) {
+        return c && c.field !== 'grain' && c.field !== 'warm' && c.field !== 'vignette';
+      }),
 
       // THE ACCOUNT'S switch, not this clip's. The watermark belongs to the
       // account (v3.113.0, v3.136.0 -- "once its configured it works for all
@@ -6699,12 +6889,37 @@
       // short window on the quick lane. It never replaces the clip -- the full
       // re-render clears it when it lands, and the frame is labelled while it
       // shows. Same-pipeline pixels, so the one-origin invariant holds.
+      /*
+       * WHAT THE EDITOR PLAYS (v3.139.0, "captions moving must be live").
+       *
+       * The PLATE first: the bare clip window the worker cut for this editor
+       * (render_plate), with nothing drawn on it, so captions, framing, grade,
+       * weather and the mark are drawn LIVE over it by the host from this
+       * same style object -- the one every slider writes. That is what makes
+       * a slider move the picture the instant it moves, which the finished
+       * render, captions baked in, could never do.
+       *
+       * A Preview window (the exact libass render of a few seconds) still
+       * outranks it while one is parked; the render is what plays when there
+       * is no plate yet and none can be made (edPlateFailed), labelled; the
+       * clean source stays as the last fallback for a self-hosted lecture.
+       */
       edVideoUrl: !edClip ? '' : (edClip.stylePreview && edClip.stylePreview.url
         ? edClip.stylePreview.url + (edClip.stylePreview.url.indexOf('?') > -1 ? '&' : '?') + 'sp=' + encodeURIComponent(String(edClip.stylePreview.at || ''))
+        : edPlate
+        ? edPlate.url + (edPlate.url.indexOf('?') > -1 ? '&' : '?') + 'pl=' + encodeURIComponent(String(edPlate.at || ''))
         : edSourceFallback
         ? '/api/clips/' + encodeURIComponent(edClip.id) + '/source-preview'
         : '/api/clips/' + encodeURIComponent(edClip.id) + '/video?rv='
           + encodeURIComponent(String(edClip.renderVersion || 1) + '.' + String(edClip.renderQuality || 'final'))),
+      // The live layer is on whenever the plate is what plays.
+      edLive: Boolean(edPlate) && !(edClip && edClip.stylePreview && edClip.stylePreview.url),
+      // The loading screen's facts: is a plate wanted, is one on its way, and
+      // what its job says. The host asks for one once per clip window.
+      edPlateWanted: Boolean(edClip && !edPlate && !UI.edPlateFailed && !(edClip.stylePreview && edClip.stylePreview.url)),
+      edPlateKey: edClip ? edClip.id + '@' + Number(edClip.startSec || 0).toFixed(2) + '-' + Number(edClip.endSec || 0).toFixed(2) : '',
+      edPlateJob: (edClipRecord && edClipRecord.plateJob) || null,
+      edPlateFailed: Boolean(UI.edPlateFailed),
       edPreviewActive: Boolean(edClip && edClip.stylePreview && edClip.stylePreview.url),
       edExportUrl: edClip ? edClip.videoUrl || '' : '',
       // Read from the template rather than printed as a literal: the tab used
@@ -6767,7 +6982,7 @@
       // its timeline equals the clip's, so there is no offset arithmetic on
       // this path at all. Only the clean-source fallback plays the whole
       // lecture and needs the clip's start subtracted.
-      edStartSec: (edClip && edSourceFallback) ? Number(edClip.startSec) || 0 : 0,
+      edStartSec: (edClip && edSourceFallback && !edPlate) ? Number(edClip.startSec) || 0 : 0,
       edPoster: edClip ? edClip.thumbUrl || '' : '',
       edPlaying: Boolean(UI.edPlaying),
       edPlayIcon: UI.edPlaying ? 'ph ph-pause' : 'ph ph-play',
@@ -6786,6 +7001,39 @@
       edVideoFilter: lookFilter(tpl).replace(/^filter:\s*/, '').replace(/;$/, ''),
       edVideoVignette: Math.max(0, Math.min(1, Number(tpl.vignette) || 0)),
       edVideoGrain: Math.max(0, Math.min(100, Number(tpl.grain) || 0)),
+      // Where the crop window sits over a wider source (Fill mode), as
+      // object-position -- the same two numbers the renderer's crop reads.
+      edVideoPos: tpl.fitMode === 'crop'
+        ? (Math.round((Number(tpl.cropPositionX) >= 0 ? Number(tpl.cropPositionX) : 0.5) * 100) + '% '
+          + Math.round((Number(tpl.cropPositionY) >= 0 ? Number(tpl.cropPositionY) : 0.5) * 100) + '%')
+        : '50% 50%',
+      // The darken scrim, the weather and (on the live layer) vignette and
+      // grain, as one background stack over the picture.
+      edVideoFx: fxLayersStyle(tpl),
+      // The nasheed the render would mix under the voice, and how loud: the
+      // host plays it beside the plate so the Audio slider is heard, not
+      // just written. The FIRST enabled track stands in for the render's
+      // seeded pick; the level is the account's music setting.
+      edMusic: (function () {
+        if (!edPlate) return null;
+        // Tracks are the library entries audio.listNasheeds hands the payload:
+        // no url field, they stream by id from /api/music/:id/audio, the same
+        // route the Nasheed library's own Play button uses.
+        var list = (DATA && (DATA.tracks || DATA.music)) || [];
+        if (!Array.isArray(list)) list = [];
+        var track = list.filter(function (t) { return t && t.id && t.enabled !== false; })[0] || list.filter(function (t) { return t && t.id; })[0] || null;
+        if (!track) return null;
+        var trackUrl = track.url || ('/api/music/' + encodeURIComponent(track.id) + '/audio');
+        var ms = (DATA && DATA.musicSettings) || {};
+        // The payload calls it volumePercent; the worker's job setting is
+        // musicVolumePercent. Both are read so a rename on either side
+        // cannot silently mute the preview.
+        var pct = Number(ms.volumePercent != null ? ms.volumePercent : ms.musicVolumePercent);
+        if (!isFinite(pct)) pct = 13;
+        return { url: trackUrl, level: Math.max(0, Math.min(0.5, pct / 100)), name: track.name || 'Nasheed', wanted: !(edClip && edClip.musicEnabled === false) };
+      }()),
+      // What the frame says about itself while live.
+      edLiveLabel: edPlate ? 'Live preview \u00b7 Save clip renders the exact video' : '',
       // Play/pause. The design draws the button but exports no handler for it,
       // so the binding exists for the host to attach.
       togglePlay: function (e) {

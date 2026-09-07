@@ -1,17 +1,19 @@
 /*
- * The clip editor is held back for launch.
+ * THE CLIP EDITOR SHIPPED ON 7 SEPT 2026 (v3.139.0), and its launch gate went
+ * with it. This file used to prove the gate held -- both halves served, the
+ * notice over the blur, the subtree inert -- and it now proves the gate is
+ * GONE, because half a gate is the worst of both: a served stylesheet that
+ * blurs an editor nothing announces as coming, or an inert subtree with no
+ * notice over it.
  *
- * It opens from the queue and draws itself, blurred, behind a "coming soon"
- * notice — so what is coming is visible and what is not ready is said plainly.
+ * It shipped once before, briefly (v3.78.0, 2 Sept 2026), and was re-gated the
+ * same hour at Youssef's call; this is the second and deliberate time. Asked
+ * whether to settle the one remaining unknown first (no preview or save has
+ * been watched landing from the REAL worker) or to take the gate off now, he
+ * chose now. That unknown is recorded in CLAUDE.md, not hidden here.
  *
- * Two failures are worth a test each. The first is a blurred editor that is
- * still REACHABLE: pointer-events stops the mouse but not the keyboard, and a
- * Save button that can be tabbed to can write an edit onto a customer's clip
- * that nobody asked for. The second is the phone rule that hides every child of
- * the editor — which, once the notice became a child, would hide the notice and
- * leave a blank screen.
- *
- * When the editor ships, this whole file goes with the two it describes.
+ * The two gate files are `git rm`'d, not merely unlinked: a file on disk that
+ * nothing serves is a file the next person "restores" by re-adding a link.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -23,12 +25,6 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deenclipped-gate-'));
-// Ports 32768-60999 are Linux's EPHEMERAL range: the kernel hands them out
-// to outgoing sockets, so a port chosen there can be taken between the
-// choice and the listen. The file then dies with EADDRINUSE and the run
-// reports FEWER TESTS rather than a failure anyone can read -- measured at
-// 1 abort in 6 full runs. This window is below the range, and every test
-// file gets its own so two cannot collide with each other either.
 const port = 17750 + Math.floor(Math.random() * 100);
 process.env.DATA_DIR = dataDir;
 process.env.PORT = String(port);
@@ -48,89 +44,78 @@ test.after(async () => {
   try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* cleanup must not fail a run */ }
 });
 
-const gateCss = fs.readFileSync(path.join(ROOT, 'src/public/studio-editor-gate.css'), 'utf8');
-const gateJs = fs.readFileSync(path.join(ROOT, 'src/public/editor-gate.js'), 'utf8');
 const host = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
 const responsive = fs.readFileSync(path.join(ROOT, 'src/public/studio-responsive.css'), 'utf8');
+const serverSrc = fs.readFileSync(path.join(ROOT, 'src/server.js'), 'utf8');
 
-test('both halves of the gate are actually served', async () => {
-  // Static files are an explicit allowlist. An unlisted one 404s, which would
-  // leave the editor open and working with no notice over it at all.
-  for (const [route, type] of [['/studio-editor-gate.css', /css/], ['/editor-gate.js', /javascript/]]) {
-    const res = await fetch(`${base}${route}`);
-    assert.equal(res.status, 200, `${route} must be registered in src/server.js`);
-    assert.match(res.headers.get('content-type') || '', type);
-    assert.ok((await res.text()).length > 200, `${route} must not be served empty`);
+test('the two gate files are gone from the tree, not merely unlinked', () => {
+  for (const rel of ['src/public/editor-gate.js', 'src/public/studio-editor-gate.css']) {
+    assert.ok(!fs.existsSync(path.join(ROOT, rel)), `${rel} must be deleted -- a file nothing serves is one the next person re-links`);
   }
 });
 
-test('the page loads the gate, after the stylesheet it has to override', async () => {
-  assert.match(host, /studio-editor-gate\.css/);
-  assert.match(host, /editor-gate\.js/);
-  assert.ok(host.indexOf('studio-editor-gate.css') > host.indexOf('studio-responsive.css'),
-    'the gate must come after the mobile stylesheet to win the cascade');
+test('neither half of the gate is served any more', async () => {
+  for (const route of ['/studio-editor-gate.css', '/editor-gate.js']) {
+    const res = await fetch(`${base}${route}`);
+    assert.equal(res.status, 404, `${route} must no longer be in the static allowlist`);
+  }
+  assert.doesNotMatch(serverSrc, /studioAsset\('(studio-)?editor-gate\./, 'and the allowlist lines are deleted, not commented out');
 });
 
-test('the notice survives the phone rule that hides the editor', () => {
-  // studio-responsive.css hides every child of the editor below 700px. The
-  // notice is a child. Without the exclusion the phone gets a blank screen.
+test('the page does not load the gate', () => {
+  // The TAGS, not the words: the comment where the link used to be names both
+  // files on purpose, so the next person knows what shipped and when.
+  assert.doesNotMatch(host, /<link[^>]+studio-editor-gate\.css/);
+  assert.doesNotMatch(host, /<script[^>]+editor-gate\.js/);
+});
+
+test('the phone rule hides the whole editor and explains itself, with no notice to exempt', () => {
   const hideRule = responsive.match(/#studio \[data-dc-editor\] > [^{]+\{[^}]*display:\s*none/);
-  assert.ok(hideRule, 'the phone rule should still exist');
-  assert.match(hideRule[0], /:not\(#dcEditorSoon\)/,
-    'hiding the notice along with the editor leaves nothing on screen');
+  assert.ok(hideRule, 'the phone rule still exists: the editor needs a wider screen');
+  assert.doesNotMatch(hideRule[0], /dcEditorSoon/, 'the exemption was for a notice that no longer exists');
+  assert.match(responsive, /\[data-dc-editor\]::before[^}]*content:\s*'The clip editor needs a wider screen/,
+    'the wider-screen message is the one thing a phone sees');
 });
 
-test('the phone never shows two different messages about one screen', () => {
-  // The old "needs a wider screen" note and the notice say different things
-  // about the same screen; while the gate is on, only one of them speaks.
-  const phoneBlock = gateCss.slice(gateCss.indexOf('@media (max-width: 700px)'));
-  assert.match(phoneBlock, /\[data-dc-editor\]::before[^}]*display:\s*none/,
-    'the wider-screen message must stand down while the notice is up');
-});
-
-test('the editor underneath cannot be reached by mouse or by keyboard', () => {
-  // Blur is not a lock. CSS stops the pointer; only inert stops tabbing, and a
-  // reachable Save writes an edit onto a clip nobody meant to edit.
-  assert.match(gateCss, /#studio \[data-dc-editor\] > \*:not\(#dcEditorSoon\)[^}]*pointer-events:\s*none/s,
-    'the mouse has to be stopped in CSS');
-  assert.match(gateJs, /\.inert = true/,
-    'and the keyboard in JS — pointer-events does not affect the tab order');
+test('the editor is reachable: nothing marks it gated', async () => {
+  // The gate's own identifiers, not a bare `.inert = true` -- the dialogs'
+  // focus trap (v3.125.0) sets inert on SIBLINGS and is a different feature
+  // that must stay. The first cut of this matched it and went red on correct
+  // code.
+  const page = await fetch(`${base}/app`).then(r => r.text());
+  assert.doesNotMatch(page, /dc-editor-gated|['"#]dcEditorSoon['"]|OVERLAY_ID/);
 });
 
 test('the editor no longer wears a BETA badge or a first-run beta pop-up', () => {
-  // The pop-up ("rough edges are possible while we improve this") and the
-  // "Clip editor · BETA" title were retired with the editor fixes of
-  // 6 Sept 2026: a screen that has just come out from behind "coming soon"
-  // must not open by telling the customer it is not ready after all. The
-  // gate's CSS rule for the pop-up is harmless and may stay; the pop-up
-  // itself must not come back.
-  const host = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  // Retired with the editor fixes of 6 Sept 2026: a screen that has just come
+  // out from behind "coming soon" must not open by telling the customer it is
+  // not ready after all.
   assert.ok(!host.includes('edBetaPop'), 'the beta pop-up is gone from the host');
   assert.ok(!host.includes('deenEditorBetaSeen'), 'and so is its storage key');
   const adapter = fs.readFileSync(path.join(ROOT, 'src/public/studio-adapter.js'), 'utf8');
   assert.ok(!/editor:\s*'Clip editor[^']*BETA/.test(adapter), 'the title carries no BETA');
   assert.ok(!/Beta \\u2014 sliders preview instantly/.test(adapter), 'the subtitle no longer calls it a beta');
-  assert.match(gateJs, /dc-editor-gated/, 'the gate still marks the body while it is up');
 });
 
-test('the gate never rewrites a subtitle belonging to another screen', () => {
-  // It replaces the editor's own line in the topbar, and the topbar is shared
-  // by every screen in the app. The match is on the words the editor's line
-  // actually carries (Preview / Save clip), never on "beta".
-  assert.match(gateJs, /Save clip\|Preview/);
-  assert.ok(/if \(!editor\) return;/.test(gateJs),
-    'it must give up before touching anything when the editor is not on screen');
-});
-
-test('turning the editor back on is a deletion, not an untangling', () => {
-  // The gate is deliberately not in the design export: re-importing the design
-  // regenerates hashed class names, and that churn should not be the price of
-  // shipping the editor.
-  const design = fs.readFileSync(path.join(ROOT, 'design/studio-dashboard.dc.html'), 'utf8');
-  assert.ok(!design.includes('dcEditorSoon'),
-    'the notice belongs to the gate, not to the design');
-  const generated = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');
-  assert.ok(!generated.includes('dcEditorSoon'));
-  assert.ok(generated.includes('data-dc-editor'),
-    'but the hook the gate hangs off has to be in the template');
+test('no public sentence still calls the editor coming soon', () => {
+  // The claim lived in five places (help, terms, the features chapter, a
+  // landing page's honest-limits list, and the /alternatives copy). A gate
+  // that is off while the site still says it is on is the stale-claim
+  // failure CLAUDE.md pays for most often.
+  // The SPECIFIC retired sentences, not a fuzzy "editor near coming soon":
+  // the features chapter legitimately keeps a "Concept preview · frame-level
+  // tools coming soon" badge on an image of tools that do not exist, and a
+  // window regex catches that while proving nothing about the editor.
+  const retired = [
+    ['src/marketing.js', 'The complete editor is currently marked coming soon'],
+    ['src/marketing.js', 'The full editor stays clearly marked as coming soon'],
+    ['src/marketing.js', 'the full clip editor is behind a "coming soon" gate'],
+    ['src/marketing.js', 'DeenClipped editor coming soon'],
+    ['src/seo-copy.js', 'the full clip editor is behind a "coming soon" gate'],
+    ['src/help.js', 'The clip editor says coming soon'],
+  ];
+  for (const [rel, sentence] of retired) {
+    const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    assert.ok(!src.includes(sentence), `${rel} still says: ${sentence}`);
+  }
 });

@@ -88,10 +88,6 @@ const STUDIO_ASSETS = {
   '/studio-notify.js': { file: studioAsset('studio-notify.js'), type: JS_TYPE },
   '/studio-theme.generated.css': { file: studioAsset('studio-theme.generated.css'), type: 'text/css; charset=utf-8' },
   '/studio-light.generated.css': { file: studioAsset('studio-light.generated.css'), type: 'text/css; charset=utf-8' },
-  // The editor's launch gate (see index.html). Two files and these two lines;
-  // turning the editor on again is a deletion rather than an untangling.
-  '/studio-editor-gate.css': { file: studioAsset('studio-editor-gate.css'), type: 'text/css; charset=utf-8' },
-  '/editor-gate.js': { file: studioAsset('editor-gate.js'), type: JS_TYPE },
   // The phone dashboard (studio-mobile.js renders a second template over the
   // same bindings; the sheet lives entirely inside the 820px query).
   '/studio-mobile.css': { file: studioAsset('studio-mobile.css'), type: 'text/css; charset=utf-8' },
@@ -727,7 +723,9 @@ function latestRerender(clipId) {
   // and never touches the clip, so reporting it here would put "re-rendering"
   // on a clip whose own render is finished and offer an editor spinner for
   // work the customer did not ask for and cannot see.
-  const jobs = state.rerenderJobs.filter(job => job.clipId === clipId && !job.socialVariant);
+  // A plate is excluded the same way: it is the editor's own live-preview
+  // backdrop, never the clip's render, and it has its own `plateJob` field.
+  const jobs = state.rerenderJobs.filter(job => job.clipId === clipId && !job.socialVariant && !job.plate);
   return jobs.find(job => !job.preview && ['queued', 'processing'].includes(job.status)) || jobs[0] || null;
 }
 function publicClip(clip, { detail = false } = {}) {
@@ -786,6 +784,20 @@ function publicClip(clip, { detail = false } = {}) {
       : social.plannedChannelsFor(clip),
     rerender: rerender ? { id: rerender.id, status: rerender.status, stage: rerender.stage, progress: rerender.progress, error: rerender.error || null, asVariant: rerender.asVariant, preview: Boolean(rerender.preview) } : null,
     stylePreview: clip.stylePreview ? { ...clip.stylePreview, url: mediaUrl(clip.stylePreview.url) } : null,
+    // The editor's live-preview plate (render_plate in the worker): the bare
+    // clip window it draws captions, framing and grade over. Keyed on the
+    // window it was cut from, so a trimmed clip gets a fresh one rather than
+    // drawing over a stale stretch. Its job is reported separately from the
+    // clip's own render so a loading screen can watch it.
+    plate: clip.plate ? {
+      startSec: clip.plate.startSec, endSec: clip.plate.endSec, at: clip.plate.at,
+      url: mediaUrl(clip.plate.url) || (clip.plate.clipFile ? `/api/clips/${encodeURIComponent(clip.id)}/plate` : ''),
+      thumbUrl: mediaUrl(clip.plate.thumbUrl) || (clip.plate.thumbFile ? `/api/clips/${encodeURIComponent(clip.id)}/plate-thumb` : ''),
+    } : null,
+    plateJob: (() => {
+      const job = state.rerenderJobs.find(item => item.clipId === clip.id && item.plate && ['queued', 'processing', 'failed'].includes(item.status));
+      return job ? { id: job.id, status: job.status, stage: job.stage, progress: job.progress, error: job.error || null } : null;
+    })(),
     videoUrl: mediaUrl(clip.clipUrl) || `/api/clips/${encodeURIComponent(clip.id)}/video`, thumbUrl: mediaUrl(clip.thumbUrl) || `/api/clips/${encodeURIComponent(clip.id)}/thumb`,
   };
 }
@@ -2688,6 +2700,23 @@ async function route(req, res, url) {
     } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
   }
 
+  // The editor's live-preview plate (render_plate): on the remote engine the
+  // worker uploaded it and publicClip hands out that URL directly; on the
+  // self-hosted engine the file stays on disk and is streamed from here.
+  const platePath = pathname.match(/^\/api\/clips\/([^/]+)\/(plate|plate-thumb)$/);
+  if (method === 'GET' && platePath) {
+    let clip; try { clip = assertCanAccessClip(currentUser, decodeURIComponent(platePath[1])); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+    const plate = clip?.plate || null;
+    const thumb = platePath[2] === 'plate-thumb';
+    const remote = mediaUrl(thumb ? plate?.thumbUrl : plate?.url);
+    if (remote) return temporaryRedirect(res, remote);
+    const file = thumb ? plate?.thumbFile : plate?.clipFile;
+    if (!plate || !file || !fs.existsSync(file)) {
+      res.setHeader('Cache-Control', 'private, max-age=60');
+      return json(res, 404, { error: 'No live-preview plate for this clip yet.' });
+    }
+    return streamFile(req, res, file, { contentType: thumb ? 'image/jpeg' : 'video/mp4' });
+  }
   const sourcePreview = pathname.match(/^\/api\/clips\/([^/]+)\/source-preview$/);
   if (method === 'GET' && sourcePreview) {
     let clip; try { clip = assertCanAccessClip(currentUser, decodeURIComponent(sourcePreview[1])); } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
@@ -2770,7 +2799,12 @@ async function route(req, res, url) {
       const previewWindow = body.preview && Number.isFinite(Number(body.preview.startSec)) && Number.isFinite(Number(body.preview.endSec))
         ? { startSec: Math.max(0, Number(body.preview.startSec)), endSec: Math.max(0, Number(body.preview.endSec)) }
         : null;
-      return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, wanted, { asVariant: Boolean(body.asVariant), priority: previewWindow ? 0 : 1, preview: previewWindow }) });
+      // The editor's plate: the bare clip window it draws live over. Someone
+      // is watching a loading screen for it, so it is priority 0 like a
+      // preview and rides the quick lane. It costs nothing and changes
+      // nothing about the clip -- see render_plate in the worker.
+      const plate = Boolean(body.plate);
+      return json(res, 202, { ok: true, job: agent.engine.queueClipRerender(id, wanted, { asVariant: Boolean(body.asVariant), priority: (previewWindow || plate) ? 0 : 1, preview: previewWindow, plate }) });
     }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
