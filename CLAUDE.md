@@ -12614,6 +12614,15 @@ Posting)"*.
 have been for as long as the self-check has been reporting Email configured.
 Read the dashboard before acting on a blocker list -- including one of mine.
 
+**The same handover called `studio-dashboard-import` "three commits never
+merged".** It was fully merged: `git log deenclipped-v2-2..studio-dashboard-import`
+was EMPTY, the diff was empty, and `merge-base --is-ancestor` said yes for all
+three (`3bf05a6`, `2e4bb22`, `f5fc1cb`). Deleted 7 Sept 2026 with nothing lost;
+the tip was `3bf05a61ef8d2a9774b8cb899a1d8f6ff13be78f` if it is ever wanted.
+A branch that LOOKS stale by date is not the same as one carrying work --
+`--is-ancestor` answers it in a second and "never merged" is a claim worth
+checking before anyone spends an afternoon rescuing it.
+
 **Six variables were deleted** as read by nothing anywhere in the repo:
 `ANALYTICS_SCRIPT_URL`, `ANALYTICS_SITE_ID`, `FREE_TIER_DAYS`,
 `PLAN_PRICE_MONTHLY_LIST_LABEL`, `STRIPE_COUPON_MONTHLY`, `TRIAL_PLANS`.
