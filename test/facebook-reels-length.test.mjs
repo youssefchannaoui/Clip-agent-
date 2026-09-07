@@ -117,12 +117,27 @@ test('only Facebook has a length rule, and it is stated once', () => {
   for (const provider of ['youtube', 'instagram', 'tiktok']) {
     assert.equal(social.platformRefusal(provider, { durationMs: 62_000 }), '');
   }
-  // ONE sentence: the upload asks the same function, so the reason a customer
-  // reads on the card and the reason a failure would carry cannot drift.
+  // Facebook is the only entry in the table, so it is the only platform that
+  // can refuse on length at all.
+  assert.deepEqual(Object.keys(social.PLATFORM_LENGTH_LIMITS), ['facebook']);
+
+  // ONE sentence, and it is BUILT from the table rather than typed beside it.
+  // The literal this used to count no longer exists -- the sentence became a
+  // template when the table was introduced -- so pinning the bytes would fail
+  // against correct code, which is the failure mode CLAUDE.md records most.
+  // What must stay true is that the numbers a customer reads are the numbers
+  // the refusal enforces.
+  const limit = social.PLATFORM_LENGTH_LIMITS.facebook;
+  const sentence = social.platformRefusal('facebook', { durationMs: 62_000 });
+  const [, lo, hi] = sentence.match(/requires a (\d+)\u2013(\d+) second/) || [];
+  assert.equal(Number(lo), limit.minSeconds, 'the sentence quotes the table');
+  assert.equal(Number(hi), limit.maxSeconds, 'the sentence quotes the table');
+  assert.ok(sentence.startsWith(limit.label), 'and names the platform from it');
+
   const src = fs.readFileSync(new URL('../src/social.js', import.meta.url), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  const literals = src.match(/Facebook Reels publishing requires/g) || [];
-  assert.equal(literals.length, 1, 'the sentence is written in exactly one place');
+  const built = src.match(/publishing requires a/g) || [];
+  assert.equal(built.length, 1, 'the sentence is written in exactly one place');
   assert.match(src, /platformRefusal\('facebook', clip, \{ assumeKnown: true \}\)/,
     'the upload asks the shared function rather than re-testing the duration');
 });

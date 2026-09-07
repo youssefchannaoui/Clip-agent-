@@ -95,7 +95,12 @@ test('picking a clip length changes two classes, not four cards', () => {
   assert.ok(!sig.includes('JSON.stringify(bands)'),
     'the selection is NOT in the signature, or every press rebuilds the row');
   assert.ok(!/,active,/.test(sig), 'nor is the chosen template');
-  const body = host.slice(at, at + 6000);
+  /* Bounded to the painter's own function, never to a byte count: a 6000-char
+   * window went red the moment a row was added to the structural markup, on
+   * code whose behaviour had not moved. A byte count is not a boundary. */
+  const fnAt = host.lastIndexOf('function paintJobStyleRow(', at);
+  const body = host.slice(fnAt, host.indexOf('\n    function ', at));
+  assert.ok(body.length > 500 && body.length < 20000, 'the painter was not isolated');
   assert.ok(/if\(structural\)\{/.test(body), 'the rebuild is guarded');
   // Applied on every paint, rebuild or not.
   assert.ok(/classList\.toggle\('on',bandOn\(lo,hi\)\)/.test(body), 'bands are toggled in place');

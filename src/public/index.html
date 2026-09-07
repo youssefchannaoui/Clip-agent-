@@ -6428,7 +6428,12 @@ function studioWanted(){return window.STUDIO_SHELL===true}
               +'</button>';
           }).join('')
           +'</div>'
-          +'<div class="lb-note" style="font-size:12.5px;color:var(--dc-ink-faint, #6E6E76);margin-top:14px"></div>';
+          +'<div class="lb-note" style="font-size:12.5px;color:var(--dc-ink-faint, #6E6E76);margin-top:14px"></div>'
+          /* A length one of this account's OWN live destinations cannot take.
+             Gold rather than red: choosing 60-90s is a real choice, not a
+             mistake -- the clips still go everywhere else. Empty for anyone
+             with no destination that has a length rule, which is most. */
+          +'<div class="lb-warn" style="font-size:12px;color:var(--dc-gold-lit, #F0D6A6);margin-top:7px;display:none"></div>';
       }
       if(structural){
         jobStyleEl.innerHTML=html;
@@ -6491,6 +6496,12 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           ? `Cut between ${Math.min(...picked.map(x=>x[0]))}s and ${Math.max(...picked.map(x=>x[1]))}s \u2014 anything shorter or longer is skipped.`
           : `Any length \u2014 moments are cut between ${(DATA&&DATA.clipSettings&&DATA.clipSettings.clipMinSeconds)||20}s and ${(DATA&&DATA.clipSettings&&DATA.clipSettings.clipMaxSeconds)||90}s, whatever fits best. Pick lengths above to narrow it.`;
         if(note.textContent!==text)note.textContent=text;
+      }
+      const warn=jobStyleEl.querySelector('.lb-warn');
+      if(warn){
+        const w=vals.jobLengthNote||'';
+        if(warn.textContent!==w)warn.textContent=w;
+        warn.style.display=w?'block':'none';
       }
     }
     /* The Quran flow's background choice, docked under the kind cards.

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1708 JS + 715 Python**
+- `npm test` and `npm run check` must pass. Currently **1717 JS + 715 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -7327,6 +7327,68 @@ guessed at: refund and cancellation terms, the legal entity name, ABN and
 business address, the governing-law/jurisdiction/liability clauses, a GDPR
 section, and a minimum-age threshold. Every one of those is a decision about
 the business, and inventing a liability clause is worse than having none.
+
+## The length step says which platform a band will skip (v3.146.4, 7 Sept 2026)
+
+v3.135.0 stopped Facebook Reels being handed a clip it could never take: the
+target is no longer built, so there is no wasted upload and no red row. What it
+left behind is a SILENT non-delivery -- pick 60-90s on the length step, and
+every clip quietly goes everywhere except Facebook with nothing on any screen
+saying why. That release's own closing line named this as the gap: *"the clip
+length BANDS still offer lengths Facebook cannot take ... A warning where the
+band is chosen would stop it at source."*
+
+- **The seconds come from the SERVER'S OWN TABLE, never typed twice.**
+  `PLATFORM_LENGTH_LIMITS` in social.js is the one definition; `platformRefusal`
+  builds its sentence from it, `connectionStatus` sends it as
+  `DATA.social.lengthLimits`, and the browser's `lengthWarning` reads that.
+  Two copies of 4-60 is how a warning outlives the rule it describes -- and the
+  rule is somebody else's product, so it WILL move.
+- **A NOTE, never a refusal.** Choosing 60-90s is a legitimate choice: the clips
+  still post to YouTube, TikTok and Instagram. Gating the band would take a
+  length away from an account over a platform it may not even care about, so the
+  step says what will happen and lets it happen.
+- **Drawn only for a destination that is connected AND enabled**, through
+  `providerInfo` -- the same test `anyOutletLive` uses. A warning about a
+  platform somebody does not post to is noise, and it is the shape that teaches
+  people to ignore the row.
+- **The floor is covered as well as the ceiling.** Over 60s is the case that
+  actually happens; under 4s is the next silent one, and covering it cost one
+  branch.
+- The element lives in `paintJobStyleRow`'s STRUCTURAL html and is filled in
+  place on every paint, like the sentence above it -- the v3.113.0 rule: putting
+  it in the signature would rebuild all four length cards on every press and
+  bring back the "weird refresh".
+
+**Measured at 1440x950 in both themes**: one shared left edge with the note
+(0px), no page overflow, hidden at 45-60s, hidden with Facebook switched off,
+and contrast **13.45:1 dark / 5.92:1 light** against the panel's real pixels.
+
+**AN UNCOMPOSITED GROUND WALK SAID 3.27:1 AND WAS WRONG** -- it stopped at the
+first non-transparent `backgroundColor`, `rgba(6,6,8,.6)`, and read it as an
+opaque near-black even in daylight. Alpha must be composited, or the ground
+sampled from the SCREENSHOT with the text hidden, which is what settled it.
+
+### And two more source-string tests failed against correct code
+
+The ninth and tenth occurrences in this file, in one run, and each is a
+different flavour of the same mistake:
+
+- `facebook-reels-length` counted the LITERAL sentence to prove it is written
+  once. Generalising `platformRefusal` to a template made that literal cease to
+  exist, so a test guarding a real property went red against code whose
+  behaviour had not moved. It now asserts the sentence is BUILT from the table:
+  the numbers it quotes are parsed back out and compared with
+  `PLATFORM_LENGTH_LIMITS`, and the table has exactly one entry.
+- `panel-latency` sliced **6000 characters** from the painter's signature and
+  asserted the in-place toggle was inside. Adding one row to the structural
+  markup pushed the toggle past that window. **A byte count is not a boundary**
+  -- the same fault the clip-preview test hit at 2,200 characters. It is bounded
+  to the painter's own function now.
+
+Both repaired assertions were re-proven RED: a hand-typed "4-90" in place of the
+table's numbers fails the first, and `classList.add('on')` in place of the
+toggle fails the second.
 
 ## Open items
 

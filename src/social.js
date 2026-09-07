@@ -717,6 +717,9 @@ export function connectionStatus(user) {
   const publicBaseUrlReady = Boolean(config.publicBaseUrl);
   return {
     securityReady, publicBaseUrlReady, globalAvailable: config.socialPublishEnabled,
+    // Sent so the job panel can warn about a length before it is cut rather
+    // than after it is refused. Same object platformRefusal reads.
+    lengthLimits: PLATFORM_LENGTH_LIMITS,
     issues: [
       ...(!config.socialPublishEnabled ? ['SOCIAL_PUBLISH_ENABLED is false.'] : []),
       ...(!securityReady ? ['SOCIAL_TOKEN_KEY must contain at least 32 characters.'] : []),
@@ -927,14 +930,30 @@ function validateFor(next, userId) {
  * recorded its length yet, while the upload -- which is about to spend
  * bandwidth on a file Facebook will reject -- is right to stop.
  */
-const REELS_MIN_SECONDS = 4;
-const REELS_MAX_SECONDS = 60;
+/**
+ * What a platform will actually accept, in seconds.
+ *
+ * ONE TABLE, TWO QUESTIONS, and they must never disagree: may this finished
+ * clip be sent (platformRefusal, asked at the target and again at the upload),
+ * and can a length somebody is about to CHOOSE reach that platform at all
+ * (the job panel's length bands). Writing 4-60 a second time in the browser is
+ * how a warning outlives the rule it describes -- so the browser is TOLD the
+ * numbers, in the state payload, rather than carrying its own copy.
+ *
+ * Only Facebook has a length rule. Shorts and Reels take far longer, and a
+ * limit invented for them would refuse destinations that work.
+ */
+export const PLATFORM_LENGTH_LIMITS = Object.freeze({
+  facebook: Object.freeze({ minSeconds: 4, maxSeconds: 60, label: 'Facebook Reels' }),
+});
+
 export function platformRefusal(provider, clip, { assumeKnown = false } = {}) {
-  if (provider !== 'facebook') return '';
+  const limit = PLATFORM_LENGTH_LIMITS[provider];
+  if (!limit) return '';
   const seconds = Number(clip?.durationMs || 0) / 1000;
   if (!seconds && !assumeKnown) return '';
-  if (seconds < REELS_MIN_SECONDS || seconds > REELS_MAX_SECONDS) {
-    return `Facebook Reels publishing requires a ${REELS_MIN_SECONDS}\u2013${REELS_MAX_SECONDS} second video; this clip is ${Math.ceil(seconds)} seconds.`;
+  if (seconds < limit.minSeconds || seconds > limit.maxSeconds) {
+    return `${limit.label} publishing requires a ${limit.minSeconds}\u2013${limit.maxSeconds} second video; this clip is ${Math.ceil(seconds)} seconds.`;
   }
   return '';
 }

@@ -2072,6 +2072,50 @@
   var OAUTH_OF = { youtube: 'youtube', instagram: 'meta', facebook: 'meta', tiktok: 'tiktok' };
   var PLATFORMS = ['youtube', 'tiktok', 'instagram', 'facebook'];
 
+  /**
+   * A length the customer is about to choose that one of their own live
+   * destinations cannot take.
+   *
+   * v3.135.0 stopped BUILDING a target for a clip Facebook would refuse, which
+   * removed the wasted upload and the red row -- and left the quieter half:
+   * pick 60-90s and every clip from that lecture simply never reaches Facebook,
+   * with nothing anywhere saying why. Silent non-delivery is worse than the
+   * failure it replaced, so it is said where the length is chosen.
+   *
+   * It is a NOTE, never a refusal. 60-90s is a perfectly good choice for
+   * YouTube and TikTok, and the account may not care about Facebook that day;
+   * the decision is theirs, and the app's job is to make it an informed one.
+   *
+   * Only a destination that is connected AND switched on is worth a warning --
+   * the same test anyOutletLive and the schedule sidebar make. And the seconds
+   * come from the SERVER's own table (DATA.social.lengthLimits, the object
+   * platformRefusal reads), never from a number typed here.
+   */
+  function lengthWarning(DATA) {
+    var limits = (DATA.social || {}).lengthLimits || {};
+    var settings = DATA.clipSettings || {};
+    var maximum = Number(settings.clipMaxSeconds);
+    var minimum = Number(settings.clipMinSeconds);
+    if (!isFinite(maximum) || !isFinite(minimum)) return '';
+    for (var i = 0; i < PLATFORMS.length; i++) {
+      var limit = limits[PLATFORMS[i]];
+      if (!limit) continue;
+      var info = providerInfo(DATA, PLATFORMS[i]);
+      if (!info.connected || !info.enabled) continue;
+      // Over the ceiling is the case that actually happens; under the floor is
+      // covered too rather than left as the next silent one.
+      if (maximum > Number(limit.maxSeconds)) {
+        return limit.label + ' takes ' + limit.minSeconds + '\u2013' + limit.maxSeconds
+          + 's, so clips longer than ' + limit.maxSeconds + 's skip it and go to your other channels.';
+      }
+      if (minimum < Number(limit.minSeconds)) {
+        return limit.label + ' takes ' + limit.minSeconds + '\u2013' + limit.maxSeconds
+          + 's, so clips shorter than ' + limit.minSeconds + 's skip it and go to your other channels.';
+      }
+    }
+    return '';
+  }
+
   // The engine finishes a project as `done` (local-engine.js:455, :739), never
   // `ready` -- that is a clip status. Module scope, because lecState() is called
   // from several points inside bindings() and a `var` inside the function is
@@ -7402,6 +7446,9 @@
       jobIsStepKind: jobStepId() === 'kind',
       jobIsStepTrim: jobStepId() === 'trim',
       jobIsStepLengths: jobStepId() === 'lengths',
+      // Drawn under the length bands. Empty for an account with no destination
+      // that cares, which is most of them.
+      jobLengthNote: lengthWarning(DATA),
       jobIsStepStyle: jobStepId() === 'style',
       jobIsStepPicture: jobStepId() === 'picture',
       jobIsStepSound: jobStepId() === 'sound',
