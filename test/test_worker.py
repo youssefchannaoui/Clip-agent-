@@ -2513,9 +2513,32 @@ class AyahSnapTests(unittest.TestCase):
         timeline = worker.lecture_word_timeline([
             {"start": 0.0, "end": 4.0, "text": "one two three four"},
         ])
-        self.assertEqual([w for w, _, _ in timeline], ["one", "two", "three", "four"])
+        self.assertEqual([w for w, _, _, _ in timeline], ["one", "two", "three", "four"])
         self.assertAlmostEqual(timeline[0][1], 0.0, places=2)
         self.assertAlmostEqual(timeline[-1][2], 4.0, places=2)
+
+    def test_a_spread_time_says_so_and_a_heard_one_says_so(self):
+        """The fourth field, and the reason the captions could drift.
+
+        Finding a verse BOUNDARY within a syllable is all the spread was ever
+        claimed to do. Nothing downstream could tell it from a time Whisper
+        measured, so ayah_events paged a verse against a ruler with exactly the
+        confidence it gives real audio -- and a reciter is never even. Three
+        live paths reach here with no word times: reflow_segments on an edited
+        clip, process_rerender's fallback, and local-engine's own `words: []`.
+        """
+        timeline = worker.lecture_word_timeline([
+            {"start": 0.0, "end": 2.0, "text": "heard words",
+             "words": [{"word": "heard", "start": 0.0, "end": 1.3},
+                       {"word": "words", "start": 1.3, "end": 2.0}]},
+            {"start": 2.0, "end": 6.0, "text": "no timings at all"},
+        ])
+        self.assertEqual([bool(flag) for _, _, _, flag in timeline],
+                         [True, True, False, False, False, False])
+        # And the spread really is a straight line, which is what makes
+        # believing it a fault rather than a rounding error.
+        spread = [round(b - a, 3) for _, a, b, flag in timeline if not flag]
+        self.assertEqual(spread, [1.0, 1.0, 1.0, 1.0])
 
 
 class AudioPeaksTests(unittest.TestCase):

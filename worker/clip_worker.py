@@ -1344,14 +1344,27 @@ def remove_existing_moments(candidates: list[Candidate], existing: list[dict[str
     ]
 
 
-def lecture_word_timeline(segments: list[dict[str, Any]]) -> list[tuple[str, float, float]]:
-    """Every transcribed word in the lecture with the time it was said.
+def lecture_word_timeline(segments: list[dict[str, Any]]) -> list[tuple[str, float, float, bool]]:
+    """Every transcribed word in the lecture with the time it was said, AND
+    whether that time was heard or merely worked out.
 
     Whisper gives per-word timings; a segment without them is spread evenly
-    across its own span, which is what the caption code already does and is
-    accurate enough to find a verse boundary within a syllable or two.
+    across its own span, which is accurate enough to find a verse boundary
+    within a syllable or two -- the job this was written for.
+
+    THE FOURTH FIELD IS WHY THE CAPTIONS COULD FALL OUT OF SYNC. Those spread
+    times are a RULER, and until now nothing downstream could tell one from a
+    time Whisper actually measured: ayah_events paged a verse against them with
+    exactly the confidence it gives real audio, so a verse whose segment had no
+    word timings was divided into equal pages and a reciter is never equal.
+    Three live paths produce such a segment -- reflow_segments drops word times
+    on an edited clip ("a wrong word timing is worse than none", and it is,
+    which is precisely why the ruler that replaces it must not be believed),
+    process_rerender's no-segment fallback, and local-engine's own
+    `words: []`. The flag travels with the time so a caller can hold an
+    interpolated one to a lower standard, which is what the paging now does.
     """
-    timeline: list[tuple[str, float, float]] = []
+    timeline: list[tuple[str, float, float, bool]] = []
     for segment in segments:
         words = segment.get("words") or []
         if words:
@@ -1363,6 +1376,7 @@ def lecture_word_timeline(segments: list[dict[str, Any]]) -> list[tuple[str, flo
                     text,
                     float(word.get("start", segment["start"])),
                     float(word.get("end", segment["end"])),
+                    True,
                 ))
             continue
         parts = str(segment.get("text") or "").split()
@@ -1371,7 +1385,7 @@ def lecture_word_timeline(segments: list[dict[str, Any]]) -> list[tuple[str, flo
         start, end = float(segment["start"]), float(segment["end"])
         step = (end - start) / len(parts)
         for position, text in enumerate(parts):
-            timeline.append((text, start + step * position, start + step * (position + 1)))
+            timeline.append((text, start + step * position, start + step * (position + 1), False))
     return timeline
 
 
@@ -1399,7 +1413,7 @@ def lecture_ayat(segments: list[dict[str, Any]], corpus: Any) -> list[dict[str, 
     timeline = lecture_word_timeline(segments)
     if not timeline or corpus is None:
         return []
-    transcript = " ".join(word for word, _, _ in timeline)
+    transcript = " ".join(word for word, _, _, _ in timeline)
     found: list[dict[str, Any]] = []
     for hit in corpus.match_sequence(transcript):
         first = int(hit.get("wordStart", 0))
@@ -1414,6 +1428,11 @@ def lecture_ayat(segments: list[dict[str, Any]], corpus: Any) -> list[dict[str, 
                 # PAGED to the recitation rather than to a ruler: a reciter
                 # holds a madd for four seconds, and the page must hold with it.
                 "words": [(timeline[i][1], timeline[i][2]) for i in range(first, last)],
+                # And which of those times were HEARD rather than worked out by
+                # spreading a segment evenly. A page may only be anchored to a
+                # heard word; the rest are interpolated between the heard ones,
+                # which is what stops a ruler being mistaken for the audio.
+                "heard": [timeline[i][3] for i in range(first, last)],
             })
     return found
 
@@ -1473,6 +1492,12 @@ def attach_lecture_ayat(
                 index for index, (a, b) in enumerate(raw)
                 if b > candidate.start and a < candidate.end
             ]
+            # Which of those times Whisper HEARD, sliced the same way. A word
+            # whose time came from spreading a segment evenly may not anchor a
+            # page (lecture_word_timeline). Absent -- a hit from before this,
+            # or the per-segment match -- every word counts as heard, which is
+            # exactly the behaviour that shipped.
+            flags = list(hit.get("heard") or [])
             mine.append({
                 "start": start, "end": end, "ayah": hit["ayah"],
                 "words": [
@@ -1480,10 +1505,24 @@ def attach_lecture_ayat(
                      min(candidate.duration, raw[index][1] - candidate.start))
                     for index in inside
                 ],
+                "heard": [
+                    bool(flags[index]) if index < len(flags) else True
+                    for index in inside
+                ],
                 "wordFrom": inside[0] if inside else 0,
                 "wordCount": len(raw),
             })
         candidate.ayat = mine
+        if mine:
+            # A VERSE THE CORPUS MATCHED IS SCRIPTURE, AND SCRIPTURE IS REVIEWED
+            # BY A PERSON (invariant 1). quote_risk is otherwise decided by a
+            # regex over the clip's transcript, which is a good guess; a corpus
+            # match is not a guess. A recitation Whisper mangled far enough to
+            # slip the regex -- and it mangles recitation badly, which is the
+            # whole reason the lecture walk exists -- would have gone to the
+            # queue unflagged, and with auto-approve on it could have posted
+            # without anyone reading the ayah on the frame.
+            candidate.quote_risk = True
     return selected
 
 
@@ -2552,6 +2591,19 @@ def quran_font(fallback: str) -> str:
 GAP_CAPTION_MIN_WORDS = 6
 
 AYAH_MAX_WORDS = 4
+# When Whisper heard FEWER words than the verse has pages, most page boundaries
+# would be invented inside one long transcript word -- which is the "word-level
+# confidence is weak" case, and the instruction there is to show a correctly
+# timed larger unit rather than an inaccurately timed smaller one. Pages are
+# capped at the number of words actually heard, but never made so long that the
+# page stops being readable: this is the ceiling that stops a sixteen-word verse
+# collapsing into one block because Whisper ran it together.
+AYAH_MAX_WORDS_WEAK = 7
+# A page shorter than this is a flash rather than a caption. It only ever
+# matters where Whisper put two page boundaries on top of each other, and it is
+# a FLOOR on the gap between page starts, never a reason to delay a page that
+# has room.
+AYAH_MIN_PAGE_SEC = 0.35
 # Measured from the reference recitation clips (frame-by-frame brightness of
 # the text band): phrases enter over roughly half a second and leave slightly
 # faster -- a calm, pure opacity fade, no scale and no drift. 300ms symmetric
@@ -2725,20 +2777,208 @@ def ornament_text(face: str, ayah: int) -> str:
     return quran.ornament_for(ayah)
 
 
+def ayah_page_plan(
+    words: list[str], *, start: float, end: float,
+    word_times: list[tuple[float, float]] | None = None,
+    word_heard: list[bool] | None = None,
+    word_offset: int = 0, word_count: int = 0,
+) -> dict[str, Any]:
+    """Which pages a verse is drawn in, and WHEN each one is on screen.
+
+    Split out of ayah_events so that there is ONE answer to "when does this
+    page go up" -- the renderer draws it and render_clip records it as a
+    diagnostic, and two derivations of that would eventually disagree about
+    the very thing being measured.
+
+    THE FAULT THIS EXISTS TO FIX. Page ENDS have snapped to a real word end
+    since v3.102.0, and page STARTS never did: each page simply began where the
+    one before it finished. So a reciter who takes a breath, or holds a madd,
+    between two pages had the NEXT page on screen for the whole pause --
+    measured on constructed word times at exactly the shape Whisper produces,
+    a three-second breath put page two up 3.00s before its first word, twelve
+    times the 250ms this is held to. And where a snap could not be used the
+    fallback ruler was accumulated from the verse's own start, so it ignored
+    every successful snap before it and a page that ran long stayed wrong for
+    the rest of the verse.
+
+    So each page is ANCHORED to the start of the first transcript word its own
+    text covers. A page with no word of its own -- Whisper ran several together
+    -- is interpolated between its NEIGHBOURS' real times, never from the
+    verse's start, which is what stops a small early error accumulating. A page
+    holds until the next page's anchor, so a breath mid-verse leaves the words
+    being recited on screen instead of the words that follow them.
+
+    `word_offset` and `word_count` say which of the verse's words this clip
+    actually holds, so a clip that opens or closes mid-verse draws only the
+    pages recited inside it (v3.118.1) -- unchanged here.
+
+    Returns {chunks, live, times, complete, anchored, evidence}. `times` is
+    keyed by chunk index and holds clip-local seconds; `anchored` counts the
+    pages placed by a real word rather than by interpolation, which is the
+    confidence a caller can report.
+    """
+    if not words:
+        return {"chunks": [], "live": [], "times": {}, "complete": True,
+                "heard": [], "anchored": 0, "evidence": 0}
+
+    raw = list(word_times or [])
+    flags = list(word_heard or [])
+    # Kept in step: dropping a zero-length word must drop its flag with it, or
+    # every anchor after it is read off the wrong word.
+    timed: list[tuple[float, float]] = []
+    heard_flag: list[bool] = []
+    for index, (a, b) in enumerate(raw):
+        if float(b) <= float(a):
+            continue
+        timed.append((float(a), float(b)))
+        heard_flag.append(bool(flags[index]) if index < len(flags) else True)
+    span = max(0.4, end - start)
+
+    # HOW MANY PAGES. Readability wants at most AYAH_MAX_WORDS to a page. The
+    # evidence caps it: a verse Whisper heard as three words cannot support
+    # four honest page boundaries, and inventing the fourth is the inaccurate
+    # word-by-word timing this is meant to replace. The weak ceiling stops that
+    # cap collapsing a long verse into an unreadable block.
+    pages = max(1, -(-len(words) // AYAH_MAX_WORDS))  # ceil
+    # The evidence is the words actually HEARD across the whole verse. A verse
+    # with none -- every time spread from a segment -- has evidence 0, so it is
+    # drawn in as few pages as stay readable: a correctly timed phrase rather
+    # than an inaccurately timed word-by-word split.
+    measured = sum(1 for flag in heard_flag if flag)
+    if timed and measured and len(timed) < int(word_count or 0):
+        # A clip holding part of the verse: scale what it heard up to the
+        # whole, or a mid-verse window would always read as weak evidence.
+        measured = int(round(measured * int(word_count) / len(timed)))
+    evidence = measured if timed else int(word_count or 0)
+    if timed and evidence < pages:
+        readable = max(1, -(-len(words) // AYAH_MAX_WORDS_WEAK))
+        pages = max(readable, max(1, evidence))
+
+    base, extra = divmod(len(words), pages)
+    chunks: list[list[str]] = []
+    taken = 0
+    for index in range(pages):
+        size = base + (1 if index < extra else 0)
+        chunks.append(words[taken:taken + size])
+        taken += size
+
+    # Each page's share of the verse in TRANSCRIPT-word indices. Uthmani and
+    # transcript word counts differ -- Whisper runs words together and splits
+    # others -- so the share is carried across by proportion of index.
+    total = max(1, int(word_count or (word_offset + len(timed))))
+    bounds: list[tuple[int, int]] = []
+    taken_words = 0
+    for chunk in chunks:
+        lo = int(round(taken_words / len(words) * total))
+        taken_words += len(chunk)
+        bounds.append((lo, max(lo, int(round(taken_words / len(words) * total)))))
+
+    have_from, have_to = word_offset, word_offset + len(timed)
+    # With no word times at all -- an older transcript, or a re-render -- every
+    # page is drawn and the ruler below shares the time out, exactly as before.
+    live = list(range(pages)) if not timed else [
+        index for index, (lo, hi) in enumerate(bounds) if hi > have_from and lo < have_to
+    ]
+    if not live:
+        return {"chunks": chunks, "live": [], "times": {}, "complete": False,
+                "heard": [], "anchored": 0, "evidence": evidence}
+    # The mark closes a verse. A clip that ends part way through one has not
+    # reached the end of it, so nothing is closed and no ornament is drawn.
+    complete = (not timed) or have_to >= total
+
+    # WHERE EACH PAGE'S OWN WORDS ARE. None where Whisper heard nothing this
+    # page can claim -- several pages inside one long word, which is the case
+    # interpolation exists for.
+    # Only a HEARD word may anchor a page. A time that came from spreading a
+    # segment evenly is a ruler, and anchoring to it would be this fault
+    # wearing a fix's clothes: perfectly even pages, presented as the audio.
+    heard: dict[int, tuple[float, float]] = {}
+    for index in live:
+        lo, hi = bounds[index]
+        first = max(0, lo - word_offset)
+        last = min(len(timed), hi - word_offset)
+        if not timed or first >= last:
+            continue
+        real = [position for position in range(first, last) if heard_flag[position]]
+        if real:
+            heard[index] = (timed[real[0]][0], timed[real[-1]][1])
+
+    # THE ANCHORS. A page with words of its own goes up when its first word
+    # does. A RUN of pages with none -- Whisper ran several together, so they
+    # all sit inside one long word -- is shared out between its NEIGHBOURS'
+    # real times by word count. That sharing is the re-anchoring: an unheard
+    # page is placed from the words on either side of it and never from the
+    # verse's start, so no early error survives past the next word Whisper did
+    # hear.
+    seq: list[float] = [heard[index][0] if index in heard else -1.0 for index in live]
+    position = 0
+    while position < len(seq):
+        if seq[position] >= 0:
+            position += 1
+            continue
+        run = position
+        while run < len(seq) and seq[run] < 0:
+            run += 1
+        # position-1 is anchored by construction: a run begins either at the
+        # first page or immediately after one that was heard.
+        before = heard[live[position - 1]][1] if position else start
+        after = seq[run] if run < len(seq) else end
+        room = max(0.0, after - before)
+        whole = sum(len(chunks[live[index]]) for index in range(position, run)) or 1
+        ahead = 0
+        for index in range(position, run):
+            seq[index] = before + room * (ahead / whole)
+            ahead += len(chunks[live[index]])
+        position = run
+
+    # Monotonic, inside the verse, and never a flash. The forward pass can only
+    # move a page LATER and the backward pass only EARLIER, so between them a
+    # page is placed as close to its own words as the window allows.
+    seq = [min(max(value, start), end) for value in seq]
+    for position in range(1, len(seq)):
+        seq[position] = max(seq[position], seq[position - 1] + AYAH_MIN_PAGE_SEC)
+    limit = end - AYAH_MIN_PAGE_SEC
+    for position in range(len(seq) - 1, -1, -1):
+        seq[position] = min(seq[position], limit)
+        limit = seq[position] - AYAH_MIN_PAGE_SEC
+    seq[0] = start
+    if any(seq[position] <= seq[position - 1] for position in range(1, len(seq))):
+        # The window is shorter than this many pages need. An even share is the
+        # ruler, and here it is the only honest answer rather than a shortcut.
+        step = span / len(seq)
+        seq = [start + step * position for position in range(len(seq))]
+
+    times: dict[int, tuple[float, float]] = {}
+    for position, index in enumerate(live):
+        page_end = seq[position + 1] if position + 1 < len(seq) else end
+        times[index] = (seq[position], max(seq[position], page_end))
+
+    return {"chunks": chunks, "live": live, "times": times, "complete": complete,
+            # WHICH pages a heard word placed, not only how many -- a caller
+            # recording a diagnostic needs to say which page was a measurement
+            # and which was worked out between two.
+            "heard": [index for index in live if index in heard],
+            "anchored": sum(1 for index in live if index in heard),
+            "evidence": evidence}
+
+
 def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: float,
                 latin_font: str, translation_size: int, show_translation: bool,
                 ayah_size: int = 0, mark_size: int = 0, ayah_font: str = "",
                 word_times: list[tuple[float, float]] | None = None,
-                word_offset: int = 0, word_count: int = 0) -> list[str]:
+                word_heard: list[bool] | None = None,
+                word_offset: int = 0, word_count: int = 0,
+                plan: dict[str, Any] | None = None) -> list[str]:
     """The Dialogue lines carrying an ayah, a short phrase at a time.
 
     Modelled on the reference clips: a long ayah is not held on screen as one
     block of text, it moves through in phrases of a few words, each fading out
     and the next fading in. So:
 
-    A long ayah is split into balanced chunks of at most AYAH_MAX_WORDS words,
-    and the segment's time is shared out in proportion to each chunk's length.
-    A short ayah stays whole, which is exactly the reference frame.
+    A long ayah is split into balanced chunks of at most AYAH_MAX_WORDS words.
+    A short ayah stays whole, which is exactly the reference frame. WHEN each
+    page is on screen is ayah_page_plan's answer, not this one -- it anchors a
+    page to the words it shows rather than chaining it to the page before.
 
     Each chunk fades in and out (a gentle \\fad, nothing else -- no pop and no
     per-word highlight; scripture does not do word animations).
@@ -2757,62 +2997,23 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
     words = strip_unattachable_marks(str(found["arabic"]), ayah_font).split()
     if not words:
         return []
-    chunk_count = max(1, -(-len(words) // AYAH_MAX_WORDS))  # ceil
-    base, extra = divmod(len(words), chunk_count)
-    chunks: list[list[str]] = []
-    taken = 0
-    for index in range(chunk_count):
-        size = base + (1 if index < extra else 0)
-        chunks.append(words[taken:taken + size])
-        taken += size
+    # The caller may hand its own plan in so that the diagnostics it records
+    # and the events drawn here are the SAME answer rather than two derivations
+    # of it -- which is how a diagnostic starts describing a render nobody got.
+    if plan is None:
+        plan = ayah_page_plan(
+            words, start=start, end=end, word_times=word_times,
+            word_heard=word_heard, word_offset=word_offset, word_count=word_count)
+    chunks, live, page_times = plan["chunks"], plan["live"], plan["times"]
+    if not live:
+        return []
+    chunk_count = len(chunks)
+    # The mark closes a verse. A clip that ends part way through one has not
+    # reached the end of it, so nothing is closed and no ornament is drawn.
+    complete = plan["complete"]
 
     gloss_words = str(found.get("translation") or "").split() if show_translation else []
     span = max(0.4, end - start)
-
-    # Where each page ENDS. The default shares the verse's time out by word
-    # count -- a ruler laid over the recitation -- and that is what "the Quran
-    # clips do not sync" was (Youssef, 3 Sept 2026): a reciter holds a madd on
-    # the last word of a page for four seconds and the next page was already
-    # up, because a ruler does not know he paused. When the transcript words
-    # that aligned to this verse are known (the lecture walk carries them,
-    # with the times Whisper heard them at), each page ends where its LAST
-    # ALIGNED WORD ends. Whisper's timing on recitation is imperfect; it is
-    # still the audio, and a ruler is not.
-    #
-    # Uthmani and transcript word counts differ (Whisper runs words together
-    # and splits others), so a page's share of the verse is carried across by
-    # proportion of index, and the boundary then snaps to a real word end.
-    # Monotonic by construction; a boundary that would run backwards falls
-    # back to the ruler for that page only.
-    timed = [(float(a), float(b)) for a, b in (word_times or []) if float(b) > float(a)]
-
-    # Each page's share of the verse in TRANSCRIPT-word indices, and which of
-    # those the clip actually holds. word_offset says how many of the verse's
-    # words were recited before this clip began and word_count how many it has
-    # in all, so a verse the clip opens or closes half way through draws only
-    # the pages that were recited INSIDE it. Without that the pages whose
-    # words are outside were squeezed into whatever time was left, and the
-    # whole verse flashed past at the clip's edges -- Youssef, 3 Sept 2026:
-    # "the start and end ... it goes through QUICKLY to find where the reciter
-    # is speaking". A page nobody recited here is not a page.
-    total = max(1, int(word_count or (word_offset + len(timed))))
-    bounds: list[tuple[int, int]] = []
-    taken_words = 0
-    for chunk in chunks:
-        lo = int(round(taken_words / len(words) * total))
-        taken_words += len(chunk)
-        bounds.append((lo, max(lo, int(round(taken_words / len(words) * total)))))
-    have_from, have_to = word_offset, word_offset + len(timed)
-    # With no word times at all -- an older transcript, or a re-render -- every
-    # page is drawn and the ruler below shares the time out, exactly as before.
-    live = list(range(chunk_count)) if not timed else [
-        index for index, (lo, hi) in enumerate(bounds) if hi > have_from and lo < have_to
-    ]
-    if not live:
-        return []
-    # The mark closes a verse. A clip that ends part way through one has not
-    # reached the end of it, so nothing is closed and no ornament is drawn.
-    complete = (not timed) or have_to >= total
 
     # Still capped by the page's own length so a short phrase is not all fade:
     # each side may use at most a third of the time it is on screen. Counted
@@ -2823,38 +3024,6 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
     fade_in = min(AYAH_FADE_IN_MS, int(per_chunk_ms / 3))
     fade_out = min(AYAH_FADE_OUT_MS, int(per_chunk_ms / 3))
     fade_tag = f"{{\\fad({fade_in},{fade_out})}}"
-
-    # Where each page ENDS. The default shares the verse's time out by word
-    # count -- a ruler laid over the recitation -- and that is what "the Quran
-    # clips do not sync" was (Youssef, 3 Sept 2026): a reciter holds a madd on
-    # the last word of a page for four seconds and the next page was already
-    # up, because a ruler does not know he paused. When the transcript words
-    # that aligned to this verse are known (the lecture walk carries them,
-    # with the times Whisper heard them at), each page ends where its LAST
-    # ALIGNED WORD ends. Whisper's timing on recitation is imperfect; it is
-    # still the audio, and a ruler is not.
-    #
-    # Uthmani and transcript word counts differ (Whisper runs words together
-    # and splits others), so a page's share of the verse is carried across by
-    # proportion of index, and the boundary then snaps to a real word end.
-    # Monotonic by construction; a boundary that would run backwards falls
-    # back to the ruler for that page only.
-    live_words = sum(len(chunks[index]) for index in live) or 1
-    page_ends: dict[int, float] = {}
-    at_ruler = start
-    for position, index in enumerate(live):
-        at_ruler = min(end, at_ruler + span * (len(chunks[index]) / live_words))
-        if position == len(live) - 1:
-            page_ends[index] = end
-            continue
-        if timed:
-            pick = max(0, min(len(timed) - 1, bounds[index][1] - 1 - word_offset))
-            snapped = timed[pick][1]
-            floor = page_ends[live[position - 1]] if position else start
-            if floor + 0.15 < snapped < end:
-                page_ends[index] = snapped
-                continue
-        page_ends[index] = at_ruler
 
     # The translation is shared out over EVERY page, live or not, and only the
     # live ones are drawn -- so the gloss of a stretch nobody recited here is
@@ -2872,13 +3041,12 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
         g_taken += g_size
 
     events: list[str] = []
-    at = start
-    for position, index in enumerate(live):
+    for index in live:
         chunk = chunks[index]
-        chunk_start, chunk_end = at, max(at, page_ends[index])
-        if position == len(live) - 1:
-            chunk_end = end
-        at = chunk_end
+        # Both ends come from the plan. Chaining a page's start to the previous
+        # page's end is the fault this release exists to fix: it put the NEXT
+        # page on screen for the whole of a reciter's breath.
+        chunk_start, chunk_end = page_times[index]
 
         text = ass_escape(" ".join(chunk))
         if index == chunk_count - 1 and complete:
@@ -3798,12 +3966,47 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for hit in lecture_hits:
                 found = hit["found"]
                 captioned += 1
+                # ONE plan, drawn AND recorded. A sync complaint on a shipped
+                # clip used to be answerable only by re-deriving what the
+                # renderer might have done; the row below says what it did.
+                hit_words = strip_unattachable_marks(str(found["arabic"]), ayah_font).split()
+                plan = ayah_page_plan(
+                    hit_words, start=hit["start"], end=hit["end"],
+                    word_times=hit.get("words"), word_heard=hit.get("heard"),
+                    word_offset=int(hit.get("wordFrom") or 0),
+                    word_count=int(hit.get("wordCount") or 0))
+                anchored_pages = set(plan["heard"])
+                pages = [
+                    {
+                        "start": round(plan["times"][index][0], 3),
+                        "end": round(plan["times"][index][1], 3),
+                        # Media time, so a frame from the finished clip can be
+                        # put beside the lecture it was cut from.
+                        "sourceStart": round(plan["times"][index][0] + candidate.start, 3),
+                        "sourceEnd": round(plan["times"][index][1] + candidate.start, 3),
+                        "words": len(plan["chunks"][index]),
+                        # Placed by a word Whisper HEARD, or interpolated
+                        # between two that it did.
+                        "anchored": index in anchored_pages,
+                    }
+                    for index in plan["live"]
+                ]
                 matched_ayahs.append({
                     "start": round(hit["start"], 3), "end": round(hit["end"], 3),
+                    "sourceStart": round(hit["start"] + candidate.start, 3),
+                    "sourceEnd": round(hit["end"] + candidate.start, 3),
                     "surah": found["surah"], "ayah": found["ayah"],
                     "surahName": found["surahName"], "arabic": found["arabic"],
                     "translation": found.get("translation") or "",
                     "confidence": found.get("confidence"),
+                    # How the TIMING was arrived at, which is a different
+                    # question from how confident the MATCH is: a verse can be
+                    # identified beyond doubt and still be paged against a
+                    # ruler, and that pair is the whole of this release.
+                    "pages": pages,
+                    "pagesAnchored": plan["anchored"],
+                    "wordsHeard": plan["evidence"],
+                    "complete": plan["complete"],
                 })
                 events.extend(ayah_events(
                     found, ornament=ornament_text(ayah_font, found["ayah"]),
@@ -3812,8 +4015,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     show_translation=show_translation, ayah_size=ayah_size,
                     mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
                     ayah_font=ayah_font, word_times=hit.get("words"),
+                    word_heard=hit.get("heard"),
                     word_offset=int(hit.get("wordFrom") or 0),
                     word_count=int(hit.get("wordCount") or 0),
+                    plan=plan,
                 ))
             for segment in candidate.segments:
                 start = max(0.0, float(segment["start"]) - candidate.start)
@@ -5139,11 +5344,25 @@ def retime_for_cuts(candidate: Candidate, keeps: list[tuple[float, float]]) -> C
             moved_a, moved_b = remap_clamped(media_a), remap_clamped(media_b)
             if moved_b - moved_a > 0.05:
                 moved_words = []
-                for wa, wb in (hit.get("words") or []):
+                moved_heard = []
+                flags = list(hit.get("heard") or [])
+                for index, (wa, wb) in enumerate(hit.get("words") or []):
                     ma, mb = remap_clamped(wa + candidate.start), remap_clamped(wb + candidate.start)
                     if mb > ma:
                         moved_words.append((ma, mb))
-                ayat.append({"start": moved_a, "end": moved_b, "ayah": hit["ayah"], "words": moved_words})
+                        # In step with the word it belongs to, or a page would
+                        # be anchored to a heard word that a cut removed.
+                        moved_heard.append(bool(flags[index]) if index < len(flags) else True)
+                ayat.append({
+                    "start": moved_a, "end": moved_b, "ayah": hit["ayah"],
+                    "words": moved_words, "heard": moved_heard,
+                    # Carried rather than dropped. Without them ayah_events
+                    # reads the clip's own surviving words as the whole verse,
+                    # so a verse the clip holds half of is drawn as if it held
+                    # all of it -- the v3.118.1 fault, reintroduced by a cut.
+                    "wordFrom": int(hit.get("wordFrom") or 0),
+                    "wordCount": int(hit.get("wordCount") or 0),
+                })
     from dataclasses import replace
     return replace(candidate, start=0.0, end=total, segments=segments, cuts=None, ayat=ayat)
 

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1717 JS + 715 Python**
+- `npm test` and `npm run check` must pass. Currently **1717 JS + 741 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -7389,6 +7389,198 @@ different flavour of the same mistake:
 Both repaired assertions were re-proven RED: a hand-typed "4-90" in place of the
 table's numbers fails the first, and `classList.add('on')` in place of the
 toggle fails the second.
+
+## The Qur'an captions follow the reciter, not a ruler (v3.147.0, 7 Sept 2026)
+
+Youssef: "The Qur'an caption system already works and usually identifies the
+correct ayahs. Do not rebuild or replace it. Fix the cases where the correct
+captions fall out of sync with the reciter. First determine where the error
+begins."
+
+### THE EXPORT WAS RULED OUT FIRST, BY MEASUREMENT
+
+A 60s source with a 30ms 1kHz click at every whole second and keyframes only
+every 10s, trimmed at four offsets -- three of them NON-keyframe -- both
+plainly and through the real render chain shape (`ass` on video,
+`highpass,lowpass,asetpts=PTS-STARTPTS,aresample=async=1` on audio), with a
+caption burned in from ASS 2.000 to 4.000:
+
+    ss=23.400   caption ink 2.000..3.960   clicks 0.600 1.600 2.600 3.600
+    ss=23.000   caption ink 2.000..3.960   clicks 0.000 1.000 2.000 3.000
+    ss=27.640   caption ink 2.000..3.960   clicks 0.360 1.360 2.360 3.360
+    ss=31.117   caption ink 2.000..3.960   clicks 0.883 1.883 2.883 3.883
+
+The ink is lit from exactly the ASS time to the last frame before its end, at
+every start; the clicks land at exactly the expected fractional offsets. So
+`-ss` before `-i`, the ass filter and `asetpts=PTS-STARTPTS` introduce **no
+drift**, video and audio share one timeline, and **the error is in the ASS
+TIMES**. That is where everything below happens. `vidwin.sh`/`onsets.py` in the
+session scratchpad are the whole rig if it needs re-running -- and note the
+caption band's black is Y=**16** in limited range, so a threshold of 2 reports
+"lit at 0.000" for ever.
+
+### THE THREE FAULTS, all one shape
+
+A page was placed by ARITHMETIC where a MEASUREMENT was available, and nothing
+downstream could tell the two apart.
+
+1. **Page ENDS have snapped to a real word end since v3.102.0. Page STARTS
+   never did** -- each page simply began where the one before it finished. A
+   reciter's breath between two pages therefore put the NEXT page on screen for
+   the whole pause. Measured on constructed word times at exactly the shape
+   Whisper produces: a three-second breath put page two up **3.00s early**,
+   twelve times the 250ms asked for.
+2. **The fallback ruler accumulated from the verse's own start**, ignoring every
+   successful snap before it, so one page running long stayed wrong for the rest
+   of the verse.
+3. **`lecture_word_timeline` spreads a segment's words EVENLY when Whisper gave
+   none -- and that ruler was indistinguishable from measured audio.** This is
+   the silent one and the one that matters most. Its docstring only ever claimed
+   the spread was "accurate enough to find a verse boundary within a syllable or
+   two", which is true of the job it was written for and false of PAGING a verse
+   against it. **Three live paths produce such a segment**: `reflow_segments` on
+   an edited clip (its own comment says "a wrong word timing is worse than
+   none", which is exactly why the ruler that replaces it must not be believed),
+   `process_rerender`'s no-segment fallback, and `local-engine.js`'s own
+   `words: []`.
+
+### THE FIX: anchor to what was heard, interpolate only between anchors
+
+`ayah_page_plan` is now the ONE answer to "when is this page on screen", and
+`write_ass` hands the same plan to `ayah_events` that it records as a
+diagnostic -- two derivations of that would eventually disagree about the very
+thing being measured.
+
+- **A page goes up when the first word it shows is recited**, and holds until
+  the next page's anchor. So a breath mid-verse leaves the words being recited
+  on screen rather than the words that follow them -- a blank frame part way
+  through a verse reads as broken, and is never drawn.
+- **`lecture_word_timeline` returns a fourth field**: whether the time was heard
+  or worked out. It travels through `lecture_ayat` -> `attach_lecture_ayat` ->
+  `ayah_events` as `heard`, and `retime_for_cuts` moves it with the word it
+  belongs to. **Only a heard word may anchor a page.**
+- **A run of pages with no heard word is shared out between its NEIGHBOURS' real
+  times**, never measured from the verse's start. That is the re-anchoring, and
+  it is what stops an early error surviving past the next word Whisper did hear.
+- **Weak evidence draws fewer pages** (`AYAH_MAX_WORDS_WEAK = 7`): a verse
+  Whisper heard as three words cannot support four honest page boundaries.
+- Monotonic by construction, inside the verse by construction, and a window
+  genuinely too short for its pages falls back to an even share -- there, and
+  only there, a ruler is the honest answer.
+
+### PROVEN ON A REAL RECITATION, FROM THE PIXELS
+
+`.github/scripts/quran-sync-probe.py` + `deploy-worker.yml`'s `quran_sync`
+input asks the BOX: it imports the container's own clip_worker and quran, walks
+a cached transcript with the real `lecture_ayat`, and prints the page times
+against the words Whisper heard. Like `diagnose` it SKIPS the deploy -- asking
+a question must never restart a worker mid-job. No transcript word leaves the
+box: corpus Arabic (scripture) and word TIMES only, which is exactly enough to
+replay the alignment locally.
+
+Run 92 returned three real recitations, 10/19/3 ayat walked. Its own numbers
+read 0ms everywhere, and **that was the probe grading the code against its own
+proportional carry-across** -- the circularity is unavoidable for the START
+question, because the only Arabic-word-to-time mapping that exists IS that
+carry-across. So the real answer came from the box's data plus a real render.
+
+4:94 (An-Nisaa), 41 Arabic words, 35 heard, 46.36s, rendered at 1080x1920
+through real libass in real **Amiri** (checked with `fc-list`, not assumed),
+over a click track whose clicks are the reciter's OWN word onsets. What is on
+screen at each moment was then read from the PIXELS -- nearest-reference match
+per frame, because the pages crossfade and no frame-to-frame step is sharp:
+
+    model                      pages  wrong  mean wait  median   worst  >250ms
+    before (spread believed)     11    19/35     687ms    160ms  3060ms   17/35
+    after  (spread marked)        6     8/35     365ms      0ms  5020ms    7/35
+    truth  (real word times)     11     9/35      27ms      0ms   140ms    0/35
+
+**The `truth` row is the headline and it is the normal path**: on real measured
+word times the captions are within **140ms worst, 27ms mean, 0 of 35 words over
+250ms**. Its "9 wrong" is the crossfade fooling the classifier, which is why
+the WAIT column is the one to read. And on the box's own recitations the new
+code is **byte-identical to the old** for all seven verses (compared by loading
+`git show HEAD:worker/clip_worker.py` beside the new one, as this file
+requires) -- where word times are measured and contiguous, anchoring and
+chaining agree exactly, so nothing regressed.
+
+The before/after difference is entirely the DEGRADED path -- an edited clip's
+re-render, where the times are a spread. There the screen is wrong for **8
+words instead of 19** and the mean wait nearly halves. **The worst case gets
+WORSE (3060 -> 5020ms) and that is an honest trade, not an oversight**: fewer,
+longer pages are right far more often and, when wrong, wrong for longer.
+
+**Why fewer pages is right there, measured rather than argued.** With no heard
+word at all, the sync error rises monotonically with the page count:
+
+    pages    1     2     3     4     5     6     7     9    11
+    mean    0ms  43ms 207ms 211ms 317ms 405ms 524ms 927ms 1168ms
+    >250ms  0/35  1/35  3/35  6/35  7/35  8/35 13/35 17/35  23/35
+
+Which is the instruction restated as arithmetic. `AYAH_MAX_WORDS_WEAK = 7` (6
+pages for this verse) is a deliberate middle: it halves the invented boundaries
+without approaching an unreadable block. **Going further is a look decision and
+therefore Youssef's** -- the table says what each step buys.
+
+### The other things asked for
+
+- **`reviewRequired` on every Qur'an clip.** It was decided by `QUOTE_RISK`, a
+  regex over the transcript -- a good guess, and Whisper mangles recitation
+  badly enough to slip one, which is the entire reason the lecture walk exists.
+  **A verse the CORPUS matched is not a guess**, so `attach_lecture_ayat` now
+  forces `quote_risk` when a clip holds one. Unflagged, with auto-approve on,
+  such a clip could have posted without anyone reading the ayah on the frame.
+- **Timestamp diagnostics.** Every matched ayah now records `sourceStart`/
+  `sourceEnd` (media time) beside its clip-local times, and a `pages` list
+  carrying each phrase's timing, its word count and whether a heard word placed
+  it -- plus `pagesAnchored`, `wordsHeard` and `complete`. The MATCH confidence
+  and the TIMING confidence are different questions: a verse can be identified
+  beyond doubt and still be paged against a ruler, and that pair is the whole of
+  this release.
+- **The canonical corpus is untouched.** Nothing here writes, rewrites or
+  reorders scripture; a page is a slice of the verse the corpus gave, in its
+  order, and a test asserts exactly that.
+- **`retime_for_cuts` now carries `wordFrom`/`wordCount` through a cut.**
+  Dropping them made a clip's surviving words read as the whole verse -- the
+  v3.118.1 fault, reintroduced by a cut. Still unreachable today (cuts arrive
+  only on a re-render), like the note above it.
+
+### What is NOT claimed
+
+- **Youssef's own complaint has not been reproduced on the box's current data.**
+  faster-whisper's word times there are contiguous within a segment, so fault 1
+  does not currently fire on a first render; what IS live is fault 3, on every
+  re-render of an edited clip. Said plainly rather than dressed up.
+- **The 550ms fade-in is untouched and is worth a decision.** A page reaches
+  full opacity 550ms after its start, which is over the 250ms bar on its own.
+  It was set from the reference clips and is a look, so it is Youssef's call,
+  not a bug to fix quietly.
+- **One page of 4:94 holds 12.32s for four words**, because Whisper reports one
+  8.48-second "word" there. On recitation that is an ordinary madd and the page
+  SHOULD hold; it could also be a merge. The numbers cannot tell, and guessing
+  either way makes it worse.
+- **Not yet seen on a clip rendered by the real box.** Every frame here came
+  from the real `ayah_events` through real libass on this machine, on the box's
+  own corpus text and word times. Worker change, so `deploy-worker.yml` ships it
+  on push; one Quran import settles it there.
+
+### Traps paid for
+
+- **A JSON `true` is not a Python name.** The PARAMS literal four probes share
+  is substituted into a Python file, and `JSON.stringify` spells a boolean
+  `true`; run 91 died on line one. 1 and 0 are valid in both.
+- **`importlib` cannot exec a module containing a `@dataclass` unless it is in
+  `sys.modules` first** -- needed for the old-code comparison this file demands.
+- **Two red probes came back GREEN**, the ninth and tenth occurrences here. One
+  because `test_quran_sync.py` never drives `lecture_word_timeline` (the flag's
+  production is pinned in `test_worker.py` instead); one because asserting page
+  ORDER passes without the forward monotonic pass -- clamping only backwards
+  keeps pages in order while dragging an earlier page **5.35s off its own
+  measured word**. Both are pinned properly now and both re-proven red.
+- **The caption ink is one continuous lit stretch**, because pages crossfade --
+  an on/off detector reports one page however many there are. And a
+  frame-to-frame difference never exceeds ~18 levels for the same reason, so a
+  per-pixel threshold of 40 reports 0.000% and looks like a broken video.
 
 ## Open items
 
