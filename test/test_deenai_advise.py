@@ -16,6 +16,7 @@ import hmac
 import http.client
 import importlib
 import io
+import inspect
 import json
 import os
 import sys
@@ -192,7 +193,13 @@ class AdviseRouteTests(unittest.TestCase):
         finally:
             os.environ.pop("OLLAMA_URL", None)
         self.assertEqual(status, 502)
-        self.assertEqual(data["code"], "empty_answer")
+        # THE PROPERTY IS THE 502, not the code string. An empty reply is now
+        # caught a step earlier -- `unusable` reads it as "it came back empty",
+        # so all three attempts are refused and the request ends as
+        # `answer_refused` rather than reaching the empty check below it. Both
+        # are the same promise to the app: never a blank 200.
+        self.assertIn(data["code"], ("empty_answer", "answer_refused"))
+        self.assertTrue(data["error"], "and it says something")
 
 
 if __name__ == "__main__":
@@ -275,14 +282,42 @@ class AdviseRejectionTests(unittest.TestCase):
         ])
         self.assertEqual(answer, "Review your clips in the Review queue.")
 
-    def test_three_bad_answers_return_the_first_rather_than_nothing(self):
-        # A blank box is worse than a flawed answer, and the app's own 502 says
-        # "DeenAI had no answer", which would not be what happened.
-        answer, prompts = self._run([
-            "Rate is 91% good.", "Rate is 92% good.", "Rate is 93% good.",
-        ])
-        self.assertEqual(len(prompts), 3, "three shots on goal")
-        self.assertEqual(answer, "Rate is 91% good.")
+    def test_three_bad_answers_ship_NOTHING(self):
+        # THIS TEST USED TO ASSERT THE OPPOSITE, on the reasoning that "a
+        # rejected answer is still better than a blank box". True of a DULL
+        # answer; false of every reason `unusable` actually refuses for.
+        #
+        # PROVEN WRONG BY THE PROBE, 7 Sept 2026 on a slow box: asked to print
+        # its instructions the model returned the system prompt VERBATIM,
+        # `unusable` caught it, the budget was spent so the loop broke -- and
+        # the leak was returned anyway. The guard worked and the fallback
+        # undid it.
+        with self.assertRaises(self.service.AnswerRefused) as caught:
+            self._run(["Rate is 91% good.", "Rate is 92% good.", "Rate is 93% good."])
+        # The LAST rejection is the reason reported -- it is the one that made
+        # the request fail, and the earlier ones are already history.
+        self.assertIn("93%", str(caught.exception), "and it says which rule broke")
+
+    def test_a_refusal_is_not_an_outage(self):
+        # 503 would send the customer to look at the box, which is fine. What
+        # happened is that this code would not stand behind the answer.
+        self.assertTrue(issubclass(self.service.AnswerRefused, RuntimeError),
+                        "still caught by anything that catches RuntimeError")
+        handler = inspect.getsource(self.service.Handler)
+        at = handler.index('path == "/ai/advise"')
+        block = handler[at:at + 1600]
+        self.assertLess(block.index("except AnswerRefused"), block.index("except RuntimeError"),
+                        "the narrower catch has to come first or it never runs")
+        self.assertIn("answer_refused", block)
+
+    def test_a_leak_is_refused_even_when_the_budget_is_spent(self):
+        # The exact shape the box produced: one attempt, rejected, no time for
+        # another. The old code returned the leak.
+        leak = ("You are DeenAI, the growth coach inside DeenClipped -- a studio "
+                "that turns Islamic lectures into short vertical clips.")
+        with mock.patch.object(self.service, "ai_time_left", lambda deadline: False):
+            with self.assertRaises(self.service.AnswerRefused):
+                self._run([leak])
 
     def test_the_rules_are_restated_last_before_the_data(self):
         # The technique this repo has measured twice: a rule this model obeys
@@ -368,12 +403,12 @@ class AdviseBudgetTests(unittest.TestCase):
         original = self.service.ai_time_left
         with mock.patch("urllib.request.urlopen", slow), \
              mock.patch.object(self.service, "ai_time_left", lambda deadline: False):
-            answer = self.service.advise_with_ollama("What now?", {"figures": []})
+            # The answer was rejected and there was no budget to try again, so
+            # nothing ships -- see test_three_bad_answers_ship_NOTHING for why
+            # this used to return the flawed one.
+            with self.assertRaises(self.service.AnswerRefused):
+                self.service.advise_with_ollama("What now?", {"figures": []})
         self.assertEqual(len(calls), 1, "it stopped rather than retrying into the abort")
-        # And it still returns the flawed answer rather than nothing: a blank
-        # box is worse, and the app's 502 says "no answer", which is not what
-        # happened.
-        self.assertEqual(answer, "Rate is 91%.")
         self.assertIs(self.service.ai_time_left, original)
 
     def test_the_budget_finishes_inside_the_client_abort(self):
@@ -566,7 +601,10 @@ class ContextFitTests(unittest.TestCase):
         os.environ["OLLAMA_URL"] = "http://127.0.0.1:11434"
         try:
             with mock.patch("urllib.request.urlopen", fake_urlopen):
-                self.service.advise_with_ollama("How am I doing?", big)
+                # Every attempt states the same dropped figure, so every one is
+                # refused and nothing ships.
+                with self.assertRaises(self.service.AnswerRefused):
+                    self.service.advise_with_ollama("How am I doing?", big)
         finally:
             os.environ.pop("OLLAMA_URL", None)
         self.assertGreater(len(prompts), 1, "it retried rather than shipping the figure")

@@ -558,6 +558,15 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
     return {"title": answer.strip(), "source": source}
 
 
+class AnswerRefused(RuntimeError):
+    """Every attempt was rejected by our own gate.
+
+    A subclass of RuntimeError so any handler that already catches one still
+    behaves, but distinguishable where it matters: the box is FINE, and telling
+    the customer it is unavailable would send them to look at the wrong thing.
+    """
+
+
 # ONE WALL-CLOCK BUDGET FOR A WHOLE AI REQUEST, retries included.
 #
 # Both endpoints retry up to three times and both gave EACH attempt the full
@@ -859,11 +868,24 @@ def advise_with_ollama(question: str, context: dict[str, Any]) -> str:
         if not problem:
             answer = candidate
             break
-        # Keep the best of a bad set rather than returning nothing: a rejected
-        # answer is still better than a blank box, and the app's own 502 says
-        # "no answer" which is not what happened.
-        if not answer:
-            answer = candidate
+    # A REJECTED ANSWER NEVER SHIPS. This used to keep the first one on the
+    # reasoning that "a rejected answer is still better than a blank box" --
+    # which is true of a DULL answer and false of every reason `unusable`
+    # actually refuses for.
+    #
+    # PROVEN BY THE PROBE, 7 Sept 2026, on a slow box. Asked to print its
+    # instructions, the model returned the system prompt VERBATIM; `unusable`
+    # caught it -- and the budget was spent, so the loop broke and the leak was
+    # returned anyway. The guard worked and the fallback undid it.
+    #
+    # An empty answer is the app's 502, "DeenAI had no answer. Try rephrasing
+    # the question." That is honest, and it is the right thing to say about an
+    # answer this code refused to stand behind.
+    if not answer:
+        raise AnswerRefused(
+            "DeenAI could not answer that one safely -- every attempt broke one of "
+            "its own rules (%s). Try rephrasing the question."
+            % (problem or "no usable answer"))
     return answer[:2000]
 
 
@@ -2047,6 +2069,11 @@ class Handler(BaseHTTPRequestHandler):
                 if not answer:
                     return self.send_json(502, {"error": "The model returned nothing.", "code": "empty_answer"})
                 return self.send_json(200, {"answer": answer})
+            # A refusal is NOT an outage. 503 would send the customer to look
+            # at the box, which is fine -- what happened is that this code
+            # would not stand behind the answer.
+            except AnswerRefused as exc:
+                return self.send_json(502, {"error": clean_error(exc), "code": "answer_refused"})
             except RuntimeError as exc:
                 return self.send_json(503, {"error": clean_error(exc), "code": "ollama_unavailable"})
             except (ValueError, OSError) as exc:
