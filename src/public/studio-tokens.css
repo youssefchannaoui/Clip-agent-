@@ -864,6 +864,17 @@ body.dc-light #studioLiveBar {
   color: #D9B478; font-variant-numeric: tabular-nums;
 }
 
+/* THE DIALOG HEAD STYLES ITS OWN <span>, AND THE RING IS ONE.
+   `.studio-conn-head span` (0-1-1, for the subtitle) beats `.dctk-ring`
+   (0-1-0), so the ring rendered `display: block` -- `place-items: center` does
+   nothing on a block, and the percentage sat at the TOP LEFT of the circle.
+   Measured: -7.3px across and -8.3px up from the centre. It also inherited the
+   subtitle's 2px top margin.
+   Scoped inside the head so it outranks that rule rather than fighting it with
+   !important, which is what an inline style would have needed. */
+.studio-conn-head .dctk-ring {
+  display: grid; place-items: center; margin-top: 0;
+}
 /* The same ring, larger, in the tasks panel's own header. */
 .dctk-ring-lg {
   width: 36px; height: 36px; flex: 0 0 36px; margin-right: 11px;

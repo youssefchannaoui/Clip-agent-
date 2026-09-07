@@ -737,3 +737,29 @@ test('the panel offers nothing to an account that cannot be paid', () => {
   assert.match(code, /!rows\.unlimited&&group\.tasks\.some\(t=>t\.reward>0\)/,
     'the footnote is not shown to an account no reward applies to');
 });
+
+test('the ring stays a grid, so its percentage centres in the circle', () => {
+  /*
+   * Youssef, 8 Sept 2026: "perctnage not in the middle of circle."
+   *
+   * `.dctk-ring` sets `display: grid; place-items: center` at 0-1-0. The panel
+   * header styles its own subtitle with `.studio-conn-head span` at 0-1-1 —
+   * and the ring IS a span, so that rule won and the ring rendered as a BLOCK.
+   * `place-items` does nothing on a block, so the number sat at the top-left
+   * of the circle: measured -7.3px across and -8.3px up from centre, plus the
+   * subtitle's 2px top margin. Scoped inside the head it outranks that rule,
+   * with no !important needed. After: 0px on both axes.
+   */
+  const sheet = read('src/public/studio-tokens.css');
+  const rule = sheet.slice(sheet.indexOf('.studio-conn-head .dctk-ring {'),
+    sheet.indexOf('}', sheet.indexOf('.studio-conn-head .dctk-ring {')));
+  assert.ok(rule.length, 'the ring is re-declared inside the head');
+  assert.match(rule, /display:\s*grid/, 'or place-items centres nothing');
+  assert.match(rule, /place-items:\s*center/);
+  assert.match(rule, /margin-top:\s*0/, 'and it does not inherit the subtitle margin');
+
+  // The rule it has to outrank must still be the reason it exists.
+  const host = read('src/public/index.html');
+  assert.match(host, /\.studio-conn-head span \{[^}]*display:\s*block/,
+    'the head still styles its own span as a block — that is what this outranks');
+});

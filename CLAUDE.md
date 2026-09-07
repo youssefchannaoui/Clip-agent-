@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1721 JS + 770 Python**
+- `npm test` and `npm run check` must pass. Currently **1722 JS + 770 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -13788,3 +13788,28 @@ self-maintaining in a way a second hex never is.
 Four probes proven red -- and the first attempt at one of them EDITED NOTHING
 and reported green, which proves nothing; it was redone with the replacement
 count checked.
+
+### The ring's percentage sat in the corner of its own circle (v3.148.6)
+
+Youssef, on the panel one release later: "perctnage not in the middle of
+circle." He was right, and the cause is a specificity collision worth
+remembering.
+
+`.dctk-ring` sets `display: grid; place-items: center` at **0-1-0**. The
+dialog header styles its own subtitle with `.studio-conn-head span` at
+**0-1-1** -- and the ring IS a `<span>`, so that rule won and the ring
+rendered as a **BLOCK**. `place-items` does nothing on a block, so the number
+sat at the top left of the circle: measured **-7.3px across and -8.3px up**
+from the centre, plus the subtitle's 2px top margin it also inherited.
+
+`.studio-conn-head .dctk-ring` outranks it at 0-2-0 with no `!important`
+needed -- which is the right tool here, because the alternative for a node the
+host creates is an inline style, and this file already records that an inline
+style is the one thing a stylesheet cannot outrank later. Measured after:
+**0px on both axes.**
+
+**The reading that settles this is `getComputedStyle(el).display`, not the
+geometry.** The offsets alone look like a centring bug in the ring; `display:
+"block"` says immediately that the layout mode was never what the rule
+intended. When `place-items` or `justify-content` appears not to work, check
+the element is still the display type you wrote it for.
