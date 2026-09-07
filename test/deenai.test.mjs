@@ -168,18 +168,30 @@ test('the band names the worst destination and what to do about it', () => {
 });
 
 
-test('a Pro account gets its insights but is refused the ask', async () => {
-  // The split is the whole reason Studio exists. Pro must NOT see a demo here:
-  // its numbers are real, and only the question box is held back.
+test('a Pro account gets its insights AND the ask it was sold', async () => {
+  // THIS TEST USED TO PIN THE BUG. It asserted `ask === false` for Pro and a
+  // 403 reading "Studio feature" -- written when Ask was Studio, and left
+  // asserting the old behaviour when v3.122.0 moved the feature to Pro in the
+  // FEATURES table and forgot the gate. So the one test over this path agreed
+  // with the fault, and three law tests read the table reflected back at
+  // itself. A Pro subscriber was sold Ask, shown it unlocked, and refused.
   const view = await (await fetch(`${base}/api/deenai`, { headers: { Cookie: proSession.cookie } })).json();
   assert.equal(view.pro, true);
-  assert.equal(view.ask, false, 'Pro sees real insights with asking held back');
-  const refused = await fetch(`${base}/api/deenai/ask`, {
+  assert.equal(view.ask, true, 'Ask is Pro, so a Pro account may ask');
+  const answered = await fetch(`${base}/api/deenai/ask`, {
     method: 'POST', headers: { Cookie: proSession.cookie, 'Content-Type': 'application/json' },
     body: JSON.stringify({ question: 'What should I clip next?' }),
   });
-  assert.equal(refused.status, 403);
-  assert.match((await refused.json()).error, /Studio feature/);
+  // This deployment has no worker, so the honest answer is 503 with a sentence
+  // -- NOT a 403. What matters is that the plan is no longer the refusal.
+  assert.notEqual(answered.status, 403, 'a Pro account is never refused for its plan');
+  // And this question is one of the three the app itself puts in the box, so
+  // it is answered from the account's own arithmetic with no model involved --
+  // which is why it succeeds on a deployment that has no worker at all.
+  assert.equal(answered.status, 200);
+  const body = await answered.json();
+  assert.equal(body.source, 'computed');
+  assert.ok(body.answer.length > 20, 'and it is a real answer, not an empty string');
 });
 
 test('ask refuses an empty question, an over-long one, and a deployment with no worker', async () => {
@@ -196,10 +208,18 @@ test('ask refuses an empty question, an over-long one, and a deployment with no 
   assert.equal((await post({ question: '   ' })).status, 400);
   assert.equal((await post({ question: 'x'.repeat(501) })).status, 400);
   // This test runs in local mode, where there is no Ollama to hand the
-  // question to. The honest answer is 503 with a sentence, not a hang.
-  const noWorker = await post({ question: 'What should I clip next?' });
+  // question to. The honest answer is 503 with a sentence, not a hang -- but
+  // only for a question that NEEDS the model. "How do I grow on TikTok?" is
+  // advice rather than arithmetic and is deliberately not answerable locally;
+  // answering it from a table would be inventing the very thing the computed
+  // layer exists to prevent.
+  const noWorker = await post({ question: 'How do I grow on TikTok?' });
   assert.equal(noWorker.status, 503);
   assert.match((await noWorker.json()).error, /render worker/);
+  // While a question the account's own records can answer still succeeds.
+  const local = await post({ question: 'What should I clip next?' });
+  assert.equal(local.status, 200);
+  assert.equal((await local.json()).source, 'computed');
 });
 
 test('the ask context is numbers and titles, never transcript text', () => {

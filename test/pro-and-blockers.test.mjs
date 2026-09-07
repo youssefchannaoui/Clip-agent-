@@ -27,8 +27,15 @@ test('every feature the table sells is enforced server-side, tier by tier', () =
   const server = read('src/server.js');
   assert.match(server, /Removing the DeenClipped watermark is a Pro feature/);
   assert.match(server, /is a Pro template/);
-  assert.match(server, /DeenAI is a Pro feature/);
-  assert.match(server, /Asking DeenAI is a Studio feature/);
+  // ONE refusal for DeenAI, with the tier named from the FEATURES table rather
+  // than typed. There were two literals here -- "DeenAI is a Pro feature" and
+  // "Asking DeenAI is a Studio feature" -- which is exactly the shape that let
+  // the feature be sold at one tier and enforced at another: the second named
+  // a plan the gate no longer used, and this test went on demanding it for
+  // three days while a paying Pro account was refused. The gate reads the
+  // table now, so the sentence does too, and there is one of them.
+  assert.match(server, /DeenAI is a ' \+ deenai\.deenaiAskTierName\(\) \+ ' feature/);
+  assert.doesNotMatch(server, /is a Studio feature/, 'no refusal names a tier of its own');
   // The two Studio features that are not a route read DIFFERENT tiers, and the
   // difference is whether anyone else pays for it.
   //

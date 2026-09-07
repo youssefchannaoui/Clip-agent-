@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1623 JS + 691 Python**
+- `npm test` and `npm run check` must pass. Currently **1631 JS + 698 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -2434,6 +2434,14 @@ to 3.100.0. The guard diffs against the FIRST parent, and because my side
 already held the higher number the merge kept 3.101.0 -- unchanged against my
 parent -- while pulling in four of their `src/` files. Their `src/` diff, no
 version movement, red branch.
+
+**IT HAPPENED AGAIN THE SAME DAY, AT 3.142.0** -- both sessions minted that
+number too, hours after the note below was written. It is not a fluke: two
+sessions working the same afternoon take the next number from the same base,
+so a collision is the DEFAULT rather than the exception. The check is one
+command before the merge -- `git log --oneline origin/<branch>` and read the
+version out of the other side -- and the merge that morning also had to
+restamp `worker/RELEASE`, for exactly the reason the section below it gives.
 
 **AND IT HAPPENED THE OTHER WAY ON 7 SEPT 2026: both sides independently
 minted 3.138.0.** This session shipped the confirmation screen as v3.138.0
@@ -11796,3 +11804,209 @@ change, so `deploy-worker.yml` deploys it on push**; the box was idle
 (diagnose run, every job completed) before the push. The plate has not yet
 been seen landing from the REAL worker -- the first editor open on production
 is that proof.
+
+## Four things Youssef found by driving the editor (v3.140.1, 7 Sept 2026)
+
+He opened the shipped editor on a real Quran clip and reported: "everything
+seems like it's working, which is great ... just the captions is the most
+important thing ... it's showing me all of the captions or something for the
+whole video", plus "those two bars on the left and the right, let's remove
+them. They look horrendous", "grain doesn't look grainy, it looks weird",
+"sharpening, I don't know if sharpening is working or not", and "it seems a
+bit slow as well".
+
+- **AN AYAH IS PAGED, AND THE LIVE LAYER WAS DRAWING THE WHOLE VERSE.** The
+  export splits a verse into phrases of at most five words and shows one at a
+  time (`ayah_events`), and `edAyahPhrase` has computed exactly that split for
+  months -- the v3.140.0 live branch bypassed it and returned the block's own
+  text. So a 13-word verse arrived as all 13 words at once, stacked over
+  itself, which is precisely "all of the captions for the whole video".
+  **Measured: 13 words before, 5 / 4 / 4-plus-the-verse-mark after**, and the
+  phrase now advances with the playhead. The translation line was already
+  paged (`edCapTranslation` reads the same phrase), which is why only the
+  Arabic looked wrong.
+- **The two green bars in the music lane were INVENTED DATA.** They are two
+  empty spans drawn at a hardcoded `left:1%;width:47%` and `left:50%;width:49%`
+  -- two "segments" describing nothing about the clip's actual nasheed, drawn
+  in full on a clip that has none. The bars are hidden and the lane's WORDS are
+  kept ("No nasheed mixed in" is the only place the timeline says it), laid out
+  in flow now that there is nothing to position them over. Found structurally
+  -- the lane is the element before the waveform lane, and the waveform lane is
+  found by the design's own literal -- so no hashed class is named and a
+  re-import cannot break it. `data-host-style` is what keeps the patcher off
+  the style it sets.
+- **Grain was a 3px conic CHECKERBOARD**, which tiles into a visible weave.
+  `feTurbulence` fractal noise as a data URI is what film grain actually is;
+  no asset and no request added, and the strength is baked into the rect's
+  opacity because a data URI cannot read a CSS variable.
+- **SHARPENING IS PREVIEWABLE AFTER ALL, and the row had said it was not.**
+  CSS has no sharpen filter -- but an SVG `feConvolveMatrix` is a real
+  convolution and CAN be named from a CSS filter chain, so the kernel is built
+  from the same number the render hands ffmpeg's `unsharp` and referenced as
+  `url(#dcEdSharpen)`. **Measured in the browser by drawing the frame through
+  the filter onto a canvas and summing the gradient: edge energy 9.71 -> 14.96,
+  1.54x.** The kernel sums to 1, so brightness does not move. The reference is
+  added ONLY when the amount is non-zero -- a filter that does nothing must not
+  sit in the chain -- and the row now says "shown approximately here; the
+  render uses a wider unsharp mask", because unsharp is a 5x5 masked blur and
+  this is a 3x3 kernel. `preserveAlpha` is load-bearing: without it the
+  convolution eats the video's edge into the frame's rounded corners and draws
+  a dark halo.
+  **It costs nothing, and that was measured rather than assumed** -- an SVG
+  filter on video is the kind of thing that quietly halves a frame rate.
+  Playback with the filter at MAXIMUM: **0.99x real time, 0 dropped frames**,
+  against 1.00x and 0 dropped with it off.
+- **`PLATE_MAX_EDGE` 1280 -> 720.** The editor draws the plate into a frame
+  about 360px wide, so 1280 was four times the pixels anybody looks at -- paid
+  for twice, once in encode time on a single-slot box and again in the download
+  somebody watches a loading screen through. 720 is still double the frame it
+  is drawn in. That is the "a bit slow".
+
+Four red probes, each proven: the paging removed, the checkerboard restored,
+the sharpen reference deleted, the lane painter unhooked. 1603 JS + 691 Python.
+
+## DeenAI's Ask was sold at Pro and refused at Studio (v3.141.3, 7 Sept 2026)
+
+Found by a design workflow reading DeenAI end to end before rebuilding it --
+all four independent designers flagged the same thing, and it is a live
+billing fault, not a design opinion.
+
+**`FEATURES.deenaiAsk` says `tier: 'pro'`. `deenaiAskAccess()` said
+`billing.atLeast(user, 'studio')`.** So since v3.122.0 (4 Sept 2026) a Pro
+subscriber was:
+
+  - SOLD "Ask DeenAI anything" on the pricing page (built from the table),
+  - shown the Ask box UNLOCKED in the studio (`aiAskOn` reads
+    `current.features.deenaiAsk`, which reads the table),
+  - and refused by the route with **"Asking DeenAI is a Studio feature"** the
+    moment they pressed it.
+
+**Proven by execution, not by reading**: for a `pro_monthly` account
+`planFeatures().deenaiAsk` returned `true` and `deenaiAskAccess()` returned
+`false`.
+
+This is the v3.72.10 fault -- a button naming the wrong plan -- inverted and
+made worse, because the customer has already paid. The comment ON THE VERY
+LINE that moved the feature says *"Two gates at two tiers is what let a button
+sell the wrong plan in v3.72.10; one tier cannot."* The table moved; the gate
+did not.
+
+- **Both gates read the table now** (`billing.FEATURES.deenai.tier` /
+  `.deenaiAsk.tier`), and a literal tier string is banned inside them by test.
+  That is the whole point of the FEATURES table and it was being bypassed.
+- **The refusal names the tier the gate enforces**, from
+  `deenaiAskTierName()`, rather than a typed "Studio" that outlived the gate.
+
+### THE THREE LAW TESTS ALL PASSED, AND THAT IS THE LESSON
+
+`plan-gating`, `studio-design` and `pro-and-blockers` each assert the "one
+tier" rule, and every one of them reads `billing.featuresForTier(...)` -- **the
+table reflected back at itself.** A test that reads the table to check the
+table can only ever agree with itself; the drift lives BETWEEN the table and
+the function, so that is where the comparison has to be.
+
+Measured with the bug deliberately restored: **`test/deenai-gate.test.mjs`
+fails 3 of its 4, and 297 existing law tests all pass.** That is why it
+survived three days.
+
+- The new file CALLS both gates against `planFeatures()` at free, Pro and
+  Studio, and asserts the two halves unlock together -- against the GATES,
+  where the older tests assert it against the table.
+- **`test/deenai.test.mjs` was PINNING the bug.** It asserted `view.ask ===
+  false` for Pro and a 403 matching /Studio feature/ -- correct when written,
+  and left agreeing with the fault when the feature moved. It now asserts a Pro
+  account is never refused for its plan, and that a refusal here is the WORKER
+  (503), not the tier.
+- **`pro-and-blockers` demanded the literal "Asking DeenAI is a Studio
+  feature"** -- a source-string test that would have gone RED against the
+  correct fix, which is the eighth time this repo has recorded that shape. It
+  asserts the sentence is BUILT from the table now, and lets the table decide
+  the word.
+
+## DeenAI answers from arithmetic where it can, and is checked in code where it cannot (v3.142.0, 7 Sept 2026)
+
+Youssef: "make DEEN AI AMAZING ... IMPROVED SOO WELL THAT HELP USERS TO DO SO
+MANY THINGS IN THE WBEISTE". Measured on production first, because the Ask had
+never been read against the real model from the app:
+
+    cold ask                                   25.6s
+    warm ask                                    6.8s
+    "Which lecture should I clip more of?"     never named the lecture
+    invented, in one warm answer               "the most efficient rate is 80%"
+                                               titles "are popular and well-received"
+
+Both inventions are forbidden by the system prompt in as many words. The 80% is
+a figure that appears nowhere in the account; "popular and well-received" is an
+audience claim **no platform sends this app** -- the privacy policy states it
+and the Performance screen carries a footnote saying why those columns are
+absent. That is this repo's oldest lesson about qwen3:1.7b arriving on a new
+path: a negative instruction is a suggestion, and what must not happen belongs
+in code.
+
+### Where the answer is arithmetic, there is no model in it
+
+`answerLocally` (src/deenai.js) answers the three prompt chips from the same
+`insights()`/`metrics()` the cards below the box are drawn from -- so the
+answer and the screen cannot contradict each other, which is the reason
+`metrics()` lives in that module at all. Keyed on the EXACT strings
+`AI_PROMPTS` puts in the box, so intent is certain: no classifier, no misfire.
+
+    "What should I clip next?"           -> names the lecture, its keep rate,
+                                            and what is waiting in the queue
+    "Which lecture is worth more clips?" -> ranks the account's lectures and
+                                            names the weakest for contrast
+    a question naming a platform it has
+    failures on, and plainly about them  -> the count, and where the reason is
+
+**"How do I grow on TikTok?" is deliberately NOT answerable locally.** It is
+advice rather than arithmetic, and answering it from a table would be inventing
+the thing this layer exists to prevent. A computed answer that comes back empty
+(a young account with nothing true to say) falls through to the model rather
+than padding.
+
+- **It is checked BEFORE the worker gate**, so a deployment with no box still
+  answers the chips instead of refusing every question. Two existing tests went
+  red on exactly that and were corrected rather than weakened -- a chip now
+  returns 200 where it used to 503.
+- **The reply carries `source`** (`computed` | `ai`) and the screen wears it:
+  "Counted from your own clips" in green, "Written by DeenAI on our own server"
+  in gold. A counted figure and a sentence a 1.7B wrote read identically as
+  prose and are not the same claim. Host-rendered beside the export's own
+  DEENAI label, anchored on that literal rather than a hashed class.
+
+### Where a model is needed, its answer is REJECTED in code
+
+`advise_with_ollama` was the only Ollama caller in this repo with no validation
+at all -- a `<think>` strip and a truncation. It now carries the device the
+title path already proved:
+
+- **The rules are restated LAST, immediately before the data** ("BEFORE YOU
+  ANSWER, CHECK EACH OF THESE"), the technique measured twice here. They sat
+  ~1,500 characters ahead of a 4,000-character blob.
+- **Every percentage in the answer must appear verbatim in the context handed
+  to the model**, or it is refused by name. That is the 80%.
+- **Audience claims are refused outright** (popular, well received, viral,
+  performed well, trending), because this app is told none of it.
+- **This prompt's own furniture coming back is refused**, the LEAKED check with
+  Ask's own headings.
+- **Three shots, warmer each time (0.35 / 0.6 / 0.85), each retry NAMING the
+  rejection.** Driven with the two real production failures: attempt one is
+  refused as *"it stated 80%, which is not a figure in this account"*, attempt
+  two as *"it claimed the clips were well received, which no platform tells
+  this app"*, and the third clean answer ships.
+- **Three bad answers return the FIRST rather than nothing.** A blank box is
+  worse than a flawed answer, and the app's own 502 says "DeenAI had no
+  answer", which would not be what happened.
+- A percentage that IS in the context is kept -- a test drives that, or the
+  guard would throw away every honest answer with a figure in it.
+
+**A trap this file already records, paid again:** the fence-order test used
+`prompt.index("BEGIN UNTRUSTED")` and the SAFETY paragraph MENTIONS the marker
+before the real fence opens. `rindex`, as `test_deenai_advise` already knew.
+
+Three red probes proven: the percentage guard removed, the audience guard
+removed, the computed layer removed.
+
+**Worker change, so `deploy-worker.yml` deploys it on push.** The rejection
+gate has been driven against a scripted model, not the box; the first real ask
+after the deploy is what confirms it there.

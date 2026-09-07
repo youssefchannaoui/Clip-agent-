@@ -155,6 +155,7 @@
     redeemBusy: false,
     redeemSaid: null,
     aiAnswer: '',
+    aiSource: '',
     aiBusy: false,
     // Approving is a round trip. Until /api/state comes back the card would snap
     // back to "needs review", so the decision is held here and layered over the
@@ -1789,6 +1790,20 @@
    * renderer's own arithmetic (a flat black at a fraction); the weather is a
    * static field carrying the effect's real colour, size and density.
    */
+  // Film grain as fractal noise, sized so the tile is not readable as a tile.
+  // baseFrequency high enough to be grain rather than cloud; three octaves so
+  // it has fine structure. The strength is baked into the rect's opacity
+  // because a data URI cannot read a CSS variable.
+  function grainNoise(strength) {
+    var a = Math.max(0.02, Math.min(0.5, strength * 0.42)).toFixed(3);
+    var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'>"
+      + "<filter id='g' x='0' y='0' width='100%' height='100%'>"
+      + "<feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/>"
+      + "<feColorMatrix type='saturate' values='0'/></filter>"
+      + "<rect width='128' height='128' filter='url(#g)' opacity='" + a + "'/></svg>";
+    return "url(\"data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg) + "\")";
+  }
+
   function fxLayersStyle(t) {
     var vignette = Math.max(0, Math.min(1, Number(t.vignette) || 0));
     var grain = Math.max(0, Math.min(100, Number(t.grain) || 0)) / 100;
@@ -1800,7 +1815,12 @@
     if (dark) layer('linear-gradient(rgba(0,0,0,' + dark.toFixed(3) + '), rgba(0,0,0,' + dark.toFixed(3) + '))');
     if (weather) { for (var w = 0; w < weather.image.length; w++) layer(weather.image[w], weather.size[w], weather.position[w]); }
     if (vignette) layer('radial-gradient(ellipse at center, rgba(0,0,0,0) 42%, rgba(0,0,0,' + (vignette * 0.85).toFixed(3) + ') 100%)');
-    if (grain) layer('repeating-conic-gradient(rgba(255,255,255,' + (grain * 0.16).toFixed(3) + ') 0% 25%, rgba(0,0,0,' + (grain * 0.16).toFixed(3) + ') 0% 50%)', '3px 3px');
+    // GRAIN IS NOISE, NOT A PATTERN. This drew a 3px conic checkerboard, which
+    // tiles into a visible weave -- "grain doesn't look grainy, it looks
+    // weird". feTurbulence gives real fractal noise, which is what film grain
+    // is and what the render's own noise filter approximates; it rides in as a
+    // data URI so no asset and no request is added.
+    if (grain) layer(grainNoise(grain), '128px 128px');
     return 'background-image: ' + layers.join(', ') + '; background-size: ' + sizes.join(', ') + '; background-position: ' + spots.join(', ') + ';';
   }
 
@@ -3964,11 +3984,14 @@
           only(tpl.filterPreset === 'custom', tplRange('contrast', 'Contrast', 50, 200, 1, { scale: 100, fmt: fmtHundredths('\u00d7'), fallback: 1 })),
           only(tpl.filterPreset === 'custom', tplRange('saturation', 'Saturation', 0, 300, 1, { scale: 100, fmt: fmtHundredths('\u00d7'), fallback: 1 })),
           only(tpl.filterPreset === 'custom', tplRange('gamma', 'Gamma', 50, 200, 1, { scale: 100, fmt: fmtHundredths(''), fallback: 1 })),
-          // The one look control no preview can echo: a browser has no
-          // sharpen filter, and inventing one with contrast would be a lie.
-          // Said on the row rather than left as the one slider that moves
-          // nothing (invariant 9 -- a control must say what it reaches).
-          tplRange('sharpen', 'Sharpen', 0, 200, 5, { scale: 100, fmt: fmtHundredths(''), fallback: 0.45, note: 'Applied at render — the preview cannot show sharpening.' }),
+          // This used to be the one look control no preview could echo --
+          // CSS has no sharpen, and faking one with contrast would be a lie.
+          // An SVG feConvolveMatrix IS a real convolution and can be
+          // referenced from a CSS filter chain, so the slider moves the
+          // picture now (edSharpenKernel). The row says "approximately"
+          // because the render's unsharp is a 5x5 masked blur and this is a
+          // 3x3 kernel -- close in effect, not identical.
+          tplRange('sharpen', 'Sharpen', 0, 200, 5, { scale: 100, fmt: fmtHundredths(''), fallback: 0.45, note: 'Shown approximately here; the render uses a wider unsharp mask.' }),
           tplRange('vignette', 'Vignette', 0, 100, 1, { scale: 100, fmt: fmtPct }),
           tplRange('grain', 'Grain', 0, 100, 1, { fmt: fmtPct }),
           tplRange('warm', 'Warmth', -100, 100, 1, { fmt: function (v) { return v === 0 ? 'Neutral' : (v > 0 ? 'Warm +' : 'Cool ') + Math.abs(v); } }),
@@ -4734,6 +4757,8 @@
       : {};
     var ED_LOOK_KEYS = ['grain', 'warm', 'vignette', 'filterPreset'];
     var ED_FRAMING_KEYS = ['fitMode', 'smartFramingZoom', 'cropPositionX', 'cropPositionY', 'smartFramingEnabled'];
+    // The sharpen the picture should carry, clamped to the schema's own range.
+    var edSharpenAmount = Math.max(0, Math.min(2, Number(tpl.sharpen) || 0));
     var edLookApprox = ED_LOOK_KEYS.some(function (k) { return Object.prototype.hasOwnProperty.call(edPendingStyle, k); });
     var edFramingPending = ED_FRAMING_KEYS.some(function (k) { return Object.prototype.hasOwnProperty.call(edPendingStyle, k); });
 
@@ -5817,6 +5842,21 @@
         : 'Answers use your numbers, never your transcripts.',
       aiHasAnswer: Boolean(UI.aiAnswer),
       aiAnswer: UI.aiAnswer,
+      // A counted answer and a written one are not the same claim, and the
+      // prose does not say which it is. Measured on production before this
+      // existed: the model answered "the most efficient rate is 80%" -- a
+      // figure that appears nowhere in the account -- and there was nothing on
+      // screen to tell that apart from a real number.
+      aiSourceLabel: UI.aiAnswer
+        ? (UI.aiSource === 'computed' ? 'Counted from your own clips' : 'Written by DeenAI on our own server')
+        : '',
+      aiSourceStyle: UI.aiAnswer
+        ? ('display: inline-flex; align-items: center; gap: 6px; margin-bottom: 9px; padding: 3px 9px; border-radius: 999px; '
+          + 'font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; '
+          + (UI.aiSource === 'computed'
+            ? 'border: 1px solid rgba(127,209,166,.34); color: var(--dc-n-7fd1a6, #7FD1A6); background: rgba(127,209,166,.08);'
+            : 'border: 1px solid rgba(217,180,120,.34); color: var(--dc-gold-lit, #F0D6A6); background: rgba(217,180,120,.08);'))
+        : 'display: none;',
 
       // ── Home ──
       needsCount: needsCount,
@@ -6421,7 +6461,16 @@
          * export burns in, never from a typed draft -- invariant 7.
          */
         if (edPlate && echoBlock) {
-          if (echoBlock.ayah) return [{ text: String(echoBlock.text || ''), style: '' }];
+          // AN AYAH IS PAGED, and the whole verse is not a caption. The export
+          // splits a verse into phrases of at most five words and shows one at
+          // a time (ayah_events); edAyahPhrase already computes exactly that
+          // split, and this branch was handing back the block's WHOLE text --
+          // so a long verse arrived on the frame as every phrase at once,
+          // stacked over itself. Reported as "it's showing me all of the
+          // captions for the whole video", which is what it looked like.
+          if (echoBlock.ayah) {
+            return [{ text: (edAyahPhrase && edAyahPhrase.text) || String(echoBlock.text || ''), style: '' }];
+          }
           var parts = clipCaptionParts(echoBlock, edTime, tpl.captionMode, /stack/.test(String(tpl.captionMode)) ? (tpl.captionStackMaxWords || 4) : (tpl.captionMaxWords || 5));
           return parts.words.map(function (text, i) {
             return { text: text, style: i === parts.liveIndex && tpl.captionMode !== 'phrase' && tpl.captionMode !== 'cards' ? captionHighlightStyle(tpl) : '' };
@@ -7057,7 +7106,24 @@
       edVideoBlurBg: tpl.fitMode === 'blur',
       // The renderer's grade, as CSS, applied to the real footage: preset +
       // warmth via lookFilter, vignette and grain as host-drawn overlays.
-      edVideoFilter: lookFilter(tpl).replace(/^filter:\s*/, '').replace(/;$/, ''),
+      edVideoFilter: lookFilter(tpl).replace(/^filter:\s*/, '').replace(/;$/, '')
+        // SHARPENING IS PREVIEWABLE AFTER ALL. CSS has no sharpen, so the row
+        // said so and the slider did nothing you could see. An SVG
+        // feConvolveMatrix is a real convolution and can be referenced from a
+        // CSS filter chain, so the kernel is built from the same number the
+        // render passes to ffmpeg's unsharp and the picture actually changes.
+        // It is an APPROXIMATION -- unsharp is a 5x5 masked blur, this is a
+        // 3x3 kernel -- and the row says so rather than claiming parity.
+        + (edSharpenAmount ? ' url(#dcEdSharpen)' : ''),
+      // The kernel itself, for the host-owned filter the frame carries.
+      edSharpen: edSharpenAmount,
+      edSharpenKernel: edSharpenAmount
+        ? (function () {
+          var a = Math.min(1.1, edSharpenAmount * 0.55);
+          return '0 ' + (-a).toFixed(3) + ' 0 ' + (-a).toFixed(3) + ' ' + (1 + 4 * a).toFixed(3)
+            + ' ' + (-a).toFixed(3) + ' 0 ' + (-a).toFixed(3) + ' 0';
+        }())
+        : '',
       edVideoVignette: Math.max(0, Math.min(1, Number(tpl.vignette) || 0)),
       edVideoGrain: Math.max(0, Math.min(100, Number(tpl.grain) || 0)),
       // Where the crop window sits over a wider source (Fill mode), as

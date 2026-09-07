@@ -101,7 +101,10 @@ class RenderPlateTests(unittest.TestCase):
             info = json.loads(probe.stdout)
             width, height = info["streams"][0]["width"], info["streams"][0]["height"]
             self.assertEqual(width, worker.PLATE_MAX_EDGE, "the long edge is bounded")
-            self.assertEqual(height, 720)
+            # The short edge follows the source's own shape, rounded to an even
+            # number for yuv420p: 1080 * 720/1920 = 405 -> 406.
+            self.assertEqual(height, 406)
+            self.assertLessEqual(max(width, height), worker.PLATE_MAX_EDGE)
             self.assertAlmostEqual(float(info["format"]["duration"]), 3.0, delta=0.25)
 
     def test_an_empty_window_is_refused(self):

@@ -197,3 +197,117 @@ class AdviseRouteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AdviseRejectionTests(unittest.TestCase):
+    """The answer is checked in CODE, because the model does not obey a rule.
+
+    Both failures pinned here were MEASURED on the production box on 7 Sept
+    2026, asking a real account a real question:
+
+      "The most efficient rate is 80%"        -- a figure in no part of the
+                                                 account's context
+      titles "are popular and well-received"  -- an audience claim no platform
+                                                 sends this app
+
+    The system prompt forbids both in as many words. qwen3:1.7b wrote them
+    anyway, which is this repo's standing lesson about that model: a negative
+    instruction is a suggestion, so anything that must not happen is enforced
+    here.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.mkdtemp()
+        os.environ["WORKER_DATA_DIR"] = self.temp
+        sys.modules.pop("service", None)
+        self.service = importlib.import_module("service")
+        os.environ["OLLAMA_URL"] = "http://127.0.0.1:11434"
+
+    def tearDown(self):
+        os.environ.pop("OLLAMA_URL", None)
+
+    def _run(self, answers, context=None):
+        """Drive advise_with_ollama against a scripted model. Returns
+        (answer, prompts) so the retry's own wording can be read."""
+        context = context if context is not None else {"figures": ["Approval bar: 70"], "clipsKept": 31}
+        prompts = []
+        supply = iter(answers)
+
+        def fake_urlopen(request, timeout=None):
+            prompts.append(json.loads(request.data.decode("utf-8"))["prompt"])
+            return FakeResponse(json.dumps({"response": next(supply)}).encode())
+
+        with mock.patch("urllib.request.urlopen", fake_urlopen):
+            return self.service.advise_with_ollama("What should I do today?", context), prompts
+
+    def test_an_invented_percentage_is_rejected_and_the_retry_says_why(self):
+        answer, prompts = self._run([
+            "Your keep rate is 80% which is efficient.",
+            "Review the waiting clips in the Review queue.",
+        ])
+        self.assertEqual(answer, "Review the waiting clips in the Review queue.")
+        self.assertEqual(len(prompts), 2, "it asked again rather than shipping the invention")
+        self.assertIn("REJECTED", prompts[1])
+        self.assertIn("80%", prompts[1], "and the retry names the figure it refused")
+
+    def test_a_percentage_that_IS_in_the_context_is_kept(self):
+        # The guard must not refuse the account's own numbers, or every honest
+        # answer with a figure in it would be thrown away.
+        answer, prompts = self._run(
+            ["Your keep rate is 70%, which is your best."],
+            context={"figures": ["Keep rate: 70% across five lectures"]},
+        )
+        self.assertIn("70%", answer)
+        self.assertEqual(len(prompts), 1, "no retry was needed")
+
+    def test_an_audience_claim_is_rejected(self):
+        answer, prompts = self._run([
+            "Your clips are popular and well received.",
+            "Clip more of that lecture; the import is cached.",
+        ])
+        self.assertEqual(answer, "Clip more of that lecture; the import is cached.")
+        self.assertIn("no platform tells this app", prompts[1])
+
+    def test_the_prompt_leaking_back_is_rejected(self):
+        answer, _ = self._run([
+            "ACCOUNT CONTEXT: you should review your clips.",
+            "Review your clips in the Review queue.",
+        ])
+        self.assertEqual(answer, "Review your clips in the Review queue.")
+
+    def test_three_bad_answers_return_the_first_rather_than_nothing(self):
+        # A blank box is worse than a flawed answer, and the app's own 502 says
+        # "DeenAI had no answer", which would not be what happened.
+        answer, prompts = self._run([
+            "Rate is 91% good.", "Rate is 92% good.", "Rate is 93% good.",
+        ])
+        self.assertEqual(len(prompts), 3, "three shots on goal")
+        self.assertEqual(answer, "Rate is 91% good.")
+
+    def test_the_rules_are_restated_last_before_the_data(self):
+        # The technique this repo has measured twice: a rule this model obeys
+        # is one it read immediately before answering.
+        _, prompts = self._run(["Review the queue."])
+        prompt = prompts[0]
+        self.assertIn("BEFORE YOU ANSWER", prompt)
+        self.assertLess(
+            prompt.index("HOW TO ANSWER"), prompt.index("BEFORE YOU ANSWER"),
+            "the restatement comes after the original rules",
+        )
+        # rindex, not index: the SAFETY paragraph MENTIONS the markers before
+        # the real fence opens, and index finds the mention. This file's own
+        # fence test already learned that; so does CLAUDE.md.
+        self.assertLess(
+            prompt.index("BEFORE YOU ANSWER"), prompt.rindex("BEGIN UNTRUSTED"),
+            "and immediately before the data",
+        )
+
+    def test_a_failed_first_call_still_raises(self):
+        # A box that is down must surface as an error, not as a silent empty
+        # answer -- the app turns the exception into a 503 with a sentence.
+        def boom(request, timeout=None):
+            raise OSError("connection refused")
+
+        with mock.patch("urllib.request.urlopen", boom):
+            with self.assertRaises(OSError):
+                self.service.advise_with_ollama("What now?", {"figures": []})

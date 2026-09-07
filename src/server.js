@@ -2547,20 +2547,29 @@ async function route(req, res, url) {
   }
   if (method === 'POST' && pathname === '/api/deenai/ask') {
     if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
-    // Pro reaches this route and is refused HERE rather than at the tab, so the
-    // screen can show a Studio prompt beside real insights instead of a demo.
+    // ONE SENTENCE, because both halves of DeenAI sit at one tier. This was a
+    // ternary whose first arm told a Pro account "Asking DeenAI is a Studio
+    // feature" -- and with the gates now reading the table, an account refused
+    // here is below the tier for BOTH halves, so that arm is unreachable. Dead
+    // code a test asserts against is worse than no code: test/pro-and-blockers
+    // was matching that exact literal and would have gone on passing over it.
+    // The tier is named from the table, so the sentence follows it.
     if (!deenai.deenaiAskAccess(currentUser)) {
       return json(res, 403, {
-        error: deenai.deenaiAccess(currentUser)
-          ? 'Asking DeenAI is a Studio feature. Pro shows the insights; Studio answers questions.'
-          : 'DeenAI is a Pro feature. Upgrade to see your own numbers.',
+        error: 'DeenAI is a ' + deenai.deenaiAskTierName() + ' feature. Upgrade to see your own numbers and ask.',
       });
     }
     let body;
     try { body = await readBody(req, 64 * 1024); } catch (error) { return json(res, 400, { error: error.message }); }
     try {
-      const answer = await deenai.ask(currentUser, body?.question);
-      return json(res, 200, { answer });
+      // `source` says which KIND of answer this is -- 'computed' when the
+      // figures came from this account's own records with no model involved,
+      // 'ai' when the box's Ollama wrote it. The screen says so, because a
+      // number counted from your clips and a sentence a small model wrote
+      // deserve different amounts of trust and the reader cannot tell them
+      // apart otherwise.
+      const { answer, source } = await deenai.ask(currentUser, body?.question);
+      return json(res, 200, { answer, source });
     } catch (error) {
       return json(res, error.statusCode || (error.code === 'worker_unavailable' ? 503 : 500), { error: error.message });
     }

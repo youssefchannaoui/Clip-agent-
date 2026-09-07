@@ -163,3 +163,104 @@ test('word mode lights the word being said inside its group', () => {
   assert.equal(words(open({ captionMode: 'word', time: 3.5 })), 'because *you');
   assert.equal(words(open({ captionMode: 'cards', time: 1.5 })).includes('*'), false, 'a card is cut, never lit');
 });
+
+// ── v3.140.1: what Youssef found by driving the editor ───────────────────
+// "it's showing me all of the captions or something for the whole video" —
+// the live layer handed back an ayah's WHOLE text, so a long verse arrived on
+// the frame as every phrase at once, stacked over itself.
+
+const VERSE = 'وسيق الذين كفروا إلى جهنم زمرا حتى إذا جاءوها فتحت أبوابها وقال لهم';
+
+function openQuran(time) {
+  const c = {
+    id: 'c1', projectId: 'p1', title: 'A clip', status: 'waiting', score: 80, durationMs: 20000,
+    startSec: 0, endSec: 20, templateId: 'quran-recitation', renderQuality: 'final',
+    musicVerified: true, renderVerified: true, targets: [], clipUrl: '/api/clips/c1/video',
+    plate: { url: '/api/clips/c1/plate', startSec: 0, endSec: 20, at: 1 },
+    captionSegments: [{ start: 0, end: 12, text: VERSE }],
+    ayahs: [{ start: 0, end: 12, arabic: VERSE, translation: 'And those who disbelieved will be driven to Hell in groups', ayah: 71 }],
+  };
+  const t = { id: 'quran-recitation', name: 'Quran Recitation', captionMode: 'quran', captionMaxWords: 5,
+    captionFontSize: 62, captionArabicFont: 'Amiri', captionPrimary: '#FFFFFF' };
+  Object.assign(SA.ui, { screen: 'editor', edClipId: 'c1', edTrim: null, edCutOuts: null, edCutMark: null,
+    edTime: time, edDirty: false, edBlockDraft: null, edStyleDraft: null, edPlateFailed: false,
+    edTplId: 'quran-recitation', edBlock: 0 });
+  return SA.bindings({ clips: [c], projects: [{ id: 'p1', title: 'L', status: 'done' }], templates: [t],
+    selectedTemplate: t, social: {}, publishingSettings: {}, billing: {}, jobs: [], music: { tracks: [] }, musicSettings: {} });
+}
+
+test('a live ayah draws ONE phrase, the way the export pages it', () => {
+  const whole = VERSE.split(/\s+/).length;
+  assert.ok(whole > 5, 'the fixture must be long enough to page');
+  const opening = words(openQuran(0.5)).split(/\s+/);
+  assert.ok(opening.length <= 5, `the opening phrase is at most five words, got ${opening.length}`);
+  assert.ok(opening.length < whole, 'never the whole verse at once');
+  // And it MOVES: a later moment is a different phrase.
+  assert.notEqual(words(openQuran(0.5)), words(openQuran(9)), 'the phrase advances with the playhead');
+  // The verse mark closes the last phrase, exactly as ayah_events does.
+  assert.match(words(openQuran(11.5)), /۝|[٠-٩]/, 'the last phrase carries the verse mark');
+});
+
+test('grain is noise, not a tiled pattern', () => {
+  // "grain doesn't look grainy, it looks weird" — it was a 3px conic
+  // checkerboard, which reads as a weave. Real grain is fractal noise.
+  const b = open();
+  const fx = SA.__fxForTests ? '' : String(b.edVideoFx || '');
+  const withGrain = SA.bindings({
+    clips: [{ id: 'c1', projectId: 'p1', title: 'A', status: 'waiting', durationMs: 19550, startSec: 5, endSec: 24.55,
+      templateId: 'clean-line', renderQuality: 'final', musicVerified: true, renderVerified: true, targets: [],
+      captionSegments: SEGS, plate: { url: '/p.mp4', startSec: 5, endSec: 24.55, at: 1 } }],
+    projects: [{ id: 'p1', title: 'L', status: 'done' }],
+    templates: [tpl({ grain: 60 })], selectedTemplate: tpl({ grain: 60 }),
+    social: {}, publishingSettings: {}, billing: {}, jobs: [], music: { tracks: [] }, musicSettings: {},
+  });
+  const css = String(withGrain.edVideoFx || '');
+  assert.match(css, /feTurbulence/, 'fractal noise');
+  assert.doesNotMatch(css, /repeating-conic-gradient/, 'not a checkerboard');
+  assert.doesNotMatch(fx, /feTurbulence/, 'and no grain layer when the template asks for none');
+});
+
+test('sharpening is previewed by a real convolution, and only when it is on', () => {
+  // CSS has no sharpen; an SVG feConvolveMatrix is a real one and can be named
+  // from a CSS filter chain. Measured in a browser: edge energy 9.71 -> 14.96.
+  const on = SA.bindings({
+    clips: [{ id: 'c1', projectId: 'p1', title: 'A', status: 'waiting', durationMs: 19550, startSec: 5, endSec: 24.55,
+      templateId: 'clean-line', renderQuality: 'final', musicVerified: true, renderVerified: true, targets: [],
+      captionSegments: SEGS, plate: { url: '/p.mp4', startSec: 5, endSec: 24.55, at: 1 } }],
+    projects: [{ id: 'p1', title: 'L', status: 'done' }],
+    templates: [tpl({ sharpen: 1.8 })], selectedTemplate: tpl({ sharpen: 1.8 }),
+    social: {}, publishingSettings: {}, billing: {}, jobs: [], music: { tracks: [] }, musicSettings: {},
+  });
+  assert.match(String(on.edVideoFilter), /url\(#dcEdSharpen\)/, 'the chain names the filter');
+  const k = String(on.edSharpenKernel).split(' ').map(Number);
+  assert.equal(k.length, 9, 'a 3x3 kernel');
+  assert.ok(k[4] > 1, 'the centre tap is positive and greater than one');
+  assert.ok(k[1] < 0 && k[3] < 0 && k[5] < 0 && k[7] < 0, 'the four neighbours are negative');
+  assert.ok(Math.abs(k.reduce((a, n) => a + n, 0) - 1) < 1e-6, 'the kernel sums to 1, so brightness is unchanged');
+
+  const off = SA.bindings({
+    clips: [{ id: 'c1', projectId: 'p1', title: 'A', status: 'waiting', durationMs: 19550, startSec: 5, endSec: 24.55,
+      templateId: 'clean-line', renderQuality: 'final', musicVerified: true, renderVerified: true, targets: [],
+      captionSegments: SEGS, plate: { url: '/p.mp4', startSec: 5, endSec: 24.55, at: 1 } }],
+    projects: [{ id: 'p1', title: 'L', status: 'done' }],
+    templates: [tpl({ sharpen: 0 })], selectedTemplate: tpl({ sharpen: 0 }),
+    social: {}, publishingSettings: {}, billing: {}, jobs: [], music: { tracks: [] }, musicSettings: {},
+  });
+  assert.doesNotMatch(String(off.edVideoFilter), /dcEdSharpen/, 'no filter reference when it is off');
+  assert.equal(off.edSharpenKernel, '', 'and no kernel to apply');
+});
+
+test('the timeline\'s two decorative music bars are hidden, and the words are kept', () => {
+  // They were drawn at a hardcoded left:1%/width:47% and left:50%/width:49% —
+  // two "segments" describing nothing about the clip's actual nasheed, on a
+  // clip that has none. Invented data on a timeline.
+  const host = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const fn = /function paintEditorTrackLane\(\)\{[\s\S]*?\n    \}/.exec(host);
+  assert.ok(fn, 'the painter exists');
+  const body = fn[0];
+  assert.match(body, /Video \\u00b7 speech waveform|Video · speech waveform/, 'anchored on the design\'s own literal');
+  assert.doesNotMatch(body.replace(/\/\*[\s\S]*?\*\//g, ''), /\.s[0-9][0-9a-z]?\b/, 'names no hashed class');
+  assert.match(body, /data-host-style/, 'marked so the patcher leaves the style alone');
+  assert.match(body, /!\(n\.textContent\|\|''\)\.trim\(\)/, 'only the EMPTY spans are hidden');
+  assert.match(host, /paintEditorLayout\(vals\);\n\s*paintEditorTrackLane\(\);/, 'and it runs from paintStudio');
+});
