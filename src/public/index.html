@@ -9948,9 +9948,20 @@ function railFooterSlot(){
   const nav=document.getElementById('dcRailNav');
   if(!nav)return null;
   let slot=document.getElementById('dcTaskSlot');
-  if(slot&&nav.contains(slot))return slot;
   const tail=nav.querySelector('.dc-nav-tail');
   if(!tail||!tail.parentNode)return null;
+  /* IN THE NAV IS NOT THE SAME AS IN THE RIGHT PLACE, and this used to accept
+     the first for the second (`if(slot&&nav.contains(slot))return slot`).
+     Collapsing the rail re-renders it, and the patcher leaves this host-owned
+     node wherever the diff puts it: measured at 68px, the DOM order came back
+     Templates, Nasheed, DeenAI, dcTaskSlot, Help -- the card had drifted PAST
+     the tail. Nothing re-seated it, because it was still inside the nav.
+     Harmless while the tail carried the auto margin; the moment the CARD
+     carries it, two elements have `margin-top: auto` and the free space splits
+     between them (105px each, measured), which draws a void above DeenAI and
+     another above the card. So the position has to be asserted on every paint,
+     not just the first. */
+  if(slot&&slot.nextElementSibling===tail)return slot;
   if(!slot){
     slot=document.createElement('div');
     slot.id='dcTaskSlot';

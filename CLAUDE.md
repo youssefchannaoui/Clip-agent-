@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1718 JS + 741 Python**
+- `npm test` and `npm run check` must pass. Currently **1719 JS + 741 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -13366,3 +13366,52 @@ own day now (`schedAnchor: clip.scheduledAt`), so the clock cannot reach it.
 **Any test that seeds a time relative to `Date.now()` and then reads a
 DAY-bucketed view has this shape.** Anchor the view to the seeded time rather
 than hoping the two land in the same day.
+
+## The tasks card rides down with the tail (v3.147.2, 8 Sept 2026)
+
+Youssef: "move your tasks on side bar lower."
+
+- **The tail's `margin-top: auto` collects ALL the rail's free space**, and the
+  card sat immediately before it -- so the card was pinned just under Set up
+  with the whole void beneath it. Measured on production: card at y=**429**,
+  DeenAI at **609**, 180px of nothing in between.
+- **Moving the auto margin onto the CARD** collects that space above it
+  instead, so the card drops to sit just over the tail. Measured after: card
+  **429 -> 542**, and **DeenAI, Help and Owner did not move by a single
+  pixel** -- which is what keeps the 3 Sept instruction ("move perctnage taks
+  thing up and deen ai help and owner down") intact rather than reversing it.
+  The tail gives its auto margin up only while the card has something to say;
+  an empty slot is `display: none` and everything is exactly as before.
+
+### IN THE NAV IS NOT THE SAME AS IN THE RIGHT PLACE
+
+The other half, found only because the first half exposed it, and it was
+pre-existing.
+
+`railFooterSlot()` returned early on `nav.contains(slot)` -- presence, not
+position. Collapsing the rail re-renders it and the patcher leaves this
+host-owned node wherever the diff puts it: **measured at 68px, the DOM order
+came back Templates, Nasheed, DeenAI, dcTaskSlot, Help -- the card had drifted
+PAST the tail**, and nothing ever re-seated it because it was still inside the
+nav.
+
+That was harmless while the TAIL carried the auto margin. The moment the CARD
+carries it, two elements have `margin-top: auto` and the free space **splits
+between them** -- 105px each, measured -- drawing a void above DeenAI and
+another above the card, which is what the collapsed rail actually rendered.
+The seat is asserted by POSITION on every paint now
+(`slot.nextElementSibling === tail`).
+
+**A host-owned node's place in generated markup is not a thing you set once.**
+The patcher can move it on any re-render; assert where it belongs, do not ask
+whether it is merely present.
+
+Scoped to `@media (min-width: 821px)` like every other rail rule -- the same
+nav is the phone's bottom TAB BAR, where a vertical auto margin would push a
+tab out of line. Three probes proven red; the generated light sheet is
+unchanged, the rules setting no colour.
+
+**A test failed on its own explanation for the ELEVENTH time** -- the note
+above the fix quotes the old line verbatim, so the assertion matched the
+comment rather than the code. Comments are stripped before the match. Strip,
+never reword.

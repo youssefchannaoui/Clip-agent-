@@ -617,3 +617,53 @@ test('the Now badge cannot grow the row it sits in', () => {
   assert.match(rule, /line-height:\s*1\b/, 'its own leading, not the title’s');
   assert.match(rule, /height:\s*\d+px/, 'and a height under the title’s line');
 });
+
+test('the tasks card rides down with the tail, and its seat is asserted every paint', () => {
+  /*
+   * Youssef, 8 Sept 2026: "move your tasks on side bar lower."
+   *
+   * The tail's `margin-top: auto` collects ALL the rail's free space and the
+   * card sat immediately before it, so the card was pinned under Set up with
+   * the void beneath it — measured on production: card y=429, DeenAI y=609.
+   * Moving the auto margin onto the CARD collects that space above it instead:
+   * card 429 -> 542, and DeenAI, Help and Owner did not move a pixel, which is
+   * what keeps the 3 Sept instruction ("deen ai help and owner down") intact.
+   *
+   * The seating fix is the other half and is silent without it. `railFooterSlot`
+   * accepted "inside the nav" as "in the right place", and collapsing the rail
+   * re-renders it — measured at 68px, the order came back DeenAI, dcTaskSlot,
+   * Help: the card had drifted past the tail. With the auto margin on the card,
+   * that leaves TWO auto margins and the space splits in half (105px each),
+   * drawing a void above DeenAI and another above the card.
+   */
+  const tokens = fs.readFileSync(new URL('../src/public/studio-tokens.css', import.meta.url), 'utf8');
+  const card = /#dcRailNav #dcTaskSlot:not\(:empty\)\s*\{([^}]*)\}/.exec(tokens);
+  assert.ok(card, 'the card takes the auto margin');
+  assert.match(card[1], /margin-top:\s*auto/);
+  const tail = /#dcRailNav #dcTaskSlot:not\(:empty\) \+ a\.dc-nav-tail\s*\{([^}]*)\}/.exec(tokens);
+  assert.ok(tail, 'and the tail gives its own up when the card is there');
+  assert.doesNotMatch(tail[1], /margin-top:\s*auto/, 'two auto margins split the space in half');
+
+  // Only when the card has something to say: an empty slot is display:none and
+  // the tail keeps its auto margin exactly as before.
+  assert.match(tokens, /#dcTaskSlot:empty \{ display: none; \}/);
+
+  // Rail-only. The same nav is the phone's bottom TAB BAR, where a vertical
+  // auto margin would push a tab out of line.
+  const at = tokens.indexOf('#dcRailNav #dcTaskSlot:not(:empty)');
+  const query = tokens.slice(0, at).lastIndexOf('@media');
+  assert.match(tokens.slice(query, query + 40), /min-width: 821px/);
+
+  const host = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
+  const fn = host.slice(host.indexOf('function railFooterSlot()'));
+  // Comments STRIPPED first: the note above the fix quotes the old line
+  // verbatim, and matching the raw source fails on the explanation rather than
+  // on the code — the eleventh time this repo has hit that. Strip, never
+  // reword: rewording a comment to appease a test is how a test stops
+  // protecting anything.
+  const body = fn.slice(0, fn.indexOf('\n}')).replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(body, /slot\.nextElementSibling===tail/,
+    'the seat is asserted by POSITION, not by mere presence in the nav');
+  assert.doesNotMatch(body, /nav\.contains\(slot\)\)return slot/,
+    'the presence-only early return is what let the card drift past the tail');
+});

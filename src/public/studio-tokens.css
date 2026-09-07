@@ -328,6 +328,20 @@ body.dc-light {
     margin-top: auto;
     position: relative;
   }
+  /* THE TASKS CARD RIDES DOWN WITH THE TAIL (Youssef, 8 Sept 2026: "move your
+     tasks on side bar lower").
+     The auto margin above collects ALL the rail's free space, and the card sits
+     immediately before it -- so the card was pinned just under Set up with the
+     whole void beneath it. Measured: card at y=429, DeenAI at 609, 180px of
+     nothing in between.
+     Moving the auto margin onto the CARD collects that space above it instead,
+     so the card drops to sit just over the tail. Measured after: card 429 ->
+     542, and DeenAI, Help and Owner did not move by a single pixel -- which is
+     what keeps the 3 Sept instruction ("deen ai help and owner down") intact.
+     Only while the card has something to say: an empty slot is display:none and
+     the tail keeps its own auto margin, exactly as before. */
+  #dcRailNav #dcTaskSlot:not(:empty) { margin-top: auto; }
+  #dcRailNav #dcTaskSlot:not(:empty) + a.dc-nav-tail { margin-top: 14px; }
   /* The same hairline device as the collapse row above, drawn as a
      pseudo-element rather than another node in the design export. */
   #dcRailNav a.dc-nav-tail::before {
