@@ -864,12 +864,23 @@ body.dc-light #studioLiveBar {
   color: #D9B478; font-variant-numeric: tabular-nums;
 }
 
+/* THE DIALOG HEAD STYLES ITS OWN <span>, AND THE RING IS ONE.
+   `.studio-conn-head span` (0-1-1, for the subtitle) beats `.dctk-ring`
+   (0-1-0), so the ring rendered `display: block` -- `place-items: center` does
+   nothing on a block, and the percentage sat at the TOP LEFT of the circle.
+   Measured: -7.3px across and -8.3px up from the centre. It also inherited the
+   subtitle's 2px top margin.
+   Scoped inside the head so it outranks that rule rather than fighting it with
+   !important, which is what an inline style would have needed. */
+.studio-conn-head .dctk-ring {
+  display: grid; place-items: center; margin-top: 0;
+}
 /* The same ring, larger, in the tasks panel's own header. */
 .dctk-ring-lg {
-  width: 42px; height: 42px; flex: 0 0 42px; margin-right: 12px;
+  width: 36px; height: 36px; flex: 0 0 36px; margin-right: 11px;
 }
-.dctk-ring-lg::before { inset: 4px; background: #17171A; }
-.dctk-ring-lg b { font-size: 11px; }
+.dctk-ring-lg::before { inset: 3.5px; background: #17171A; }
+.dctk-ring-lg b { font-size: 9.5px; }
 
 .dctk-copy { min-width: 0; flex: 1; }
 .dctk-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -936,7 +947,11 @@ body.dc-light #studioLiveBar {
   color: #8B8B93; font: inherit; cursor: pointer; min-width: 0;
 }
 #dcTasks .dctk-tab::after {
-  content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px;
+  /* A short bar under the label, not a rule across the whole cell: at a third
+     of the panel's width the full-cell version read as a heavy underline
+     rather than a marker. */
+  content: ""; position: absolute; left: 50%; transform: translateX(-50%);
+  width: 34px; bottom: -1px; height: 2px;
   border-radius: 2px 2px 0 0; background: transparent; transition: background .14s ease;
 }
 #dcTasks .dctk-tab:hover { color: #BCBCC3; }
@@ -999,11 +1014,15 @@ body.dc-light #studioLiveBar {
    came out 24px -- which made the one row carrying it 2px taller than its
    siblings and pushed its title 1px off the tick. Its own height, capped under
    the title's line, so it can never grow the row it sits in. */
+/* A marker, not a lozenge: a gold dot and the word, at the title's own line
+   height so it can never grow the row it sits in. */
 #dcTasks .dctk-row strong em {
-  display: inline-flex; align-items: center; height: 15px;
-  margin-left: 7px; padding: 0 6px; border-radius: 999px; font-style: normal;
-  background: rgba(217,180,120,.16); color: #D9B478;
-  font-size: 9px; font-weight: 800; line-height: 1; letter-spacing: .06em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 5px; height: 15px;
+  margin-left: 9px; font-style: normal; color: #D9B478;
+  font-size: 9px; font-weight: 800; line-height: 1; letter-spacing: .1em; text-transform: uppercase;
+}
+#dcTasks .dctk-row strong em::before {
+  content: ""; width: 4px; height: 4px; border-radius: 50%; background: #D9B478;
 }
 #dcTasks .dctk-row:first-of-type { border-top: 0; }
 #dcTasks .dctk-tick {
@@ -1031,36 +1050,52 @@ body.dc-light #studioLiveBar {
   margin-top: 7px; height: 3px; border-radius: 999px; background: #1E1E22; overflow: hidden;
 }
 #dcTasks .dctk-bar i { display: block; height: 100%; border-radius: 999px; background: #D9B478; }
-/* Same height as the title line, so it centres on it; and a min-width with
-   tabular figures so every chip is the same width whatever number is in it.
-   Measured before: "+10 tokens" was 88px beside "15 tokens" at 78.8px, so the
-   chips' left edges were ragged even though their right edges lined up. */
-#dcTasks .dctk-prize {
+/* NO PILLS (Youssef, 8 Sept 2026). A reward you have not taken yet is a quiet
+   gold figure, not a bordered lozenge; every state keeps the title's own line
+   height so it centres on it by construction, and tabular figures keep the
+   column's right edge honest whatever the number is. */
+#dcTasks .dctk-fee, #dcTasks .dctk-got {
   flex: 0 0 auto; box-sizing: border-box;
-  display: inline-flex; align-items: center; justify-content: center;
-  height: var(--dctk-line); min-width: 82px; padding: 0 10px;
-  border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums;
-  border: 1px solid #26262A; color: #8B8B93; font-size: 10px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px;
+  height: var(--dctk-line); min-width: 72px; white-space: nowrap;
+  font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 700;
 }
+#dcTasks .dctk-fee { color: #8B8B93; letter-spacing: .01em; }
+/* var() with NO hex fallback, deliberately: the daylight generator re-emits
+   any rule holding a hex, and its remap of #A2762C measured 4.07:1 on paper --
+   under AA. --dc-gold is already #D9B478 in night and the AA-clearing #8A6425
+   on paper, so letting the token do it is both correct and self-maintaining. */
+#dcTasks .dctk-row:not(.is-done) .dctk-fee { color: var(--dc-gold); }
+#dcTasks .dctk-got { color: var(--dc-gold); font-size: 10.5px; font-weight: 700; }
+#dcTasks .dctk-got i { font-style: normal; font-size: 11px; line-height: 1; }
 /* Claimed reads as settled, not as an offer: the quiet gold of something
    already collected, with no button under it. */
-#dcTasks .dctk-prize.is-claimed {
-  border-color: rgba(217,180,120,.3); background: rgba(217,180,120,.10); color: #D9B478;
+
+
+/* No row in this group carries a reward, so the third column is dead space --
+   ~94px of it on every row, which is what made the panel read as empty. */
+#dcTasks .dctk-list.is-bare .dctk-row {
+  grid-template-columns: var(--dctk-line) minmax(0, 1fr);
 }
-/* An empty slot still holds the column open, so a rung with no reward does not
-   let its row's text run wider than the rows above and below it. */
-#dcTasks .dctk-prize.is-none { border-color: transparent; background: transparent; }
 /* The one control in the row. Same height as the chip it replaces, so a row
    with a claim in it is exactly as tall as one without. */
 #dcTasks .dctk-claim {
   flex: 0 0 auto; box-sizing: border-box;
   display: inline-flex; align-items: center; justify-content: center;
-  height: var(--dctk-line); min-width: 82px; padding: 0 10px;
-  border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums;
-  border: 1px solid rgba(217,180,120,.55); background: rgba(217,180,120,.14);
-  color: #F0D6A6; font-size: 10px; font-weight: 800; letter-spacing: .02em;
+  height: var(--dctk-line); min-width: 72px; padding: 0 11px;
+  border-radius: 7px; white-space: nowrap; font-variant-numeric: tabular-nums;
+  border: 1px solid rgba(217,180,120,.5);
+  background: linear-gradient(180deg, rgba(217,180,120,.20), rgba(217,180,120,.11));
+  color: #F0D6A6; font-size: 10.5px; font-weight: 700; letter-spacing: .01em;
   font-family: inherit; cursor: pointer;
+  transition: background .14s ease, border-color .14s ease, transform .12s ease;
 }
+#dcTasks .dctk-claim b { font-weight: 800; }
+#dcTasks .dctk-claim:hover {
+  border-color: rgba(217,180,120,.8);
+  background: linear-gradient(180deg, rgba(217,180,120,.30), rgba(217,180,120,.17));
+}
+#dcTasks .dctk-claim:active { transform: translateY(1px); }
 #dcTasks .dctk-claim:hover { background: rgba(217,180,120,.24); border-color: rgba(217,180,120,.8); }
 #dcTasks .dctk-claim:disabled { opacity: .6; cursor: default; }
 
@@ -1728,3 +1763,66 @@ body.dcm-light #dcMobile {
  * diagnosis. Check what the element IS before concluding a rule failed.
  */
 #studio section:has(> #dcHeroFloaters) { align-items: stretch; }
+
+/* ── the tasks panel's motion ──────────────────────────────────────────
+ *
+ * Youssef, 8 Sept 2026: "cool animations that match of course". So they are
+ * built from the language the studio already speaks -- the same short
+ * cubic-bezier(.2,.8,.2,1) rise the screens use, staggered the way the pricing
+ * cards and the phone's sections are.
+ *
+ * GATED BY CONSTRUCTION, which is the rule this repo keeps restating. The
+ * panel is repainted on every state poll, but `paintTasksPanel` only assigns
+ * innerHTML when the markup actually CHANGED -- so the rows are new nodes, and
+ * the entry runs, exactly when the panel is opened, a tab is switched or a
+ * reward is claimed. An ordinary poll rewrites nothing and replays nothing.
+ *
+ * `backwards`, never `both`: a forwards fill leaves the last keyframe beating
+ * ordinary declarations for the element's life, which is how this repo has
+ * killed a hover three times.
+ */
+@keyframes dctkRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes dctkFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+#dcTasks .dctk-list .dctk-row {
+  animation: dctkRise .26s cubic-bezier(.2,.8,.2,1) backwards;
+}
+/* The stagger is declared AFTER the shorthand above: `animation:` is a
+   shorthand and resets animation-delay, which is how a stagger set earlier in
+   a file silently becomes lockstep. */
+#dcTasks .dctk-list .dctk-row:nth-child(1) { animation-delay: 0ms; }
+#dcTasks .dctk-list .dctk-row:nth-child(2) { animation-delay: 40ms; }
+#dcTasks .dctk-list .dctk-row:nth-child(3) { animation-delay: 80ms; }
+#dcTasks .dctk-list .dctk-row:nth-child(4) { animation-delay: 120ms; }
+#dcTasks .dctk-list .dctk-row:nth-child(n+5) { animation-delay: 160ms; }
+
+/* The bar draws itself in rather than appearing at length. */
+#dcTasks .dctk-bar i {
+  transform-origin: left center;
+  animation: dctkFill .5s cubic-bezier(.2,.8,.2,1) 140ms backwards;
+}
+
+/* The ring sweeps up from zero. A custom property only interpolates once it is
+   REGISTERED with a type -- without this @property the conic gradient jumps
+   straight to its value and the transition below does nothing at all. */
+@property --p {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+/* A keyframe with only a `from` animates up to the element's OWN value, so the
+   ring never depends on script to end up correct -- see the note in
+   paintTasksPanel about rAF not firing in an occluded window. */
+@keyframes dctkSweep { from { --p: 0; } }
+.dctk-ring-lg.is-sweep { animation: dctkSweep .9s cubic-bezier(.2,.8,.2,1) backwards; }
+
+/* Motion is decoration here, so under reduced motion it all goes -- unlike the
+   processing spinners, where a frozen one reads as a hang. Each rule needs its
+   own kill: a bare `*{animation:none}` never matches a pseudo-element, and the
+   transition above is a transition, not an animation. */
+@media (prefers-reduced-motion: reduce) {
+  #dcTasks .dctk-list .dctk-row,
+  #dcTasks .dctk-bar i { animation: none; }
+  .dctk-ring-lg.is-sweep { animation: none; }
+  #dcTasks .dctk-claim { transition: none; }
+}
