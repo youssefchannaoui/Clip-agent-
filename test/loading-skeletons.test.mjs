@@ -78,7 +78,27 @@ test('the anchor is a SECTION of the screen, not the deepest node with the words
   // hidden and the whole KPI row still on display.
   const body = fn('paintLoadingSkeleton');
   assert.match(body, /parentElement\.tagName!=='MAIN'/, 'it walks up to the screen root');
-  assert.match(body, /section\.parentElement!==screenRoot/, 'then takes that root\'s own section');
+  assert.match(body, /section\.parentElement!==container/, 'then takes that container\'s own section');
+});
+
+test('THE PHONE HAS NO <main>, so the container is found per surface', () => {
+  // Requiring a <main> ancestor meant NOTHING painted at 390px — the phone
+  // shell has none; .dcm-body holds the screen's cards directly.
+  //
+  // And the second cut was worse than the bug: treating .dcm-body as the
+  // SECTION rather than as the container made the ask card's own header the
+  // section, so the skeleton went INSIDE the ask card and hid its input, chips
+  // and Ask button while the stray footnote below stayed on display.
+  const body = fn('paintLoadingSkeleton');
+  assert.match(body, /closest\('\.dcm-body'\)/, 'the phone container is the body of the screen');
+  const containerAt = body.indexOf('const phoneBody=');
+  const sectionAt = body.indexOf('let section=anchor;');
+  assert.ok(containerAt > 0 && sectionAt > containerAt,
+    'the container is resolved BEFORE the section is walked up to it');
+  // dcm-body is a literal class studio-mobile.js writes, so it survives a
+  // design re-import — unlike anything hashed.
+  const mobile = fs.readFileSync(new URL('../src/public/studio-mobile.js', import.meta.url), 'utf8');
+  assert.match(mobile, /dcm-body/, 'and the phone actually writes it');
 });
 
 test('it names no hashed class — the anchors are the design\'s own words', () => {
@@ -112,6 +132,64 @@ test('THE FILL IS A PER-THEME TOKEN, not one that inverts the wrong way', () => 
   assert.match(tokens, /\.dc-skel-b \{[\s\S]*?background: var\(--dc-skel-fill\);/);
   const generated = fs.readFileSync(new URL('../src/public/studio-light.generated.css', import.meta.url), 'utf8');
   assert.doesNotMatch(generated, /\.dc-skel-b\{background:#/, 'the generator did not re-emit it');
+});
+
+test('THE PHONE KEEPS ITS OWN THEME, so the tokens flip under its key too', () => {
+  // body.dcm-light is a SEPARATE key from the desktop's dc-light, and
+  // `dcm-light` does not contain the substring `dc-light` — so nothing that
+  // flips for paper flipped for a paper phone. Measured before the fix:
+  // --dc-skel-fill stayed at night's #f2f2f41c against a #F4EFE4 ground, and
+  // the label sat at 2.8:1. After: 1.22:1 block step and 5.26:1 label, the
+  // same readings the desktop's paper theme gives.
+  const arm = /body\.dcm-light #dcMobile \{([^}]*)\}/.exec(tokens);
+  assert.ok(arm, 'the phone has a paper arm');
+  for (const token of ['--dc-skel-fill', '--dc-skel-sweep', '--dc-skel-ink']) {
+    assert.match(arm[1], new RegExp(token.replace(/-/g, '\\-') + ':'), `${token} flips on the phone too`);
+  }
+  // Scoped to #dcMobile rather than declared on the body, because Owner, Help
+  // and the editor are still FRAMED from the desktop's own dark DOM inside a
+  // paper phone — they paint into #studio and must keep the night values, or
+  // this would blank them out instead of fixing them.
+  assert.doesNotMatch(tokens, /body\.dcm-light \{[^}]*--dc-skel-fill/,
+    'never declared on the body, or the framed dark screens would take paper values');
+});
+
+test('the skeleton has its OWN ink token, not the general one', () => {
+  // --dc-ink-dim is redefined for the desktop's paper theme only, so on a
+  // paper phone the label kept night's #8B8B93 on warm paper.
+  assert.match(tokens, /\.dc-skel-say \{[\s\S]*?color: var\(--dc-skel-ink/);
+  assert.match(tokens, /:root \{[\s\S]*?--dc-skel-ink:/);
+  assert.match(tokens, /body\.dc-light \{[\s\S]*?--dc-skel-ink:/);
+});
+
+test('the light-theme generator skips the phone\'s key, and closes nested groups', () => {
+  const script = fs.readFileSync(new URL('../scripts/build-light-theme.mjs', import.meta.url), 'utf8');
+  // `dcm-light` is NOT caught by the dc-light test — a rule already written for
+  // the phone's paper theme, re-scoped under the desktop's, would be
+  // `body.dc-light body.dcm-light …`: a body inside a body, matching nothing.
+  assert.match(script, /includes\('dcm-light'\)/);
+  const generated = fs.readFileSync(new URL('../src/public/studio-light.generated.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(generated, /dcm-light/, 'so no such rule is emitted');
+
+  // A STACK, not one slot. studio-tokens.css nests @media (min-width: 1200px)
+  // inside @media (min-width: 821px), and with a single slot the inner group's
+  // `}` cleared it — the outer was never closed and EVERY rule after it was
+  // emitted inside the desktop media query. Measured before the fix: 53 of 681
+  // rules, the whole skeleton block among them, so their daylight colours
+  // simply did not apply below 821px.
+  assert.match(script, /const groups = \[\]/);
+  let open = 0, trapped = 0, total = 0, current = null;
+  for (const raw of generated.split('\n')) {
+    const line = raw.trim();
+    if (line.startsWith('@')) { current = line; open += 1; continue; }
+    if (line === '}') { open = Math.max(0, open - 1); current = null; continue; }
+    if (line.includes('{') && line.endsWith('}')) {
+      total += 1;
+      if (open && current && current.includes('821')) trapped += 1;
+    }
+  }
+  assert.ok(total > 400, 'the sheet was read');
+  assert.ok(trapped < 10, `only genuinely desktop-only rules sit in the 821px group, saw ${trapped}`);
 });
 
 test('a skeleton is the only thing saying the screen works, so reduced motion keeps the SHAPE', () => {

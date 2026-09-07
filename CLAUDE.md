@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1692 JS + 715 Python**
+- `npm test` and `npm run check` must pass. Currently **1696 JS + 715 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -12811,3 +12811,69 @@ skeletons' hex fallbacks; bounded to the shade's own SELECTORS now. Then the
 repaired version failed on the comment that says those rules use "rgba(9,9,10)
 rather than hex or rgba(0,0,0)" -- the tenth occurrence. Comments stripped. The
 repair was re-proven by putting a real hex back and watching it go red.
+
+## The skeletons on a phone, and a generator that never closed its groups (v3.145.1, 7 Sept 2026)
+
+Youssef, straight after the desktop skeletons: "now do the same for the mobile
+version." **Neither skeleton painted at 390px**, and the two fixes it needed
+were each worse than the bug on the first attempt.
+
+### The phone has no `<main>`
+
+`paintLoadingSkeleton` walked up until its parent was `<main>` and returned if
+it never found one. The phone shell has none -- `.dcm-body` holds the screen's
+cards directly -- so on a phone the painter returned every time and both
+screens went on looking finished while they fetched, which is the whole
+complaint this feature exists for.
+
+**The second cut was worse than the bug**, and only measuring showed it.
+Treating `.dcm-body` as the SECTION rather than as the CONTAINER OF sections
+made the DeenAI anchor's own card header the section -- so the skeleton was
+inserted INSIDE the Ask card and hid its input, chips and Ask button as "the
+data region", while the stray footnote underneath stayed on display. Exactly
+backwards. Container and section are now resolved separately: the container is
+`.dcm-body` on the phone and the screen root under `<main>` on the desktop, and
+the section is whichever direct child of it holds the anchor. Measured after at
+390: the skeleton lands at `.dcm-body` index 2, the three data sections below
+it are hidden, the ask box is intact and the stray footnote is gone.
+
+### THE PHONE KEEPS ITS OWN THEME, and `dcm-light` does not contain `dc-light`
+
+That is the whole of the second fault, and it is a substring away from being
+invisible. `--dc-skel-fill` flipped for `body.dc-light` and nothing flipped for
+`body.dcm-light`, so on a **paper phone** the blocks stayed at night's light
+translucent ink on a #F4EFE4 ground and the label sat at **2.8:1**.
+
+- The arm is scoped to `body.dcm-light #dcMobile`, **never declared on the
+  body**: Owner, Help and the editor are still FRAMED from the desktop's own
+  dark DOM inside a paper phone, so they paint into `#studio` and must keep the
+  night values. Declared on the body this "fix" would have blanked exactly
+  those three out instead. Verified: Owner on a paper phone reads 1.27 / 5.89,
+  the night numbers, while the shell's own screens read 1.22 / 5.26.
+- **The skeleton has its own ink token.** `--dc-ink-dim` is redefined for the
+  desktop's paper theme only, so borrowing it left the phone's label at night's
+  grey on paper -- the same class of mismatch as the card grounds one release
+  earlier, which is why those are `background: transparent` with a translucent
+  hairline. `--dc-skel-sweep` moved with it, so the sweep rule now holds no hex
+  at all and the daylight generator leaves it alone (the v3.127.0 escape hatch).
+
+### The light-theme generator had never closed a nested group
+
+Found while checking that no junk rule was emitted for the new arm.
+`build-light-theme.mjs` tracked the open conditional group in ONE SLOT, so
+`@media (min-width: 1200px)` nested inside `@media (min-width: 821px)` cleared
+it on the inner group's `}` -- the outer was never closed in the output, and
+**every rule after it was emitted inside the desktop media query. Measured: 53
+of 681 generated rules**, the whole skeleton block among them, so their daylight
+colours simply did not apply below 821px. A stack, not a slot; measured after,
+**1 of 681**, and that one is genuinely desktop-only. The rule BODIES are
+byte-identical either way -- proven by comparing the two generated sheets as
+multisets -- so this only ever changed which widths they applied at.
+
+Its skip test also had to learn `dcm-light`: `selector.includes('dc-light')`
+does not catch it, so a rule already written for the phone's paper theme would
+have been re-emitted as `body.dc-light body.dcm-light …` -- a body inside a
+body, matching nothing.
+
+Four probes, all proven red: the phone container removed, the paper arm
+removed, the generator's skip removed, and the stack reverted to one slot.

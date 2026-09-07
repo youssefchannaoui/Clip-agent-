@@ -5734,7 +5734,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           +`<div class="dc-skel-panel" style="flex:1 1 320px">${skelBlock('30%',9,4)}${rows(5)}</div></div>`;
       }
       // DeenAI: one headline card, then rows — the shape insights() returns.
-      const row=()=>`<div style="display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-top:1px solid var(--dc-line-soft,#1E1E22)">`
+      const row=()=>`<div style="display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-top:1px solid rgba(128,128,134,.22)">`
         +skelBlock('32px',32,10)+`<div style="flex:1;display:grid;gap:7px">${skelBlock('52%',11,4)}${skelBlock('88%',9,4)}</div></div>`;
       return say('Reading your clips')
         +`<div class="dc-skel-panel" style="margin-top:14px">${skelBlock('26%',9,4)}${skelBlock('58%',24,6)}${skelBlock('92%',9,4)}</div>`
@@ -5788,14 +5788,32 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          THAT HAPPENS TO HOLD THE WORDS. The first cut matched the innermost
          tab container, so "everything after the anchor" meant its siblings
          INSIDE that container -- one nested element hidden and the whole KPI
-         row still on display. Walk up to the screen root (the direct child of
-         <main>), then take the section of it that holds the anchor. */
-      let screenRoot=anchor;
-      while(screenRoot.parentElement&&screenRoot.parentElement.tagName!=='MAIN')screenRoot=screenRoot.parentElement;
-      if(!screenRoot.parentElement)return;
+         row still on display. So walk up to the section: a direct child of the
+         CONTAINER of sections, which is a different element on each surface,
+         and conflating the two is what broke the phone.
+
+         Desktop: <main> holds one screen <div>, and THAT div's children are the
+         sections. Phone: #dcMobile has no <main> at all -- .dcm-body holds the
+         screen's cards directly.
+
+         Measured at 390px before this: the anchor matched the ask card's own
+         HEADER, the walk stopped one level too low, and the "section" came out
+         as that header -- so the skeleton was inserted INSIDE the ask card and
+         its input, chips and Ask button were hidden as "the data region", while
+         the stray footnote below stayed on display. Exactly backwards.
+
+         `dcm-body` is a literal class studio-mobile.js writes, never a hashed
+         one, so a design re-import cannot rename it. */
+      const phoneBody=anchor.closest('.dcm-body');
+      let container=phoneBody;
+      if(!container){
+        container=anchor;
+        while(container.parentElement&&container.parentElement.tagName!=='MAIN')container=container.parentElement;
+        if(!container.parentElement||container.parentElement.tagName!=='MAIN')return;
+      }
       let section=anchor;
-      while(section.parentElement&&section.parentElement!==screenRoot)section=section.parentElement;
-      if(section.parentElement!==screenRoot)return;
+      while(section.parentElement&&section.parentElement!==container)section=section.parentElement;
+      if(section.parentElement!==container)return;
       anchor=section;
       // Everything after the anchor is the data region: hidden in place, never
       // removed -- taking a generated node out shortens the live child list

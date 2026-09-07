@@ -66,7 +66,14 @@ const css = SOURCES.map(file => fs.readFileSync(file, 'utf8')).join('\n')
 // and no nesting beyond that, so tracking brace depth is enough — and a real
 // parser would be a dependency this repo deliberately does not have.
 const out = [];
-let atRule = null;
+/* A STACK, not one slot. A conditional group can nest -- studio-tokens.css
+   has `@media (min-width: 1200px)` inside `@media (min-width: 821px)` -- and
+   with a single slot the inner group's `}` cleared it, so the outer one was
+   never closed in the output and EVERY rule after it was emitted inside
+   `@media (min-width: 821px)`. Measured before the fix: 53 of 681 generated
+   rules, including the whole skeleton block, so their daylight colours simply
+   did not apply below 821px. */
+const groups = [];
 let depth = 0;
 let buffer = '';
 
@@ -78,8 +85,15 @@ const flushRule = (selector, body) => {
    * Re-emitting those would remap the light values a second time, and scoping
    * an already-scoped rule gives `body.dc-light body.dc-light …`, which
    * matches nothing.
+   *
+   * `dcm-light` is skipped for the same reason and is NOT caught by the test
+   * above -- the phone keeps its own theme under a separate key, and
+   * `dcm-light` does not contain the substring `dc-light`. A rule already
+   * written for the phone's paper theme scoped under the desktop's would be
+   * `body.dc-light body.dcm-light …`: a body inside a body, matching nothing.
    */
-  if (/(^|,)\s*:root/.test(selector) || selector.includes('dc-light')) return;
+  if (/(^|,)\s*:root/.test(selector)
+    || selector.includes('dc-light') || selector.includes('dcm-light')) return;
   const kept = [];
   for (const raw of body.split(';')) {
     const declaration = raw.trim();
@@ -113,7 +127,7 @@ while (index < css.length) {
         // percentage steps, not selectors, and prefixing those with
         // `body.dc-light` would produce nonsense; @font-face has no colours at
         // all. Both are skipped whole rather than half-copied.
-        if (/^@(media|supports|container|layer)\b/.test(head)) { atRule = head; out.push(`${head}{`); depth = 0; }
+        if (/^@(media|supports|container|layer)\b/.test(head)) { groups.push(head); out.push(`${head}{`); depth = 0; }
         else {
           let inner = 1; index += 1;
           while (index < css.length && inner > 0) {
@@ -141,7 +155,7 @@ while (index < css.length) {
       continue;
     }
   } else if (char === '}') {
-    if (atRule) { out.push('}'); atRule = null; buffer = ''; index += 1; continue; }
+    if (groups.length) { out.push('}'); groups.pop(); buffer = ''; index += 1; continue; }
   }
   buffer += char;
   index += 1;

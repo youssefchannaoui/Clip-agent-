@@ -79,6 +79,12 @@
      nobody can see is worse than none, because the screen just looks blank.
      Declared per theme so each one is a step away from the card it sits on. */
   --dc-skel-fill: #f2f2f41c;
+  --dc-skel-sweep: rgba(242, 242, 244, .07);
+  /* The skeleton's own ink, NOT --dc-ink-dim. That token is redefined for the
+     desktop's paper theme only, and the phone keeps its own -- so on a paper
+     phone the label stayed at night's #8B8B93 and measured 2.8:1 on warm
+     paper. One token per theme per surface, flipped below. */
+  --dc-skel-ink: #8B8B93;
   /* A sunken well — the empty thumbnail an unrendered clip shows. It is an
      rgba, not a hex, so the tokeniser that swept the inline colours could not
      see it: on paper it was the last dark patch left on the screen. */
@@ -97,6 +103,8 @@
 :root.dc-light,
 body.dc-light {
   --dc-skel-fill: #0d0d1218;
+  --dc-skel-sweep: rgba(13, 13, 18, .06);
+  --dc-skel-ink: #62626B;
   /* White, gold and black. Every value here has a twin in
      scripts/theme-palette.mjs -- a colour that moved in one and not the other
      is a seam down the middle of the screen -- and the two are compared by
@@ -1519,23 +1527,50 @@ body.dc-livebar #studio main { padding-bottom: 92px; }
      reduced-motion kill needs no ::before rule -- the trap this file records
      about `*{animation:none}` never matching a pseudo-element. */
   background-image: linear-gradient(90deg,
-    rgba(242, 242, 244, 0) 0%,
-    rgba(242, 242, 244, .07) 50%,
-    rgba(242, 242, 244, 0) 100%);
+    transparent 0%,
+    var(--dc-skel-sweep) 50%,
+    transparent 100%);
   background-size: 220% 100%;
   background-repeat: no-repeat;
   animation: dcSkelSweep 1.35s ease-in-out infinite;
 }
 @keyframes dcSkelSweep { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+/* TRANSPARENT, WITH A HAIRLINE -- never a themed ground.
+ *
+ * These first borrowed --dc-bg / --dc-line-soft, and the phone caught it: it
+ * keeps its OWN theme (body.dcm-light, a separate key from dc-light), so with
+ * the desktop on paper and the phone on night, --dc-bg resolved to #FFFFFF and
+ * the cards drew as WHITE SLABS on a dark phone screen. Measured:
+ * --dc-bg #FFFFFF while --dcm-card was #121214, on the same page.
+ *
+ * A translucent border over no ground at all takes whatever surface it lands
+ * on -- either theme, either surface -- and needs no token to keep in step.
+ * The blocks inside are translucent ink for the same reason. */
 .dc-skel-card {
   flex: 1 1 168px; display: grid; gap: 9px; padding: 15px 17px;
-  border: 1px solid var(--dc-line-soft, #1E1E22); border-radius: 11px;
-  background: var(--dc-bg, #121214);
+  border: 1px solid rgba(128, 128, 134, .22); border-radius: 11px;
+  background: transparent;
 }
 .dc-skel-panel {
   display: grid; gap: 11px; padding: 17px 19px;
-  border: 1px solid var(--dc-line-soft, #1E1E22); border-radius: 11px;
-  background: var(--dc-bg, #121214);
+  border: 1px solid rgba(128, 128, 134, .22); border-radius: 11px;
+  background: transparent;
+}
+/* THE PHONE'S PAPER THEME, and it has to be scoped to the shell.
+ *
+ * The phone keeps its own theme under `body.dcm-light`, a separate key from
+ * the desktop's `dc-light` -- so on a paper phone the fill stayed at night's
+ * light translucent ink and the blocks were all but invisible on warm paper.
+ * Measured: --dc-skel-fill #f2f2f41c against a #F4EFE4 ground.
+ *
+ * Scoped to `#dcMobile` rather than declared on the body, because three
+ * screens (Owner, Help, the editor) are still FRAMED from the desktop's own
+ * dark DOM inside a paper phone. Those paint their skeleton inside #studio and
+ * must keep the night values, or this would blank them out instead. */
+body.dcm-light #dcMobile {
+  --dc-skel-fill: #0d0d1218;
+  --dc-skel-sweep: rgba(13, 13, 18, .06);
+  --dc-skel-ink: #62626B;
 }
 /* A skeleton is not decoration -- it is the only thing saying the screen is
    working -- so under reduced motion the SHAPES stay and only the sweep goes.
@@ -1548,7 +1583,7 @@ body.dc-livebar #studio main { padding-bottom: 92px; }
 .dc-skel-say {
   display: flex; align-items: center; gap: 8px;
   font-size: 11px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase;
-  color: var(--dc-ink-dim, #8B8B93);
+  color: var(--dc-skel-ink, #8B8B93);
 }
 .dc-skel-dot {
   width: 9px; height: 9px; border-radius: 50%; flex: none;
