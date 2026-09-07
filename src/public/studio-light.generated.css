@@ -640,6 +640,10 @@ body.dc-light .dcct-foot{color:var(--dc-ink-dim, #62626B)}
 body.dc-light #studio article[data-clip] > [data-dc-star]{border:1px solid rgba(162, 118, 44, 0.460);color:var(--dc-gold-lit, #7E5B18)}
 body.dc-light #studio article[data-clip] > [data-dc-star]:hover{background:rgba(162, 118, 44, 0.230)}
 @media (min-width: 821px){
+body.dc-light .dc-skel-card{border:1px solid var(--dc-line-soft, #E2E2E6);background:var(--dc-bg, #FFFFFF)}
+body.dc-light .dc-skel-panel{border:1px solid var(--dc-line-soft, #E2E2E6);background:var(--dc-bg, #FFFFFF)}
+body.dc-light .dc-skel-say{color:var(--dc-ink-dim, #62626B)}
+body.dc-light .dc-skel-dot{border:2px solid rgba(162, 118, 44, 0.345);border-top-color:var(--dc-gold-lit, #7E5B18)}
 body.dc-light #dcRailNav a[style*="#D9B478"]::before{background:linear-gradient(#8A6425,#7E5B18)}
 body.dc-light #dcRailBrand{background-image:linear-gradient(115deg,transparent 42%,rgba(162, 118, 44, 0.115) 50%,transparent 58%)}
 body.dc-light [data-dc-sched-card]:hover{box-shadow:0 14px 32px rgba(58, 44, 20, 0.180)}

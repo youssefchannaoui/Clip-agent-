@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1669 JS + 715 Python**
+- `npm test` and `npm run check` must pass. Currently **1679 JS + 715 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -12630,3 +12630,73 @@ checking before anyone spends an afternoon rescuing it.
 `VIZARD_*` and `VIDEO_IMPORT_API_KEY` were NOT deleted despite naming dead
 features -- the code still reads them, and an earlier count of "11 stale" was
 wrong because it grepped `src/*.js` alone instead of the whole tree.
+
+## A screen that is fetching must not look finished (v3.145.0, 7 Sept 2026)
+
+Youssef: "add skeleton loading to where needs to be ... to not make the webiste
+look stuck or crashed."
+
+**MEASURED FIRST, by slowing the endpoints in a real browser rather than
+guessing where to put one.** Only two screens fetch when they OPEN, and both
+looked wrong while they waited:
+
+    Owner   calls FOUR endpoints and only repaints when all four settle, so a
+            first open drew a complete, confident screen of ZEROS -- "MRR none
+            active", "A$0.00", "STRIPE NOT CONFIGURED" -- for the whole round
+            trip. That is WORSE than a spinner: a spinner says wait, and a zero
+            says your money is gone.
+    DeenAI  drew its header and the ask box and then nothing beneath them,
+            under a footnote reading "Every figure above is counted from your
+            own clips" -- about figures that were not there.
+
+**Boot needed nothing, and that was CHECKED rather than assumed.** An early
+reading said "blank page" -- wrong: it looked at `#gate`/`#app`/`#connect` and
+missed `#splash`, which holds the screen until `/api/state` answers and has a
+timeout that says "taking longer than expected to reach the server". Nothing
+was added there. The global 2px activity bar (any request over 250ms) already
+covers everything else.
+
+- **The skeleton REPLACES the data region, it does not sit under it.**
+  Appending was the first cut and it was wrong: Owner's screen of zeros stayed
+  on display with a skeleton beneath it, which is the complaint plus clutter.
+  The chrome a person can still use -- the range buttons, the tabs, the ask box
+  -- stays; everything after it is hidden in place and restored.
+- **HIDDEN, never removed.** Taking a generated node out shortens the live
+  child list against the rendered one and the patcher pairs everything after it
+  one across (v3.124.5).
+- **The anchor is a SECTION of the screen, not the deepest node holding the
+  words.** The first cut matched the innermost tab container, so "everything
+  after the anchor" meant its siblings INSIDE that container: one nested
+  element hidden and the whole KPI row still on display. It walks up to the
+  screen root and takes that root's own section. The anchors are the design's
+  own literals ("Overview…Health", "ASK DEENAI"), never a hashed class.
+- **Only while the screen has NOTHING to show.** A refresh over data already on
+  screen must not blank it -- the old numbers stay true until the new ones
+  land, and blanking them would be a second kind of flicker.
+- Both surfaces (`#dcMobile, #studio`), `data-host-owned`, in paintStudio's
+  list, through `dcSetHtml`: **0 DOM operations on an unchanged repaint**, one
+  skeleton after three repaints.
+
+### The fill could not borrow a token, and only measuring showed it
+
+`--dc-bg-alt` was the obvious choice and it inverts to NEAR-WHITE on paper --
+so the blocks sat at **1.07:1 on a white card**, invisible. A skeleton nobody
+can see is worse than none: the screen just looks blank, which is the exact
+complaint this change exists for. `--dc-skel-fill` is declared per theme, and
+the rule reads ONLY `var()` so `build-light-theme` finds no hex to remap and
+leaves it alone -- the escape hatch v3.127.0 established. Measured after:
+**1.32:1 dark, 1.22:1 light**, labels at 5.89 and 5.12.
+
+**Reduced motion keeps the SHAPE and drops only the sweep.** A skeleton is the
+only thing saying the screen is working, so removing it there would leave
+nothing; the same call the processing spinners make. And it carries
+`role="status"` / `aria-live="polite"` with "Reading your books" / "Reading
+your clips", because a block of grey rectangles tells a screen reader nothing.
+
+**A TEST SLICED TO THE END OF THE FILE, AND A TEST FAILED ON ITS OWN COMMENT --
+in the same run.** `safe-chrome` took `css.slice(css.indexOf('#dcSafeChrome
+{'))`, so it swept up whatever was appended to the sheet next and failed on the
+skeletons' hex fallbacks; bounded to the shade's own SELECTORS now. Then the
+repaired version failed on the comment that says those rules use "rgba(9,9,10)
+rather than hex or rgba(0,0,0)" -- the tenth occurrence. Comments stripped. The
+repair was re-proven by putting a real hex back and watching it go red.

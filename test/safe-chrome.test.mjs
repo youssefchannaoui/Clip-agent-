@@ -108,7 +108,18 @@ test('the shade sits under the caption and takes no pointer events', () => {
   assert.match(band, /pointer-events: none/);
   // No hex and no rgba(0,0,0): the light-theme generator remaps both, and the
   // stage is night in both themes.
-  const block = css.slice(css.indexOf('#dcSafeChrome {'));
+  // THE SHADE'S OWN RULES, not "from #dcSafeChrome to the end of the file".
+  // That slice swept up whatever was appended to the sheet next — the loading
+  // skeletons, whose var() fallbacks are hex — and failed on rules that have
+  // nothing to do with the stage. A byte offset is not a boundary; the
+  // selector is. Same trap as clip-preview-panel's 2,200-character window.
+  // Comments stripped first: the rules are introduced by a comment SAYING they
+  // use rgba(9,9,10) "rather than hex or rgba(0,0,0)", so the checks below
+  // failed on their own explanation. Tenth time in this repo. Strip, never
+  // reword — rewording a comment to appease a test protects nothing.
+  const noComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const block = (noComments.match(/[^}]*(?:#dcSafeChrome|\.dc-safe-)[^{]*\{[^}]*\}/g) || []).join('\n');
+  assert.ok(block.includes('#dcSafeChrome {'), 'the shade rules were found');
   assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(block.replace(/#dcSafeChrome/g, '')), 'no hex colour in the shade rules');
   assert.ok(!/rgba\(\s*0\s*,\s*0\s*,\s*0/.test(block), 'no rgba(0,0,0) in the shade rules');
   assert.ok(!/body\.dc-light[^{]*dcSafeChrome/.test(read('src/public/studio-light.generated.css')), 'and the generated daylight sheet carries no twin of it');

@@ -5709,6 +5709,118 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         aiCardButton(aiCardHost(row.title,row.body),row.action);
       }
     }
+    /* SKELETONS FOR THE TWO SCREENS THAT FETCH WHEN THEY OPEN.
+       Owner drew a full screen of zeros for the whole round trip; DeenAI drew
+       its header and nothing below it. Both now show the SHAPE of what is
+       coming, so the screen reads as working rather than as finished-and-empty
+       or as crashed. Boot needed nothing -- #splash already holds that.
+
+       Host-rendered (a skeleton in the design export would regenerate every
+       hashed class name), mounted on the screen's own scroller, marked
+       data-host-owned so the patcher leaves it alone, and written through
+       dcSetHtml so an unchanged repaint touches no DOM. */
+    function skelBlock(w,h,r){
+      return `<span class="dc-skel-b" style="width:${w};height:${h}px;border-radius:${r||8}px;display:block"></span>`;
+    }
+    function skelMarkup(kind){
+      const say=k=>`<div class="dc-skel-say"><span class="dc-skel-dot"></span>${k}</div>`;
+      if(kind==='owner'){
+        const card=()=>`<div class="dc-skel-card">${skelBlock('62%',9,4)}${skelBlock('44%',26,6)}${skelBlock('80%',8,4)}</div>`;
+        const rows=n=>Array.from({length:n},()=>`<div style="display:flex;gap:12px;align-items:center">${skelBlock('38%',11,4)}${skelBlock('22%',11,4)}<span style="flex:1"></span>${skelBlock('44px',11,4)}</div>`).join('');
+        return say('Reading your books')
+          +`<div class="dc-skel-row" style="margin-top:14px">${card()}${card()}${card()}${card()}</div>`
+          +`<div class="dc-skel-row" style="margin-top:16px">`
+          +`<div class="dc-skel-panel" style="flex:1 1 320px">${skelBlock('34%',9,4)}${rows(5)}</div>`
+          +`<div class="dc-skel-panel" style="flex:1 1 320px">${skelBlock('30%',9,4)}${rows(5)}</div></div>`;
+      }
+      // DeenAI: one headline card, then rows — the shape insights() returns.
+      const row=()=>`<div style="display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-top:1px solid var(--dc-line-soft,#1E1E22)">`
+        +skelBlock('32px',32,10)+`<div style="flex:1;display:grid;gap:7px">${skelBlock('52%',11,4)}${skelBlock('88%',9,4)}</div></div>`;
+      return say('Reading your clips')
+        +`<div class="dc-skel-panel" style="margin-top:14px">${skelBlock('26%',9,4)}${skelBlock('58%',24,6)}${skelBlock('92%',9,4)}</div>`
+        +`<div style="margin-top:8px">${row()}${row()}${row()}</div>`;
+    }
+    /* WHERE the skeleton goes, per screen: after a piece of chrome the person
+       can still use, and IN PLACE OF the data region rather than below it.
+
+       Appending was the first cut and it was wrong -- Owner's confident screen
+       of zeros stayed on display with a skeleton underneath it, which is the
+       complaint plus clutter. The anchors are the design's own LITERALS, never
+       a hashed class, so a re-import cannot move them. */
+    const SKEL_AT={
+      owner:{kind:'owner', anchor:el=>/Overview/.test(el.textContent||'')&&/Health/.test(el.textContent||'')},
+      deenai:{kind:'deenai', anchor:el=>/ASK DEENAI/i.test(el.textContent||'')},
+    };
+    function skelRestore(){
+      for(const n of document.querySelectorAll('[data-host-skelhid]')){
+        n.style.display='';
+        n.removeAttribute('data-host-skelhid');
+        if(!n.getAttribute('style'))n.removeAttribute('data-host-style');
+      }
+    }
+    function paintLoadingSkeleton(){
+      const ui=StudioAdapter.ui;
+      // Only while the screen has NOTHING to show. A refresh over data already
+      // on screen must not blank it -- the old numbers stay true until the new
+      // ones land, and blanking them would be a second kind of flicker.
+      const busy={owner:ui.ownerBusy&&!(window.DC_OWNER&&window.DC_OWNER.finance),
+                  deenai:ui.aiBusyLoad&&!window.DC_DEENAI};
+      const spec=SKEL_AT[ui.screen];
+      const on=Boolean(spec&&busy[ui.screen]);
+      if(!on){
+        for(const old of document.querySelectorAll('[data-host-skel]'))old.remove();
+        skelRestore();
+        return;
+      }
+      // Both surfaces: the phone draws its own screens and body.dcm-own hides
+      // the desktop copy, so a skeleton scoped to #studio alone is painted
+      // where nobody can see it.
+      const roots=[...document.querySelectorAll('#dcMobile, #studio')].filter(r=>r.getClientRects().length>0);
+      let anchor=null;
+      for(const root of roots){
+        const found=[...root.querySelectorAll('div')].filter(spec.anchor)
+          .filter(el=>![...el.querySelectorAll('div')].some(spec.anchor))
+          .filter(el=>el.getClientRects().length>0);
+        if(found.length){anchor=found.pop();break}
+      }
+      if(!anchor||!anchor.parentElement)return;
+      /* THE ANCHOR HAS TO BE A SECTION OF THE SCREEN, NOT THE DEEPEST NODE
+         THAT HAPPENS TO HOLD THE WORDS. The first cut matched the innermost
+         tab container, so "everything after the anchor" meant its siblings
+         INSIDE that container -- one nested element hidden and the whole KPI
+         row still on display. Walk up to the screen root (the direct child of
+         <main>), then take the section of it that holds the anchor. */
+      let screenRoot=anchor;
+      while(screenRoot.parentElement&&screenRoot.parentElement.tagName!=='MAIN')screenRoot=screenRoot.parentElement;
+      if(!screenRoot.parentElement)return;
+      let section=anchor;
+      while(section.parentElement&&section.parentElement!==screenRoot)section=section.parentElement;
+      if(section.parentElement!==screenRoot)return;
+      anchor=section;
+      // Everything after the anchor is the data region: hidden in place, never
+      // removed -- taking a generated node out shortens the live child list
+      // against the rendered one and the patcher pairs the rest one across.
+      for(let n=anchor.nextElementSibling;n;n=n.nextElementSibling){
+        if(n.hasAttribute('data-host-skel'))continue;
+        if(!n.hasAttribute('data-host-skelhid')){
+          n.setAttribute('data-host-style','');
+          n.setAttribute('data-host-skelhid','');
+          n.style.display='none';
+        }
+      }
+      let box=document.querySelector('[data-host-skel]');
+      if(!box||box.previousElementSibling!==anchor){
+        if(box)box.remove();
+        box=document.createElement('div');
+        box.setAttribute('data-host-owned','');
+        box.setAttribute('data-host-skel','');
+        box.setAttribute('role','status');
+        box.setAttribute('aria-live','polite');
+        box.style.cssText='padding:16px 0 8px;flex:none';
+        anchor.insertAdjacentElement('afterend',box);
+      }
+      window.dcSetHtml(box,skelMarkup(spec.kind));
+    }
     function paintAiAnswerSource(vals){
       const labels=aiQueryAll('span').filter(n=>(n.textContent||'').trim()==='DEENAI');
       const label=labels.filter(aiShown).pop()||labels[0];
@@ -9243,6 +9355,10 @@ StudioAdapter.onProbeSource=async url=>{try{
     });
     StudioAdapter.onLoadOwner=async(days,opts={})=>{
       if(ownerLoading)return;ownerLoading=true;
+      /* Read by paintLoadingSkeleton. Owner calls four endpoints and only
+         repaints when all four settle, so without this the first open drew a
+         complete screen of ZEROS for the whole round trip. */
+      StudioAdapter.ui.ownerBusy=true;
       window.DC_OWNER=window.DC_OWNER||{};
       try{
         const d=Number(days)||180;
@@ -9260,7 +9376,7 @@ StudioAdapter.onProbeSource=async url=>{try{
         try{window.dcPaintLandingTable&&setTimeout(window.dcPaintLandingTable,0)}catch(e){}
         try{window.dcPaintFirst100&&setTimeout(window.dcPaintFirst100,0)}catch(e){}
         renderAll();
-      }finally{ownerLoading=false}
+      }finally{ownerLoading=false;StudioAdapter.ui.ownerBusy=false}
       /* Health after the books have painted, never instead of them. */
       if(opts.health===false)return;
       try{
@@ -9278,12 +9394,16 @@ StudioAdapter.onProbeSource=async url=>{try{
     let deenaiLoading=false;
     StudioAdapter.onLoadDeenai=async()=>{
       if(deenaiLoading)return;deenaiLoading=true;
+      /* The template's own "DeenAI is reading your numbers" block is gated on
+         `aiBusy`, which only the ASK sets -- so the screen's own load drew the
+         header and nothing below it. */
+      StudioAdapter.ui.aiBusyLoad=true;renderAll();
       try{
         window.DC_DEENAI=await api('/api/deenai');
         if(DATA)DATA.deenai=window.DC_DEENAI;
         renderAll();
       }catch(e){toast(e.message,'bad')}
-      finally{deenaiLoading=false}
+      finally{deenaiLoading=false;StudioAdapter.ui.aiBusyLoad=false}
     };
     /*
      * Redeem a tester or campaign code. ONE handler, called from the desktop
@@ -11004,6 +11124,7 @@ function paintStudio(){
   paintEditorTrackLane();
   paintAiAnswerSource(vals);
   paintAiActions(vals);
+  paintLoadingSkeleton();
   paintTrimTools(vals);
   paintEditorLook(vals);
   paintEditorScrub();
