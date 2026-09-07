@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1701 JS + 715 Python**
+- `npm test` and `npm run check` must pass. Currently **1708 JS + 715 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -12928,3 +12928,76 @@ body, matching nothing.
 
 Four probes, all proven red: the phone container removed, the paper arm
 removed, the generator's skip removed, and the stack reverted to one slot.
+
+## "Continue with Apple" was live, and it sent customers to an Apple error page (v3.146.3, 7 Sept 2026)
+
+Youssef, asking whether Sign in with Apple was worth setting up: "you know where
+it says you can countiue with apple to sign up is it worth approving it?"
+
+**It was already switched on, and it was broken.** Pressed on production the way
+a customer would, `deenclipped.online/login` -> Continue with Apple landed on
+Apple's own page reading **`invalid_client` -- Invalid client.** Every visitor
+to the sign-in page could see the button, and every one who pressed it got that.
+
+- **All four `APPLE_SIGNIN_*` variables were set on Render**, so
+  `configured('apple')` was true and the button rendered LIVE rather than
+  greyed. The value in `APPLE_SIGNIN_CLIENT_ID` was a **32-character hex
+  string** -- not a Services ID at all. It looks like a placeholder pasted in to
+  fill the field, and **filling the field is exactly what switched the button
+  on**: the check asked whether the variables were non-empty, never whether the
+  value could work.
+- **A Services ID is reverse-DNS** (`online.deenclipped.signin`). Apple never
+  issues a bare hex one, so `looksLikeAppleServiceId` refuses a client id with
+  no dot in it: a blank with something typed in it is not configuration.
+  **Checking the SHAPE rather than deleting the button is what makes it
+  self-healing** -- the day real credentials are set it comes back on its own,
+  with nobody having to remember. The comment says outright that this does NOT
+  validate the credential: only Apple can say whether a well-formed Services ID
+  is live, and claiming more would be the stale claim this file keeps paying for.
+- **An unusable provider is now OMITTED, never greyed.** The old state was
+  `pointer-events:none; opacity:.45` -- inert, and still a dead control on the
+  first screen a customer ever sees, reading as a fault rather than as an option
+  not on offer. Invariant 9 applies to the sign-in page as much as to the studio.
+  The row and the "or use email" divider go with the last button: a divider
+  under nothing is a line across the top of a form, and "or" promises an
+  alternative that is not there. Verified in all four combinations.
+
+### Why it was not worth paying for, which is the question actually asked
+
+Sign in with Apple on the web needs an **Apple Developer Program membership,
+A$149/year, recurring**; there is no free tier. Against that:
+
+- **It is not required.** Apple's rule that an app offering third-party sign-in
+  must also offer Apple's applies to **App Store apps**. This is a website.
+- **Nobody is locked out.** Google is the other button, and these customers need
+  a Google account anyway -- YouTube is the main destination and connecting a
+  channel means one. Email and password is the third path.
+- **Hide My Email would fight the growth loop.** A `@privaterelay.appleid.com`
+  address sits in the middle of the nudge emails, "clips are ready" and "your
+  clip is live", and a customer who later turns forwarding off stops receiving
+  them silently.
+
+Revisit if there is ever a real iOS app (then it is mandatory) or if a customer
+asks. **The placeholder on Render is now inert either way** -- it fails the
+shape check -- so it can be left or cleared without changing what anybody sees.
+
+### A test that pinned the MECHANISM, and was corrected rather than deleted
+
+`auth-login-page` asserted `.dc-oauth-btn.is-disabled{...}` EXISTS, because a
+real bug once grouped `.dc-auth-primary` into that rule and made the primary CTA
+unclickable for every visitor. Removing the greyed state entirely strictly
+strengthens that guarantee -- there is no `pointer-events:none` rule left to be
+grouped into -- so the test now asserts the rule stays GONE and keeps its sweep
+over every rule that kills pointer events. The property survived; the mechanism
+it named did not.
+
+**The test harness trap, one import deeper than the one already recorded:**
+`config.js` reads the environment ONCE, at first import, so a `?case=` query on
+the auth.js specifier gives a fresh auth module and the SAME cached config --
+every case after the first was answered from the first case's environment, and
+two tests passed for the wrong reason while two failed against correct code.
+Each case runs in its own process now.
+
+Four probes proven red: the shape check removed (the production bug restored),
+the greyed button restored, the divider drawn unconditionally, and the honesty
+note reworded away.

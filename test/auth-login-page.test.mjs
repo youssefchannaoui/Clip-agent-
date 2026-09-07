@@ -35,10 +35,13 @@ test('the primary sign-in button is clickable, and carries the size rule rather 
   // whole funnel starts at, while every test stayed green.
   const html = auth.loginPage({});
 
-  const disabledRule = html.match(/\.dc-oauth-btn\.is-disabled\{([^}]*)\}/);
-  assert.ok(disabledRule, 'the disabled-provider rule still exists');
-  assert.doesNotMatch(disabledRule[0], /dc-auth-primary/,
-    'the primary CTA must never be grouped into the disabled rule');
+  // THE DISABLED RULE IS GONE (v3.146.2) and that strengthens this rather than
+  // weakening it: an unusable provider is now omitted from the page instead of
+  // being drawn at 45% opacity, so there is no `pointer-events:none` rule left
+  // for the primary CTA to be grouped into. If one ever returns, the sweep at
+  // the foot of this test is what catches it — the PROPERTY, not the mechanism.
+  assert.doesNotMatch(html, /\.dc-oauth-btn\.is-disabled\{/,
+    'the greyed-out provider state should stay removed; see test/apple-signin.test.mjs');
 
   const sizeRule = html.match(/\.dc-auth-primary,\.dc-oauth-btn\{([^}]*)\}/);
   assert.ok(sizeRule, 'the primary CTA shares the button sizing rule');
