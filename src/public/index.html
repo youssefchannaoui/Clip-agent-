@@ -3711,6 +3711,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       const want=zoom===1?'':`scale(${zoom})`;
       if(edVideoNode.style.transform!==want)edVideoNode.style.transform=want;
       paintEditorFx(onRender?'':(vals.edVideoFx||''),frame);
+      paintEditorSharpen(live?vals.edSharpenKernel:'' ,frame);
       paintEditorMusic(vals);
       /* The Look grade on the real footage -- the same preset+warmth maths the
          renderer runs, as CSS. Without this every Look control read as dead in
@@ -3779,6 +3780,33 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         const render=edLoadingEl.querySelector('[data-render]');
         if(render)render.onclick=e=>{e.preventDefault();StudioAdapter.ui.edPlateFailed=true;StudioAdapter.ui.edPlateError='';paintStudio()};
       }
+    }
+    /* SHARPENING, ACTUALLY SHOWN. CSS has no sharpen filter, so this slider
+       moved nothing you could see and the row said so. An SVG
+       feConvolveMatrix is a real convolution and CAN be named from a CSS
+       filter chain, so the kernel is built from the same number the render
+       hands ffmpeg's unsharp and the picture changes with the slider. The
+       filter element lives beside the frame and is host-owned; the chain
+       references it by id (edVideoFilter). */
+    let edSharpenEl=null;
+    function paintEditorSharpen(kernel,frame){
+      if(!kernel||!frame){if(edSharpenEl){edSharpenEl.remove();edSharpenEl=null}return}
+      if(!edSharpenEl||!edSharpenEl.isConnected||edSharpenEl.parentElement!==frame){
+        if(edSharpenEl)edSharpenEl.remove();
+        edSharpenEl=document.createElementNS('http://www.w3.org/2000/svg','svg');
+        edSharpenEl.setAttribute('data-host-owned','');
+        edSharpenEl.setAttribute('width','0');edSharpenEl.setAttribute('height','0');
+        edSharpenEl.style.cssText='position:absolute;width:0;height:0;pointer-events:none';
+        const f=document.createElementNS('http://www.w3.org/2000/svg','filter');
+        f.setAttribute('id','dcEdSharpen');
+        /* preserveAlpha, or the convolution eats the video's edges into the
+           frame's own rounded corners and draws a dark halo round the picture. */
+        const c=document.createElementNS('http://www.w3.org/2000/svg','feConvolveMatrix');
+        c.setAttribute('order','3');c.setAttribute('preserveAlpha','true');
+        f.appendChild(c);edSharpenEl.appendChild(f);frame.appendChild(edSharpenEl);
+      }
+      const node=edSharpenEl.querySelector('feConvolveMatrix');
+      if(node&&node.getAttribute('kernelMatrix')!==kernel)node.setAttribute('kernelMatrix',kernel);
     }
     /* The darken scrim, weather, vignette and grain as one background stack
        over the plate -- the adapter's fxLayersStyle, the same builder the
@@ -5567,6 +5595,47 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       });
       lanes.style.cursor='ew-resize';
 
+    }
+    /* THE TWO GREEN BARS IN THE MUSIC LANE WERE DECORATION, and they were
+       drawn at a hardcoded left:1%/width:47% and left:50%/width:49% -- two
+       "segments" that represent nothing about the clip's actual nasheed. So a
+       clip with no nasheed at all still showed two full bars, which is
+       invented data on a timeline, and Youssef's reading of them was exactly
+       right: "those two bars on the left and the right, let's remove them.
+       They look horrendous."
+
+       The LANE stays and so does its text: "No nasheed mixed in" is worth
+       saying, and it is the only place the timeline says it. Only the two
+       empty decorative spans go, and the two labels are laid out in flow
+       instead of being positioned over bars that are no longer there.
+
+       Found structurally, never by a hashed class: the lane is the element
+       immediately before the waveform lane, and the waveform lane is found by
+       the literal the design puts in it. data-host-style is the one attribute
+       family the patcher never strips, and the runtime honours it by leaving
+       the node's style alone. */
+    function paintEditorTrackLane(){
+      if(StudioAdapter.ui.screen!=='editor')return;
+      const wave=[...document.querySelectorAll('#studio span')]
+        .find(n=>(n.textContent||'').trim()==='Video \u00b7 speech waveform');
+      const lane=wave&&wave.parentElement&&wave.parentElement.previousElementSibling;
+      if(!lane||lane.dataset.hostLane==='1')return;
+      const spans=[...lane.children].filter(n=>n.tagName==='SPAN');
+      const bars=spans.filter(n=>!(n.textContent||'').trim());
+      if(!bars.length)return;
+      for(const bar of bars){
+        bar.setAttribute('data-host-style','');
+        bar.style.display='none';
+      }
+      lane.setAttribute('data-host-style','');
+      lane.style.display='flex';lane.style.alignItems='center';
+      lane.style.gap='8px';lane.style.padding='0 10px';
+      for(const label of spans.filter(n=>(n.textContent||'').trim())){
+        label.setAttribute('data-host-style','');
+        label.style.position='static';label.style.left='auto';
+        label.style.top='auto';label.style.marginLeft='0';
+      }
+      lane.dataset.hostLane='1';
     }
     function paintEditorLayout(vals){
       if(StudioAdapter.ui.screen!=='editor'||!StudioAdapter.ui.edClipId){edLayoutSig='';clearEditorLayout();return}
@@ -10560,6 +10629,7 @@ function paintStudio(){
   paintEditorPlayer(vals);
   if(StudioAdapter.ui.screen!=='editor'){paintEditorMusic({});}
   paintEditorLayout(vals);
+  paintEditorTrackLane();
   paintTrimTools(vals);
   paintEditorLook(vals);
   paintEditorScrub();

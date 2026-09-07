@@ -5201,7 +5201,12 @@ def render_cut_plate(ffmpeg: str, source: Path, keeps: list[tuple[float, float]]
 # too heavy to stream, and it keeps the source's full resolution. This one
 # is bounded to PLATE_MAX_EDGE on the long side and moves its moov atom to
 # the front so the browser can seek before the download finishes.
-PLATE_MAX_EDGE = 1280
+#
+# 720, not 1280: the editor draws this into a frame about 360px wide, so 1280
+# was four times the pixels anybody looks at -- paid for twice, once in encode
+# time on a single-slot box and again in the download somebody is watching a
+# loading screen through. 720 is still double the frame it is drawn in.
+PLATE_MAX_EDGE = 720
 
 
 def render_plate(ffmpeg: str, source: Path, start: float, end: float,

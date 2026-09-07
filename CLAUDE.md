@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1599 JS + 691 Python**
+- `npm test` and `npm run check` must pass. Currently **1603 JS + 691 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -11515,3 +11515,63 @@ change, so `deploy-worker.yml` deploys it on push**; the box was idle
 (diagnose run, every job completed) before the push. The plate has not yet
 been seen landing from the REAL worker -- the first editor open on production
 is that proof.
+
+## Four things Youssef found by driving the editor (v3.140.1, 7 Sept 2026)
+
+He opened the shipped editor on a real Quran clip and reported: "everything
+seems like it's working, which is great ... just the captions is the most
+important thing ... it's showing me all of the captions or something for the
+whole video", plus "those two bars on the left and the right, let's remove
+them. They look horrendous", "grain doesn't look grainy, it looks weird",
+"sharpening, I don't know if sharpening is working or not", and "it seems a
+bit slow as well".
+
+- **AN AYAH IS PAGED, AND THE LIVE LAYER WAS DRAWING THE WHOLE VERSE.** The
+  export splits a verse into phrases of at most five words and shows one at a
+  time (`ayah_events`), and `edAyahPhrase` has computed exactly that split for
+  months -- the v3.140.0 live branch bypassed it and returned the block's own
+  text. So a 13-word verse arrived as all 13 words at once, stacked over
+  itself, which is precisely "all of the captions for the whole video".
+  **Measured: 13 words before, 5 / 4 / 4-plus-the-verse-mark after**, and the
+  phrase now advances with the playhead. The translation line was already
+  paged (`edCapTranslation` reads the same phrase), which is why only the
+  Arabic looked wrong.
+- **The two green bars in the music lane were INVENTED DATA.** They are two
+  empty spans drawn at a hardcoded `left:1%;width:47%` and `left:50%;width:49%`
+  -- two "segments" describing nothing about the clip's actual nasheed, drawn
+  in full on a clip that has none. The bars are hidden and the lane's WORDS are
+  kept ("No nasheed mixed in" is the only place the timeline says it), laid out
+  in flow now that there is nothing to position them over. Found structurally
+  -- the lane is the element before the waveform lane, and the waveform lane is
+  found by the design's own literal -- so no hashed class is named and a
+  re-import cannot break it. `data-host-style` is what keeps the patcher off
+  the style it sets.
+- **Grain was a 3px conic CHECKERBOARD**, which tiles into a visible weave.
+  `feTurbulence` fractal noise as a data URI is what film grain actually is;
+  no asset and no request added, and the strength is baked into the rect's
+  opacity because a data URI cannot read a CSS variable.
+- **SHARPENING IS PREVIEWABLE AFTER ALL, and the row had said it was not.**
+  CSS has no sharpen filter -- but an SVG `feConvolveMatrix` is a real
+  convolution and CAN be named from a CSS filter chain, so the kernel is built
+  from the same number the render hands ffmpeg's `unsharp` and referenced as
+  `url(#dcEdSharpen)`. **Measured in the browser by drawing the frame through
+  the filter onto a canvas and summing the gradient: edge energy 9.71 -> 14.96,
+  1.54x.** The kernel sums to 1, so brightness does not move. The reference is
+  added ONLY when the amount is non-zero -- a filter that does nothing must not
+  sit in the chain -- and the row now says "shown approximately here; the
+  render uses a wider unsharp mask", because unsharp is a 5x5 masked blur and
+  this is a 3x3 kernel. `preserveAlpha` is load-bearing: without it the
+  convolution eats the video's edge into the frame's rounded corners and draws
+  a dark halo.
+  **It costs nothing, and that was measured rather than assumed** -- an SVG
+  filter on video is the kind of thing that quietly halves a frame rate.
+  Playback with the filter at MAXIMUM: **0.99x real time, 0 dropped frames**,
+  against 1.00x and 0 dropped with it off.
+- **`PLATE_MAX_EDGE` 1280 -> 720.** The editor draws the plate into a frame
+  about 360px wide, so 1280 was four times the pixels anybody looks at -- paid
+  for twice, once in encode time on a single-slot box and again in the download
+  somebody watches a loading screen through. 720 is still double the frame it
+  is drawn in. That is the "a bit slow".
+
+Four red probes, each proven: the paging removed, the checkerboard restored,
+the sharpen reference deleted, the lane painter unhooked. 1603 JS + 691 Python.
