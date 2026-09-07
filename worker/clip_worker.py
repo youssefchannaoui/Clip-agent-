@@ -3769,14 +3769,55 @@ def shift_segments(segments: list[dict[str, Any]], offset: float) -> list[dict[s
     return shifted
 
 
+def shift_ayat(ayat: list[dict[str, Any]] | None, offset: float,
+               duration: float) -> list[dict[str, Any]] | None:
+    """The caption nudge, applied to the lecture's verses as well.
+
+    THE ONE MANUAL REMEDY FOR A CAPTION THAT FEELS LATE COULD NOT MOVE
+    SCRIPTURE. `captionTimingOffsetMs` is a shipped Templates control and it
+    shifted `candidate.segments` only -- every spoken caption mode reads those,
+    and the ayah path reads `candidate.ayat`, which nothing touched. So on a
+    recitation the slider moved nothing at all: a control that cannot reach an
+    export is the fault invariant 9 exists to prevent, and this one was
+    invisible because the same slider plainly works on a lecture.
+
+    Clip-local throughout, and clamped to the clip -- a verse nudged off either
+    end is dropped rather than drawn at a time it was never recited.
+    """
+    if ayat is None:
+        return None
+    moved: list[dict[str, Any]] = []
+    for hit in ayat:
+        start = float(hit["start"]) + offset
+        end = float(hit["end"]) + offset
+        if end <= 0 or start >= duration:
+            continue
+        copy = dict(hit)
+        copy["start"] = max(0.0, min(duration, start))
+        copy["end"] = max(0.0, min(duration, end))
+        copy["words"] = [
+            (max(0.0, min(duration, float(a) + offset)),
+             max(0.0, min(duration, float(b) + offset)))
+            for a, b in (hit.get("words") or [])
+        ]
+        moved.append(copy)
+    return moved
+
+
 def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) -> list[dict[str, Any]]:
     # The caption nudge. Shifting the source words moves every caption mode
     # together; ass_time clamps at zero so a large negative nudge cannot put an
-    # event before the clip starts.
+    # event before the clip starts. The lecture's VERSES move with them -- they
+    # live on their own field and were left behind, so the slider did nothing
+    # whatever on a recitation.
     timing_offset = max(-2.0, min(2.0, float(template.get("captionTimingOffsetMs", 0) or 0) / 1000.0))
     if abs(timing_offset) > 0.0005:
         from dataclasses import replace
-        candidate = replace(candidate, segments=shift_segments(candidate.segments, timing_offset))
+        candidate = replace(
+            candidate,
+            segments=shift_segments(candidate.segments, timing_offset),
+            ayat=shift_ayat(candidate.ayat, timing_offset, candidate.duration),
+        )
     width = int(template.get("width", 1080))
     height = int(template.get("height", 1920))
     font = safe_font(template.get("captionFont", "DejaVu Sans"), "DejaVu Sans")

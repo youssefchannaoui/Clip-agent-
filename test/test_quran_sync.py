@@ -742,6 +742,80 @@ class CutVerseTests(unittest.TestCase):
         self.assertEqual(len(out), 1, "nothing to split on")
 
 
+class TimingNudgeTests(unittest.TestCase):
+    """THE SLIDER FOR "THE CAPTIONS FEEL LATE" COULD NOT MOVE SCRIPTURE.
+
+    captionTimingOffsetMs is a shipped Templates control. It shifted
+    candidate.segments -- which every spoken caption mode reads -- and the ayah
+    path reads candidate.ayat, which nothing touched. So on a recitation the
+    one manual remedy for the exact complaint this release is about did
+    absolutely nothing, and it was invisible because the same slider plainly
+    works on a lecture.
+    """
+
+    def _hit(self):
+        return [{"start": 2.0, "end": 6.0,
+                 "ayah": {"surah": 1, "ayah": 1, "arabic": verse(8), "translation": "",
+                          "surahName": "Test", "confidence": 0.99},
+                 "words": [(2.0, 4.0), (4.0, 6.0)], "heard": [True, True],
+                 "wordFrom": 0, "wordCount": 2}]
+
+    def test_the_nudge_moves_the_verse_and_its_words(self):
+        moved = worker.shift_ayat(self._hit(), 0.4, 20.0)
+        self.assertAlmostEqual(moved[0]["start"], 2.4, places=3)
+        self.assertAlmostEqual(moved[0]["end"], 6.4, places=3)
+        self.assertEqual([(round(a, 3), round(b, 3)) for a, b in moved[0]["words"]],
+                         [(2.4, 4.4), (4.4, 6.4)],
+                         "the anchors move with the verse or the paging fights the nudge")
+
+    def test_a_negative_nudge_is_clamped_into_the_clip(self):
+        moved = worker.shift_ayat(self._hit(), -3.0, 20.0)
+        self.assertGreaterEqual(moved[0]["start"], 0.0)
+        for a, b in moved[0]["words"]:
+            self.assertGreaterEqual(a, 0.0)
+
+    def test_a_verse_nudged_clean_off_the_clip_is_dropped(self):
+        # Drawn at a time it was never recited would be worse than not drawn.
+        self.assertEqual(worker.shift_ayat(self._hit(), -10.0, 20.0), [])
+
+    def test_no_lecture_walked_stays_no_lecture_walked(self):
+        # None and [] are different statements and both must survive a nudge.
+        self.assertIsNone(worker.shift_ayat(None, 0.4, 20.0))
+        self.assertEqual(worker.shift_ayat([], 0.4, 20.0), [])
+
+    def test_the_renderer_applies_it_to_both(self):
+        import tempfile
+        arabic = verse(8)
+        clip = worker.Candidate(
+            start=100.0, end=120.0, text="x",
+            segments=[{"start": 100.0, "end": 120.0, "text": "x", "words": []}],
+            score=70, reasons=[], quote_risk=True)
+        clip.ayat = self._hit()
+        template = {"captionMode": "quran", "width": 1080, "height": 1920,
+                    "captionFont": "DejaVu Sans", "captionArabicFont": "Amiri",
+                    "captionTranslation": False, "captionFontSize": 60,
+                    "captionTimingOffsetMs": 500}
+
+        class _Corpus:
+            def match(self, *a, **k): return None
+            def match_sequence(self, *a, **k): return []
+
+        class _Quran:
+            load = staticmethod(lambda: _Corpus())
+            ornament_for = staticmethod(lambda ayah: "\u06dd")
+
+        original, worker.quran = worker.quran, _Quran()
+        try:
+            with tempfile.NamedTemporaryFile("r+", suffix=".ass") as handle:
+                rows = worker.write_ass(clip, template, worker.Path(handle.name))
+        finally:
+            worker.quran = original
+        self.assertTrue(rows)
+        # The verse was at 2.0s; half a second of nudge puts it at 2.5s.
+        self.assertAlmostEqual(rows[0]["start"], 2.5, places=2,
+                               msg="the slider did nothing to the ayah")
+
+
 class EditedClipWalkTests(unittest.TestCase):
     """AN EDITED CLIP WALKS WHISPER'S ORIGINAL, NOT THE EDIT.
 

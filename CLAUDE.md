@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1721 JS + 765 Python**
+- `npm test` and `npm run check` must pass. Currently **1721 JS + 771 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -7537,6 +7537,19 @@ with heard times while `candidate.text` is still the editor's words.
 
 This removes the biggest of the three degraded paths outright, so the re-listen
 above is left for genuinely old transcripts rather than for every edit.
+
+### The Timing nudge moves scripture now (v3.148.2)
+
+`captionTimingOffsetMs` is a shipped Templates control and it shifted
+`candidate.segments` only. Every SPOKEN caption mode reads those; the ayah path
+reads `candidate.ayat`, which nothing touched. So on a recitation **the one
+manual remedy for "the captions feel late" did nothing at all** -- invariant 9,
+and invisible, because the same slider plainly works on a lecture.
+
+`shift_ayat` moves the verse, its end and its anchor WORDS together (moving the
+verse without its words would leave the paging fighting the nudge), clip-local
+and clamped, and a verse nudged clean off the clip is dropped rather than drawn
+at a time it was never recited.
 
 ### What is still NOT perfect, said plainly
 
