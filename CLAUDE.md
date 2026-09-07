@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1609 JS + 691 Python**
+- `npm test` and `npm run check` must pass. Currently **1623 JS + 691 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10255,6 +10255,131 @@ and never to be STOPPED. Every fault below is a stop going wrong.
   status should read `interrupted`, then `resumed: 1` with "Resuming from the
   saved clip plan" in its stage, and the clip count should come back whole.
   Until then the claim is the tests', not the box's.
+
+## Tester access codes: fourteen days of Pro, and a real cut-off (v3.142.0, 7 Sept 2026)
+
+Youssef, about to recruit testers by DM on Instagram and TikTok: "we'll give
+them a code ... they will get, let's say, fourteen days ... of pro, and they
+get everything that's included on the pro subscription ... once it's over the
+two weeks, it'll just say everything is done purchase a subscription and
+shouldnt allow them to post further ... be kinda geniarious."
+
+**650 tokens** -- a full Pro MONTH inside the fortnight. A tester who runs out
+on day four has not tested anything, and finding out what the product does in
+somebody else's hands is the entire point of the code.
+
+### A grant is not a subscription, and never pretends to be one
+
+It lives in `billing.grant` and touches none of the Stripe columns, so a tester
+who subscribes for real mid-fortnight gets a clean record with nothing of ours
+to unpick, and a webhook can neither overwrite a grant nor be overwritten by
+one. When it lapses there is nothing to clean up -- it simply stops being
+consulted.
+
+- **THE GRANT BUYS FEATURES, NEVER QUEUE POSITION.** `tierOf` reads it and
+  `paidTierOf` does not, which is the line this file already draws for the
+  operator: there is ONE worker slot, so an account that is not paying must not
+  put its lecture in front of one that is. A Pro grant is unaffected by that
+  today (priority is a Studio feature) and the rule is written down so a Studio
+  code cannot quietly change it later.
+- **The tokens are an ALLOWANCE, not a bonus balance.** Bonus tokens do not
+  expire, and a fortnight of Pro leaving 650 permanent tokens behind is not a
+  fortnight of anything -- the cut-off at the end is what makes the code worth
+  redeeming rather than ignoring. It only ever RAISES the ceiling, so a real
+  subscriber who redeems one cannot end up with less than they pay for.
+- The clock is reset with the grant (`tokensUsed = 0`), or a tester who signed
+  up a fortnight ago arrives with their free 40 already spent and the gift
+  hands them 650 minus a spend made before it existed.
+
+### Nothing posts once access has ended -- and the clip is HELD, never failed
+
+That half was simply missing. `assertCanSpend` has always refused IMPORTS when
+the window closes; posting never was gated, so a lapsed account went on
+publishing clips it could no longer make, which is most of what a plan is for.
+
+`billing.canPublish` is **derived from the notices** rather than deciding the
+question again: the sentence a person reads on their dashboard IS the reason
+their clips are held, so the two can never drift. One rule covers the free
+window and a lapsed grant, because two rules is how they drift.
+
+Held rather than failed, deliberately: the clip keeps its approval, its slot
+and its destinations, so **buying a plan releases the whole backlog by
+itself** -- where failing them would fill the activity feed with red over a
+decision the customer has not made yet and cost a re-approval each.
+`publishNow` meets the same wall and SAYS so, rather than reporting success
+and posting nowhere (the v3.115.3 fault from the other side).
+
+**Blocking only when there is genuinely nothing left.** A tester who redeems on
+day one runs the fortnight and their own free week side by side, so by the time
+the grant ends the free window is long gone -- the normal case, and a real
+wall. A SHORT code can end while free days remain, and blocking somebody who
+still has tokens would be the product refusing work it had already given away.
+Found by a test expectation that was wrong; the code was changed, not the test.
+
+### The screen contradicted itself, and only looking at it showed that
+
+Measured in a browser straight after redeeming: the header pill read **PRO**
+with 650 tokens while the biggest block on the same screen read **"Basic /
+Free / 7 free days left"**. `planName` reads `tierOf` and had moved; the plan
+CARD's `planTitle`, `planState` and `planNote` read the plan ID and the free
+window and had not. One account described two ways, which is the fault this
+file records more than any other. All three now read the grant, and
+`access-codes.test.mjs` drives the real bindings and pins the agreement.
+
+### Where the code is typed, and where it is minted
+
+- **Not on the sign-up form** (his call: "not on the sign up area ... they make
+  their account, and then ... somewhere obvious on the top"). A code typed at
+  sign-up is a second thing that can go wrong on the one form that must not,
+  and somebody who loses their code has to abandon the account rather than ask
+  for another. It sits ABOVE the plan cards -- a box under six pricing cards is
+  one people scroll past and then write to ask about.
+- **The copy lives in the ADAPTER**, and the desktop panel and the phone card
+  both render those strings. A DM link opens on a phone, so that surface
+  matters most here; two copies of the copy would eventually tell one tester
+  two different things about the same fortnight. Both call ONE handler.
+- **The operator mints from Owner -> Users**, at the top of the tab: days,
+  tokens, uses and who it is for, then New code -- which copies straight to the
+  clipboard, because the next thing he does with it is paste it into a DM.
+- **A code is DISABLED, never deleted.** The same text could otherwise be
+  re-minted on different terms, and the redemptions on it are the record of who
+  was given what.
+- **The alphabet has no 0/O, 1/I or 5/S.** A tester who mistypes their code
+  reads it as the product refusing them, and the support cost of one ambiguous
+  glyph is larger than the entropy it buys against a redemption cap.
+- Refusals name what is wrong -- not recognised, already used, fully claimed,
+  disabled, already running -- because somebody personally asked to try the
+  product who meets "invalid code" gives up rather than writing back.
+
+### Measured, and the traps
+
+At 1440 the owner panel has ONE left edge per column, ONE row height, and its
+fields and button share a baseline; zero overflow, zero page errors, on desktop
+in both themes and on a 390 phone. Fifteen tests, **all 21 probes proven red**.
+
+- **`??` DOES NOT CATCH NaN**, and `Number(undefined)` is NaN -- so the obvious
+  `Number(options.tokens) ?? defaults.tokens` minted every code with NaN
+  tokens, which `grantState` then read as 0 and handed testers nothing. Caught
+  by a smoke test, not by reading.
+- **`b(x) ? a : c` in the phone template is always the truthy branch**: `b()`
+  hands back a binding DESCRIPTOR at template-build time, so a conditional
+  class has to come from a binding of its own.
+- **Three of the six phone tokens I first named did not exist**
+  (`--dcm-gold-line`, `--dcm-gold-wash`, `--dcm-on-gold`), and a `var()` naming
+  an undeclared token fails silently. Check every one against the declarations
+  in the same file.
+- **The operator cannot sign in with a password**: the ADMIN_EMAIL account is
+  provider-backed, and `passwordLogin` checks APP_PASSWORD against the OWNER
+  record -- which is only seeded on a data directory that had it set from the
+  first boot. The admin fallback on `/login` is the way in.
+- **`pkill -f` kills the calling shell when the pattern is in its own command
+  line, and so does a `/proc/*/cmdline` scan.** Build the pattern at runtime
+  (`printf 'ver%s/ser%s' 'ify' 've'`) or match on `/proc/*/environ` instead.
+
+**Nothing is switched on by this release for anyone who does not hold a code.**
+The box is on the billing screen for every signed-in account and says "Have a
+code?"; the operator's panel is on Owner. `ACCESS_CODE_DAYS` and
+`ACCESS_CODE_TOKENS` on Render change the defaults without a deploy.
 
 ## The confirmation screen: six cells under one light (v3.138.0, 7 Sept 2026)
 

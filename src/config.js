@@ -432,6 +432,15 @@ export const config = {
   // whole 6000-minute allowance for free, which is more bandwidth than the
   // proxy plan sells in a month. 0 disables the cap.
   tokensTrial: Math.max(0, Math.round(number(process.env.TOKENS_TRIAL, 40))),
+  /*
+   * What an access code hands over, and it is deliberately generous: a full
+   * Pro MONTH of tokens inside a fortnight. A tester who runs out on day four
+   * has not tested anything, and the whole point of the code is to find out
+   * what the product does in somebody else's hands. Per-code values override
+   * these; they are only the defaults the owner's form starts from.
+   */
+  accessCodeDays: Math.max(1, Math.round(number(process.env.ACCESS_CODE_DAYS, 14))),
+  accessCodeTokens: Math.max(1, Math.round(number(process.env.ACCESS_CODE_TOKENS, 650))),
   tokensPerMinute: Math.max(0.1, number(process.env.TOKENS_PER_MINUTE, 1)),
   minimumTokensToStart: Math.max(1, Math.round(number(process.env.MINIMUM_TOKENS_TO_START, 10))),
   tiktokRedirectUri: process.env.TIKTOK_REDIRECT_URI || '',

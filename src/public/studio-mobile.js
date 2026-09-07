@@ -860,6 +860,30 @@
   // ── Tokens & billing ─────────────────────────────────────────────────────
   function tokensScreen() {
     return [
+      /*
+       * The code box, FIRST on the screen.
+       *
+       * A tester is recruited by DM and opens the link on a phone, so this is
+       * the surface that matters most for it -- and the desktop panel and this
+       * card render the SAME adapter strings (redeemTitle/redeemNote/
+       * redeemDays), so the two cannot tell one person two different things
+       * about the same fortnight. Only the layout is this file's.
+       */
+      h('div', { class: cat('dcm-card dcm-redeem', b('redeemCls')) }, [
+        h('div', { class: 'dcm-card-h' }, [
+          h('strong', {}, [tx('redeemTitle')]),
+          iff('redeemDays', [h('span', { class: 'dcm-pill' }, [tx('redeemDays')])]),
+        ]),
+        h('p', { class: 'dcm-muted' }, [tx('redeemNote')]),
+        h('input', {
+          class: 'dcm-input dcm-code', type: 'text', inputmode: 'text', autocomplete: 'off',
+          spellcheck: 'false', enterkeyhint: 'go', placeholder: 'DEEN-XXXXXX',
+          'aria-label': 'Your code', value: b('redeemCode'),
+          on: { input: 'redeemSetCode', keydown: 'm.redeemKey' },
+        }),
+        iff('redeemSaid', [h('p', { class: cat('dcm-said', b('redeemSaidCls')) }, [tx('redeemSaid')])]),
+        h('button', { type: 'button', class: 'dcm-btn dcm-btn-p dcm-btn-wide', on: { click: 'redeemGo' } }, [tx('redeemLabel')]),
+      ]),
       h('div', { class: 'dcm-card dcm-create' }, [
         h('span', { class: 'dcm-k' }, 'Your plan'),
         h('div', { class: 'dcm-card-h' }, [h('strong', {}, [tx('currentPlan')]), h('span', { class: 'dcm-pill' }, [tx('tokenBalance'), ' tokens'])]),
@@ -1120,6 +1144,7 @@
       m.screenCls = (Date.now() - (M.screenAt || 0) < 420) ? (M.screenCls || '') : '';
     }
     m.jobKey = function (e) { if (e && e.key === 'Enter') vals.startJob(e); };
+    m.redeemKey = function (e) { if (e && e.key === 'Enter') vals.redeemGo(e); };
     // The create sheet's own file input, routed straight to the lecture
     // uploader: the shared onFile routes by screen, and from the Nasheed
     // screen it would have sent a lecture to the nasheed library.
