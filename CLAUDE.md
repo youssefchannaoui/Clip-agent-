@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1649 JS + 701 Python**
+- `npm test` and `npm run check` must pass. Currently **1657 JS + 701 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -7038,6 +7038,115 @@ So the code is right and the value is wrong. The likeliest specific cause,
 worth checking first because nothing distinguishes it by shape: a **`stripe
 listen` CLI secret**, which is also `whsec_` + 32 and never validates a
 dashboard endpoint's deliveries. The second is a second endpoint's secret.
+
+## /plans was rebuilt for the decision it exists to carry (v3.144.0, 7 Sept 2026)
+
+Youssef, with the page on screen: "the tester code thing should also come on
+this page as well. This page is probably more important because this is where
+they first subscribe ... I wanna show people that you can have a free account.
+You don't need to connect your credit card. But in the same time, I want to
+make money from it ... Some people wouldn't maybe scroll down."
+
+### What was actually wrong, measured before anything moved
+
+At 1440x950 the plan cards began at **y=1731** — nearly two full screens down.
+Above them sat a hero, a gold full-width free card, and then a SECOND heading
+block ("SUBSCRIPTIONS / Built for different posting rhythms. / Start small,
+publish consistently...") saying what the hero had already said. So the one
+thing this page sells was invisible to anybody who did not scroll, and the free
+card — the exit — was the loudest thing on the screen.
+
+- **The free offer is the hero's own secondary action now**, not a card of its
+  own. It keeps the promise he asked for ("you don't need to connect your
+  credit card") in the first screen, in an OUTLINED button under a gold-filled
+  nothing, so the plans below it stay the primary decision. The bottom "Still
+  deciding?" strip that repeated the same button verbatim is gone with it.
+- **The second heading block is deleted.** A page has one thesis; the hero is
+  it. That block alone was ~120px of the gap.
+- **Measured after: plans at y=647 desktop (fold 950) and y=715 on a 390px
+  phone (fold 844)** — from 1731 and off-screen. The prices themselves sit at
+  y=845 on the desktop, so the period switch, all three cards, their names and
+  their prices are in the first screen with nothing scrolled.
+- Order is hero → code row → plans → wallet → token shop. The wallet moved
+  BELOW the plans deliberately: a balance is what you check after deciding,
+  not what you read while deciding.
+
+### The code row, and why it is a plain form post
+
+A new account is sent here the moment it signs up, so somebody who was DM'd a
+tester code meets this screen before it ever reaches the dashboard. **This page
+carries no script at all** — the period switch is three CSS radios for exactly
+that reason, and a test asserts the page has zero `<script>` tags — so the
+round trip through `POST /billing/redeem-code` is the whole mechanism.
+`POST /billing/redeem-code` sits BESIDE `/billing/checkout`, ABOVE the `/api`
+area: below it the catch-all answered 404, which reads as a dead button.
+
+### `--bg2` was never declared, so two panels painted no ground at all
+
+The code row and the closed-window card were written against `var(--bg2)`.
+The page declares `--bg`, `--bg1` and `--panel`. **A `var()` naming a token
+that does not exist fails silently** — the third time this file has recorded
+that shape (the phone's `--dcm-ink-2`, the topbar's `--dc-n-121214`). A test
+now walks every `var()` on this page against the tokens the page itself
+declares, and was proven red against `--bg2` restored.
+
+### "i dont like that font, copy these fonts"
+
+Sent with a screenshot of deenclipped.online's own hero. **Both surfaces
+already loaded the same two faces**, Fraunces and Outfit, from the same Google
+Fonts link — so nothing about the FAMILY was ever wrong, and swapping one would
+have been the wrong fix.
+
+What read as a different font was the SETTINGS, and Fraunces is the face where
+that matters most: it carries an **optical-size axis**, so the site's
+95px/weight 400/-.028em headline and this page's 52px/weight 420 are genuinely
+different letterforms — heavier serifs, less contrast — not the same type at
+two sizes. Measured on both pages in a browser before touching anything.
+
+- The h1 now takes the site's own spec: **weight 400, `-.028em`, line-height
+  .99**, at `clamp(34px,5vw,64px)` — large enough that the axis lands on a
+  display cut. The eyebrow takes its 11.5px/500/.22em. The body stack and the
+  serif stack are the site's strings verbatim, `"Times New Roman"` included.
+- **It takes the site's headline SHAPE too**: a white statement, then the
+  clause in gold italic on its own line — `Choose a plan.` / *`Add tokens any
+  time.`* Left to wrap it orphaned "time." on a line by itself, so the `<em>`
+  is `display:block` rather than trusted to break where it should.
+- `test/access-codes.test.mjs` **reads `marketing.css` and compares** rather
+  than pinning a string: the display and UI stacks must be the site's own, and
+  the h1 must carry its weight, tracking and leading. A test naming the values
+  would just be edited to match the day they drift. Proven red three ways.
+- The auth pages took the same serif stack, so every signed-out surface agrees.
+- **The hero's free line measured 3.95:1** on `--muted2` at 12px — under AA, on
+  the one sentence carrying the offer. `--muted` is 7.90:1.
+
+### A test that failed on a word, not a behaviour — the seventh
+
+`access-codes` pinned the literal "Continue with free tokens". The button reads
+"Start free — no card" now and the PROPERTY it protects — the free CTA is
+offered only while there is something free left to take — never changed. It
+matches `action="/billing/continue-free"` instead, and was re-proven red.
+
+## The app answers "is this deployment configured?" itself (v3.144.0)
+
+Youssef: "make sure ALL ENVRIOMENT on render is correct ADD ANY needed ones."
+
+**Render's API cannot be READ from a session** — `update_environment_variables`
+writes, and nothing lists what is set — so "check Render" is not a thing an
+agent can do, and a list typed from memory is exactly the stale claim this file
+keeps paying for. `configReady()` in `src/selfcheck.js` asks the process
+itself, which is the only source that cannot be wrong.
+
+- Seven groups, each named with what its absence COSTS rather than as a bare
+  variable list: Payments, Plan prices, Email, Worker, Media storage, Sign-in,
+  Posting — plus the optional switches. A group is reported by consequence
+  ("nobody can pay", "no email leaves the deployment"), because a missing
+  variable name tells an operator nothing about whether it matters today.
+- It joins the break detector, so it reaches **Owner → Health** on a screen
+  that works with nothing configured — `alerts.js` sends nothing until
+  `EMAIL_API_KEY` is set, which is itself one of the things this check reports.
+- **It never prints a value**, only whether one is present, its length and
+  whether it carried whitespace — the rule `webhookSecretNote()` already
+  follows, because a health payload is not a secure channel.
 
 ## Open items
 

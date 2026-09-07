@@ -35,6 +35,19 @@ function healthy(over = {}) {
     remote: true,
     workerRelease: '3.128.0',
     workerVersion: '3.128.0',
+    /*
+     * A fully configured deployment. Passed EXPLICITLY rather than left to
+     * process.env: a config check that reads the runner's own environment
+     * would pass or fail on whatever CI happens to export, which is neither
+     * this test's business nor stable.
+     */
+    env: {
+      STRIPE_SECRET_KEY: 'x', STRIPE_WEBHOOK_SECRET: 'x', STRIPE_PRICE_PRO_MONTHLY: 'x',
+      EMAIL_API_KEY: 'x', EMAIL_FROM: 'x',
+      WORKER_BASE_URL: 'x', WORKER_SHARED_SECRET: 'x',
+      OBJECT_STORAGE_BUCKET: 'x', MEDIA_PUBLIC_BASE: 'x',
+      APP_SESSION_SECRET: 'x', SOCIAL_TOKEN_KEY: 'x', GOOGLE_CLIENT_ID: 'x',
+    },
   }, over);
 }
 
@@ -257,4 +270,35 @@ test('the detector is on the screen, not only in the payload', () => {
   const adapter = fs.readFileSync(path.join(root, 'src/public/studio-adapter.js'), 'utf8');
   assert.match(adapter, /owPill: owPill,/, 'owPill must be exposed so the panel does not redefine it');
   assert.match(body, /StudioAdapter\.owPill/, 'the panel must use it');
+});
+
+test('the configuration check names what is missing and what it costs, never a value', () => {
+  // Render's API does not hand the values back, so the app is the only thing
+  // that can answer "is this deployment configured" -- and it is the only
+  // thing that knows what each absence actually breaks.
+  const bare = one(checks(healthy({ env: {} })), 'config');
+  assert.equal(bare.ok, false);
+  assert.match(bare.detail, /Payments: missing STRIPE_SECRET_KEY/);
+  assert.match(bare.detail, /Email: missing EMAIL_API_KEY \+ EMAIL_FROM/);
+  assert.match(bare.detail, /no address is ever confirmed/, 'and what it costs, not just the name');
+
+  // NEVER A VALUE. This reaches an operator's screen and, through
+  // alerts.report, an email -- which is not a secure channel.
+  const secret = 'sk_live_do_not_print_me';
+  const leaky = one(checks(healthy({ env: { STRIPE_SECRET_KEY: secret } })), 'config');
+  assert.ok(!leaky.detail.includes(secret), 'the check must not echo a credential');
+
+  // One group missing is enough to fail, and it names only that group.
+  const noMail = one(checks(healthy({ env: Object.assign({}, healthy().env, { EMAIL_API_KEY: '', EMAIL_FROM: '' }) })), 'config');
+  assert.equal(noMail.ok, false);
+  assert.match(noMail.detail, /^Email: missing/);
+  assert.ok(!/Payments/.test(noMail.detail), 'and stays quiet about the groups that are fine');
+});
+
+test('a switch that is deliberately off does not turn the row red', () => {
+  // An alert that fires on a decision somebody made on purpose is one nobody
+  // reads, and then the real one is missed too.
+  const r = one(checks(healthy()), 'config');
+  assert.equal(r.ok, true);
+  assert.match(r.detail, /Switched off by choice: .*Robot box/);
 });

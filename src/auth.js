@@ -851,7 +851,7 @@ export function loginPage({ error = '', returnTo = '/', info = '' } = {}) {
       <button class="dc-auth-primary compact" type="submit">Continue to dashboard</button>
     </form>` : '';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Sign in · DeenClipped</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Outfit:wght@400;500;600;700&display=swap"><style>
-  :root{color-scheme:dark;--bg:#070607;--bg1:#0d0c0e;--bg2:#131115;--text:#f5f1e8;--muted:#a8a196;--muted2:#736d63;--line:rgba(245,241,232,.09);--line2:rgba(245,241,232,.17);--gold:#d9b66f;--gold2:#f1d18e;--green:#6fce9e;--red:#ef6b7a;--shadow:0 40px 120px rgba(0,0,0,.55);--ease:cubic-bezier(.22,.6,.18,1);--serif:"Fraunces",Georgia,serif;--sans:"Outfit",Inter,ui-sans-serif,-apple-system,"Segoe UI",sans-serif}
+  :root{color-scheme:dark;--bg:#070607;--bg1:#0d0c0e;--bg2:#131115;--text:#f5f1e8;--muted:#a8a196;--muted2:#736d63;--line:rgba(245,241,232,.09);--line2:rgba(245,241,232,.17);--gold:#d9b66f;--gold2:#f1d18e;--green:#6fce9e;--red:#ef6b7a;--shadow:0 40px 120px rgba(0,0,0,.55);--ease:cubic-bezier(.22,.6,.18,1);--serif:"Fraunces",Georgia,"Times New Roman",serif;--sans:"Outfit",Inter,ui-sans-serif,-apple-system,"Segoe UI",sans-serif}
   *{box-sizing:border-box}html{min-width:320px}
   body{margin:0;min-height:100vh;background:radial-gradient(46% 34% at 24% 0%,rgba(217,182,111,.09),transparent 70%),var(--bg);font-family:var(--sans);color:var(--text);-webkit-font-smoothing:antialiased}
   a{color:inherit}
@@ -982,7 +982,7 @@ export function verifyPage({ email = '', error = '', info = '', returnTo = '/app
   .vc-wrap{width:100%;max-width:430px}
   .vc-lede{text-align:center;margin:0 0 20px}
   .vc-lede span{display:block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
-  .vc-lede strong{display:block;font-family:Fraunces,Georgia,serif;font-size:27px;font-weight:460;letter-spacing:-.02em;color:var(--text)}
+  .vc-lede strong{display:block;font-family:"Fraunces",Georgia,"Times New Roman",serif;font-size:27px;font-weight:460;letter-spacing:-.02em;color:var(--text)}
   /* The card sits under the same light as everything in it. */
   .vc-card{position:relative;padding:30px 28px 26px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(160deg,var(--card),#0d0c0e 72%);box-shadow:calc(var(--sx) * 26px) calc(var(--sy) * 30px) 70px -22px rgba(0,0,0,.85),0 40px 120px rgba(0,0,0,.5);transition:border-color .3s var(--ease),transform .5s var(--ease)}
   /* The lit edge and the sheen, both placed by the same two numbers: the gold
@@ -992,7 +992,7 @@ export function verifyPage({ email = '', error = '', info = '', returnTo = '/app
   .vc-card:after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(118% 88% at calc(50% - var(--sx) * 44%) calc(50% - var(--sy) * 44%),rgba(245,241,232,.055),transparent 60%)}
   .vc-lock{width:42px;height:42px;margin:0 auto 16px;display:grid;place-items:center;border-radius:13px;border:1px solid rgba(217,182,111,.2);background:rgba(217,182,111,.05);box-shadow:calc(var(--sx) * 7px) calc(var(--sy) * 7px) 15px -6px rgba(0,0,0,.8)}
   .vc-lock svg{width:19px;height:19px;fill:none;stroke:var(--gold);stroke-width:1.7;stroke-linecap:round}
-  .vc-card h1{margin:0 0 7px;text-align:center;font-family:Fraunces,Georgia,serif;font-size:23px;font-weight:500;letter-spacing:-.01em}
+  .vc-card h1{margin:0 0 7px;text-align:center;font-family:"Fraunces",Georgia,"Times New Roman",serif;font-size:23px;font-weight:500;letter-spacing:-.01em}
   .vc-to{margin:0 0 22px;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.6}
   .vc-to b{display:block;margin-top:3px;color:var(--text);font-weight:600;word-break:break-word}
   .vc-alert{margin:0 0 16px;padding:11px 13px;border-radius:12px;font-size:12.5px;line-height:1.45}
@@ -1034,7 +1034,7 @@ export function verifyPage({ email = '', error = '', info = '', returnTo = '/app
   .vc-card.is-done .vc-done{opacity:1;visibility:visible}
   .vc-coin{width:66px;height:66px;margin:0 auto 15px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(70% 70% at calc(50% - var(--sx) * 26%) calc(50% - var(--sy) * 26%),var(--gold2),#b58c3f);box-shadow:calc(var(--sx) * 10px) calc(var(--sy) * 10px) 26px -8px rgba(0,0,0,.8),0 0 0 10px rgba(217,182,111,.06),0 0 0 22px rgba(217,182,111,.03);animation:vcCoin .5s var(--ease) backwards}
   .vc-coin svg{width:26px;height:26px;fill:none;stroke:#171109;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:30;stroke-dashoffset:30;animation:vcTick .4s var(--ease) .22s forwards}
-  .vc-done p{margin:0;text-align:center;font-family:Fraunces,Georgia,serif;font-size:20px;font-weight:500}
+  .vc-done p{margin:0;text-align:center;font-family:"Fraunces",Georgia,"Times New Roman",serif;font-size:20px;font-weight:500}
   .vc-done small{display:block;margin-top:6px;color:var(--muted);font-family:Outfit,sans-serif;font-size:12.5px}
   @keyframes vcCoin{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
   @keyframes vcTick{to{stroke-dashoffset:0}}

@@ -153,12 +153,102 @@ function workerCurrent({ workerRelease, workerVersion, remote }) {
  * rather than imported so this module stays pure and testable -- calling it
  * needs no server, no disk and no network.
  */
+/*
+ * WHAT THIS DEPLOYMENT IS MISSING, AND WHAT EACH ABSENCE COSTS.
+ *
+ * Youssef, 7 Sept 2026: "make sure ALL ENVRIOMENT on render is correct ADD ANY
+ * needed ones." Render's API does not hand the values back, and reading them
+ * once from a session that is about to end answers the question for a day. The
+ * app can answer it for ever -- it is the only thing that knows both which
+ * variables it reads AND what stops working without them.
+ *
+ * NEVER A VALUE, not even a length or a prefix: this reaches an operator's
+ * screen and, through alerts.report, an email. Only set / not set, and the
+ * sentence that says what it costs.
+ *
+ * A group is only FAILING when the absence actually breaks a promise the
+ * product makes to a customer. Things that are merely off (Turnstile, an
+ * access-code default) are listed as off and do not turn the row red -- an
+ * alert that fires on a deliberate choice is one nobody reads.
+ */
+function configReady({ env = process.env } = {}) {
+  const has = name => Boolean(String(env[name] || '').trim());
+  const every = names => names.every(has);
+  const some = names => names.some(has);
+
+  const groups = [
+    {
+      name: 'Payments',
+      need: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+      ok: every(['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']),
+      costs: 'nobody can subscribe, or a payment lands and the plan never does',
+    },
+    {
+      name: 'Plan prices',
+      need: ['STRIPE_PRICE_PRO_MONTHLY', 'STRIPE_PRICE_STUDIO_MONTHLY'],
+      // Any one price makes checkout reachable; the columns without one say
+      // "Opening soon" rather than offering a button that cannot charge.
+      ok: some(['STRIPE_PRICE_PRO_WEEKLY', 'STRIPE_PRICE_PRO_MONTHLY', 'STRIPE_PRICE_PRO_YEARLY',
+        'STRIPE_PRICE_STUDIO_WEEKLY', 'STRIPE_PRICE_STUDIO_MONTHLY', 'STRIPE_PRICE_STUDIO_YEARLY',
+        'STRIPE_PRICE_WEEKLY', 'STRIPE_PRICE_MONTHLY', 'STRIPE_PRICE_YEARLY']),
+      costs: 'every plan column reads "Opening soon" and no one can buy anything',
+    },
+    {
+      name: 'Email',
+      need: ['EMAIL_API_KEY', 'EMAIL_FROM'],
+      ok: every(['EMAIL_API_KEY', 'EMAIL_FROM']),
+      costs: 'no address is ever confirmed, and no clip-is-live, lecture-failed, '
+        + 'lifecycle or billing-alert mail goes out at all',
+    },
+    {
+      name: 'Worker',
+      need: ['WORKER_BASE_URL', 'WORKER_SHARED_SECRET'],
+      ok: every(['WORKER_BASE_URL', 'WORKER_SHARED_SECRET']),
+      costs: 'no lecture can be imported, clipped or rendered',
+    },
+    {
+      name: 'Media storage',
+      need: ['OBJECT_STORAGE_BUCKET', 'MEDIA_PUBLIC_BASE'],
+      ok: every(['OBJECT_STORAGE_BUCKET', 'MEDIA_PUBLIC_BASE']),
+      costs: 'renders have nowhere to live, or are served from the rate-limited dev endpoint',
+    },
+    {
+      name: 'Sign-in',
+      need: ['APP_SESSION_SECRET', 'SOCIAL_TOKEN_KEY'],
+      ok: every(['APP_SESSION_SECRET', 'SOCIAL_TOKEN_KEY']),
+      costs: 'sessions do not survive a deploy, or connected channels cannot be decrypted',
+    },
+    {
+      name: 'Posting',
+      need: ['GOOGLE_CLIENT_ID', 'TIKTOK_CLIENT_KEY', 'META_APP_ID'],
+      ok: some(['GOOGLE_CLIENT_ID', 'TIKTOK_CLIENT_KEY', 'META_APP_ID']),
+      costs: 'no channel can be connected, so nothing can ever be published',
+    },
+  ];
+
+  // Off is not broken. These are switches, and each is a decision.
+  const optional = [
+    { name: 'Robot box on sign-up', on: has('TURNSTILE_SITE_KEY') && has('TURNSTILE_SECRET') },
+    { name: 'Referral discount', on: has('STRIPE_REFERRAL_COUPON') },
+    { name: 'Push keys pinned', on: has('VAPID_PUBLIC_KEY') && has('VAPID_PRIVATE_KEY') },
+  ];
+
+  const broken = groups.filter(group => !group.ok);
+  const off = optional.filter(item => !item.on).map(item => item.name);
+  const detail = broken.length
+    ? broken.map(group => `${group.name}: missing ${group.need.filter(n => !has(n)).join(' + ')} \u2014 ${group.costs}`).join('. ')
+    : `every group configured (${groups.map(group => group.name).join(', ')})`
+      + (off.length ? `. Switched off by choice: ${off.join(', ')}` : '');
+  return { key: 'config', ok: !broken.length, detail };
+}
+
 export function checks(deps = {}) {
   return [
     assetsOnDisk(deps),
     inlineScriptCovered(deps),
     mediaDomain(deps),
     workerCurrent(deps),
+    configReady(deps),
   ];
 }
 

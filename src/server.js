@@ -1106,6 +1106,31 @@ async function route(req, res, url) {
     try { const body = await formBody(req); billing.markPlansSeen(currentUser); return redirect(res, billing.postLoginRedirect(currentUser, body.returnTo || '/app')); }
     catch (error) { return redirect(res, `/plans?error=${encodeURIComponent(error.message)}`); }
   }
+  /*
+   * The /plans page's own redeem, as a plain form post.
+   *
+   * That page carries NO script -- its period switch is CSS radios and a test
+   * asserts there is no script tag -- so this cannot be the JSON route the
+   * dashboard uses. It is the same billing.redeemAccessCode either way; only
+   * the answer differs, and it comes back as a sentence on the page.
+   */
+  if (method === 'POST' && pathname === '/billing/redeem-code') {
+    if (!currentUser) return redirect(res, '/login?returnTo=%2Fplans');
+    const body = await formBody(req);
+    const back = `/plans?returnTo=${encodeURIComponent(body.returnTo || '/app')}`;
+    const guess = throttle.rateLimit(`redeem:${currentUser.id}`, 12, 60 * 60_000);
+    if (!guess.allowed) {
+      return redirect(res, `${back}&error=${encodeURIComponent('Too many tries. Wait an hour, or send us the code and we will check it.')}`);
+    }
+    try {
+      const grant = billing.redeemAccessCode(currentUser, body.code || '');
+      log(`Redeemed access code ${grant.code}`, 'info', currentUser.id);
+      const tier = grant.tier === 'studio' ? 'Studio' : 'Pro';
+      return redirect(res, `${back}&info=${encodeURIComponent(`${tier} unlocked \u2014 ${grant.daysLeft} days, and every ${tier} feature is on.`)}`);
+    } catch (error) {
+      return redirect(res, `${back}&error=${encodeURIComponent(error.message)}`);
+    }
+  }
   if (method === 'POST' && pathname === '/billing/checkout') {
     try { const body = await formBody(req); const session = await billing.createCheckoutSession(currentUser, String(body.plan || ''), geo.currencyOf(req)); return redirect(res, session.url); }
     catch (error) { return redirect(res, `/plans?error=${encodeURIComponent(error.message)}`); }

@@ -301,3 +301,138 @@ test('EVERY SURFACE AGREES about a running grant — the card, the pill and the 
   assert.ok(!/free day/.test(v.planNote), 'not the free week running underneath it');
   assert.match(v.redeemTitle, /^Pro access is running/);
 });
+
+test('/PLANS carries the code box, and it is a form post because that page has no script', async () => {
+  /*
+   * Youssef, 7 Sept 2026: "the tester code thing should also come on this page
+   * as well. This page is probably more important." He is right -- a new
+   * account is redirected to /plans the moment it signs up, so somebody DM'd a
+   * code meets this screen before they ever reach the dashboard.
+   */
+  const page = await (await fetch(`${base}/plans`, { headers: { cookie } })).text();
+  assert.match(page, /action="\/billing\/redeem-code"/, 'the box is on the page');
+  assert.match(page, /name="code"/);
+  // The period switch is CSS radios precisely because this page admits no
+  // inline script, so the redeem cannot be the dashboard's JSON route.
+  assert.ok(!/<script/i.test(page), 'and the page still carries no script at all');
+});
+
+test('/plans puts the PRICES above the wallet — some people never scroll', () => {
+  /*
+   * "Some people wouldn't maybe scroll down." The wallet is STATUS -- four
+   * zeros on a new account -- and it was sitting between the only gold button
+   * on the page and the only prices, so the plans began roughly two screens
+   * down under a heading nobody had a reason to reach.
+   */
+  const src = fs.readFileSync(new URL('../src/billing.js', import.meta.url), 'utf8');
+  const at = needle => src.indexOf(needle);
+  const code = at('${codeBox}');
+  const plans = at('<section class="plans">');
+  const wallet = at('<section class="wallet">');
+  const shop = at('id="token-shop"');
+  assert.ok(code > 0 && plans > 0 && wallet > 0 && shop > 0, 'all four sections exist');
+  assert.ok(code < plans, 'the code box comes before the plans');
+  assert.ok(plans < wallet, 'THE PLANS COME BEFORE THE WALLET');
+  assert.ok(wallet < shop, 'and the wallet before the token shop');
+});
+
+test('the free CTA is only offered while there is something free left to take', async () => {
+  const user = me();
+  const b = billing.ensureUserBilling(user);
+  // Back to a plain free account with days remaining.
+  delete b.grant;
+  b.plan = 'free';
+  b.status = 'free';
+  user.createdAt = Date.now() - 1000;
+  const fresh = await (await fetch(`${base}/plans`, { headers: { cookie } })).text();
+  assert.match(fresh, /action="\/billing\/continue-free"/, 'day one: getting in IS the right primary action');
+
+  // Now spend the window. A gold button offering forty tokens it cannot give
+  // is the loudest thing on the page telling somebody to do the one thing that
+  // will not work.
+  user.createdAt = Date.now() - 40 * 24 * 3600 * 1000;
+  const spent = await (await fetch(`${base}/plans`, { headers: { cookie } })).text();
+  assert.ok(!/action="\/billing\/continue-free"/.test(spent), 'once it is gone the offer goes with it');
+  assert.match(spent, /Your free days are up/, 'and says so plainly instead');
+  assert.match(spent, /still here/, 'without implying their work was lost');
+});
+
+test('a code redeems from /plans and the page says what landed', async () => {
+  const user = me();
+  delete billing.ensureUserBilling(user).grant;
+  const code = billing.createAccessCode({ id: 'operator' }, { code: 'DEENTEST', cap: 200 });
+  assert.equal(code.code, 'DEENTEST', 'a shared code can be given readable text');
+  const response = await fetch(`${base}/billing/redeem-code`, {
+    method: 'POST',
+    headers: { cookie, 'Content-Type': 'application/x-www-form-urlencoded', Origin: base },
+    body: new URLSearchParams({ code: 'deentest', returnTo: '/app' }).toString(),
+    redirect: 'manual',
+  });
+  assert.equal(response.status, 302);
+  const back = response.headers.get('location') || '';
+  assert.match(back, /^\/plans/);
+  assert.match(decodeURIComponent(back), /Pro unlocked/);
+  assert.equal(billing.tierOf(me()), 'pro');
+
+  // And the page then leads with the running grant rather than the offer.
+  const page = await (await fetch(`${base}/plans`, { headers: { cookie } })).text();
+  assert.match(page, /Pro access is running/);
+  assert.match(page, /14 days left/);
+});
+
+/*
+ * THE FONTS ARE THE PUBLIC SITE'S, AND THE VALUES ARE COPIED, NOT CHOSEN.
+ *
+ * Youssef, 7 Sept 2026, looking at deenclipped.online beside this page: "i
+ * dont like that font, copy these fonts". Both surfaces already loaded the
+ * same two faces -- Fraunces and Outfit -- so nothing about the FAMILY was
+ * wrong. What read as a different font was the settings: Fraunces carries an
+ * optical-size axis, so the site's 95px/400/-.028em headline and this page's
+ * 52px/420 are genuinely different letterforms, and the stacks had drifted a
+ * fallback apart.
+ *
+ * So this reads marketing.css and compares, rather than pinning a string. A
+ * palette or a fallback moved on the site has to move here too, and a test
+ * naming the value would simply be edited to match instead of catching it.
+ */
+test('/plans takes its type from the public site, not from its own taste', async () => {
+  const css = fs.readFileSync(new URL('../src/public/marketing.css', import.meta.url), 'utf8');
+  const site = {
+    display: /--font-display:([^;]+);/.exec(css)?.[1]?.trim(),
+    ui: /--font-ui:([^;]+);/.exec(css)?.[1]?.trim(),
+  };
+  assert.ok(site.display && site.ui, 'the site still declares both faces');
+
+  const page = await (await fetch(`${base}/plans`, { headers: { cookie } })).text();
+  assert.ok(page.includes(`--serif:${site.display}`), "the display stack is the site's, fallbacks included");
+  // The site quotes only the first family; this page quotes 'Segoe UI' with
+  // single quotes because it lives inside a template literal. Compare the
+  // families themselves rather than the punctuation around them.
+  const families = t => t.split(',').map(x => x.trim().replace(/^["']|["']$/g, ''));
+  const pageUi = /font-family:("Outfit"[^;]+);/.exec(page)?.[1] || '';
+  assert.deepEqual(families(pageUi), families(site.ui), 'and the UI stack is the same faces in the same order');
+
+  // The site's own h1 spec. Only the SIZE may differ -- an interior page is
+  // not a homepage hero -- and it must still be the large end of the axis.
+  const h1 = /\.hero h1\{([^}]+)\}/.exec(page)?.[1] || '';
+  assert.match(h1, /font-weight:400\b/, 'weight 400, like the site');
+  assert.match(h1, /letter-spacing:-\.028em/, 'and its tracking');
+  assert.match(h1, /line-height:\.99/, 'and its leading');
+  assert.match(h1, /font-size:clamp\(\d+px,[\d.]+vw,(\d+)px\)/, 'sized on a clamp');
+  assert.ok(Number(/font-size:clamp\(\d+px,[\d.]+vw,(\d+)px\)/.exec(h1)[1]) >= 56,
+    'and big enough that Fraunces picks a display optical size');
+});
+
+/*
+ * Every var() on this page has to name a token the page declares. --bg2 did
+ * not, so the code row and the closed-window card painted no ground at all --
+ * silent, and the exact trap v3.119.0 records on the phone sheet.
+ */
+test('/plans declares every colour token it uses', async () => {
+  const page = await (await fetch(`${base}/plans`, { headers: { cookie } })).text();
+  const css = page.slice(page.indexOf('<style>'), page.indexOf('</style>'));
+  const declared = new Set([...css.matchAll(/(--[a-z0-9-]+)\s*:/g)].map(m => m[1]));
+  const missing = [...new Set([...css.matchAll(/var\((--[a-z0-9-]+)\)/g)].map(m => m[1]))]
+    .filter(name => !declared.has(name));
+  assert.deepEqual(missing, [], 'a var() naming nothing fails silently');
+});
