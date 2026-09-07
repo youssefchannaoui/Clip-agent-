@@ -866,10 +866,10 @@ body.dc-light #studioLiveBar {
 
 /* The same ring, larger, in the tasks panel's own header. */
 .dctk-ring-lg {
-  width: 42px; height: 42px; flex: 0 0 42px; margin-right: 12px;
+  width: 36px; height: 36px; flex: 0 0 36px; margin-right: 11px;
 }
-.dctk-ring-lg::before { inset: 4px; background: #17171A; }
-.dctk-ring-lg b { font-size: 11px; }
+.dctk-ring-lg::before { inset: 3.5px; background: #17171A; }
+.dctk-ring-lg b { font-size: 9.5px; }
 
 .dctk-copy { min-width: 0; flex: 1; }
 .dctk-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -936,7 +936,11 @@ body.dc-light #studioLiveBar {
   color: #8B8B93; font: inherit; cursor: pointer; min-width: 0;
 }
 #dcTasks .dctk-tab::after {
-  content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px;
+  /* A short bar under the label, not a rule across the whole cell: at a third
+     of the panel's width the full-cell version read as a heavy underline
+     rather than a marker. */
+  content: ""; position: absolute; left: 50%; transform: translateX(-50%);
+  width: 34px; bottom: -1px; height: 2px;
   border-radius: 2px 2px 0 0; background: transparent; transition: background .14s ease;
 }
 #dcTasks .dctk-tab:hover { color: #BCBCC3; }
@@ -1050,6 +1054,11 @@ body.dc-light #studioLiveBar {
 /* An empty slot still holds the column open, so a rung with no reward does not
    let its row's text run wider than the rows above and below it. */
 #dcTasks .dctk-prize.is-none { border-color: transparent; background: transparent; }
+/* No row in this group carries a reward, so the third column is dead space --
+   ~94px of it on every row, which is what made the panel read as empty. */
+#dcTasks .dctk-list.is-bare .dctk-row {
+  grid-template-columns: var(--dctk-line) minmax(0, 1fr);
+}
 /* The one control in the row. Same height as the chip it replaces, so a row
    with a claim in it is exactly as tall as one without. */
 #dcTasks .dctk-claim {

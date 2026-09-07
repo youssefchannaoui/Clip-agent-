@@ -13705,3 +13705,29 @@ what the ring is a mark for.
 at **3.7:1** in night -- under AA, on the one line that answers "can these be
 given twice". #6E6E76 -> #8B8B93 takes it to **5.53**. Paper was already 5.36.
 Every other reading passed: tab-on 16.74/18.37, tab-off and note 5.53/6.04.
+
+## The tasks rows were reserving a column nothing fills (v3.148.4, 8 Sept 2026)
+
+Youssef, on the restyled panel: "its messed up i dont like this look."
+
+One concrete defect, and it is specific to his own account. The row is a
+three-column grid and `.dctk-prize.is-none` held the third column open with an
+empty 82px chip -- **correct when SOME rows carry a reward, dead space when
+none do.** On an unlimited account no row ever carries one, so every row was
+reserving ~94px on the right and the panel read as stretched and empty. The
+column is dropped when nothing in the group has a visible reward: the title and
+note go from **354px to 448px** of the 520px card.
+
+Two things that read as heavy went with it: the tab's ink bar was a rule across
+the whole cell and is now a **34px marker** under the label, and the header ring
+is 36px rather than 42.
+
+**The card was never stretching.** It is capped at `min(520px, 100%)`, measured
+520 at a 1440 viewport; the screenshot that prompted this was a
+higher-resolution capture of the same 520px card, which reads as much larger.
+Check the scale of a screenshot before diagnosing a width from it.
+
+**And the taste question was handed back rather than guessed at a fourth time.**
+Two rounds of restyling had already been rejected; the defect above is
+measurable and was fixed, and the LOOK was put to Youssef as a choice instead
+of another unprompted redesign.

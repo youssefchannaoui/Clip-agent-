@@ -10114,7 +10114,7 @@ function paintTasksPanel(){
           : task.claimable
             ? '<button type="button" class="dctk-claim" data-claim="'+esc(task.id)+'">Claim '+task.reward+'</button>'
             : '<span class="dctk-prize">'+task.reward+' tokens</span>')
-      : '<span class="dctk-prize is-none"></span>';
+      : '';
     const now=!task.done&&task.id===rows.nowId;
     return '<div class="dctk-row'+(task.done?' is-done':'')+(now?' is-now':'')
       +(group.locked?' is-shut':'')+'" data-task="'+esc(task.id)+'" data-go="'+esc(task.action||'')+'">'
@@ -10130,7 +10130,13 @@ function paintTasksPanel(){
      nobody has to wonder, and only where a reward can actually be paid. */
   const foot=(!rows.unlimited&&group.tasks.some(t=>t.reward>0))
     ? '<p class="dctk-foot">Each reward is paid once.</p>' : '';
-  const html=tabs+head+'<div class="dctk-list">'+list+'</div>'+foot;
+  /* WHEN NOTHING IN THE GROUP CARRIES A REWARD, DROP THE COLUMN.
+     The row is a three-column grid and the empty chip held the third column
+     open -- right when SOME rows have a chip, and dead space when none do. On
+     an unlimited account no row ever has one, so every row was reserving ~94px
+     on the right and the panel read as stretched and empty. */
+  const bare=!group.tasks.some(t=>t.reward>0&&!rows.unlimited);
+  const html=tabs+head+'<div class="dctk-list'+(bare?' is-bare':'')+'">'+list+'</div>'+foot;
   if(body.innerHTML!==html)body.innerHTML=html;
 }
 
