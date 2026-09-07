@@ -88,10 +88,6 @@ const STUDIO_ASSETS = {
   '/studio-notify.js': { file: studioAsset('studio-notify.js'), type: JS_TYPE },
   '/studio-theme.generated.css': { file: studioAsset('studio-theme.generated.css'), type: 'text/css; charset=utf-8' },
   '/studio-light.generated.css': { file: studioAsset('studio-light.generated.css'), type: 'text/css; charset=utf-8' },
-  // The editor's launch gate (see index.html). Two files and these two lines;
-  // turning the editor on again is a deletion rather than an untangling.
-  '/studio-editor-gate.css': { file: studioAsset('studio-editor-gate.css'), type: 'text/css; charset=utf-8' },
-  '/editor-gate.js': { file: studioAsset('editor-gate.js'), type: JS_TYPE },
   // The phone dashboard (studio-mobile.js renders a second template over the
   // same bindings; the sheet lives entirely inside the 820px query).
   '/studio-mobile.css': { file: studioAsset('studio-mobile.css'), type: 'text/css; charset=utf-8' },

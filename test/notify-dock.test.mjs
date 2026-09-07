@@ -86,7 +86,7 @@ test('the dock outranks every layer this app draws', () => {
   const files = ['src/public/index.html', 'src/public/studio-adapter.js', 'src/public/studio-styles.generated.css',
     'src/public/studio-help.css', 'src/public/studio-owner.css', 'src/public/studio-tokens.css',
     'src/public/studio-motion.css', 'src/public/studio-mobile.css', 'src/public/studio-mobile.js',
-    'src/public/studio-responsive.css', 'src/public/studio-editor-gate.css'];
+    'src/public/studio-responsive.css'];  // studio-editor-gate.css: deleted with the gate, 7 Sept 2026
   let highest = 0, where = '';
   for (const file of files) {
     for (const hit of src(file).matchAll(/z-index:\s*(\d+)/g)) {

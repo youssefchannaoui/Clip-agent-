@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1594 JS + 687 Python**
+- `npm test` and `npm run check` must pass. Currently **1593 JS + 687 Python**
   (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -522,6 +522,10 @@ Habits the tests now enforce, and why:
 ---
 
 ## The editor is gated for launch (27 Aug 2026, Youssef's call)
+
+**SHIPPED 7 Sept 2026 (v3.139.0) -- see *The editor shipped* at the foot of this
+file. The two gate files are deleted; everything below is the record of why it
+was held and what it was held behind.**
 
 **Un-gated in v3.78.0 and RE-GATED in v3.78.3, both on 2 Sept 2026.** The
 "fix all" pass on the week-one gaps shipped the editor with section cuts;
@@ -11373,3 +11377,51 @@ picking one gives you.
 
 **The gate is untouched and still on**, at origin and here: this is built
 BEHIND it, like the section cuts were.
+
+## The editor shipped (v3.139.0, 7 Sept 2026)
+
+Youssef, with a screenshot of production still reading "The clip editor lands
+in the next update", asked whether to settle the one remaining unknown first or
+take the gate off now: **"Take the gate off now."** So it is off. Held from
+27 Aug (re-gated once on 2 Sept), and behind it two sessions had fixed
+everything he complained about (v3.137.0 and v3.138.0).
+
+**What "the gate" was, and every piece of it that went:** `editor-gate.js` and
+`studio-editor-gate.css` (`git rm`'d, not unlinked -- a file nothing serves is
+a file the next person re-links), their `<link>` and `<script>` in index.html,
+the two server allowlist lines, and the phone rule's `:not(#dcEditorSoon)`
+exemption. The copy moved with it in **five places**, using the wording that
+shipped briefly in v3.78.0 (`8a07833`, applied as a patch where it still
+applied): the help article "The clip editor says coming soon", the terms'
+"currently marked coming soon", the features chapter's headline, the
+`/alternatives` honest-limits list and the landing page's "behind a coming
+soon gate". The concept image of frame-level tools KEEPS its "Concept preview"
+badge -- overlays, media and AI tools are still not built, and CLAUDE.md's
+rule that `editor-premium.webp` is never shown untagged stands; only its alt
+stopped calling the editor itself coming soon.
+
+- **`test/editor-gate.test.mjs` proves the gate is GONE now** (both files
+  absent, both routes 404, no tags, no allowlist lines, the phone rule with
+  nothing to exempt, no BETA, and the six retired sentences absent) -- half a
+  gate is the worst of both. Its first cut matched a bare `.inert = true` and
+  went red on the dialogs' focus trap, a different feature that must stay; it
+  names the gate's own identifiers now. And it pins the SPECIFIC retired
+  sentences rather than "editor near coming soon": the concept badge is a
+  legitimate "coming soon" eighty characters from the word "editor".
+- **`test/notify-dock.test.mjs` had the deleted sheet in a typed list** of
+  files to scan for z-index -- the one typed list in a test whose comment says
+  "read from the files rather than listed by hand". Dropped.
+- Driven on the real build with no local hacks, in from the queue card's own
+  Edit button: no overlay, not inert, no blur, both gate files 404, title
+  "Clip editor" with v3.137.0's honest subtitle. At 390 the phone shows the
+  wider-screen message alone. 1593 JS + 687 Python.
+
+**THE ONE THING NOT PROVEN, said here because he chose to ship past it:** no
+preview or save has been WATCHED landing from the real Hetzner worker
+(v3.137.0's own closing line). Every render request is proven by the bindings
+and the engine's tests; the dev box has no worker. **The first Preview press on
+production is now a customer's** -- or Youssef's, and it is worth being his:
+open any clip on deenclipped.online, press Preview, and see "Rendering preview"
+come back as a playable window. If it does not, that is the first thing to
+look at, and `runRemoteAux`'s stall detection (v3.133.0) is what bounds it.
+

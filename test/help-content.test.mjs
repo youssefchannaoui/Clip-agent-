@@ -103,7 +103,10 @@ test('the content still says the things that are true today', () => {
   // Each of these is a fact the product depends on and a customer is surprised
   // by. If one changes, the copy must change with it -- that is the point of
   // asserting them rather than the machinery around them.
-  assert.match(all, /coming soon|not open yet|gated/, 'the clip editor is behind a gate and the help must say so');
+  // The editor shipped (v3.78.0): trim, section cuts, caption words. The help
+  // must teach the cut and must not still call the editor coming soon.
+  assert.match(all, /cut a section from here/, 'the help teaches the section cut');
+  assert.doesNotMatch(all, /editor says coming soon|deliberately switched off/, 'the editor is no longer gated');
   assert.match(all, /nothing posts|until you approve|your say-so|approve/, 'nothing publishes without approval');
   assert.match(all, /view|audience|no platform sends/, 'no platform sends audience numbers back');
 });

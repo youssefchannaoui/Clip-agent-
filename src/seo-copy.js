@@ -7,8 +7,9 @@
  * 1. Every claim here is checkable against the code. No view counts, no
  *    customer numbers, no "10x faster" — nothing in this product records any
  *    of that, so writing it would be inventing it. Where a page says what
- *    DeenClipped does NOT do, that sentence is load-bearing: the editor is
- *    gated, there is no mobile app, no platform sends audience data back, and
+ *    DeenClipped does NOT do, that sentence is load-bearing: the editor trims
+ *    and cuts but has no frame-level tools, there is no mobile app, no
+ *    platform sends audience data back, and
  *    a visitor who finds that out after paying is a refund and a bad review.
  * 2. A page that describes a feature must be deleted or rewritten when that
  *    feature changes. test/seo-architecture.test.mjs asserts the shape; only
@@ -225,7 +226,7 @@ export const SEO_COPY = {
       { heading: "An English talk with Arabic inside it is two languages",
         body: "Most transcription picks one language from the opening seconds and applies it to the whole file. An English lecture with two minutes of recitation in the middle comes back as Latin nonsense, and after that nothing can tell it was ever Arabic. Auto-detect here is multilingual and switches per segment. Arabic speech that is not scripture is captioned in Arabic with an English line beneath it, taken from a second translate pass. You can also pin the language — English, Arabic or Urdu — when you already know what is on the recording." },
       { heading: "Scripture cannot leave without a person seeing it",
-        body: "Every clip lands in a review queue and waits for a human decision. Nothing publishes on its own. Clips containing scripture carry an extra flag, QUOTE_RISK, that forces review and never bypasses — not even under automatic approval. The reviewer watches the rendered clip, the same file that would post, with its score and the model's short reasons beside it: complete ending, question hook, stands alone. Approve, reject or send it back, with keyboard shortcuts for a long queue. The full clip editor is still behind a coming-soon notice and is not part of what you get today." },
+        body: "Every clip lands in a review queue and waits for a human decision. Nothing publishes on its own. Clips containing scripture carry an extra flag, QUOTE_RISK, that forces review and never bypasses — not even under automatic approval. The reviewer watches the rendered clip, the same file that would post, with its score and the model's short reasons beside it: complete ending, question hook, stands alone. Approve, reject or send it back, with keyboard shortcuts for a long queue. A clip that needs a trim or a section cut out of the middle opens in the editor from the same queue, and Save renders the cut." },
       { heading: "What happens between the link and the first clip",
         body: "Give it a YouTube URL or an MP4, then pick the start and end of the stretch worth clipping — thirty seconds minimum. Only that stretch is downloaded and processed, so a three-minute selection from a ninety-minute lecture costs three minutes. Whisper transcribes it with word-level timings. A self-hosted Ollama model scores candidate moments and returns its reasons, and cuts land on complete moments rather than fixed intervals. Face detection crops 16:9 to vertical 9:16, a nasheed is mixed under the speech and ducked beneath it, and captions burn in word-by-word, karaoke, phrase or stacked, across five templates." },
       { heading: "Approved clips go out on your own channels",
@@ -324,7 +325,7 @@ export const SEO_COPY = {
       { q: "How does DeenClipped handle Quran recitation?",
         a: "Recited Quran is matched against a 6,236-ayah corpus and rendered as the ayah with its translation, set in Amiri rather than the lecture caption face. The Quran Recitation template captions scripture and nothing else, so a half-heard aside never appears under a verse. Any clip containing scripture carries a QUOTE_RISK flag that forces a human decision before it can go anywhere." },
       { q: "What can DeenClipped not do yet?",
-        a: "The full clip editor is built but sits behind a coming-soon notice, so choosing a template and re-rendering is how you change a clip's look today. There are no view counts, watch time or audience figures anywhere in the app, because no connected platform sends them. Posting to two accounts on the same platform is not built yet either. There is no mobile app." },
+        a: "The clip editor trims a clip, cuts sections out of the middle, edits caption words and repositions captions; it has no frame-by-frame tools, overlays or extra media. There are no view counts, watch time or audience figures anywhere in the app, because no connected platform sends them. Posting to two accounts on the same platform is not built yet either. There is no mobile app." },
     ],
     ctaLabel: "Start Basic free",
   },
@@ -370,7 +371,7 @@ export const SEO_COPY = {
       { heading: "Arabic, and what happens when scripture is recited",
         body: "Recited Quran is matched against a corpus of all 6,236 ayat and rendered as the ayah with its translation, set in Amiri, instead of as a phonetic guess from a transcriber. Arabic speech that is not scripture is captioned in Arabic with an English line beneath it, drawn from a second translation pass. Auto-detect switches per segment, so an English talk containing recitation is handled as both languages rather than one. Any clip containing scripture is flagged and forced into human review, and that flag never bypasses, including on accounts running automation." },
       { heading: "What it does not do yet",
-        body: "The full clip editor sits behind a coming-soon notice and is not available yet, so clips are reviewed and published as rendered. There are no view counts, watch time or audience figures anywhere in the product, because no connected platform sends them to us and inventing them would be worse than leaving them out. There is no mobile app, and Studio multi-account posting is not built. Everything else described on this page is running today, and this page is kept honest about the difference." },
+        body: "The clip editor trims a clip, cuts sections out of the middle and edits caption words, with every change rendered into the clip on Save; it is not a frame-level editor, so there are no overlays, extra media or keyframes. There are no view counts, watch time or audience figures anywhere in the product, because no connected platform sends them to us and inventing them would be worse than leaving them out. There is no mobile app. Everything else described on this page is running today, and this page is kept honest about the difference." },
     ],
     faqs: [
       { q: "What is DeenClipped?",
@@ -610,7 +611,7 @@ export const SEO_COPY = {
       { heading: "How to tell which one you need",
         body: "Three questions settle it. Does your audio contain Arabic or recitation? If no, a general tool is likely a better fit and you should not pay a niche premium for handling you will never use. Do you need a person to see every clip before it publishes, and do you want that enforced rather than suggested? DeenClipped makes review mandatory and cannot be configured out of it, which is a feature to some people and friction to others. And are you starting from long recordings, or from audio you want a video built around? Long recordings are what this cuts." },
       { heading: "What DeenClipped does not have",
-        body: "Said plainly so you can rule it out quickly: the full clip editor is behind a \"coming soon\" gate, so what you can change today is the template and the source range, not individual frames. There is no mobile app. No connected platform sends audience data back, so there are no view counts or watch-time figures anywhere in the product — the numbers you get are about your own workflow, not your reach. And posting to more than one account on the same platform is not built yet. If any of those is a requirement, this is not your tool this month." },
+        body: "Said plainly so you can rule it out quickly: the clip editor trims, cuts sections and edits caption words, but it is not a frame-level editor — no overlays, no extra media, no keyframes. There is no mobile app. No connected platform sends audience data back, so there are no view counts or watch-time figures anywhere in the product — the numbers you get are about your own workflow, not your reach. And posting to more than one account on the same platform is not built yet. If any of those is a requirement, this is not your tool this month." },
       { heading: "Check their current details yourself",
         body: "Nothing on this page quotes anyone else’s price or feature list, deliberately. Those move, and a stale comparison is worse for you than no comparison — you would check, find it wrong, and reasonably stop believing the rest of this site. Go to their sites, look at what they charge today, and try the free tier where there is one. Ours is 40 tokens and needs no card." },
     ],

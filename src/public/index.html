@@ -64,12 +64,11 @@
      body.dc-light, so loading it costs a dark session nothing. -->
 <link rel="stylesheet" href="/studio-theme.generated.css">
 <link rel="stylesheet" href="/studio-light.generated.css">
-<!-- The clip editor is held back for launch (Youssef, 27 Aug 2026, reaffirmed
-     2 Sept 2026: "just keep editor as coming soon"). This sheet blurs it and
-     editor-gate.js makes it inert under a notice. Shipping the editor is
-     removing this link, the script below, and the two server allowlist lines;
-     the section-cut controls underneath are already built. -->
-<link rel="stylesheet" href="/studio-editor-gate.css">
+<!-- The clip editor SHIPPED on 7 Sept 2026 (Youssef, asked whether to settle
+     the last unknown first or take the gate off now: "Take the gate off now").
+     It was held back from 27 Aug behind studio-editor-gate.css + editor-gate.js;
+     both files, their two links here, the two server allowlist lines and the
+     phone rule's exemption for its notice are all deleted. -->
 <!-- The phone dashboard: a second template over the same bindings, mounted
      only under the 820px query. Every rule in the sheet sits inside that
      query, so a desktop render is byte-for-byte unchanged. -->
@@ -2729,7 +2728,6 @@ select:focus{outline:none;border-color:var(--blue)}
 <script src="/studio-runtime.js"></script>
 <script src="/safe-zones.js"></script>
 <script src="/studio-adapter.js"></script>
-<script src="/editor-gate.js"></script>
 <script src="/studio-mobile.js"></script>
 <script src="/studio-templates.js"></script>
 <script src="/studio-notify.js"></script>
