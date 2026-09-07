@@ -7130,8 +7130,26 @@ matches `action="/billing/continue-free"` instead, and was re-proven red.
 
 Youssef: "make sure ALL ENVRIOMENT on render is correct ADD ANY needed ones."
 
-**Render's API cannot be READ from a session** — `update_environment_variables`
-writes, and nothing lists what is set — so "check Render" is not a thing an
+**Render's API cannot be READ from a session** — checked rather than assumed on
+7 Sept 2026: `list_services` and `get_service` return the plan, the disk, the
+branch and the SSH address and NO `envVars` at all, and
+`update_environment_variables` only writes. So "check Render" is not something
+an agent can do directly.
+
+**THE LOGS ARE THE READ, AND THEY ANSWER MORE THAN THE VARIABLES WOULD.**
+`list_logs` on the web service is the live instance talking: its boot warnings
+say what is missing (7 Sept: **one** line, `APP_PASSWORD is not set` — and the
+ABSENCE of `backup.js`'s "Backups are not running" is what proves object
+storage is configured), and its error level says what is actually failing in
+front of customers. That is where the dead TikTok refresh token in open item 6
+was found, after four days of it failing every scheduled clip with nobody
+looking. Read the logs before reporting a deployment healthy, and read the
+INFO level too — "Published … to youtube" is the only proof a destination
+works, and it is what disproved the stale "reconnect YouTube" item.
+
+Production itself is NOT reachable from an agent container (the egress proxy
+rejects both `deenclipped.online` and the `.onrender.com` URL), so the logs and
+a `watch-live.yml` dispatch are the two routes to what is live — so "check Render" is not a thing an
 agent can do, and a list typed from memory is exactly the stale claim this file
 keeps paying for. `configReady()` in `src/selfcheck.js` asks the process
 itself, which is the only source that cannot be wrong.
@@ -7268,8 +7286,23 @@ starting before the count climbs rather than after.
    `dashboard.stripe.com/acct_1U1p3tKKpFy0S4he/account/status`.
 5. **Hetzner CPX41 rescale.** Once done: worker retune (4 jobs, whisper medium,
    `qwen3:4b`), ETA recalibration, an end-to-end run with before/after numbers.
-6. **Reconnect YouTube** — the stored token is expired and posts are missing
-   their slots.
+6. ~~**Reconnect YouTube.**~~ **NOT TRUE, and had not been for some time.**
+   Read off the Render logs on 7 Sept 2026 rather than assumed: "Published
+   'The Relationship with Allah' to youtube (DeenClipped)" at 04:00 and
+   "Balance optimism and pessimism" at 06:30 the same morning, each followed
+   by "posted to youtube (DeenClipped), instagram (eurotrimau), facebook
+   (DeenClipped)". YouTube, Instagram and Facebook are all publishing on
+   schedule. Kept rather than deleted because this line sent two sessions
+   looking for an expired token that was working.
+   **RECONNECT TIKTOK INSTEAD, and it is the live one.** Every scheduled clip
+   for at least four days has failed on `TikTok error: Refresh token is
+   invalid or expired` -- fifteen of the twenty-five most recent error lines,
+   roughly every seventy-five minutes since 4 Sept. It is a refresh token, so
+   it cannot heal itself: Connections -> TikTok -> Disconnect, then Connect.
+   Nothing in the repo can do it; the credential belongs to the account.
+   **The Facebook length failures in that same log STOPPED after 6 Sept
+   12:30**, which is v3.135.0's `healImpossibleTargets` landing -- the first
+   confirmation of that fix from production rather than from a test.
 7. **A stranger test** — someone who has never seen the product signs up and
    uses it. Claude cannot create an account, so this one needs a real person.
 8. **Bing Webmaster Tools** (`BING_SITE_VERIFICATION` on Render, ~2 min). Once
