@@ -311,3 +311,72 @@ class AdviseRejectionTests(unittest.TestCase):
         with mock.patch("urllib.request.urlopen", boom):
             with self.assertRaises(OSError):
                 self.service.advise_with_ollama("What now?", {"figures": []})
+
+
+class AdviseBudgetTests(unittest.TestCase):
+    """One wall-clock budget for the whole request, retries included.
+
+    Both AI endpoints gave EACH attempt the full timeout -- 3x75s here and
+    3x90s on the title path -- against a client that aborts at 90s. A slow box
+    could therefore spend four and a half minutes of its single Ollama slot on
+    an answer nobody would ever receive.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.mkdtemp()
+        os.environ["WORKER_DATA_DIR"] = self.temp
+        sys.modules.pop("service", None)
+        self.service = importlib.import_module("service")
+        os.environ["OLLAMA_URL"] = "http://127.0.0.1:11434"
+
+    def tearDown(self):
+        os.environ.pop("OLLAMA_URL", None)
+
+    def test_each_attempt_gets_what_is_LEFT_of_the_budget(self):
+        seen = []
+        # Two rejected answers, so all three attempts are used.
+        supply = iter(["Rate is 91%.", "Rate is 92%.", "Review the queue."])
+
+        def fake_urlopen(request, timeout=None):
+            seen.append(timeout)
+            return FakeResponse(json.dumps({"response": next(supply)}).encode())
+
+        with mock.patch("urllib.request.urlopen", fake_urlopen):
+            self.service.advise_with_ollama("What now?", {"figures": []})
+
+        self.assertEqual(len(seen), 3, "three attempts")
+        self.assertLessEqual(seen[0], self.service.AI_BUDGET_SECONDS,
+                             "the first attempt cannot exceed the whole budget")
+        # Strictly decreasing: each attempt is handed the remainder, not a
+        # fresh full timeout. That IS the bug this fixes.
+        self.assertLess(seen[1], seen[0])
+        self.assertLess(seen[2], seen[1])
+        self.assertGreaterEqual(min(seen), self.service.AI_MIN_ATTEMPT_SECONDS,
+                                "and never a pointless one")
+
+    def test_a_spent_budget_stops_the_retries(self):
+        # A box slow enough to eat the budget must not start a fourth-of-a-
+        # minute attempt the client has already given up waiting for.
+        calls = []
+
+        def slow(request, timeout=None):
+            calls.append(timeout)
+            # Burn the budget inside the first call.
+            self.service.AI_BUDGET_SECONDS  # noqa: B018 - documents the intent
+            return FakeResponse(json.dumps({"response": "Rate is 91%."}).encode())
+
+        original = self.service.ai_time_left
+        with mock.patch("urllib.request.urlopen", slow), \
+             mock.patch.object(self.service, "ai_time_left", lambda deadline: False):
+            answer = self.service.advise_with_ollama("What now?", {"figures": []})
+        self.assertEqual(len(calls), 1, "it stopped rather than retrying into the abort")
+        # And it still returns the flawed answer rather than nothing: a blank
+        # box is worse, and the app's 502 says "no answer", which is not what
+        # happened.
+        self.assertEqual(answer, "Rate is 91%.")
+        self.assertIs(self.service.ai_time_left, original)
+
+    def test_the_budget_finishes_inside_the_client_abort(self):
+        # worker-client.js aborts at 90s. A budget at or above that means the
+        # app gives up while the box is still spending its only slot.
+        self.assertLess(self.service.AI_BUDGET_SECONDS, 90)

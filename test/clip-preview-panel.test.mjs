@@ -137,7 +137,12 @@ test('a title or description change goes through PATCH, which never re-renders',
 test('the retitle route refuses honestly without a worker', () => {
   const at = server.indexOf("retitle$/");
   assert.ok(at > -1, 'the retitle route is gone');
-  const route = server.slice(at, at + 2200);
+  // Sliced to the NEXT route rather than a fixed 2,200 characters: adding the
+  // rate limiter pushed the worker check past that window and turned this red
+  // against code that had not changed its behaviour at all. A byte count is
+  // not a boundary.
+  const nextRoute = server.indexOf("if (method === 'GET'", at);
+  const route = server.slice(at, nextRoute > at ? nextRoute : at + 4000);
   assert.match(route, /processingMode !== 'remote'|!workerClient\.configured\(\)/,
     'the route does not check that a worker exists');
   assert.match(route, /503/, 'a missing worker must refuse, not hang');

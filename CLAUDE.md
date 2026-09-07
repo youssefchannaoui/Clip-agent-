@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1637 JS + 698 Python**
+- `npm test` and `npm run check` must pass. Currently **1642 JS + 701 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -12086,3 +12086,42 @@ this file keeps recording, hit twice in one sitting:
   2. Scoping the painter back to `#studio` broke nothing, because the
      assertion sliced from `aiRoots` to the END OF THE FILE and matched
      `#dcMobile` in an unrelated painter. Bounded to the function body.
+
+## One budget for a whole AI request, and a limiter on both AI routes (v3.143.2)
+
+A LIVE BUG, found by the design pass rather than by a report. Both worker AI
+endpoints retry up to three times, and both gave **each attempt the full
+timeout** -- 3x90s on the title path, 3x75s on Ask -- against a client that
+aborts at **90s** (`worker-client.js`). So a slow box could spend four and a
+half minutes of its single Ollama slot on an answer nobody would ever receive,
+and the customer got `WorkerUnavailableError`'s default sentence, *"Your job
+remains queued"*, about an operation that queues nothing.
+
+- **`AI_BUDGET_SECONDS` (80) is the whole request**, retries included, and
+  sits UNDER the client's 90s abort -- a test asserts that relationship rather
+  than the numbers, so either can be tuned and the ordering holds. Each attempt
+  gets what is LEFT (`ai_timeout`), floored at 8s so a nearly-spent budget
+  still asks a real question instead of timing out on arrival, and the loop
+  refuses to START an attempt that cannot finish (`ai_time_left`).
+- **A spent budget still returns the flawed answer** rather than nothing: a
+  blank box is worse, and the app's 502 says "DeenAI had no answer", which
+  would not be what happened.
+- Driven, not reasoned about: the three attempts are handed **strictly
+  decreasing** timeouts, and with the budget forced spent the second attempt
+  never starts.
+
+**Neither AI route had a limiter** while sign-up, verify, forgot, redeem and
+presign all do -- and since v3.142.0 each press can cost three generations on
+a box with ONE Ollama slot, so a single account could hold the model against
+every other customer indefinitely. Ask is 30/hour and the clip rewrite 60/hour,
+**per ACCOUNT rather than per IP**: both sit behind a plan gate, so the account
+is the real identity and an IP is shared by a household. The limiter runs AFTER
+the plan gate, or a free account's refusal would depend on how often it had
+asked and the honest answer would come and go.
+
+**A test failed on a BYTE COUNT, not on behaviour.** `clip-preview-panel`
+sliced 2,200 characters from the retitle route and asserted the worker check
+was inside; inserting the limiter pushed it past that window and turned the
+branch red against code whose behaviour had not changed. It slices to the next
+route now. A byte count is not a boundary -- the same shape as the
+source-string tests this file keeps recording.

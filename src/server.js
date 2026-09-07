@@ -2559,6 +2559,19 @@ async function route(req, res, url) {
         error: 'DeenAI is a ' + deenai.deenaiAskTierName() + ' feature. Upgrade to see your own numbers and ask.',
       });
     }
+    // A LIMITER, because each press can now cost up to three generations on a
+    // box with ONE Ollama slot. Neither AI route had one while sign-up,
+    // verify, forgot, redeem and presign all do -- so a single account could
+    // hold the model against every other customer indefinitely. Per ACCOUNT
+    // rather than per IP: this is behind a plan gate, so the account is the
+    // real identity and an IP is shared by a household.
+    const askGate = throttle.rateLimit(`deenai-ask:${currentUser.id}`, 30, 60 * 60_000);
+    if (!askGate.allowed) {
+      return json(res, 429, {
+        error: 'That is a lot of questions in an hour. Give DeenAI a moment — the insights below are always up to date.',
+        retryAfterSec: askGate.retryAfterSec,
+      });
+    }
     let body;
     try { body = await readBody(req, 64 * 1024); } catch (error) { return json(res, 400, { error: error.message }); }
     try {
@@ -3089,6 +3102,15 @@ async function route(req, res, url) {
       // an unmetered queue on a single-slot worker.
       if (!deenai.deenaiAccess(currentUser)) {
         return json(res, 403, { error: 'Writing titles with DeenAI is on Pro and Studio.', upgrade: true });
+      }
+      // The same limiter as Ask, and for the same reason: this press can cost
+      // three generations on the box's single Ollama slot.
+      const titleGate = throttle.rateLimit(`deenai-title:${currentUser.id}`, 60, 60 * 60_000);
+      if (!titleGate.allowed) {
+        return json(res, 429, {
+          error: 'That is a lot of rewrites in an hour. Give DeenAI a moment and try again.',
+          retryAfterSec: titleGate.retryAfterSec,
+        });
       }
       if (config.processingMode !== 'remote' || !workerClient.configured()) {
         return json(res, 503, { error: 'Rewriting a title needs the clip AI, which this deployment does not have configured.' });

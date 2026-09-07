@@ -355,6 +355,8 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
         + ("WHAT THEY ASKED FOR: " + instruction[:300] + "\n" if instruction else "")
         + "END UNTRUSTED"
     )
+    deadline = ai_deadline()
+
     def ask(nudge: str = "", temperature: float = 0.7) -> str:
         """One generation, cleaned. Called repeatedly until an answer is usable."""
         payload_bytes = json.dumps({
@@ -377,7 +379,7 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
             base_url + "/api/generate", data=payload_bytes,
             headers={"Content-Type": "application/json"}, method="POST")
         try:
-            with urllib.request.urlopen(request, timeout=90) as response:
+            with urllib.request.urlopen(request, timeout=ai_timeout(deadline)) as response:
                 raw = json.loads(response.read().decode("utf-8")).get("response") or ""
         except urllib.error.URLError as exc:
             raise RuntimeError(f"The clip AI did not answer: {exc}") from exc
@@ -453,6 +455,10 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
     source = "ai"
     problem = ""
     for attempt, temperature in enumerate((0.7, 0.95, 1.1)):
+        # Same budget rule as Ask: three attempts at the FULL timeout was
+        # 3x90s against a client that gives up at 90.
+        if attempt and not ai_time_left(deadline):
+            break
         nudge = ""
         if problem:
             nudge = ("\n\nYOUR LAST ANSWER WAS REJECTED, because " + problem + ". "
@@ -521,6 +527,37 @@ def retitle_clip(payload: dict[str, Any]) -> dict[str, Any]:
         cut = answer[:limit]
         answer = (cut.rsplit(" ", 1)[0] if " " in cut else cut).rstrip(" ,;:-")
     return {"title": answer.strip(), "source": source}
+
+
+# ONE WALL-CLOCK BUDGET FOR A WHOLE AI REQUEST, retries included.
+#
+# Both endpoints retry up to three times and both gave EACH attempt the full
+# timeout -- 3x90s on the title path, 3x75s here -- against a client that
+# aborts at 90s (worker-client.js). So a slow box could spend four and a half
+# minutes of its single Ollama slot on an answer nobody would ever read, and
+# the customer got WorkerUnavailableError's default sentence, "Your job remains
+# queued", about an operation that queues nothing.
+#
+# The budget is the whole request. Each attempt gets what is LEFT, floored at
+# 8s so a nearly-spent budget still asks a real question rather than timing out
+# on arrival, and the loop stops once there is not enough left to try again.
+AI_BUDGET_SECONDS = float(os.getenv("AI_BUDGET_SECONDS", "80"))
+AI_MIN_ATTEMPT_SECONDS = 8.0
+
+
+def ai_deadline() -> float:
+    """When this request must be done, as a monotonic instant."""
+    return time.monotonic() + AI_BUDGET_SECONDS
+
+
+def ai_timeout(deadline: float) -> float:
+    """What is left of the budget, floored so an attempt is never pointless."""
+    return max(AI_MIN_ATTEMPT_SECONDS, deadline - time.monotonic())
+
+
+def ai_time_left(deadline: float) -> bool:
+    """Is there room for ANOTHER attempt, rather than only for this one?"""
+    return deadline - time.monotonic() > AI_MIN_ATTEMPT_SECONDS
 
 
 # This prompt's own furniture, coming back as the answer. The title path's
@@ -637,6 +674,8 @@ def advise_with_ollama(question: str, context: dict[str, Any]) -> str:
             "stop": ["\nQUESTION:", "\nBEGIN UNTRUSTED", "\nAnswer:"],
         },
     }).encode("utf-8")
+    deadline = ai_deadline()
+
     def generate(nudge: str, temperature: float) -> str:
         body = json.loads(payload.decode("utf-8"))
         body["prompt"] = system + nudge + "\n\n" + user + "\n\nAnswer:"
@@ -645,7 +684,7 @@ def advise_with_ollama(question: str, context: dict[str, Any]) -> str:
             base_url + "/api/generate", data=json.dumps(body).encode("utf-8"),
             headers={"Content-Type": "application/json"}, method="POST",
         )
-        with urllib.request.urlopen(request, timeout=75) as response:
+        with urllib.request.urlopen(request, timeout=ai_timeout(deadline)) as response:
             outer = json.loads(response.read().decode("utf-8"))
         out = str(outer.get("response") or "").strip()
         # Belt and braces: older qwen builds ignore think=False and leak it.
@@ -691,6 +730,11 @@ def advise_with_ollama(question: str, context: dict[str, Any]) -> str:
     # somebody is already waiting on. Rising temperature is what stops attempt
     # two being attempt one again.
     for attempt, temperature in enumerate((0.35, 0.6, 0.85)):
+        # Stop before an attempt that cannot finish inside the budget: the
+        # client aborts at 90s and the box's one Ollama slot is better spent on
+        # the next customer than on an answer nobody will receive.
+        if attempt and not ai_time_left(deadline):
+            break
         nudge = ""
         if problem:
             nudge = ("\n\nYOUR LAST ANSWER WAS REJECTED, because " + problem
