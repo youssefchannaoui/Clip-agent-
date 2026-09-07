@@ -199,8 +199,8 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1593 JS + 687 Python**
-  (8 Python skipped) — the skips are where ffmpeg is absent, which is CI.
+- `npm test` and `npm run check` must pass. Currently **1599 JS + 691 Python**
+  (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -216,8 +216,8 @@ These were each a real bug and each has a test named after it.
   for a file CI has never seen. Before writing a count, check nothing under
   `scratchpad/` matches node's test patterns (`*.test.*`, `*-test.*`,
   `*_test.*`, `test-*.*`, or anything inside a directory called `test`).
-- **The 8 skips are `SpeakerTrackingTests` (7) and `AtmosphereFrameTests` (1),
-  and they skip ONLY where ffmpeg is absent** (v3.101.2, v3.118.0). They build their own fixture with ffmpeg and run
+- **The 9 skips are `SpeakerTrackingTests` (7), `AtmosphereFrameTests` (1) and
+  `RenderPlateTests` (1, v3.140.0), and they skip ONLY where ffmpeg is absent** (v3.101.2, v3.118.0). They build their own fixture with ffmpeg and run
   wherever it exists -- all seven pass here in 0.9s -- but the CI runner has
   no working ffmpeg, so there they skip, counted as seven skips with the
   reason in each. The crop ARITHMETIC is therefore exercised by anyone running
@@ -11425,3 +11425,93 @@ open any clip on deenclipped.online, press Preview, and see "Rendering preview"
 come back as a playable window. If it does not, that is the first thing to
 look at, and `runRemoteAux`'s stall detection (v3.133.0) is what bounds it.
 
+
+## The editor plays a PLATE and draws every layer live (v3.140.0, 7 Sept 2026)
+
+Youssef, on the editor: "ZERO of those buttons work its super annoying you say
+you fix them but they still dont work i want a redo a actaul redo, ALL BUTTONS
+MUST WORK captions moving must be live ... make a loading screen".
+
+**He was right, and the cause was invariant 4 as extended on 21 Aug.** The
+editor played the finished RENDER -- the same bytes the queue plays -- so a
+slider changed a number and never the picture, and the ghost caption only
+appeared once the clip was "dirty". Measured on production before anything was
+built: caption size, colour, position, framing, look and watermark controls all
+wrote their value and left the frame byte-identical. That is what "zero
+buttons work" meant, and no green suite could have said otherwise.
+
+### The design, and the decision it reverses
+
+**Youssef's instruction reverses the "never draw over a file that exists" half
+of invariant 4 for the EDITOR.** The render is still the truth and still what
+the Queue and Preview play; the editor now plays a **plate** -- the clip window
+cut untouched by the worker (`render_plate`: no captions, no mark, no brand, no
+promo, no grade, no framing, no music; long edge bounded to
+`PLATE_MAX_EDGE`, crf 22, faststart, plus a thumb) -- and draws every layer
+over it LIVE from the same `tpl` object the sliders write: the caption in its
+real face (`captionFaceStyle`/`capInkStyle`/`captionHighlightStyle`), the
+framing as object-fit/position, the grade as `lookFilter`, darken/weather/
+vignette/grain as `fxLayersStyle`, the watermark, and the nasheed as a synced
+`<audio>` at the account's level. The chip says "Live preview · Save clip
+renders the exact video". Two rendering engines exist again, on purpose, with
+the split stated: the editor shows the CHANGE, the render is the FILE.
+
+- **The plate is a re-render job with `plate: true`**, on the quick lane at
+  priority 0 (forced in the engine whatever the caller passed), output id
+  `<clip>-plate` so it overwrites rather than collecting, and it WAIVES the
+  nasheed (`waivesMusic`) -- the worker's plate branch runs BEFORE the music and
+  template checks, because a plate lacks both by definition. `latestRerender`,
+  the live list, the bell and both supersede sweeps exclude it, and a queued
+  plate never pairs with a queued render (`Boolean(stale.plate) ===
+  Boolean(plate)`). It lands on `clip.plate {url, thumbUrl, clipFile, thumbFile,
+  startSec, endSec, at}`; the self-hosted engine streams it from
+  `/api/clips/:id/plate` and `/plate-thumb`, the remote worker hands back a URL.
+- **The editor asks for a plate itself** (`paintEditorVideo`, once per
+  `id@start-end` key, never while one is queued/processing) and shows a
+  loading screen with the job's own stage and progress until plate + fonts +
+  `canplay`; 90s offers "Keep waiting" / "Show the last render", a failure
+  offers "Try again". A trimmed clip gets a fresh plate because the key moves.
+- **Word and card timing follow the worker's own rules.** `clipCaptionParts`
+  groups by `captionMaxWords` (cards, word, fill) or `captionStackMaxWords`
+  (the stacks), cards also break on a sentence end exactly as `caption_cards`
+  does, and word mode redraws the SAME group with the live word lit -- it
+  never shows one word alone. **`edCaptionBlocks` had dropped `start`, `end`
+  and `words`**, so the chunker saw every block as 0..0 and the caption sat on
+  chunk one from 1.4s to 3.7s; they are carried now. Measured in real
+  playback: chunk one to 3.15s, chunk two from 3.41s, the sentence break
+  honoured.
+- **rAF stops in an OCCLUDED window while the video plays on.** Measured:
+  the clip at 6.9s with the playhead and caption still at 3.3s. `timeupdate`
+  keeps firing there and stands in for `follow()` whenever the frame loop has
+  been quiet for 300ms. A hidden Browser pane reproduces it exactly, so a
+  "caption stuck during playback" reading in the harness is this before it is
+  the app.
+- **The render notice is silenced over the plate** -- "saved, not rendered
+  yet" is not about a picture that is drawn from the current values, and a
+  failed style-preview's ffmpeg dump covered the whole frame.
+
+### Traps paid for
+
+- `store.musicSatisfied` passes on `musicEnabled === false`, which is what
+  lets a plate land; `upload_clip` refuses an item without a thumb.
+- The nasheed library is `DATA_DIR/music/library.json` and the payload's
+  tracks carry NO url -- stream by id from `/api/music/:id/audio`; the level
+  is `musicSettings.volumePercent`, not `musicVolumePercent`.
+- The dashed box around a live caption was the four `edCapHandle` spans;
+  they are `display: none` while live.
+- Sharpening cannot be previewed (a filter the browser does not have); the
+  row says so rather than pretending.
+- The runtime binds `input`, not `change`, on selects; the template select
+  refuses Pro templates with a toast on a free account.
+- A black screenshot before the first frame paints is the harness (luminance
+  127 measured after play); `fetch` handed around unbound throws Illegal
+  invocation; `location.reload()` kills the evaluation that called it.
+
+`test/editor-plate.test.mjs` (6) drives the queue record, the landing through
+`importRerenderResultObjectForTests`, the supersede pairing and the adapter's
+live layers; `test/test_editor_plate.py` (4) drives the worker's plate branch
+past the nasheed guard and cuts a real window where ffmpeg exists. **Worker
+change, so `deploy-worker.yml` deploys it on push**; the box was idle
+(diagnose run, every job completed) before the push. The plate has not yet
+been seen landing from the REAL worker -- the first editor open on production
+is that proof.

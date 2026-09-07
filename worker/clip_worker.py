@@ -5177,6 +5177,79 @@ def render_cut_plate(ffmpeg: str, source: Path, keeps: list[tuple[float, float]]
         raise RuntimeError("Cutting the clip produced no usable video.")
 
 
+# ── The editor's plate ───────────────────────────────────────────────────
+# Youssef, 7 Sept 2026, on the editor: "captions moving must be live so
+# loading in the start needs to be happening then make a loading screen but
+# ALL buttons MUST work."
+#
+# The editor used to play the finished RENDER -- captions burned in, framing
+# and grade baked -- so no control could change the picture until a whole
+# re-render came back minutes later. Every slider read as dead. And the
+# clean source it would have drawn over lives on this box, not on the web
+# service: on production `/source-preview` bounces to a YouTube URL no
+# <video> can play.
+#
+# So the worker cuts the editor a PLATE: the clip's own window, NOTHING drawn
+# on it -- no captions, no watermark, no brand line, no promo bar, no grade,
+# no framing, no nasheed -- transcoded light enough to stream into a browser
+# on the quick lane in seconds. The editor then draws captions, framing,
+# grade, weather, the mark and the nasheed mix LIVE on top of it, and the
+# finished render stays what the review queue and Preview show.
+#
+# It is deliberately not render_cut_plate: that one is a near-lossless
+# intermediate (crf 14) sized for the render pipeline to read, which is far
+# too heavy to stream, and it keeps the source's full resolution. This one
+# is bounded to PLATE_MAX_EDGE on the long side and moves its moov atom to
+# the front so the browser can seek before the download finishes.
+PLATE_MAX_EDGE = 1280
+
+
+def render_plate(ffmpeg: str, source: Path, start: float, end: float,
+                 clip_file: Path, thumb_file: Path, threads: str) -> dict[str, Any]:
+    """The clip window, untouched, as a streamable file plus its thumbnail."""
+    if end <= start:
+        raise RuntimeError("The clip timestamps are invalid.")
+    duration = end - start
+    # The long edge is bounded whatever the source's shape; -2 keeps the other
+    # even for yuv420p. `if(gt(iw,ih),...)` picks the long edge without probing.
+    scale = (f"scale='if(gt(iw,ih),min(iw,{PLATE_MAX_EDGE}),-2)'"
+             f":'if(gt(iw,ih),-2,min(ih,{PLATE_MAX_EDGE}))'")
+    run([
+        ffmpeg, "-y", "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(source),
+        "-vf", scale,
+        "-map", "0:v:0", "-map", "0:a:0?",
+        "-c:v", "libx264", "-threads", threads, "-preset", "veryfast", "-crf", "22",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+        "-movflags", "+faststart",
+        str(clip_file),
+    ], timeout=20 * 60)
+    if not clip_file.exists() or clip_file.stat().st_size < 1024:
+        raise RuntimeError("Cutting the editor plate produced no usable video.")
+    # upload_clip refuses an item without a thumbnail, and the frame is also
+    # the poster the editor shows behind its loading screen.
+    run([
+        ffmpeg, "-y", "-ss", f"{min(1.0, duration / 2):.3f}", "-i", str(clip_file), "-frames:v", "1",
+        "-vf", "scale=480:-2", "-q:v", "3", str(thumb_file),
+    ], timeout=120)
+    if not thumb_file.exists():
+        raise RuntimeError("The editor plate produced no thumbnail.")
+    return {
+        "clipFile": str(clip_file),
+        "thumbFile": str(thumb_file),
+        "startSec": round(start, 3),
+        "endSec": round(end, 3),
+        "durationMs": int(round(duration * 1000)),
+        # Nothing was mixed and nothing was asked for: store.musicSatisfied
+        # reads musicEnabled === false as satisfied, and renderVerified is
+        # what the app's landing checks before it will accept a result.
+        "musicEnabled": False,
+        "musicVerified": False,
+        "renderVerified": True,
+        "plate": True,
+        "createdAt": int(time.time() * 1000),
+    }
+
+
 # ── The promo bar ────────────────────────────────────────────────────────
 # A brand call-out that slides in over the clip, sits for a few seconds and
 # leaves again. Youssef, 3 Sept 2026, with the artwork: "it comes in the video
@@ -5789,6 +5862,28 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
     if not source_file.exists():
         raise RuntimeError("The original source file is unavailable, so this clip cannot be re-rendered.")
     source_file = apply_source_window(job, source_file)
+    clip = job.get("clip") or {}
+    # THE EDITOR'S PLATE (see render_plate). Branches before the music and
+    # template checks on purpose: a plate has neither -- it is the bare clip
+    # window for the editor to draw over live, and refusing it for lacking a
+    # nasheed would be refusing it for lacking the thing it exists not to have.
+    if clip.get("plate"):
+        start = float(clip.get("startSec", 0))
+        end = float(clip.get("endSec", 0))
+        output_dir.mkdir(parents=True, exist_ok=True)
+        clip_id = str(job.get("clipIdOverride") or f"{job['id']}-plate")
+        progress("Cutting the editor's live-preview plate", 25)
+        plate = render_plate(
+            job["ffmpeg"], source_file, start, end,
+            output_dir / f"{clip_id}.mp4", output_dir / f"{clip_id}.jpg",
+            str(max(1, int(job.get("settings", {}).get("ffmpegThreads") or os.getenv("FFMPEG_THREADS", "4")))),
+        )
+        plate.update(id=clip_id, projectId=job.get("projectId") or job["id"], title=str(clip.get("title") or ""))
+        result_file.write_text(json.dumps({"project": {"id": job.get("projectId")}, "clips": [plate]}, ensure_ascii=False, indent=2), encoding="utf-8")
+        progress("Complete", 100)
+        emit("result", resultPath=str(result_file))
+        return
+
     tracks = [track for track in job.get("musicTracks", []) if Path(track.get("path", "")).exists()]
     # A job may deliberately carry no nasheed. Music is still the default and
     # still mandatory when asked for -- a missing upload must not silently
@@ -5799,7 +5894,6 @@ def process_rerender(job: dict[str, Any], job_file: Path) -> None:
     if not job.get("template", {}).get("id"):
         raise RuntimeError("A valid app-owned template is mandatory.")
 
-    clip = job.get("clip") or {}
     start = float(clip.get("startSec", 0))
     end = float(clip.get("endSec", 0))
     if end <= start:

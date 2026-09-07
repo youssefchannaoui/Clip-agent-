@@ -264,6 +264,7 @@ test('the copy is machinery, so it is not a second row on any screen', () => {
   // would spin for work the customer cannot see.
   const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
   const at = server.indexOf('function latestRerender');
-  assert.match(server.slice(at, at + 700), /!job\.socialVariant/,
+  const end = server.indexOf('\n}', at);
+  assert.match(server.slice(at, end), /!job\.socialVariant/,
     'a copy is not the clip re-rendering');
 });
