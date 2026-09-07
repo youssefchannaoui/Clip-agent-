@@ -93,3 +93,33 @@ up to success.
 - Confirm it in the product too where you can: **Owner → Health → Deployed**
   compares the worker's reported version with the app's and says "Worker
   changes since then are not live" when they differ.
+
+## The same workflow can ASK the box things, without deploying
+
+Three dispatch inputs on `deploy-worker.yml` run a script INSIDE the container
+and print the answer. All three skip the rebuild, so a question never restarts
+a customer's job — and each runs after the version proof, so an answer is one
+whose version you know.
+
+| input | asks |
+|---|---|
+| `diagnose: true` | what happened to the box's recent jobs — status, settings, and the candidate pipeline replayed over a cached transcript. Counts only, never a word of transcript. `diagnose_hours`, `diagnose_audio` narrow it. |
+| `probe: true` | what the clip AI writes for each named title/description shape. |
+| `advise: true` | what DeenAI's Ask answers, over a fixed context, including an injection attempt. |
+
+    gh workflow run deploy-worker.yml --ref deenclipped-v2-2 -f advise=true
+
+**A DULL ANSWER IS A FINDING, NOT A FAILED RUN.** The AI probes exit zero on a
+weak answer and print it. They fail only on rules: the box refusing every call,
+this prompt's own wording coming back, an invented figure, or — for `advise` —
+a customer being able to CLOSE the untrusted fence.
+
+**`advise` reports one thing it deliberately does not fail on**: whether
+qwen3:1.7b obeys an instruction that is plainly inside the fence. Measured
+7 Sept 2026 — it does, and no prompt of ours changes that, so failing the run
+on it would make every run red for a model limit. See the v3.144.1/v3.144.2
+entries in CLAUDE.md before reading that line as a regression.
+
+**These are the route to any "what does the model actually do" question.** The
+alternative — putting it on Youssef to press a button and report back — was
+the wrong answer twice: the box can be asked, from a workflow, in one dispatch.
