@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1663 JS + 715 Python**
+- `npm test` and `npm run check` must pass. Currently **1669 JS + 715 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -12545,3 +12545,61 @@ channel it already knew was dead, one red row at a time, saying nothing.**
 
 Both probes proven red. **Ships for YouTube as well as TikTok** -- the same
 shape, and YouTube's stored token has expired on this account once already.
+
+## render.yaml described a service that has not existed for months (v3.144.6, 7 Sept 2026)
+
+Found while checking the Render environment at Youssef's request. The
+`deenclipped-ai` service carries a **Blueprint managed** badge, so `render.yaml`
+is not documentation -- a sync APPLIES it. It described this:
+
+    it said                          the live service is (Render API, 7 Sept)
+    runtime: node                    docker, built from ./Dockerfile
+    startCommand: node src/server.js (none -- the image has its own)
+    disk deenclipped-metadata, 1GB   deenclipped-data, 10GB
+    mountPath /var/data              /app/data
+    DATA_DIR /var/data               /app/data
+
+**`DATA_DIR` is the one that matters.** The entire database is one `state.json`
+on that disk, so pointing it at a mount that does not exist boots the app with
+an EMPTY one -- every account, clip, connection and stored token gone from its
+view. The rest would merely have failed the build, which is the failure you
+want.
+
+Two values were also actively wrong: `OLLAMA_MODEL: qwen3:4b` (2.5G against a
+2G container cap -- it OOM-kills, and `dmesg` on the box has five of them; the
+model belongs to the BOX's own env anyway) and `VIDEO_IMPORT_PROVIDER:
+ffmpegapi` (SocialKit, removed 26 Aug 2026).
+
+The file now describes the live service, and `test/render-blueprint.test.mjs`
+holds it there: the disk and `DATA_DIR` must name the SAME path, the runtime
+must be the one that runs, no value the box refuses may appear, every
+credential must be `sync: false`, and the trial length must equal the code's
+own default rather than becoming a seventh place that names it.
+
+**A test failed on its own explanation, for the NINTH time.** The file's header
+quotes every wrong value it used to carry, so `doesNotMatch` over the whole
+text failed on the fix's own description. Comments are stripped first. Strip,
+never reword.
+
+### The environment itself was already complete
+
+Read off the dashboard and cross-checked against every `process.env` in `src/`:
+**every variable the code needs is set or safely derived.** `META_REDIRECT_URI`
+and `APPLE_SIGNIN_REDIRECT_URI` are absent and that is fine -- both fall back to
+`${PUBLIC_BASE_URL}/auth/<provider>/callback`, which is what the providers are
+configured with. Production's own `config` self-check agrees: *"every group
+configured (Payments, Plan prices, Email, Worker, Media storage, Sign-in,
+Posting)"*.
+
+**A handover from the other session listed `EMAIL_API_KEY`, `EMAIL_FROM`,
+`APP_SESSION_SECRET` and `MEDIA_PUBLIC_BASE` as missing. All four are set**, and
+have been for as long as the self-check has been reporting Email configured.
+Read the dashboard before acting on a blocker list -- including one of mine.
+
+**Six variables were deleted** as read by nothing anywhere in the repo:
+`ANALYTICS_SCRIPT_URL`, `ANALYTICS_SITE_ID`, `FREE_TIER_DAYS`,
+`PLAN_PRICE_MONTHLY_LIST_LABEL`, `STRIPE_COUPON_MONTHLY`, `TRIAL_PLANS`.
+102 -> 96, saved with **"Save only"** so no rebuild and no outage.
+`VIZARD_*` and `VIDEO_IMPORT_API_KEY` were NOT deleted despite naming dead
+features -- the code still reads them, and an earlier count of "11 stale" was
+wrong because it grepped `src/*.js` alone instead of the whole tree.
