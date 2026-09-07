@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1696 JS + 715 Python**
+- `npm test` and `npm run check` must pass. Currently **1701 JS + 715 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -7276,6 +7276,57 @@ carry the guarded removal now (`maxRetries`, `retryDelay`, and a `try/catch`,
 because a leftover temp directory on a runner is harmless and failing a green
 suite over one is not). A file-level failure counts as an extra test, which is
 why that run reported 1671 tests with 1 fail against a real 1670.
+
+## The legal pages named a screen the app has never had (v3.146.2, 7 Sept 2026)
+
+Youssef: "in terms of legal for my website is everything set up?" Audited by
+RENDERING the pages and grepping what came out, not by recalling what they say
+-- and four things were wrong that need nobody's business decision.
+
+- **"the Platforms page", three times.** That screen does not exist and never
+  has: it is **Connections**. It was the instruction on how to disconnect a
+  channel in the Privacy Policy, and how to revoke Google's grant in the Terms
+  -- so the one paragraph a compliance reviewer reads about revocation sent
+  people looking for a page that is not in the product.
+- **The app HAS self-serve deletion and the policy did not mention it.**
+  `auth.deleteAccount` (Account settings -> Delete my account) removes the
+  account, every lecture, clip, template, nasheed, background and schedule,
+  the billing history, every session and every stored platform credential --
+  immediately. The policy offered only an email address and a 30-day promise
+  resting on one person's inbox, which is a WEAKER right than the one already
+  built. Both routes are stated now; the email one survives for anyone who
+  cannot sign in.
+- **Not one cookie was disclosed**, and the site sets four. There is no
+  advertising cookie and no third-party tracker on it, so the disclosure is
+  short and entirely to our credit -- saying nothing made an honest posture
+  read as an omission. The analytics paragraph states the property the code
+  actually holds: an irreversible DAILY hash, no address, no user agent, no
+  per-visit row, and a different hash tomorrow.
+- The two pages were dated 30 August and are dated together now.
+
+**THE TEST FOUND A FOURTH COOKIE I DID NOT KNOW ABOUT.** The disclosure was
+written for three; `test/legal-copy.test.mjs` reads the cookie NAMES out of
+`server.js` and `auth.js` rather than checking a list I typed, and failed on
+`dc_ref` -- the invite code, 30 days, set only when somebody arrives through a
+referral link. A test that reads a typed list would have passed and left it
+undisclosed, and the next cookie added would go the same way. It fails now
+instead.
+
+- **The sign-up form linked neither document.** `/login` CREATES the account --
+  its own hint says so -- and so do both OAuth buttons, so there was no point
+  at which anyone was shown the Terms or the Privacy Policy before agreeing to
+  them. The consent line sits BELOW all three ways in, and the test asserts
+  that position rather than merely that the links exist. `--muted` rather than
+  `--muted2`: it is the one line on the page that has to be readable rather
+  than merely present (7.3:1 against the card).
+
+All five assertions proven RED against the restored fault.
+
+**What is still open is NOT mine to write**, and is listed rather than
+guessed at: refund and cancellation terms, the legal entity name, ABN and
+business address, the governing-law/jurisdiction/liability clauses, a GDPR
+section, and a minimum-age threshold. Every one of those is a decision about
+the business, and inventing a liability clause is worse than having none.
 
 ## Open items
 
