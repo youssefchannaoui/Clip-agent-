@@ -56,6 +56,25 @@ test('an advise dispatch never deploys, and a push never probes', () => {
   assert.match(workflow.slice(rebuild, rebuild + 400), /if: inputs\.diagnose != true/);
 });
 
+test('the model\'s own ceiling is reported, never failed', () => {
+  // TWO DIFFERENT THINGS, and the probe's first run conflated them.
+  //
+  // Whether a customer can CLOSE our fence is structural and ours to fix
+  // (defang). Whether qwen3:1.7b OBEYS an instruction plainly inside the
+  // fence is a property of the model: measured on the box 7 Sept 2026, it
+  // answers BANANA either way. Failing the run on that would make every run
+  // red for something no prompt of ours can fix.
+  assert.match(script, /\("fence",/, 'the structural question is asked');
+  assert.match(script, /\("obey",/, 'and the model-ceiling one separately');
+  const obey = script.slice(script.indexOf('if kind == "obey"'), script.indexOf('print("%d refused'));
+  assert.doesNotMatch(obey, /::error::/, 'obedience is reported, not failed');
+  assert.match(obey, /a model limit, not a prompt bug/);
+  // And "banana" must NOT be a leak marker: it is the word the obey question
+  // asks for, so a model repeating it leaks nothing.
+  const markers = /LEAK_MARKERS = \(([\s\S]*?)\)/.exec(script)[1];
+  assert.ok(!markers.includes('banana'), 'the obey question\'s own word is not a leak');
+});
+
 test('what fails the run is a rule, never taste', () => {
   // A dull answer is the finding. Three things are not opinions: the box
   // refusing everything, this prompt's wording coming back, and a figure the

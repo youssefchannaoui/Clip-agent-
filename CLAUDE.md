@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1657 JS + 707 Python**
+- `npm test` and `npm run check` must pass. Currently **1658 JS + 711 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -12325,9 +12325,40 @@ as OUR instructions rather than as their data. The defence assumed the markers
 were ours; they were ours only by convention. That is invariant 2 -- untrusted
 content is data, never instructions -- broken in production.
 
-**A rejection gate cannot cover this**, and that is the point: by the time
-there is an answer to inspect, the injection has already been obeyed. It has
-to be closed on the way IN.
+**IT IS CLOSED, AND IT DID NOT STOP THE MODEL SAYING BANANA.** Re-probed
+against the box on v3.144.1 (the deploy verified that version in the running
+container) and the answer was BANANA again. That is not the fix failing -- it
+is TWO DIFFERENT THINGS, and the first run conflated them:
+
+  - **Can a customer CLOSE our fence**, so their text reads as OUR
+    instructions? That is structural, it is ours, and `defang` fixes it.
+  - **Does qwen3:1.7b OBEY an instruction that is plainly inside the fence,
+    marked as data?** Measured: yes, either way. The fence is a CONVENTION,
+    and a 1.7B model honours it only when it feels like it.
+
+So the honest claim is the narrow one: the markers are ours again, and the
+answer is still checked before it ships. What actually bounds the damage is
+NOT the fence:
+
+  - DeenAI can only NAVIGATE (src/deenai-actions.js) -- there is no action it
+    could be talked into taking.
+  - The answer passes `unusable()` before it is returned, so this prompt's own
+    wording coming back IS refused, and so is an invented figure.
+  - The blast radius of a customer injecting into their OWN question is their
+    own screen. The path that is not self-inflicted is a LECTURE TITLE, which
+    comes from a page a stranger wrote and reaches the prompt through
+    `askContext.recentKeptTitles` -- defanged now, and still subject to the
+    same model ceiling.
+
+**The probe asks the two questions separately now**: `fence` (a leak there is
+a REGRESSION and fails the run) and `obey` (reported, never failed -- failing
+on it would make every run red for something no prompt of ours can fix). And
+"banana" was removed from the leak markers: it is the word the obey question
+asks for, so a model repeating it leaks nothing.
+
+**The real answer to the model ceiling is a better model**, which this file
+already records as blocked on the CPX41 rescale (open item 5): qwen3:4b is
+2.5G against a 2G container cap.
 
 - `defang()` replaces `BEGIN`/`END UNTRUSTED` with `[marker]` in every field
   that comes from a customer or from a page a stranger wrote, before it enters
@@ -12373,3 +12404,22 @@ to produce an invented statistic -- it names the figures it has and refuses the
 ones it does not. Answers now name the lecture and quote the account's own
 numbers, where the measurement three hours earlier produced "Review the waiting
 clips, adjust posting times" and an invented 80%.
+
+### The context is fitted by dropping WHOLE FIELDS (v3.144.2)
+
+`json.dumps(context)[:4000]` cut mid-object and handed a 1.7B model MALFORMED
+JSON -- and did so exactly when the account is RICHEST, which is when the
+answer matters most. It also cut silently: nothing could tell a truncated
+context from a small one.
+
+`fit_context` drops whole fields in a stated order of least use first, and the
+order is a judgement worth reading: kept titles go first because they are
+flavour, then the destination list (the failures line already names the
+platform that matters), and the computed INSIGHTS go LAST because they are the
+whole reason the answer can be specific at all. Whatever comes back parses.
+
+**The percentage gate reads what was SENT, not the original context.** A figure
+in a field that was dropped to fit is one the model never saw -- so an answer
+stating it IS inventing it, and checking against the full context would let it
+through. A test drives exactly that: an 88% in a dropped field, an answer that
+states 88%, and the retry naming it.

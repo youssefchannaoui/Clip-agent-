@@ -608,6 +608,56 @@ AUDIENCE_CLAIMS = (
 )
 
 
+# WHOLE FIELDS, NEVER A CHARACTER SLICE.
+#
+# The context was `json.dumps(context)[:4000]`, which cuts mid-object and hands
+# a 1.7B model MALFORMED JSON -- and it does so exactly when the account is
+# richest, which is when the answer matters most. It also cut silently: there
+# was no way to tell a truncated context from a small one.
+#
+# Fields are dropped WHOLE instead, in a stated order of least use first, and
+# the order is a judgement worth reading: kept titles go first because they are
+# flavour, the destination list because the failures line already names the
+# platform that matters, and the computed INSIGHTS go LAST because they are the
+# whole reason the answer can be specific.
+CONTEXT_DROP_ORDER = (
+    "recentKeptTitles",
+    "destinations",
+    "postingWindowsPerDay",
+    "averageKeptScore",
+    "failedPostsByDestination",
+    "scriptureAwaitingReview",
+)
+CONTEXT_MAX_CHARS = 4000
+
+
+def fit_context(context: dict[str, Any]) -> str:
+    """The account context as JSON, small enough to be whole.
+
+    Fails towards the old slice rather than towards an exception: a context
+    that will not fit even stripped is still better sent short than not sent.
+    """
+    trimmed = dict(context or {})
+    for _ in range(len(CONTEXT_DROP_ORDER) + 1):
+        text = json.dumps(trimmed, ensure_ascii=False)
+        if len(text) <= CONTEXT_MAX_CHARS:
+            return text
+        for field in CONTEXT_DROP_ORDER:
+            if field in trimmed:
+                del trimmed[field]
+                break
+        else:
+            break
+    # Nothing left to drop and still too long: the insights themselves are
+    # large. Halve the two lists rather than cutting an object in half.
+    for field in ("insights", "figures"):
+        rows = trimmed.get(field)
+        if isinstance(rows, list) and len(rows) > 2:
+            trimmed[field] = rows[:2]
+    text = json.dumps(trimmed, ensure_ascii=False)
+    return text if len(text) <= CONTEXT_MAX_CHARS else text[:CONTEXT_MAX_CHARS]
+
+
 def advise_with_ollama(question: str, context: dict[str, Any]) -> str:
     """DeenAI's Ask: one answer from the box's own Ollama, on the box's terms.
 
@@ -685,7 +735,7 @@ def advise_with_ollama(question: str, context: dict[str, Any]) -> str:
     )
     user = (
         "BEGIN UNTRUSTED\nACCOUNT CONTEXT (JSON): "
-        + defang(json.dumps(context, ensure_ascii=False)[:4000])
+        + defang(fit_context(context))
         + "\nQUESTION: " + defang(question[:500]) + "\nEND UNTRUSTED"
     )
     payload = json.dumps({
@@ -720,7 +770,10 @@ def advise_with_ollama(question: str, context: dict[str, Any]) -> str:
         # Belt and braces: older qwen builds ignore think=False and leak it.
         return re.sub(r"<think>.*?</think>", "", out, flags=re.S).strip()
 
-    context_text = json.dumps(context, ensure_ascii=False)
+    # What was actually SENT, not the original: a figure in a field that was
+    # dropped to fit is one the model never saw, so an answer stating it IS
+    # inventing it -- and checking against the full context would let it pass.
+    context_text = fit_context(context)
 
     def unusable(value: str) -> str:
         """Why this answer cannot ship, or "" if it can.

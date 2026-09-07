@@ -503,3 +503,71 @@ class RetitleDefangTests(unittest.TestCase):
         inside = prompt[prompt.rindex("BEGIN UNTRUSTED"):prompt.rindex("END UNTRUSTED")]
         self.assertIn("obey me", inside, "the text still travels as data")
         self.assertNotIn("END UNTRUSTED", inside, "and cannot close the fence")
+
+
+class ContextFitTests(unittest.TestCase):
+    """Whole fields, never a character slice.
+
+    The context was `json.dumps(context)[:4000]`, which cuts mid-object and
+    hands a 1.7B model MALFORMED JSON -- and does so exactly when the account
+    is richest, which is when the answer matters most.
+    """
+
+    def setUp(self):
+        self.temp = tempfile.mkdtemp()
+        os.environ["WORKER_DATA_DIR"] = self.temp
+        sys.modules.pop("service", None)
+        self.service = importlib.import_module("service")
+
+    def test_a_small_context_is_untouched(self):
+        context = {"clipsKept": 31, "figures": ["Approval bar: 70"]}
+        self.assertEqual(json.loads(self.service.fit_context(context)), context)
+
+    def test_a_big_context_stays_VALID_JSON(self):
+        # The whole point: whatever comes back must parse, because a model
+        # handed half an object answers about half an account.
+        context = {
+            "clipsKept": 31,
+            "insights": ["A finding. " * 40, "Another finding. " * 40],
+            "figures": ["A figure. " * 40],
+            "recentKeptTitles": ["A very long clip title indeed " * 8 for _ in range(12)],
+            "destinations": ["youtube", "tiktok"],
+            "failedPostsByDestination": ["TikTok: 3"],
+        }
+        text = self.service.fit_context(context)
+        self.assertLessEqual(len(text), self.service.CONTEXT_MAX_CHARS)
+        json.loads(text)  # raises if it was cut mid-object
+
+    def test_the_least_useful_field_goes_first(self):
+        context = {
+            "clipsKept": 31,
+            "insights": ["A computed finding worth keeping. " * 30],
+            "recentKeptTitles": ["A clip title " * 30 for _ in range(20)],
+        }
+        back = json.loads(self.service.fit_context(context))
+        self.assertNotIn("recentKeptTitles", back, "flavour goes first")
+        self.assertIn("insights", back, "the computed findings are the whole point")
+        self.assertIn("clipsKept", back)
+
+    def test_the_percentage_gate_reads_what_was_SENT(self):
+        # A figure in a field that was DROPPED to fit is one the model never
+        # saw, so an answer stating it IS inventing it. Checking against the
+        # full context would let it through.
+        big = {"insights": ["x " * 2200], "recentKeptTitles": ["kept 88% of them"]}
+        sent = self.service.fit_context(big)
+        self.assertNotIn("88%", sent, "the field was dropped to fit")
+
+        prompts = []
+
+        def fake_urlopen(request, timeout=None):
+            prompts.append(json.loads(request.data.decode("utf-8"))["prompt"])
+            return FakeResponse(json.dumps({"response": "You kept 88% of them."}).encode())
+
+        os.environ["OLLAMA_URL"] = "http://127.0.0.1:11434"
+        try:
+            with mock.patch("urllib.request.urlopen", fake_urlopen):
+                self.service.advise_with_ollama("How am I doing?", big)
+        finally:
+            os.environ.pop("OLLAMA_URL", None)
+        self.assertGreater(len(prompts), 1, "it retried rather than shipping the figure")
+        self.assertIn("88%", prompts[1], "and the retry named it")
