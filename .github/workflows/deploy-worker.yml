@@ -103,6 +103,23 @@ on:
         description: 'Diagnose: pick the cached source whose length is nearest this many seconds (0 = newest)'
         required: false
         default: '0'
+      # The Quran caption sync measurement. Dispatch-only, and like diagnose it
+      # SKIPS the deploy: it asks the box what the ASS times would be against
+      # the times Whisper actually heard the words at. No transcript text
+      # leaves the box -- corpus Arabic (scripture) and word TIMES only.
+      quran_sync:
+        description: Only measure Quran caption sync (no deploy) -- ASS page times vs the recited words
+        type: boolean
+        required: false
+        default: false
+      quran_sync_hours:
+        description: 'Quran sync: how many hours of cached transcripts to walk'
+        required: false
+        default: '72'
+      quran_sync_files:
+        description: 'Quran sync: how many cached transcripts to walk, newest first'
+        required: false
+        default: '3'
   # Only worker/ code. Editing this file changes how the deploy runs, not what
   # is running on the box, so it must not trigger a deploy of its own -- an
   # unarmed run going red on every edit to the deploy script is noise, and the
@@ -221,9 +238,11 @@ jobs:
           chmod 700 "$RUNNER_TEMP/rssh"
 
       - name: Pull and rebuild on the box
-        # Skipped for a diagnose-only dispatch: a question must not become a
-        # rebuild. On a push `inputs` is empty, so this runs exactly as before.
-        if: inputs.diagnose != true
+        # Skipped for any question-only dispatch -- diagnose or the Quran sync
+        # measurement: a question must not become a rebuild, because a rebuild
+        # sends whatever is running back to its start. On a push `inputs` is
+        # empty, so this runs exactly as before.
+        if: inputs.diagnose != true && inputs.quran_sync != true
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
@@ -259,11 +278,11 @@ jobs:
           REMOTE
 
       - name: Prove the running container holds this commit
-        # A diagnose-only dispatch deployed nothing, so there is nothing to
+        # A question-only dispatch deployed nothing, so there is nothing to
         # prove -- and the box legitimately holds whatever it last built,
         # which is behind any commit that touched only src/. The diagnostics
         # step prints the running version instead.
-        if: inputs.diagnose != true
+        if: inputs.diagnose != true && inputs.quran_sync != true
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
@@ -425,6 +444,47 @@ jobs:
             | sed -E 's#://[^@/ ]+@#://***@#g' | tail -n 40 || true
           echo "--- inside the container ---"
           docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-worker-diagnose.py
+          REMOTE
+
+      # DISPATCH ONLY, off unless asked for, and it deploys nothing. Where the
+      # diagnose step above asks "why did this run produce no clips", this asks
+      # "is the caption on screen when the word is being recited" -- the
+      # question Youssef reported on 7 Sept 2026 and the one no unit test can
+      # answer, because the answer lives in Whisper's real word times on a real
+      # recitation. The export side was ruled out first, off the box, and the
+      # probe's own docstring records how.
+      #
+      # It prints corpus Arabic, which is scripture, and the TIMES of the
+      # transcript words as numbers. Not one transcript WORD leaves the box.
+      - name: Measure Quran caption sync against the recited words
+        if: inputs.quran_sync == true
+        env:
+          HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
+          USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
+          RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
+          SYNC_HOURS: ${{ inputs.quran_sync_hours }}
+          SYNC_FILES: ${{ inputs.quran_sync_files }}
+        run: |
+          set -euo pipefail
+          export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
+          # Same rule as every other probe here: no dispatch input is ever
+          # interpolated into a shell command. It becomes a JSON literal in the
+          # script, and the script travels as one base64 blob.
+          node -e '
+            const fs = require("fs");
+            const src = fs.readFileSync(".github/scripts/quran-sync-probe.py", "utf8");
+            if (!src.includes("PARAMS = {}")) throw new Error("the Quran sync probe lost its PARAMS seam");
+            const num = (name, fallback) => { const v = Number.parseFloat(process.env[name] || ""); return Number.isFinite(v) && v > 0 ? v : fallback; };
+            const params = { hours: num("SYNC_HOURS", 72), files: Math.min(8, num("SYNC_FILES", 3)), dump: true };
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/quran-sync-probe.py",
+              src.replace("PARAMS = {}", "PARAMS = " + JSON.stringify(params)));
+          '
+          BLOB=$(base64 -w0 < "$RUNNER_TEMP/quran-sync-probe.py")
+          "$RUNNER_TEMP/rssh" "SYNC_B64=$BLOB bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f /tmp/dc-quran-sync-probe.py' EXIT
+          printf '%s' "$SYNC_B64" | base64 -d > /tmp/dc-quran-sync-probe.py
+          docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-quran-sync-probe.py
           REMOTE
 
       - name: Clean up the credential
