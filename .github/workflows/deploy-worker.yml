@@ -48,6 +48,11 @@ on:
         type: boolean
         required: false
         default: false
+      advise:
+        description: Also ask the box's DeenAI what it answers (and whether it invents)
+        type: boolean
+        required: false
+        default: false
       probe_kind:
         description: 'Probe: title or description'
         required: false
@@ -340,6 +345,42 @@ jobs:
           # secret is never written to disk, never put on a command line and
           # never crosses the wire. Only the model's answer comes back.
           docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-clip-ai-probe.py
+          REMOTE
+
+      # DISPATCH ONLY, and the same shape as the clip-AI probe beside it:
+      # substituted on the runner, carried as one base64 blob, run INSIDE the
+      # container where WORKER_SHARED_SECRET already is.
+      #
+      # Ask has never been read from the app against the real model. The two
+      # failures that prompted the v3.142.0 rejection gate -- an invented "80%"
+      # and an audience claim -- were found by asking it a real question from a
+      # browser, one time. This makes that a command anyone can run, so "the
+      # gate holds" is a reading rather than an argument.
+      - name: Ask the box's DeenAI what it answers
+        if: inputs.advise == true
+        env:
+          HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
+          USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
+          RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
+          # This probe takes NO dispatch input -- its context and questions are
+          # fixed, so the answers are comparable between runs -- but it keeps
+          # the same seam check, so a script that lost it fails loudly here
+          # rather than running with a literal PARAMS on the box.
+          node -e '
+            const fs = require("fs");
+            const src = fs.readFileSync(".github/scripts/advise-probe.py", "utf8");
+            if (!src.includes("PARAMS = {}")) throw new Error("the advise probe lost its PARAMS seam");
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/advise-probe.py", src);
+          '
+          BLOB=$(base64 -w0 < "$RUNNER_TEMP/advise-probe.py")
+          "$RUNNER_TEMP/rssh" "PROBE_B64=$BLOB bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f /tmp/dc-advise-probe.py' EXIT
+          printf '%s' "$PROBE_B64" | base64 -d > /tmp/dc-advise-probe.py
+          docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-advise-probe.py
           REMOTE
 
       # DISPATCH ONLY, off unless asked for, and it deploys nothing (the

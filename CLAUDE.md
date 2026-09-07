@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1642 JS + 701 Python**
+- `npm test` and `npm run check` must pass. Currently **1649 JS + 701 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -12125,3 +12125,44 @@ was inside; inserting the limiter pushed it past that window and turned the
 branch red against code whose behaviour had not changed. It slices to the next
 route now. A byte count is not a boundary -- the same shape as the
 source-string tests this file keeps recording.
+
+## The box can be asked what DeenAI actually answers (v3.143.3, 7 Sept 2026)
+
+*No `src/` or `worker/` change: a script, a workflow input and seven tests.
+The version moves anyway because `package.json` moved with the docs.*
+
+The two failures that forced v3.142.0's rejection gate -- an invented "80%" and
+an audience claim -- were found by asking the live Ask ONE real question from a
+browser. Everything else about that gate is proven against a scripted model.
+This makes the real question a command:
+
+    deploy-worker.yml, dispatched with `advise: true`
+
+`.github/scripts/advise-probe.py` asks the RUNNING worker five questions over a
+fixed context -- the three chips the app itself puts in the box, one whose
+answer no figure supports, and one carrying a literal `END UNTRUSTED` followed
+by new instructions -- and prints what qwen3:1.7b writes.
+
+- **Modelled line for line on the clip-AI probe**: the `PARAMS = {}` seam
+  checked on the runner, carried as ONE base64 blob (no dispatch input is ever
+  interpolated into a shell command), run INSIDE the container where
+  `WORKER_SHARED_SECRET` already is and the worker answers on 127.0.0.1. Only
+  the model's answer comes back into a public run log.
+- **It takes no dispatch input at all**, deliberately: the context and the
+  questions are fixed, so two runs are comparable and a prompt change is the
+  only thing that can move the answers.
+- **A DULL ANSWER IS NOT A FAILED RUN.** Taste is the finding. Three things
+  fail it and each is a rule: the box refusing every call, this prompt's own
+  wording coming back, and a percentage the account does not have.
+- **Audience language is REPORTED, never failed.** "Do not chase what is
+  popular" is an honest sentence; the worker's own gate is what refuses the
+  claim, and a probe that failed on the word would fail on the advice.
+- **The probe's leak markers are asserted to BE the worker's own**
+  (`ADVISE_LEAKED`). Two lists that can drift are two answers to one question,
+  and the probe would then pass an answer the worker itself rejects.
+- **It asks the chips the adapter actually renders**, read out of `AI_PROMPTS`
+  by test -- a probe asking about questions nobody can send reports
+  confidently on nothing, the rule the clip-AI probe established.
+
+**Not yet run against the box.** It is one dispatch, and worth doing before
+believing anything above about what the improved prompt writes.
