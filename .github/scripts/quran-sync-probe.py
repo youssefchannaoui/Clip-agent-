@@ -48,7 +48,8 @@ HOURS = float(PARAMS.get("hours") or 72)
 # How many cached transcripts to walk, newest first.
 FILES = int(PARAMS.get("files") or 3)
 # Emit the machine-readable block that can be replayed locally.
-DUMP = bool(PARAMS.get("dump", True))
+# 1 or 0 -- never a JSON `true`, which is not a Python name (see the workflow).
+DUMP = bool(PARAMS.get("dump", 1))
 DATA = Path(os.getenv("WORKER_DATA_DIR", "/var/lib/deenclipped")).resolve()
 CODE = Path(os.getenv("DC_WORKER_CODE", "/app/worker")).resolve()
 

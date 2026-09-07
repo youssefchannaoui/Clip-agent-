@@ -475,7 +475,12 @@ jobs:
             const src = fs.readFileSync(".github/scripts/quran-sync-probe.py", "utf8");
             if (!src.includes("PARAMS = {}")) throw new Error("the Quran sync probe lost its PARAMS seam");
             const num = (name, fallback) => { const v = Number.parseFloat(process.env[name] || ""); return Number.isFinite(v) && v > 0 ? v : fallback; };
-            const params = { hours: num("SYNC_HOURS", 72), files: Math.min(8, num("SYNC_FILES", 3)), dump: true };
+            // NUMBERS AND STRINGS ONLY. This literal is substituted into a
+            // PYTHON file, and JSON.stringify spells a boolean `true` -- which
+            // Python reads as an undefined name and the probe dies on line one.
+            // 1 and 0 are valid in both languages; the probe takes them as
+            // flags. (Found by doing exactly this, run 91.)
+            const params = { hours: num("SYNC_HOURS", 72), files: Math.min(8, num("SYNC_FILES", 3)), dump: 1 };
             fs.writeFileSync(process.env.RUNNER_TEMP + "/quran-sync-probe.py",
               src.replace("PARAMS = {}", "PARAMS = " + JSON.stringify(params)));
           '
