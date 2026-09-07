@@ -4788,7 +4788,11 @@
     }());
     // The account's watermark, read the way the Templates screen reads it: the
     // brand record first, the template (which the server has already laid the
-    // brand over) when the record has nothing to say.
+    // brand over) when the record has nothing to say. Its ROW is removed from
+    // the editor (see edWmKnob below) and this survives only to keep the
+    // template's `edWmKnob` binding honest -- a missing binding is a render
+    // error, and a knob drawn in the wrong position if the hide ever fails is
+    // worse than one drawn in the right one.
     var edBrand = (DATA && DATA.brand) || {};
     var edHasBrand = function (k) { return Object.prototype.hasOwnProperty.call(edBrand, k); };
     var edWmText = edHasBrand('watermark') ? edBrand.watermark : tpl.watermark;
@@ -6898,28 +6902,36 @@
         return c && c.field !== 'grain' && c.field !== 'warm' && c.field !== 'vignette';
       }),
 
-      // THE ACCOUNT'S switch, not this clip's. The watermark belongs to the
-      // account (v3.113.0, v3.136.0 -- "once its configured it works for all
-      // clips"), so this row reads the brand record and writes it through the
-      // same route the Templates screen uses, paywall included. It used to
-      // write watermarkOpacity into THIS clip's overrides: the route's paywall
-      // refused a free account, but a paid one kept a per-clip override that
-      // contradicted the account-wide switch on the Templates screen.
+      // ── The watermark row is REMOVED from the editor ────────────────────
+      // Youssef, 8 Sept 2026: "remove watermark setting in editior."
+      //
+      // It was the ACCOUNT's switch drawn on a PER-CLIP screen, which is the
+      // "two controls for one setting" fault this repo has now shipped four
+      // times (two watermark positions, two onboarding systems, two tour
+      // buttons, two Grain sliders). The setting lives on Templates -> Brand
+      // and applies to every template (v3.113.0, v3.136.0 -- "once its
+      // configured it works for all clips"); a copy of it inside one clip's
+      // editor invites somebody to change every clip they own while looking
+      // at one of them.
+      //
+      // THE ROW IS HIDDEN IN PLACE by paintEditorLook, never taken out of the
+      // tree: removing a generated node shortens the live child list against
+      // the rendered one and the patcher then pairs every sibling after it
+      // one across (v3.124.5). `display: none`, so the row's 34px of layout
+      // and its divider go with it -- an empty gap where a control used to be
+      // reads as a fault.
+      //
+      // All five bindings survive because THE TEMPLATE NAMES THEM and a
+      // missing binding is a render error -- the same reason `railMotifStyle`
+      // is kept as an empty binding. Only the handler changes: it must never
+      // be a second road to the account's brand record, so it does nothing.
+      // The MARK itself is still drawn on the preview frame (`edMarkStyle`,
+      // read from the template the server has already laid the brand over) --
+      // showing what the export will draw is not a setting.
       edWmTrack: sliderTrack(),
       edWmKnob: sliderKnob(edWmOn),
-      edWmNote: String(tpl.captionMode || '') === 'quran'
-        ? 'Never drawn over scripture'
-        : (edWmOn ? String(edWmText).trim() + ' on every clip \u00b7 set for the account' : 'Off for every clip \u00b7 set for the account'),
-      toggleWatermark: function (e) {
-        stop(e);
-        if (typeof global.dcSaveBrand !== 'function') return;
-        var want = !edWmOn;
-        var text = String(edWmText || '').trim() || 'DEENCLIPPED';
-        var p = global.dcSaveBrand({ watermark: text, watermarkOpacity: want ? 100 : 0 });
-        if (p && typeof p.then === 'function') p.then(function () { refresh(); }, function (err) { toast(err && err.message ? err.message : 'Could not change the watermark'); refresh(); });
-      },
-      // Lights the design's "Pro" chip on the watermark row: removal is a
-      // paid feature, and the server refuses it for free plans.
+      edWmNote: '',
+      toggleWatermark: function (e) { stop(e); },
       notPro: String((current && current.plan) || 'free') === 'free',
 
       // Alignment guides only appear while dragging, as in the design.
@@ -8933,7 +8945,15 @@
         return {
           name: t.name || t.fileName || 'Untitled',
           dur: t.durationSec ? secsToClock(t.durationSec) : '',
-          mood: t.shared ? 'Shared' : 'Yours',
+          /* WHO PROVIDED THE TRACK, not merely that it is shared. The slot
+             already existed and read "Shared", which answers a question
+             nobody asks -- Youssef, 8 Sept 2026: "show its uploaded by
+             deenclipped". `shared` is the app's own definition of a starter
+             track (audio.js: "the app's own starter nasheeds"), so this reads
+             one field rather than adding a second that could disagree with
+             it, and the operator's own legacy tracks are credited correctly
+             too, because they are exactly what that flag has always meant. */
+          mood: t.shared ? 'Added by DeenClipped' : 'Yours',
           rowStyle: 'display: flex; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid var(--dc-line-soft, #1E1E22); border-radius: 10px; background: var(--dc-bg, #121214); animation: dcRise .24s cubic-bezier(.2,.8,.2,1) ' + Math.min(i * 0.03, 0.3) + 's both;',
           playStyle: 'display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%; border: 1px solid var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-gold-lit, #F0D6A6); cursor: pointer;',
           playIcon: UI.playingTrack === t.id ? 'ph-fill ph-pause' : 'ph-fill ph-play',
@@ -8942,7 +8962,21 @@
           rotStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 600; cursor: pointer; border: 1px solid rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));',
           rotIcon: 'ph-fill ph-check-circle',
           rotLabel: 'In rotation',
-          remove: function (e) { stop(e); global.StudioAdapter.onRemoveTrack(t.id); },
+          /* A starter track is not this account's to delete -- deleteNasheed
+             refuses anything the account does not own -- so pressing Remove
+             on one did nothing at all, silently: a dead control (invariant 9)
+             that only becomes visible now that every library holds nine of
+             them. It says so instead. Removing the button would need the
+             design's own literal style to become a binding, which defeats the
+             style hoist and renumbers every hashed class in the app. */
+          remove: function (e) {
+            stop(e);
+            if (t.shared && !t.owned) {
+              toast('The DeenClipped nasheeds stay in every library. Switch the rotation off or add your own.');
+              return;
+            }
+            global.StudioAdapter.onRemoveTrack(t.id);
+          },
         };
       }),
       // The template already writes " nasheeds in rotation." after this, so it

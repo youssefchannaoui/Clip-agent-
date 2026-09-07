@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import * as secretBox from './secret-box.js';
 import path from 'node:path';
 import { config } from './config.js';
-import { migrateLibraryOwnership } from './audio.js';
+import { migrateLibraryOwnership, seedStarterNasheeds, fillStarterDurations, starterNasheedsMissing } from './audio.js';
 import {
   migrateToMultiTenant, findUnownedRecords,
   readUserSetting, writeUserSetting, ownedBy,
@@ -290,6 +290,28 @@ try {
 } catch (error) {
   console.error('Music library migration failed:', error.message);
 }
+// The nine nasheeds DeenClipped ships with. Seeded rather than assumed to be
+// on the disk, so a fresh deployment can render on its first day -- and
+// idempotent on a stable id, so a restart adds nothing. Never fatal: a
+// starter track that cannot be copied is one nasheed missing, and the app
+// coming up matters more.
+try {
+  const seeded = seedStarterNasheeds(bootOwnerId());
+  if (seeded) log(`Added ${seeded} DeenClipped starter nasheed(s) to the shared library.`);
+  // Seeding 0 is the normal state on every restart after the first. Seeding 0
+  // because the assets did not ship is a deployment on which a new account
+  // cannot render anything, and that must not be silent.
+  else if (starterNasheedsMissing()) log('assets/nasheeds is missing, so this deployment ships no starter nasheeds.', 'warn');
+} catch (error) {
+  console.error('Starter nasheeds could not be seeded:', error.message);
+}
+// Their durations are a LABEL, so they are measured after boot rather than in
+// front of it: nine ffprobe processes on every restart is the wrong trade.
+setTimeout(() => {
+  fillStarterDurations()
+    .then(filled => { if (filled) log(`Measured ${filled} starter nasheed duration(s).`); })
+    .catch(error => console.error('Starter nasheed durations failed:', error.message));
+}, 1500).unref?.();
 
 const orphanRecords = findUnownedRecords(state);
 if (orphanRecords.length) {

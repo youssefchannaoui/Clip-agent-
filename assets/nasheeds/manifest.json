@@ -1,0 +1,15 @@
+{
+  "provider": "DeenClipped",
+  "note": "Beds mixed under the voice and ducked. Anything above 128kbps was re-encoded to 96kbps: measured, every one of these carries 38-61 dB less energy above 10kHz than it does overall (they are muffled by design), so the bits above that were buying nothing. Two tracks arrived at or under 100kbps and were copied untouched rather than given a second lossy pass.",
+  "tracks": [
+    { "file": "allah-allah.mp3",      "name": "Allah Allah" },
+    { "file": "arihna-biha.mp3",      "name": "Arihna Biha" },
+    { "file": "asmoo.mp3",            "name": "Asmoo" },
+    { "file": "fiya-hubbun.mp3",      "name": "Fiya Hubbun" },
+    { "file": "ila-rabbi.mp3",        "name": "Ila Rabbi — AbdulAziz Al-Rashed" },
+    { "file": "the-sins.mp3",         "name": "The Sins" },
+    { "file": "the-way-of-tears.mp3", "name": "The Way of Tears" },
+    { "file": "wedding-nasheed.mp3",  "name": "Wedding Nasheed" },
+    { "file": "ya-quluban.mp3",       "name": "Ya Quluban" }
+  ]
+}

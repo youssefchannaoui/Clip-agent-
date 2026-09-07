@@ -168,26 +168,64 @@ test('the preview window is clamped inside the clip', () => {
   assert.deepEqual([calls[1].startSec, calls[1].endSec], [0, 6], 'and one at the start does not go negative');
 });
 
-test('the watermark switch is the ACCOUNT\'s switch: it writes the brand, never this clip', () => {
+/* ── The watermark row is REMOVED from the editor (v3.149.0) ──────────────
+   Youssef, 8 Sept 2026: "remove watermark setting in editior."
+
+   v3.137.0 stopped this row writing a PER-CLIP brand override and pointed it
+   at the account's own record instead. That fixed the write and left the
+   deeper fault standing: an ACCOUNT-wide switch drawn on a PER-CLIP screen,
+   which is "two controls for one setting" -- the shape this repo has now
+   shipped four times. The setting lives on Templates -> Brand.
+
+   Both halves are pinned, because each is silent on its own: the handler must
+   write nothing (executed, through the adapter's own binding), and the row
+   must be off the screen (a source assertion on the painter -- CI has no
+   browser, and a hide that stops happening is exactly the kind of fault that
+   leaves the app rendering and the suite green). */
+test('the editor\'s watermark handler writes nothing at all', () => {
   const A = loadAdapter();
   const brandWrites = [];
   A.win.dcSaveBrand = patch => { brandWrites.push(patch); return Promise.resolve({}); };
   A.StudioAdapter.onClipStyle = () => { throw new Error('a per-clip style write must not happen'); };
   const { b } = editorAt(A, clipRecord());
-  assert.match(b.edWmNote, /every clip/, 'the note says whose switch it is');
   b.toggleWatermark(noEvent);
-  assert.equal(JSON.stringify(brandWrites), JSON.stringify([{ watermark: 'DEENCLIPPED', watermarkOpacity: 0 }]));
-  assert.equal(A.StudioAdapter.ui.edStyleDraft, null, 'nothing landed in the clip draft');
+  b.toggleWatermark(noEvent);
+  assert.equal(brandWrites.length, 0, 'the account brand is not written from the editor');
+  assert.equal(A.StudioAdapter.ui.edStyleDraft, null, 'and nothing landed in the clip draft');
 });
 
-test('the watermark row reads the brand record before the template', () => {
+test('the five bindings the template names all survive the removal', () => {
+  // A missing binding is a render error, so removing the ROW must not remove
+  // the values the generated template still reads -- the same reason
+  // railMotifStyle is kept as an empty binding.
   const A = loadAdapter();
-  const { STATE } = editorAt(A, clipRecord());
-  STATE.brand = { watermark: 'MY MARK', watermarkOpacity: 0 };
-  const b = A.StudioAdapter.bindings(STATE);
-  assert.match(b.edWmNote, /^Off for every clip/);
-  STATE.brand = { watermark: 'MY MARK', watermarkOpacity: 100 };
-  assert.match(A.StudioAdapter.bindings(STATE).edWmNote, /^MY MARK on every clip/);
+  const { b } = editorAt(A, clipRecord());
+  for (const key of ['edWmTrack', 'edWmKnob', 'edWmNote', 'toggleWatermark', 'notPro']) {
+    assert.ok(key in b, key + ' is still bound');
+  }
+  assert.equal(typeof b.toggleWatermark, 'function');
+});
+
+test('paintEditorLook hides the watermark row, and hides it before it gives up', () => {
+  const host = fs.readFileSync(path.join(ROOT, 'src/public/index.html'), 'utf8');
+  const at = host.indexOf('function paintEditorLook(');
+  assert.ok(at > 0, 'the painter is still there');
+  const body = host.slice(at, host.indexOf('\n}\n', at));
+  const code = body.replace(/\/\*[\s\S]*?\*\//g, '');   // strip comments: this one
+  //                                                       explains itself, and a
+  //                                                       test that matches its own
+  //                                                       explanation protects nothing
+  assert.match(code, /display\s*=\s*'none'/, 'the row is hidden');
+  assert.match(code, /setAttribute\('data-host-style'/, 'and marked so the patcher leaves the style alone');
+  // display:none rather than a dimming: opacity and pointer-events would each
+  // leave the row's 34px of layout and its divider behind, which reads as a
+  // fault rather than as a removal (measured: 34px visible, 0px hidden).
+  assert.doesNotMatch(code, /opacity\s*=\s*'?0/, 'not dimmed -- a dimmed row still takes its space');
+  // The hide must come BEFORE the early return on an empty control list, or a
+  // Look panel with nothing to add would keep the row.
+  const hideAt = code.search(/display\s*=\s*'none'/);
+  const bailAt = code.search(/!rows\.length/);
+  assert.ok(hideAt > 0 && bailAt > hideAt, 'the row is hidden before the painter can bail out');
 });
 
 test('a pending grade is echoed over the render, approximately, and says so', () => {

@@ -13705,3 +13705,136 @@ what the ring is a mark for.
 at **3.7:1** in night -- under AA, on the one line that answers "can these be
 given twice". #6E6E76 -> #8B8B93 takes it to **5.53**. Paper was already 5.36.
 Every other reading passed: tab-on 16.74/18.37, tab-off and note 5.53/6.04.
+
+## The watermark setting is gone from the editor (v3.149.0, 8 Sept 2026)
+
+Youssef: "remove watermark setting in editior."
+
+v3.137.0 stopped that row writing a PER-CLIP brand override and pointed it at
+the account's own record instead. That fixed the WRITE and left the deeper
+fault standing: an **account-wide switch drawn on a per-clip screen**. Somebody
+looking at one clip could change the watermark on every clip they own, and the
+setting already lives on Templates -> Brand, where it belongs. Two controls for
+one setting is the shape this repo has now shipped four times (two watermark
+positions, two onboarding systems, two tour buttons, two Grain sliders).
+
+- **HIDDEN IN PLACE, never taken out of the tree.** Removing a generated node
+  shortens the live child list against the rendered one and the patcher then
+  pairs every sibling after it one across -- the v3.124.5 lesson, and the
+  library sidebar's "Before you import" card before it. `display: none` rather
+  than opacity or pointer-events, because those leave the row's **34px** of
+  layout and its divider behind, and an empty gap where a control used to be
+  reads as a fault. `data-host-style` is the marker the patcher never strips.
+- **It is hidden BEFORE `paintEditorLook`'s early return on an empty control
+  list**, so a Look panel with nothing to add still loses the row -- and the
+  row stays in the DOM, which is what keeps it usable as that painter's own
+  anchor (it is found by its own "DeenClipped watermark" text, never a class).
+- **All five bindings survive**, because the generated template names them and
+  a missing binding is a render error -- the reason `railMotifStyle` is kept as
+  an empty binding. Only the handler changed: `toggleWatermark` does nothing,
+  so the editor cannot be a second road to the account's brand record.
+- **The MARK is still drawn on the preview frame.** `edMarkStyle` reads the
+  template the server has already laid the brand over; showing what the export
+  will draw is not a setting.
+
+**Measured at 1440x900 in both themes**: the row is in the DOM, `display: none`,
+0px tall, 0 focusable children, and the Look column's visible children are
+exactly Grain, Warmth, Vignette and the host box (Look / Sharpen / Atmosphere /
+Darken video). 0 overflowing, 0 page scroll, **0 DOM operations on an unchanged
+repaint**, 0 page errors. Still hidden after three consecutive `paintStudio()`
+calls, and restored by the next paint when undone by hand -- so the probe was
+shown able to report the row (34px, `display: flex`) rather than trusted.
+
+Three probes proven red: the brand write restored, the hide deleted, and the
+hide moved below the rows check.
+
+## Nine starter nasheeds ship with the product (v3.149.0, 8 Sept 2026)
+
+Youssef sent nine muffled nasheed beds: "add these to the nasheeds, show its
+uploaded by deenclipped."
+
+**This removes a blocker from every account, not just his.** Music is mandatory
+on every clip, so an account with no nasheed cannot finish a single render --
+"No nasheed uploaded" is one of the three things a brand-new account is stopped
+by on its first screen, and the First 100 funnel's oldest number is accounts
+that sign up and never import. Measured after: that banner is gone and the next
+one ("No publishing account connected") takes its place.
+
+- **They ship in the REPO, and the cost is stated rather than hidden: 27MB
+  against a 14MB tracked tree.** Leaving the starter library on one Render disk
+  makes it a property of THAT DISK -- a fresh deployment, or a restored one,
+  comes up with nothing to mix and nobody can render. Shipping them makes it a
+  property of the product. If that trade is ever unwanted, moving them to R2
+  and fetching once at boot is a small change.
+- **THE ENCODE WAS DECIDED BY MEASUREMENT, not by a guess.** Every one of the
+  nine carries **38 to 61 dB less energy above 10kHz than it does overall** --
+  they are genuinely muffled, which is exactly the band a lower bitrate
+  discards first. So 192kbps was spending most of its bits on silence: the
+  seven above target went to 96kbps and the two already at or under 100kbps
+  were **copied untouched** rather than given a second lossy pass. An earlier
+  pass at a flat 128k was thrown away because it UPSIZED two of them. 46MB ->
+  27MB, on a bed that is then attenuated to ~13%, ducked under the voice, and
+  finally re-encoded to AAC.
+- **`shared: true` already meant "the app's own starter nasheeds"** (audio.js's
+  own words), so the credit reads ONE field rather than adding a second that
+  could disagree with it. The row's meta slot already existed and said
+  "Shared", which answers a question nobody asks; it says **"Added by
+  DeenClipped"** now, and the operator's own legacy tracks are credited
+  correctly too, because that is exactly what the flag has always meant.
+- **Idempotent on a STABLE id** (`dc-starter-<filename>`), or every boot seeds
+  a second copy and the library grows by nine on every deploy. Proven red with
+  `Date.now()` in the id.
+- **A starter track the operator deletes STAYS deleted.** The seeder runs on
+  every boot, so without a record of the removal it comes straight back and
+  Delete reads as a button that does not work. Its own file next to
+  library.json, not state.json -- store.js imports audio.js, so reaching back
+  would be a cycle.
+- **Durations are measured AFTER boot**, not in front of it: nine ffprobe
+  processes before the server starts listening, on every restart, for a label.
+  The row simply has no duration until that has run once.
+- **A customer's Remove on a starter track was a DEAD CONTROL** (invariant 9):
+  `deleteNasheed` refuses anything the account does not own, so it did nothing
+  at all, silently -- and that only becomes visible now that every library
+  holds nine of them. It says so instead. Removing the button would need the
+  design's own literal style to become a binding, which defeats the style hoist
+  and renumbers every hashed class in the app. `listNasheeds` derives `owned`
+  so the browser can tell, which also keeps every entry's owner id off the wire.
+
+### The import cycle that failed silently, and had been there all along
+
+Found because the test seeded NOTHING while the real server seeded nine.
+
+`store.js` imports `audio.js` for the boot migrations, and `audio.js` imported
+`musicSettings`/`setMusicSettings` straight back and re-exported them -- a pair
+**nothing anywhere read**: every caller takes them from store.js directly. That
+dead re-export made a genuine ES module cycle. Import `audio.js` first and
+store.js's boot block runs while audio.js's body has not, so `musicDir`,
+`libraryFile` and `starterDir` are all in the temporal dead zone,
+`readStarterManifest`'s own `catch { return [] }` swallows the ReferenceError,
+and the seeder returns 0 having done nothing. **No error, no log line, no
+starter nasheeds** -- on an app that cannot render a clip without one.
+
+It worked in production only because `server.js` happens to import store.js
+first. **A behaviour that depends on somebody else's import order is not a
+behaviour.** The dead pair is deleted, the cycle is gone, and a test pins it --
+importing audio.js first now correctly seeds nothing, because audio.js alone is
+a library rather than the app's boot.
+
+And `starterNasheedsMissing()` splits the two silences that were one: seeding 0
+is NORMAL on every restart after the first, while seeding 0 because
+`assets/nasheeds` did not ship is a deployment on which no new account can
+render. The boot log now tells them apart.
+
+### What the change cost elsewhere
+
+`public-imports.test.mjs` went red on the idempotency test, and it was the
+feature working: that test bails out when submission is refused "for an
+unrelated reason", and **"no nasheed" can no longer be that reason**. The list
+now names the import-provider refusal instead, with a note saying why music
+left it.
+
+Eight probes proven red, plus a ninth redone after the first attempt referenced
+a function that does not exist -- a probe that crashes is not a probe that
+failed. Measured at 1440x900 in both themes: nine rows, one left edge (268),
+one right edge (1082), one row height (62), 0 overflowing, 0 page scroll, 0
+page errors.

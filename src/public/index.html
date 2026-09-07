@@ -10309,15 +10309,39 @@ function paintEditorLook(vals){
   const ID='dcEdLook';
   const rows=Array.isArray(vals.edLookControls)?vals.edLookControls:[];
   const gone=()=>{const n=document.getElementById(ID); if(n) n.remove()};
-  if(!vals.isEditor||!vals.isLook||!rows.length){ gone(); return }
+  if(!vals.isEditor||!vals.isLook){ gone(); return }
   /* The watermark row is the Look panel's first child and the only node in it
      carrying that phrase, so it identifies the column without naming a class. */
   const editor=document.querySelector('#studio [data-dc-editor]');
   if(!editor){ gone(); return }
   const wmLabel=[...editor.querySelectorAll('span')]
     .find(s=>s.childNodes.length&&s.firstChild.nodeType===3&&s.firstChild.nodeValue.trim()==='DeenClipped watermark');
-  const col=wmLabel?wmLabel.closest('div').parentElement:null;
-  if(!col){ gone(); return }
+  const wmRow=wmLabel?wmLabel.closest('div'):null;
+  /* ── The watermark row is REMOVED from the editor ──────────────────────
+     Youssef, 8 Sept 2026: "remove watermark setting in editior." It was the
+     ACCOUNT's switch on a PER-CLIP screen -- the setting belongs to Templates
+     -> Brand and applies to every template, so a copy of it here invited
+     somebody to change every clip they own while looking at one of them.
+
+     HIDDEN IN PLACE, never removed: taking a generated node out of the tree
+     shortens the live child list against the rendered one and the patcher
+     then pairs every sibling after it one across (v3.124.5, and the library
+     sidebar's "Before you import" card before it). `display: none` rather
+     than opacity or pointer-events, because those leave the row's 34px of
+     layout and its divider behind -- an empty gap where a control used to be
+     reads as a fault -- and because display:none is the only one of the three
+     that also keeps a focusable child out of the tab order, which this row
+     does not have today and might tomorrow. `data-host-style` is the marker
+     the patcher never strips, so the style survives every repaint: measured
+     display:none and 0px tall after three consecutive paintStudio() calls,
+     and restored by the next paint when undone by hand.
+
+     It is hidden BEFORE the rows check below, so a Look panel that somehow
+     has no controls to add still loses the row -- and the row stays in the
+     DOM, which is what keeps it usable as this painter's own anchor. */
+  if(wmRow&&wmRow.style.display!=='none'){ wmRow.setAttribute('data-host-style',''); wmRow.style.display='none'; }
+  const col=wmRow?wmRow.parentElement:null;
+  if(!col||!rows.length){ gone(); return }
   let box=document.getElementById(ID);
   if(!box||box.parentElement!==col){
     if(box) box.remove();

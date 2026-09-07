@@ -83,9 +83,15 @@ test('resubmitting with the same idempotency key does not create a second projec
   const first = await engine.submitVideo('https://www.youtube.com/watch?v=aaaaaaaaaaa', 'A', 'user_admin', { idempotencyKey: key })
     .catch(error => ({ error: error.message }));
   if (first && first.error) {
-    // Submission was refused for an unrelated reason (no nasheed, no template);
-    // the guard being tested lives before that, so assert the shape instead.
-    assert.match(first.error, /nasheed|template|Sign in/i);
+    // Submission was refused for an unrelated reason -- no template, no import
+    // provider configured in this environment -- and the guard being tested
+    // lives before all of them, so assert the shape instead.
+    //
+    // "no nasheed" used to be the reason it landed here and no longer can be:
+    // every account now holds the nine DeenClipped starter nasheeds from boot
+    // (v3.149.0). Left in the pattern deliberately, so this reads as a list of
+    // environment reasons rather than as a claim that music is still a blocker.
+    assert.match(first.error, /nasheed|template|Sign in|not configured/i);
     return;
   }
   const second = await engine.submitVideo('https://www.youtube.com/watch?v=aaaaaaaaaaa', 'A', 'user_admin', { idempotencyKey: key });
