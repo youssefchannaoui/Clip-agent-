@@ -328,7 +328,19 @@ export function plans() {
  */
 export function tierOf(user) {
   if (isUnlimited(user)) return 'studio';
-  return paidTierOf(user);
+  const paid = paidTierOf(user);
+  /*
+   * An access code is read HERE and deliberately not in paidTierOf. Feature
+   * access and queue position are different questions (see below): a grant
+   * hands over what the plan can DO, and never a place in front of a paying
+   * customer on a single-slot worker.
+   *
+   * It can only ever raise the tier -- a lapsed or lesser grant leaves a real
+   * subscriber exactly where their money put them.
+   */
+  const grant = grantState(ensureUserBilling(user));
+  if (!grant.active) return paid;
+  return TIER_RANK[grant.tier] > TIER_RANK[paid] ? grant.tier : paid;
 }
 
 /**
@@ -452,6 +464,17 @@ function walletAllowance(billing = {}, user = null) {
   // of days. Once the window closes the allowance is nothing, not a smaller
   // something -- otherwise cancelling and re-subscribing mints a fresh free
   // wallet on every lap.
+  /*
+   * A grant's tokens are an ALLOWANCE, never a bonus balance. Bonus tokens do
+   * not expire, and a fortnight of Pro that leaves 650 permanent tokens behind
+   * is not a fortnight of anything -- the cut-off at the end is the whole
+   * reason the code is worth redeeming rather than ignoring.
+   *
+   * It only ever raises the ceiling, so a real subscriber who redeems one
+   * cannot end up with less than they pay for.
+   */
+  const grant = grantState(billing);
+  if (grant.active) return Math.max(full, grant.tokens);
   if (planId === 'free') return freeWindow(user, billing).expired ? 0 : full;
   const cap = Math.max(0, Number(config.tokensTrial || 0));
   if (!cap) return full;
@@ -667,10 +690,54 @@ export function publicBilling(user) {
   const remaining = unlimited ? null : baseRemaining + bonusTokens;
   const periodEndsInDays = billing.periodEnd ? daysRemaining(billing.periodEnd) : null;
   const free = unlimited ? { expired: false, daysLeft: null, endsAt: null } : freeWindow(user, billing);
+  const grant = unlimited ? grantState({}) : grantState(billing);
   const notices = [];
+  /*
+   * The grant speaks first, and silences the free-window pair while it has
+   * anything to say. A tester's fortnight is the recent and specific truth;
+   * being told on the same screen about seven free days that lapsed a month
+   * ago is noise, and the adapter shows only the FIRST blocking notice
+   * anyway -- so the order here decides which sentence a person reads.
+   */
+  if (!unlimited && grant.active) {
+    if (grant.daysLeft <= 3) {
+      notices.push({
+        id: `grant-ending-${grant.endsAt}`,
+        kind: 'grant_ending',
+        title: grant.daysLeft <= 1
+          ? `Your ${planLabelForTier(grant.tier)} access ends today`
+          : `${grant.daysLeft} days of ${planLabelForTier(grant.tier)} left`,
+        message: `Your tester access ends soon. Choose a plan to keep your templates, DeenAI and posting exactly as they are.`,
+        action: 'See plans',
+      });
+    }
+  } else if (!unlimited && grant.ended && currentPlan === 'free') {
+    /*
+     * BLOCKING ONLY WHEN THERE IS GENUINELY NOTHING LEFT.
+     *
+     * A tester who redeems on their first day runs the fortnight and their own
+     * free week side by side, so by the time the grant ends the free window is
+     * long gone -- which is the normal case and a real wall. But a short code
+     * can end while free days remain, and blocking somebody who still has
+     * tokens would stop them working for no reason. The free-window notices
+     * below then take over, because that is the wall that actually applies.
+     */
+    notices.push({
+      id: `grant-ended-${grant.endsAt}`,
+      kind: 'grant_ended',
+      title: `Your ${planLabelForTier(grant.tier)} access has ended`,
+      message: free.expired
+        ? 'Thank you for testing DeenClipped. Choose a plan to keep importing lectures, making clips and posting them.'
+        : `Thank you for testing DeenClipped. Your ${planLabelForTier(grant.tier)} features are off again, and your free days are still running.`,
+      action: 'Choose plan',
+      blocking: free.expired,
+    });
+  }
   // The free window is the one wall a new account actually hits, so it is
-  // announced before it arrives and stated plainly once it has.
-  if (!unlimited && currentPlan === 'free' && free.endsAt) {
+  // announced before it arrives and stated plainly once it has. Silenced only
+  // while a grant is RUNNING, or once one has ended and taken the account with
+  // it -- there the grant's own sentence is the recent and specific truth.
+  if (!unlimited && !grant.active && !(grant.ended && free.expired) && currentPlan === 'free' && free.endsAt) {
     if (free.expired) {
       notices.push({
         id: `free-ended-${free.endsAt}`,
@@ -790,6 +857,10 @@ export function publicBilling(user) {
       cancelAt: billing.cancelAtPeriodEnd ? (billing.cancelAt || billing.periodEnd || null) : null,
       trial,
       freeTrial: unlimited ? { endsAt: null, daysLeft: null, expired: false } : freeWindow(user, billing),
+      // The screen shows the grant while it runs and says so once it has
+      // ended, so a tester always knows which day they are on.
+      grant: unlimited ? grantState({}) : grant,
+      grantTierName: grant.tier ? planLabelForTier(grant.tier) : '',
       stripeCustomerId: billing.stripeCustomerId || '',
       stripeSubscriptionId: billing.stripeSubscriptionId || '',
     },
@@ -798,6 +869,30 @@ export function publicBilling(user) {
     notices,
     recentEvents: (state.billingEvents || []).filter(event => event.userId === user.id).slice(0, 10),
   };
+}
+
+/**
+ * May this account still PUBLISH?
+ *
+ * Youssef, 7 Sept 2026, on the tester fortnight ending: "shouldnt allow them
+ * to post further." That was true of imports (assertCanSpend refuses them) and
+ * had never been true of posting -- clips already approved went on going out
+ * long after the window closed, which is most of what a plan is for.
+ *
+ * DELIBERATELY DERIVED FROM THE NOTICES rather than re-deciding the question:
+ * the sentence a person reads on their dashboard IS the reason their clips are
+ * held, so the two can never drift into disagreeing. It covers the free window
+ * and a lapsed grant with one rule, because two rules is how they drift.
+ *
+ * The clip is HELD, never failed -- see agent.js. Failing it would fill the
+ * activity feed with red for a decision the customer has not made yet, and
+ * they would have to re-approve everything after subscribing.
+ */
+export function canPublish(user) {
+  if (isUnlimited(user)) return { allowed: true, reason: '' };
+  const blocking = (publicBilling(user).notices || []).find(notice => notice && notice.blocking);
+  if (!blocking) return { allowed: true, reason: '' };
+  return { allowed: false, reason: blocking.title, message: blocking.message };
 }
 
 export function assertCanSpend(user, tokens, action = 'start this job') {
@@ -1290,6 +1385,202 @@ export function grantBonusTokens(user, tokens, reason, key) {
   state.billingEvents = state.billingEvents.slice(0, 5000);
   save();
   return { granted: amount, balance: billing.bonusTokens };
+}
+
+/* ------------------------------------------------------------------ *
+ * ACCESS CODES
+ *
+ * Youssef, 7 Sept 2026, on recruiting testers by DM: "we'll give them a code
+ * ... they will get, let's say, fourteen days ... of pro, and they get
+ * everything that's included on the pro subscription ... once it's over the
+ * two weeks, it'll just say everything is done purchase a subscription and
+ * shouldnt allow them to post further."
+ *
+ * A grant is NOT a subscription and never pretends to be one. It lives in its
+ * own field, `billing.grant`, and touches none of the Stripe columns -- so a
+ * tester who subscribes for real during their fortnight gets a clean record
+ * with nothing of ours to unpick, and a webhook can never overwrite a grant or
+ * be overwritten by one. When it lapses there is nothing to clean up: it
+ * simply stops being consulted.
+ *
+ * THE GRANT BUYS FEATURES, NOT QUEUE POSITION. `tierOf` reads it and
+ * `paidTierOf` does not, which is the same line this file already draws for
+ * the operator: there is ONE worker slot, so an account that is not paying
+ * must not put its lecture in front of one that is. A Pro grant is unaffected
+ * by that today (priority is a Studio feature) and the rule is written down so
+ * a Studio code cannot quietly change it later.
+ */
+
+/** The codes the operator has minted, keyed by their own text. */
+export function ensureAccessCodes() {
+  if (!state.accessCodes || typeof state.accessCodes !== 'object') state.accessCodes = {};
+  return state.accessCodes;
+}
+
+/** Codes are typed by hand off a DM, so case and stray spaces cannot matter. */
+function normaliseCode(raw) {
+  return String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+}
+
+/**
+ * A readable code somebody can retype from a phone screen.
+ *
+ * No 0/O, 1/I or 5/S: a tester who mistypes their code reads it as the product
+ * refusing them, and the support cost of one ambiguous glyph is larger than
+ * the entropy it buys against a 5-redemption cap.
+ */
+const CODE_ALPHABET = 'ACDEFGHJKLMNPQRTUVWXY2346789';
+export function makeAccessCode(prefix = 'DEEN') {
+  const bytes = crypto.randomBytes(6);
+  let body = '';
+  for (const byte of bytes) body += CODE_ALPHABET[byte % CODE_ALPHABET.length];
+  return `${normaliseCode(prefix) || 'DEEN'}-${body}`;
+}
+
+export function accessCodeDefaults() {
+  return {
+    tier: 'pro',
+    days: Math.max(1, Number(config.accessCodeDays || 14)),
+    tokens: Math.max(1, Number(config.accessCodeTokens || 650)),
+    cap: 1,
+  };
+}
+
+/**
+ * Mint one. `cap` is how many ACCOUNTS may redeem it: one per tester for a DM,
+ * or a larger number for a campaign code that will end up screenshotted.
+ */
+export function createAccessCode(actor, options = {}) {
+  ensureBillingState();
+  const codes = ensureAccessCodes();
+  const defaults = accessCodeDefaults();
+  const code = normaliseCode(options.code) || makeAccessCode(options.prefix);
+  if (codes[code]) throw new Error('That code already exists.');
+  const tier = TIER_ORDER.includes(String(options.tier)) && options.tier !== 'basic' ? options.tier : defaults.tier;
+  const entry = {
+    code,
+    tier,
+    days: Math.min(365, Math.max(1, Math.round(Number(options.days) || defaults.days))),
+    // `??` does NOT catch NaN, and Number(undefined) is NaN -- so the obvious
+    // `Number(options.tokens) ?? defaults.tokens` minted every code with NaN
+    // tokens, which grantState then read as 0 and handed testers nothing.
+    tokens: Math.min(100_000, Math.max(0, Math.round(
+      options.tokens == null || options.tokens === '' ? defaults.tokens : Number(options.tokens) || 0,
+    ))),
+    cap: Math.min(10_000, Math.max(1, Math.round(Number(options.cap) || defaults.cap))),
+    note: String(options.note || '').slice(0, 120),
+    createdAt: now(),
+    createdBy: actor?.id || null,
+    disabled: false,
+    redemptions: [],
+  };
+  codes[code] = entry;
+  save();
+  return entry;
+}
+
+export function setAccessCodeDisabled(code, disabled) {
+  const entry = ensureAccessCodes()[normaliseCode(code)];
+  if (!entry) throw new Error('No such code.');
+  entry.disabled = Boolean(disabled);
+  save();
+  return entry;
+}
+
+/** For the operator's own screen. Redeemers are ids, never addresses. */
+export function listAccessCodes() {
+  return Object.values(ensureAccessCodes())
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+    .map(entry => ({
+      code: entry.code,
+      tier: entry.tier,
+      days: entry.days,
+      tokens: entry.tokens,
+      cap: entry.cap,
+      note: entry.note || '',
+      disabled: Boolean(entry.disabled),
+      createdAt: entry.createdAt || null,
+      used: (entry.redemptions || []).length,
+      lastUsedAt: (entry.redemptions || []).reduce((newest, row) => Math.max(newest, Number(row.at || 0)), 0) || null,
+    }));
+}
+
+/**
+ * Where the account stands on its grant.
+ *
+ * `ended` is deliberately true only for a grant that RAN and finished -- an
+ * account that never redeemed anything has no ended grant to be told about,
+ * and a notice about a trial nobody started is noise.
+ */
+export function grantState(billing = {}) {
+  const grant = billing?.grant;
+  if (!grant || !grant.endsAt) return { active: false, ended: false, tier: null, tokens: 0, daysLeft: null, endsAt: null, code: null };
+  const endsAt = Number(grant.endsAt || 0);
+  const active = endsAt > now();
+  return {
+    active,
+    ended: !active,
+    tier: grant.tier || 'pro',
+    tokens: Math.max(0, Number(grant.tokens || 0)),
+    daysLeft: active ? daysRemaining(endsAt) : 0,
+    endsAt,
+    startedAt: Number(grant.startedAt || 0) || null,
+    code: grant.code || null,
+  };
+}
+
+/**
+ * Redeem a code.
+ *
+ * Refusals name what is wrong, because a tester who has been personally asked
+ * to try the product and meets "invalid code" has no way to tell a typo from a
+ * spent code from a code the operator disabled -- and the next thing they do
+ * is give up rather than write back.
+ */
+export function redeemAccessCode(user, rawCode) {
+  ensureBillingState();
+  if (!user) throw new Error('Sign in to redeem a code.');
+  const code = normaliseCode(rawCode);
+  if (!code) throw new Error('Enter your code.');
+  const entry = ensureAccessCodes()[code];
+  if (!entry) throw new Error('That code was not recognised. Check it against the message we sent you.');
+  if (entry.disabled) throw new Error('That code is no longer active. Ask us for a new one.');
+
+  const billing = ensureUserBilling(user);
+  const already = (entry.redemptions || []).some(row => row.userId === user.id);
+  if (already) throw new Error('You have already used this code.');
+  if ((entry.redemptions || []).length >= entry.cap) {
+    throw new Error('That code has been fully claimed. Ask us for a new one.');
+  }
+  const running = grantState(billing);
+  if (running.active) {
+    throw new Error(`Your ${planLabelForTier(running.tier)} access is already running — it ends on ${new Date(running.endsAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'long' })}.`);
+  }
+
+  const startedAt = now();
+  billing.grant = {
+    code: entry.code,
+    tier: entry.tier,
+    tokens: entry.tokens,
+    startedAt,
+    endsAt: startedAt + entry.days * DAY_MS,
+  };
+  /*
+   * The clock is reset with the grant, not left where the free week ended.
+   * Without this a tester who signed up a fortnight ago arrives with
+   * `tokensUsed` already at their free 40, and the first thing the gift does
+   * is hand them 650 tokens minus a spend they made before it existed.
+   */
+  billing.tokensUsed = 0;
+  billing.periodStart = startedAt;
+  entry.redemptions.push({ userId: user.id, at: startedAt });
+  save();
+  return grantState(billing);
+}
+
+/** "Pro" / "Studio", for a sentence rather than an id. */
+function planLabelForTier(tier) {
+  return tier === 'studio' ? 'Studio' : 'Pro';
 }
 
 export function grantTopup(user, packageId, references = {}) {

@@ -1806,6 +1806,50 @@ async function route(req, res, url) {
     } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
 
+  /*
+   * Redeem a tester or campaign code.
+   *
+   * Deliberately NOT on the sign-up form. Youssef, 7 Sept 2026: "not on the
+   * sign up area ... they make their account, and then ... somewhere obvious
+   * on the top" of the billing screen. A code typed at sign-up is a second
+   * thing that can go wrong on the one form that must not, and somebody who
+   * loses their code has to abandon the account rather than ask for another.
+   *
+   * Rate-limited per account, because the code space is guessable by design --
+   * it is short enough to retype off a phone.
+   */
+  if (method === 'POST' && pathname === '/api/billing/redeem') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to redeem a code.' });
+    const guess = throttle.rateLimit(`redeem:${currentUser.id}`, 12, 60 * 60_000);
+    if (!guess.allowed) {
+      return json(res, 429, { error: 'Too many tries. Wait an hour, or send us the code and we will check it.' });
+    }
+    let body; try { body = await readBody(req); } catch { body = {}; }
+    try {
+      const grant = billing.redeemAccessCode(currentUser, body.code || '');
+      log(`Redeemed access code ${grant.code}`, 'info', currentUser.id);
+      return json(res, 200, { ok: true, grant, billing: billing.publicBilling(currentUser) });
+    } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+  if (method === 'GET' && pathname === '/api/owner/codes') {
+    try { requireOperator(currentUser); return json(res, 200, { codes: billing.listAccessCodes(), defaults: billing.accessCodeDefaults() }); }
+    catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+  if (method === 'POST' && pathname === '/api/owner/codes') {
+    let body; try { body = await readBody(req); } catch { body = {}; }
+    try {
+      requireOperator(currentUser);
+      // Disabling is the way a code is retired: deleting it would let the same
+      // text be minted again with different terms, and the redemptions on it
+      // are the record of who was given what.
+      if (body.disable != null) {
+        billing.setAccessCodeDisabled(body.code || '', Boolean(body.disable));
+        return json(res, 200, { ok: true, codes: billing.listAccessCodes() });
+      }
+      const created = billing.createAccessCode(currentUser, body);
+      return json(res, 200, { ok: true, created: created.code, codes: billing.listAccessCodes() });
+    } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
   if (method === 'GET' && pathname === '/api/owner/finance') {
     // Clamped rather than trusted: an unbounded day count is an unbounded
     // number of Stripe pages, on a route one request can hold open.

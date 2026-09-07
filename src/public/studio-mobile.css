@@ -795,4 +795,19 @@
   #dcMobile .dcm-onb-bt b { font-size: 12.5px; font-weight: 600; color: var(--dcm-ink); }
   #dcMobile .dcm-onb-bt i { font-style: normal; font-size: 11.5px; line-height: 1.5; color: var(--dcm-ink2); }
   #dcMobile .dcm-onb-cost { margin: 0; font-size: 11px; line-height: 1.5; color: var(--dcm-ink3); }
+
+  /* The tester/campaign code card. Gold only while a grant is running: the
+     colour is what a tester's eye goes to when they open the screen to check
+     how many days are left, and spending it on the empty state would make the
+     one card that matters look like every other. */
+  .dcm-redeem .dcm-muted { margin-top: 4px; }
+  /* --dcm-edge2 / --dcm-wash / --dcm-wash2 are this sheet's OWN gold-tinted
+     pair, declared in both themes -- the first draft named --dcm-gold-line,
+     --dcm-gold-wash and --dcm-on-gold, none of which exist anywhere, and a
+     var() naming a token that is not declared fails silently. */
+  .dcm-redeem.is-on { border-color: var(--dcm-edge2); background: var(--dcm-wash); }
+  .dcm-redeem.is-on .dcm-pill { background: var(--dcm-wash2); }
+  .dcm-code { margin-top: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
+  .dcm-said { margin: 9px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--dcm-ok); }
+  .dcm-said.is-bad { color: var(--dcm-bad); }
 }

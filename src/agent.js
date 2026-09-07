@@ -839,6 +839,18 @@ export async function publishNow(id) {
     throw new Error('The full-quality render is still queued for this clip. It publishes as soon as that finishes.');
   }
   if (clip.status === 'publishing') throw new Error('This clip is already publishing.');
+  /*
+   * The same wall the timer hits, said at the button. A press that reported
+   * success and posted nowhere is the fault v3.115.3 fixed from the other
+   * side, and it would return here the moment access ends.
+   */
+  const access = billing.canPublish(ownerOfRecord(clip));
+  if (!access.allowed) {
+    const refusal = new Error(`${access.reason}. Choose a plan and this clip posts straight away — it keeps its slot in the meantime.`);
+    refusal.statusCode = 402;
+    refusal.needsPlan = true;
+    throw refusal;
+  }
   const outstanding = unpostedTargets(clip);
   if (clip.status === 'posted') {
     // Partly out: everything that posted stays posted, and this retries only
@@ -976,6 +988,33 @@ export async function tick() {
         }
       }
       if (clip.renderQuality === 'draft' && clip.status === 'scheduled') continue;
+      /*
+       * NOTHING POSTS ONCE ACCESS HAS ENDED -- and the clip is HELD, never
+       * failed.
+       *
+       * Youssef, 7 Sept 2026, on the tester fortnight: "shouldnt allow them to
+       * post further." Imports were already refused by assertCanSpend; posting
+       * never was, so a lapsed account went on publishing clips it could no
+       * longer make, which is most of what a plan is for.
+       *
+       * Held rather than failed on purpose. The clip keeps its approval, its
+       * slot and its destinations, so buying a plan releases the whole backlog
+       * by itself -- where failing them would fill the activity feed with red
+       * over a decision the customer has not made yet and cost them a
+       * re-approval each. `publishHold` is what the schedule row reads.
+       */
+      if (clip.status === 'scheduled' || clip.status === 'publishing') {
+        const access = billing.canPublish(ownerOfRecord(clip));
+        if (!access.allowed) {
+          if (clip.publishHold !== access.reason) {
+            clip.publishHold = access.reason;
+            clip.publishHoldAt = Date.now();
+            log(`"${clip.title}" is waiting for a plan before it posts: ${access.reason}.`, 'warn', ownerOf(clip));
+          }
+          continue;
+        }
+        if (clip.publishHold) { delete clip.publishHold; delete clip.publishHoldAt; }
+      }
       if (clip.status === 'scheduled' && clip.scheduledAt && clip.scheduledAt <= Date.now()) {
         /*
          * A CLIP ASKS WHERE IT IS GOING WHEN IT POSTS, not when it was

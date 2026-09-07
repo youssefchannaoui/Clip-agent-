@@ -8461,6 +8461,136 @@ StudioAdapter.onProbeSource=async url=>{try{
          Host-rendered rather than added to the design export, the same as the
          landing table below it — putting one panel in the export would
          regenerate every hashed class name in the app. */
+      /* ------------------------------------------------------------------
+         Access codes, on the Owner screen's Users tab.
+
+         This is the half Youssef operates: he DMs a person, and the code he
+         pastes has to come from somewhere. It sits on Users because a code is
+         about WHO gets in, and at the TOP of that tab because it is the thing
+         he opens the screen to do.
+
+         A code is DISABLED, never deleted: the same text could otherwise be
+         minted again on different terms, and the redemptions on it are the
+         record of who was given what.
+      ------------------------------------------------------------------ */
+      let dcCodes=null, dcCodesLoading=false;
+      const loadCodes=async(force)=>{
+        if(dcCodesLoading) return dcCodes;
+        if(dcCodes&&!force) return dcCodes;
+        dcCodesLoading=true;
+        try{ dcCodes=await api('/api/owner/codes'); }
+        catch(e){ dcCodes=null; }
+        finally{ dcCodesLoading=false; }
+        return dcCodes;
+      };
+      const paintOwnerCodes=async()=>{
+        try{
+          const onUsers=StudioAdapter.ui.screen==='owner'&&(StudioAdapter.ui.ownerTab||'overview')==='users';
+          let box=document.getElementById('dcowCodes');
+          const anchorSec=document.querySelector('#dcOwnerScreen .dcow-s.dcow-d1');
+          const parent=anchorSec&&anchorSec.parentNode;
+          if(!onUsers||!parent){ if(box)box.remove(); return; }
+          const data=await loadCodes();
+          if(!data){ if(box)box.remove(); return; }
+          if(!box||box.parentNode!==parent){
+            if(box)box.remove();
+            box=document.createElement('div'); box.id='dcowCodes';
+            box.setAttribute('data-host-owned','');
+            parent.insertBefore(box,anchorSec);
+          }
+          const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+          /* The card wrapper's class is HASHED and a re-import renumbers it, so
+             it is read off the anchor section's own first child rather than
+             named -- the rule paintSelfChecks established. */
+          const host=anchorSec.firstElementChild;
+          const cls=(host&&host.className)||'';
+          const pill=StudioAdapter.owPill||(()=>'');
+          const d=data.defaults||{days:14,tokens:650,cap:1};
+          const rows=data.codes||[];
+          /* Codes that can still be GIVEN to somebody -- which is the number
+             he needs before opening the DMs, not how many exist. "none live"
+             beside a code plainly in use read as broken; this names the noun. */
+          const live=rows.filter(r=>!r.disabled&&r.used<r.cap).length;
+          const num=(id,val,label,min,max)=>'<label style="display:flex;flex-direction:column;gap:4px;flex:0 0 82px">'
+            +'<span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dc-ink-faint, #6A6A72)">'+esc(label)+'</span>'
+            +'<input id="'+id+'" type="number" min="'+min+'" max="'+max+'" value="'+esc(val)+'" '
+            +'style="width:100%;height:34px;padding:0 9px;border-radius:8px;border:1px solid var(--dc-line, #26262A);'
+            +'background:var(--dc-bg, #0E0E11);color:var(--dc-ink, #F2F2F4);font:600 13px/1 inherit"></label>';
+          box.className='dcow-s';
+          box.style.cssText='flex-shrink:0;margin-bottom:18px';
+          window.dcSetHtml(box,'<div class="'+esc(cls)+'">'
+            +'<div class="scl"><span class="s97">Access codes</span>'
+              +'<span style="'+esc(pill(live?'good':'off'))+'">'+(live?esc(live)+' ready to send':'none left to send')+'</span></div>'
+            +'<div style="display:flex;gap:9px;align-items:flex-end;flex-wrap:wrap;padding:2px 0 13px">'
+            + num('dcowCodeDays',d.days,'Days',1,365)
+            + num('dcowCodeTokens',d.tokens,'Tokens',0,100000)
+            + num('dcowCodeCap',d.cap,'Uses',1,10000)
+            +'<label style="display:flex;flex-direction:column;gap:4px;flex:1 1 150px;min-width:0">'
+              +'<span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dc-ink-faint, #6A6A72)">Who it is for</span>'
+              +'<input id="dcowCodeNote" type="text" placeholder="e.g. @brother_ahmad on Instagram" maxlength="120" '
+              +'style="width:100%;height:34px;padding:0 10px;border-radius:8px;border:1px solid var(--dc-line, #26262A);'
+              +'background:var(--dc-bg, #0E0E11);color:var(--dc-ink, #F2F2F4);font:400 13px/1 inherit"></label>'
+            +'<button id="dcowCodeNew" type="button" style="height:34px;padding:0 15px;border:0;border-radius:8px;cursor:pointer;'
+              +'background:#D9B478;color:#171109;font:700 12.5px/1 inherit">New code</button>'
+            +'</div>'
+            +(rows.length
+              ? '<div class="sdk"><table class="sh1">'
+                +'<tr><th class="sgh">Code</th><th class="sgh">Gives</th><th class="sgh">Used</th><th class="sgh">Who for</th><th class="sgh"></th></tr>'
+                + rows.map(r=>'<tr class="dcow-hov"'+(r.disabled?' style="opacity:.5"':'')+'>'
+                    +'<td class="sgl"><code style="font:600 12.5px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.05em;color:var(--dc-gold-lit, #F0D6A6)">'+esc(r.code)+'</code></td>'
+                    +'<td class="sgl">'+esc(r.tier==='studio'?'Studio':'Pro')+' · '+esc(r.days)+'d · '+esc(r.tokens)+' tokens</td>'
+                    +'<td class="sgl">'+esc(r.used)+' of '+esc(r.cap)+'</td>'
+                    +'<td class="sgl">'+esc(r.note||'—')+'</td>'
+                    +'<td class="sgl" style="white-space:nowrap">'
+                      +'<button type="button" data-code-copy="'+esc(r.code)+'" style="border:0;background:none;cursor:pointer;'
+                        +'color:var(--dc-ink-soft, #A2A2AA);font:600 12px inherit;padding:4px 6px">Copy</button>'
+                      +'<button type="button" data-code-toggle="'+esc(r.code)+'" data-code-to="'+(r.disabled?'0':'1')+'" '
+                        +'style="border:0;background:none;cursor:pointer;color:var(--dc-ink-soft, #A2A2AA);font:600 12px inherit;padding:4px 6px">'
+                        +(r.disabled?'Enable':'Disable')+'</button>'
+                    +'</td></tr>').join('')
+                +'</table></div>'
+              : '<p style="margin:0;font-size:12.5px;color:var(--dc-ink-dim, #9A9AA3)">No codes yet. Set the terms above and press New code — then paste it into the DM.</p>')
+            +'</div>');
+          /* Rewired on every paint rather than guarded by a flag: dcSetHtml
+             rebuilds these nodes whenever the markup changes, and a wired flag
+             would leave the new buttons dead. */
+          const btn=document.getElementById('dcowCodeNew');
+          if(btn) btn.onclick=async()=>{
+            const val=id=>{const el=document.getElementById(id);return el?el.value:'';};
+            btn.disabled=true;
+            try{
+              const r=await api('/api/owner/codes',{method:'POST',body:JSON.stringify({
+                days:val('dcowCodeDays'), tokens:val('dcowCodeTokens'),
+                cap:val('dcowCodeCap'), note:val('dcowCodeNote'),
+              })});
+              dcCodes=Object.assign({},dcCodes,{codes:r.codes});
+              /* Straight to the clipboard: the next thing he does with a new
+                 code is paste it into a DM, and making him find and press Copy
+                 first is a step this screen can simply not cost him. */
+              try{ await navigator.clipboard.writeText(r.created); toast(r.created+' copied'); }
+              catch(e){ toast('Created '+r.created); }
+              paintOwnerCodes();
+            }catch(err){ toast((err&&err.message)||'Could not create that code.','bad'); }
+            btn.disabled=false;
+          };
+          box.querySelectorAll('[data-code-copy]').forEach(el=>{ el.onclick=async()=>{
+            const code=el.getAttribute('data-code-copy');
+            try{ await navigator.clipboard.writeText(code); toast(code+' copied'); }
+            catch(e){ toast('Copy failed — select it by hand.','bad'); }
+          };});
+          box.querySelectorAll('[data-code-toggle]').forEach(el=>{ el.onclick=async()=>{
+            try{
+              const r=await api('/api/owner/codes',{method:'POST',body:JSON.stringify({
+                code:el.getAttribute('data-code-toggle'), disable:el.getAttribute('data-code-to')==='1',
+              })});
+              dcCodes=Object.assign({},dcCodes,{codes:r.codes});
+              paintOwnerCodes();
+            }catch(err){ toast((err&&err.message)||'That did not go through.','bad'); }
+          };});
+        }catch(e){ console.error('paintOwnerCodes',e); }
+      };
+      window.dcPaintOwnerCodes=paintOwnerCodes;
+
       const paintFirst100=()=>{
         try{
           const g=(window.DC_OWNER&&window.DC_OWNER.growth)||null;
@@ -8627,6 +8757,88 @@ StudioAdapter.onProbeSource=async url=>{try{
         return dcRefInFlight;
       };
 
+      /* ------------------------------------------------------------------
+         "Have a code?" -- the tester and campaign code box.
+
+         Youssef, 7 Sept 2026, recruiting testers by DM: "somewhere obvious on
+         the top, maybe under the free plan ... a little area that they can
+         write their codes in ... we'll be updating discounts and etcetera."
+         So it sits ABOVE the plan cards rather than below them: somebody who
+         has been sent a code arrives looking for where to put it, and a box
+         under six pricing cards is a box they scroll past and then write to
+         ask about.
+
+         Host-rendered against #dcPlanGrid -- an id the design export carries
+         and a re-import cannot renumber -- for the same reason the invite
+         panel beside it is: a new section in the export regenerates every
+         hashed class name in the app.
+      ------------------------------------------------------------------ */
+      const paintRedeem=(vals)=>{
+        try{
+          /* Keyed off the DOM, not off UI.screen: the box belongs wherever the
+             plan cards are, and if they are not rendered we are not on that
+             screen. One source of truth rather than two that disagree after a
+             re-render. */
+          const grid=document.getElementById('dcPlanGrid');
+          if(!grid){ const gone=document.getElementById('dcRedeem'); if(gone)gone.remove(); return; }
+          const host=grid.parentNode; if(!host) return;
+          const cur=(DATA.billing&&DATA.billing.current)||{};
+          /* The operator has every feature by role, so a code would hand them
+             nothing and the box would be a control that cannot do anything. */
+          if(cur.unlimited){ const gone=document.getElementById('dcRedeem'); if(gone)gone.remove(); return; }
+          let box=document.getElementById('dcRedeem');
+          if(!box){
+            box=document.createElement('div'); box.id='dcRedeem';
+            box.setAttribute('data-host-owned','');
+            /* ABOVE the plan cards. Youssef: "somewhere obvious on the top."
+               Somebody who has been sent a code arrives looking for where to
+               put it, and a box under six pricing cards is one they scroll
+               past and then write to ask about. */
+            host.insertBefore(box, grid);
+          }
+          const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+          /* EVERY SENTENCE COMES FROM THE ADAPTER, never from here: the phone
+             renders the same strings into its own card, and two copies of this
+             copy would eventually tell one tester two different things about
+             the same fortnight. What this function owns is the layout. */
+          const on=Boolean(vals.redeemOn), gold='#D9B478';
+          const said=vals.redeemSaid
+            ? '<p style="margin:10px 0 0;font-size:12px;line-height:1.5;color:'
+              +(vals.redeemSaidBad?'#EF6B7A':'#6FCE9E')+'">'+esc(vals.redeemSaid)+'</p>'
+            : '';
+          window.dcSetHtml(box,
+            '<section style="margin:0 0 18px;padding:17px 18px;border:1px solid '
+            +(on?'rgba(217,180,120,.32)':'var(--dc-line, #26262A)')+';border-radius:14px;'
+            +'background:'+(on?'rgba(217,180,120,.055)':'var(--dc-card, #17171A)')+'">'
+            +'<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
+            +'<strong style="font-size:15px;color:var(--dc-ink, #F2F2F4)">'+esc(vals.redeemTitle)+'</strong>'
+            +(vals.redeemDays?'<span style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:'
+              +gold+'">'+esc(vals.redeemDays)+'</span>':'')
+            +'</div>'
+            +'<p style="margin:7px 0 0;font-size:12.5px;line-height:1.55;color:var(--dc-ink-dim, #9A9AA3)">'+esc(vals.redeemNote)+'</p>'
+            /* The field stays even while a grant runs: a tester whose fortnight
+               is nearly up may well be sent a second code, and hiding the one
+               control that would take it is worse than showing it. */
+            +'<form id="dcRedeemForm" style="display:flex;gap:9px;margin-top:13px;flex-wrap:wrap">'
+            +'<input id="dcRedeemCode" name="code" autocomplete="off" spellcheck="false" placeholder="DEEN-XXXXXX" '
+            +'aria-label="Your code" value="'+esc(vals.redeemCode||'')+'" style="flex:1 1 190px;min-width:0;height:42px;padding:0 13px;'
+            +'border-radius:10px;border:1px solid var(--dc-line, #26262A);background:var(--dc-bg, #0E0E11);'
+            +'color:var(--dc-ink, #F2F2F4);font:600 14px/1 ui-monospace,SFMono-Regular,Menlo,monospace;'
+            +'letter-spacing:.08em;text-transform:uppercase">'
+            +'<button id="dcRedeemGo" type="submit"'+(vals.redeemBusy?' disabled':'')+' style="height:42px;padding:0 18px;border:0;'
+            +'border-radius:10px;cursor:pointer;background:'+gold+';color:#171109;font:700 13px/1 inherit'
+            +(vals.redeemBusy?';opacity:.6;cursor:default':'')+'">'+esc(vals.redeemLabel)+'</button>'
+            +'</form>'+said+'</section>');
+          const form=document.getElementById('dcRedeemForm');
+          const field=document.getElementById('dcRedeemCode');
+          /* Rewired on every paint rather than guarded by a flag: dcSetHtml
+             rebuilds these nodes whenever the markup changes, and a wired flag
+             would leave the new button dead. */
+          if(field) field.oninput=e=>{ StudioAdapter.ui.redeemCode=e.target.value; };
+          if(form) form.onsubmit=e=>{ e.preventDefault(); StudioAdapter.onRedeemCode(); };
+        }catch(e){ console.error('paintRedeem',e); }
+      };
+      window.paintRedeem=paintRedeem;
       const paintInvite=async()=>{
         try{
           /* Keyed off the DOM rather than off UI.screen: the panel belongs
@@ -9063,6 +9275,38 @@ StudioAdapter.onProbeSource=async url=>{try{
         renderAll();
       }catch(e){toast(e.message,'bad')}
       finally{deenaiLoading=false}
+    };
+    /*
+     * Redeem a tester or campaign code. ONE handler, called from the desktop
+     * panel's form and from the phone card's button, so the two surfaces
+     * cannot behave differently on the one action that changes what an
+     * account may do.
+     */
+    StudioAdapter.onRedeemCode=async()=>{
+      const ui=StudioAdapter.ui;
+      if(ui.redeemBusy)return;
+      const code=String(ui.redeemCode||'').trim();
+      if(!code){ ui.redeemSaid={ok:false,text:'Enter the code we sent you.'}; paintStudio(); return; }
+      ui.redeemBusy=true; ui.redeemSaid=null; paintStudio();
+      try{
+        /* api() THROWS on a refusal with the server's own sentence as the
+           message, so there is no ok/error branch to write here -- the catch
+           IS the refusal path, and it says exactly what the route said rather
+           than a second wording of it. */
+        const r=await api('/api/billing/redeem',{method:'POST',body:JSON.stringify({code})});
+        ui.redeemBusy=false; ui.redeemSaid=null; ui.redeemCode='';
+        const g=(r&&r.grant)||{}, tier=g.tier==='studio'?'Studio':'Pro';
+        const days=Number(g.daysLeft||0);
+        toast(tier+' unlocked \u00b7 '+(days===1?'1 day':days+' days')+' on');
+        /* The whole screen changes -- the plan pill, the token count, which
+           features are on, the notices -- so the state is refreshed rather
+           than this one box patched. */
+        await refresh();
+      }catch(err){
+        ui.redeemBusy=false;
+        ui.redeemSaid={ok:false,text:(err&&err.message)||'That did not go through. Try again in a moment.'};
+        paintStudio();
+      }
     };
     StudioAdapter.onAskDeenAI=async()=>{
       const q=String(StudioAdapter.ui.aiQ||'').trim();
@@ -10775,7 +11019,9 @@ function paintStudio(){
   paintTaskCard();
   paintTasksPanel();
   paintPlanChip((DATA.billing&&DATA.billing.current)||{});
+  if(window.paintRedeem)window.paintRedeem(vals);
   try{window.dcPaintSelfChecks&&window.dcPaintSelfChecks()}catch(e){}
+  try{window.dcPaintOwnerCodes&&window.dcPaintOwnerCodes()}catch(e){}
   paintClipWaveforms(vals);
   paintClipDestinations(vals,DATA);
   paintLibraryAside(vals);

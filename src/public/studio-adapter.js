@@ -149,6 +149,11 @@
     // DeenAI's ask box. The answer is held here, not in DATA: it belongs to
     // this sitting, and a state poll must not wipe a reply mid-read.
     aiQ: '',
+    // The code box: what has been typed, whether a redemption is in flight,
+    // and what the server last said about it.
+    redeemCode: '',
+    redeemBusy: false,
+    redeemSaid: null,
     aiAnswer: '',
     aiSource: '',
     aiBusy: false,
@@ -2629,6 +2634,10 @@
       if (owFinance.profit && owFinance.profit.completeness) owNotes.push(owFinance.profit.completeness);
     }
     var current = (DATA.billing && DATA.billing.current) || {};
+    // The tester/campaign grant, read once here so the desktop panel and the
+    // phone card cannot disagree about which day of the fortnight it is.
+    var redeemGrant = current.grant || { active: false, ended: false, daysLeft: 0, tokens: 0, tier: null };
+    var redeemTierName = current.grantTierName || (redeemGrant.tier === 'studio' ? 'Studio' : 'Pro');
     // One word for the state of the subscription, and the colour that goes
     // with it. A failed payment is the case worth shouting about: the plan
     // keeps working for a few days and then stops, and the only warning used
@@ -2644,6 +2653,17 @@
     else if (current.cancelAtPeriodEnd) { planStateWord = 'Ending soon'; planStateTone = 'warn'; }
     else if (billingStatus === 'canceled' || billingStatus === 'cancelled') { planStateWord = 'Cancelled'; planStateTone = 'warn'; }
     else if (current.trial && current.trial.active) { planStateWord = 'Trial'; planStateTone = 'warn'; }
+    /*
+     * A RUNNING ACCESS CODE OUTRANKS THE FREE-PLAN WORD.
+     *
+     * Measured in a browser right after redeeming: the header pill read "PRO"
+     * with 650 tokens while the biggest block on the same screen read
+     * "Basic / Free / 7 free days left" -- the app contradicting itself about
+     * one account, which is the fault this file has recorded more than any
+     * other. The subscription really is still `free`; what a tester needs to
+     * read is what they HAVE, and for how long.
+     */
+    else if (redeemGrant.active) { planStateWord = 'Trial'; planStateTone = 'warn'; }
     else if ((current.plan || 'free') === 'free') {
       var freeWin = current.freeTrial || {};
       planStateWord = freeWin.expired ? 'Trial ended' : 'Free';
@@ -5792,6 +5812,45 @@
         };
       }),
       aiAsk: function (e) { stop(e); global.StudioAdapter.onAskDeenAI(); },
+      /*
+       * THE CODE BOX'S COPY LIVES HERE, not in either surface.
+       *
+       * The desktop paints it into the plan screen and the phone renders it as
+       * a card of its own, and they read these same strings -- otherwise the
+       * two would eventually tell a tester different things about the same
+       * fortnight, which is the drift this file has recorded more than any
+       * other. What each surface owns is only the LAYOUT.
+       */
+      redeemOn: redeemGrant.active,
+      redeemEnded: redeemGrant.ended,
+      redeemTitle: redeemGrant.active
+        ? redeemTierName + ' access is running'
+        : redeemGrant.ended
+          ? 'Your ' + redeemTierName + ' access has ended'
+          : 'Have a code?',
+      redeemDays: redeemGrant.active
+        ? (redeemGrant.daysLeft <= 0 ? 'Ends today'
+          : redeemGrant.daysLeft === 1 ? '1 day left'
+            : redeemGrant.daysLeft + ' days left')
+        : '',
+      redeemNote: redeemGrant.active
+        ? 'Every ' + redeemTierName + ' feature is on, with ' + Math.round(Number(redeemGrant.tokens || 0))
+          + ' tokens for the run. When it ends your account goes back to the free plan, so pick a plan before then to keep going without a gap.'
+        : redeemGrant.ended
+          ? 'Thank you for testing DeenClipped. Choose a plan below to pick up exactly where you left off \u2014 your clips and schedule are all still here.'
+          : 'If we sent you a tester or launch code, put it in here to unlock it on this account.',
+      redeemCode: UI.redeemCode,
+      redeemSetCode: function (e) { UI.redeemCode = e.target.value; refresh(); },
+      redeemGo: function (e) { stop(e); global.StudioAdapter.onRedeemCode(); },
+      redeemLabel: UI.redeemBusy ? 'Checking\u2026' : 'Apply code',
+      redeemBusy: UI.redeemBusy,
+      redeemSaid: UI.redeemSaid ? UI.redeemSaid.text : '',
+      redeemSaidBad: Boolean(UI.redeemSaid && !UI.redeemSaid.ok),
+      // The phone builds its classes from bindings rather than a ternary: b()
+      // hands back a DESCRIPTOR at template-build time, so `b(x) ? a : c` is
+      // always the truthy branch -- an object.
+      redeemCls: redeemGrant.active ? ' is-on' : '',
+      redeemSaidCls: UI.redeemSaid && !UI.redeemSaid.ok ? ' is-bad' : '',
       aiAskStyle: 'flex: none; display: inline-flex; align-items: center; gap: 7px; margin-top: 3px; padding: 11px 18px; border: 1px solid rgba(217,180,120,.55); border-radius: 9px; '
         + (UI.aiBusy
           ? 'background: rgba(217,180,120,.06); color: #A08A63; cursor: default;'
@@ -9416,6 +9475,10 @@
       // in a "Change" link beside a card number at the very bottom.
       planTitle: (function () {
         if (current.unlimited) return 'Owner';
+        // The tier they actually have right now, which a grant can raise.
+        // current.planName is the server's own answer and reads tierOf, so the
+        // header pill and this card cannot disagree.
+        if (redeemGrant.active) return redeemTierName;
         var named = currentPlanRecord();
         return (named && named.name) || 'Basic';
       })(),
@@ -9557,6 +9620,20 @@
             ? 'Cancelled. Everything keeps working until ' + billingDate(current.cancelAt) + ', then this account moves to Free.'
             : 'Cancelled. Everything keeps working until the end of the paid period, then this account moves to Free.')
             + ' Top-up tokens you bought stay on the account.';
+        }
+        /*
+         * The grant's fortnight is the window that applies, so it is stated
+         * before the free week -- which runs underneath it and is not what
+         * decides anything while a code is live.
+         */
+        if (redeemGrant.active) {
+          var left = Number(redeemGrant.daysLeft || 0);
+          return redeemTierName + ' access from your code \u2014 '
+            + (left <= 0 ? 'ends today' : plural(left, 'day') + ' left')
+            + ', then this account goes back to Free.';
+        }
+        if (redeemGrant.ended && (current.plan || 'free') === 'free') {
+          return 'Your ' + redeemTierName + ' access has ended. Choose a plan to keep going.';
         }
         var free = current.freeTrial || {};
         if (free.expired && (current.plan || 'free') === 'free') return 'Your free trial has ended. Choose a plan to keep going.';
@@ -9823,6 +9900,7 @@
     onLoadOwner: function () {},
     onLoadDeenai: function () {},
     onAskDeenAI: function () {},
+    onRedeemCode: function () {},
     onSaveOwnerCost: function () {},
     onDeleteOwnerCost: function () {},
     onResumeSubscription: function () {},
