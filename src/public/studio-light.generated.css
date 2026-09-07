@@ -606,7 +606,8 @@ body.dc-light #dcTasks .dctk-row{border-top:1px solid #E2E2E6}
 body.dc-light #dcTasks .dctk-row:hover{background:#FFFFFF}
 body.dc-light #dcTasks .dctk-row.is-now{background:linear-gradient(90deg, rgba(162, 118, 44, 0.103), transparent 62%);box-shadow:inset 2px 0 0 #8A6425}
 body.dc-light #dcTasks .dctk-row.is-now strong{color:#7E5B18}
-body.dc-light #dcTasks .dctk-row strong em{background:rgba(162, 118, 44, 0.184);color:#8A6425}
+body.dc-light #dcTasks .dctk-row strong em{color:#8A6425}
+body.dc-light #dcTasks .dctk-row strong em::before{background:#8A6425}
 body.dc-light #dcTasks .dctk-tick{border:1px solid #D4D4DA;color:#6A6A72}
 body.dc-light #dcTasks .dctk-row.is-done .dctk-tick{border-color:rgba(162, 118, 44, 0.575);background:rgba(162, 118, 44, 0.149);color:#8A6425}
 body.dc-light #dcTasks .dctk-row strong{color:#1D1D22}
@@ -614,9 +615,9 @@ body.dc-light #dcTasks .dctk-row.is-done strong{color:#33333A}
 body.dc-light #dcTasks .dctk-row .dctk-note{color:#62626B}
 body.dc-light #dcTasks .dctk-bar{background:#E2E2E6}
 body.dc-light #dcTasks .dctk-bar i{background:#8A6425}
-body.dc-light #dcTasks .dctk-prize{border:1px solid #D4D4DA;color:#62626B}
-body.dc-light #dcTasks .dctk-prize.is-claimed{border-color:rgba(162, 118, 44, 0.345);background:rgba(162, 118, 44, 0.115);color:#8A6425}
-body.dc-light #dcTasks .dctk-claim{border:1px solid rgba(162, 118, 44, 0.632);background:rgba(162, 118, 44, 0.161);color:#7E5B18}
+body.dc-light #dcTasks .dctk-fee{color:#62626B}
+body.dc-light #dcTasks .dctk-claim{border:1px solid rgba(162, 118, 44, 0.575);background:linear-gradient(180deg, rgba(162, 118, 44, 0.230), rgba(162, 118, 44, 0.127));color:#7E5B18}
+body.dc-light #dcTasks .dctk-claim:hover{border-color:rgba(162, 118, 44, 0.900);background:linear-gradient(180deg, rgba(162, 118, 44, 0.345), rgba(162, 118, 44, 0.196))}
 body.dc-light #dcTasks .dctk-claim:hover{background:rgba(162, 118, 44, 0.276);border-color:rgba(162, 118, 44, 0.900)}
 body.dc-light #dcBlocker[data-tone="note"]{border-color:var(--dc-line-soft, #E2E2E6) !important}
 body.dc-light #dcBlocker[data-tone="note"] > i{color:var(--dc-ink-dim, #62626B) !important}

@@ -589,7 +589,12 @@ test('one line token drives the tick, the title and the reward chip', () => {
   for (const [what, selector] of [
     ['the tick', '#dcTasks .dctk-tick'],
     ['the title', '#dcTasks .dctk-row strong'],
-    ['the reward chip', '#dcTasks .dctk-prize'],
+    // The pill is gone (Youssef, 8 Sept 2026: "no ulgy ai pills"), but the
+    // property it was here for is not: every state at the end of a row is
+    // sized from the SAME shared line, so it centres on the title by
+    // construction rather than by a nudge.
+    ['the pending reward', '#dcTasks .dctk-fee, #dcTasks .dctk-got'],
+    ['the claim button', '#dcTasks .dctk-claim'],
   ]) {
     const rule = sheet.slice(sheet.indexOf(selector + ' {'), sheet.indexOf('}', sheet.indexOf(selector + ' {')));
     assert.match(rule, /var\(--dctk-line\)/, `${what} must be sized from the shared line, not by hand`);
@@ -607,16 +612,23 @@ test('nothing is nudged into place with a margin', () => {
   assert.ok(!/\.dctk-prize[^}]*margin-top/.test(block), 'and so is the chip');
 });
 
-test('a chip is the same width whatever number is in it', () => {
+test('the end of a row is the same width whatever number is in it', () => {
   const sheet = read('src/public/studio-tokens.css');
-  const rule = sheet.slice(sheet.indexOf('#dcTasks .dctk-prize {'), sheet.indexOf('}', sheet.indexOf('#dcTasks .dctk-prize {')));
-  assert.match(rule, /min-width:\s*\d+px/, 'a min-width, or 10 and 100 tokens give different left edges');
-  assert.match(rule, /tabular-nums/, 'and tabular figures, so the digits do not shuffle the width');
-  // The "+" that used to mark a paid chip made it 9px wider than the rest.
-  const page = read('src/public/index.html');
-  const at = page.indexOf('const prize=task.reward>0');
-  assert.ok(!/task\.paidAt\?'\+':''/.test(page.slice(at, at + 200)),
-    'a paid chip must not be wider than an unpaid one; its colour already says it is paid');
+  const pick = sel => sheet.slice(sheet.indexOf(sel), sheet.indexOf('}', sheet.indexOf(sel)));
+  const pending = pick('#dcTasks .dctk-fee, #dcTasks .dctk-got {');
+  const claim = pick('#dcTasks .dctk-claim {');
+  assert.match(pending, /min-width:\s*(\d+)px/, 'a min-width, or 5 and 10 tokens give different edges');
+  assert.match(pending, /tabular-nums/, 'and tabular figures, so the digits do not shuffle the width');
+  assert.match(claim, /tabular-nums/);
+  // Every state shares ONE min-width, so the column does not resize as a rung
+  // moves from pending to claimable to claimed.
+  const w = r => Number(/min-width:\s*(\d+)px/.exec(r)[1]);
+  assert.equal(w(pending), w(claim), 'the column must not change width with the state');
+
+  // No pills: the states are typographic, and only the pressable one is a
+  // button -- a rectangle with a small radius rather than a lozenge.
+  assert.doesNotMatch(sheet, /#dcTasks \.dctk-prize/, 'the pill class is gone');
+  assert.match(claim, /border-radius:\s*[1-9]px/, 'the claim is a rectangle, not a 999px lozenge');
 });
 
 test('the rows sit on the dialog header’s own left edge', () => {

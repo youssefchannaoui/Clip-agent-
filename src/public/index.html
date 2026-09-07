@@ -10030,7 +10030,14 @@ let dcTaskTab='';
 
 function paintTasksPanel(){
   const root=document.getElementById('dcTasks');
-  if(!root||root.classList.contains('hide'))return;
+  if(!root)return;
+  if(root.classList.contains('hide')){
+    // Closed: forget that the ring has swept, so it sweeps again next time it
+    // is opened rather than only ever animating once a session.
+    const r=root.querySelector('.dctk-ring');
+    if(r){ delete r.dataset.swept; r.classList.remove('is-sweep'); }
+    return;
+  }
   const rows=taskLadder();
   const body=document.getElementById('dcTasksBody');
   const sub=document.getElementById('dcTasksSub');
@@ -10059,7 +10066,15 @@ function paintTasksPanel(){
       headEl.insertBefore(ring,headEl.firstChild);
     }
     const pc=Math.max(0,Math.min(100,Math.round(rows.percent||0)));
+    /* THE VALUE IS SET UNCONDITIONALLY; the sweep is a CSS animation on top.
+       The first cut set --p to 0 and moved it to the real figure from a nested
+       requestAnimationFrame -- and rAF does not fire in a window Chrome thinks
+       is occluded, so the ring sat at 0% and showed the WRONG NUMBER. Measured
+       exactly that in a hidden pane. A keyframe with only a `from` animates up
+       to the element's own value, so if animations never run the ring is still
+       correct: the failure mode is a missing flourish, not a wrong figure. */
     ring.style.setProperty('--p',String(pc));
+    if(ring.dataset.swept!=='1'){ ring.dataset.swept='1'; ring.classList.add('is-sweep'); }
     const want='<b>'+pc+'%</b>';
     if(ring.innerHTML!==want)ring.innerHTML=want;
   }
@@ -10108,12 +10123,16 @@ function paintTasksPanel(){
     /* Three states for the reward, and only one of them is a button. A rung
        with no reward draws nothing rather than "+0 tokens", which would read
        as a fault. */
+    /* NO PILLS. Youssef, 8 Sept 2026: "no ulgy ai pills and etc". A reward that
+       is not yet yours is a quiet gold figure, a collected one is a tick and a
+       word, and only the thing you can actually press is a button -- and that
+       one is a rectangle with a small radius, not a lozenge. */
     const prize=(task.reward>0&&!rows.unlimited)
       ? (task.claimed
-          ? '<span class="dctk-prize is-claimed">Claimed</span>'
+          ? '<span class="dctk-got"><i aria-hidden="true">\u2713</i>Claimed</span>'
           : task.claimable
-            ? '<button type="button" class="dctk-claim" data-claim="'+esc(task.id)+'">Claim '+task.reward+'</button>'
-            : '<span class="dctk-prize">'+task.reward+' tokens</span>')
+            ? '<button type="button" class="dctk-claim" data-claim="'+esc(task.id)+'">Claim <b>'+task.reward+'</b></button>'
+            : '<span class="dctk-fee">+'+task.reward+'</span>')
       : '';
     const now=!task.done&&task.id===rows.nowId;
     return '<div class="dctk-row'+(task.done?' is-done':'')+(now?' is-now':'')

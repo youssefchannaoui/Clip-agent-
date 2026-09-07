@@ -13731,3 +13731,60 @@ Check the scale of a screenshot before diagnosing a width from it.
 Two rounds of restyling had already been rejected; the defect above is
 measurable and was fixed, and the LOOK was put to Youssef as a choice instead
 of another unprompted redesign.
+
+## The tasks panel lost its pills and learned the studio's motion (v3.148.5, 8 Sept 2026)
+
+Youssef, asked which direction he wanted after two rejected restyles: "what
+ever looks good no ulgy ai pills and etc cool animations that match of course."
+
+### Every lozenge is gone, and the states are typographic
+
+- A reward not yet yours is a quiet gold **+5**, not a bordered chip.
+- A collected one is **✓ Claimed** in gold text, with no box under it.
+- Only the thing you can actually press stays a button, and it is a **7px
+  rectangle** rather than a 999px lozenge.
+- The **NOW** marker is a gold dot and small caps, not a pill.
+
+`.dctk-prize` is deleted outright. Two tests named it and were UPDATED rather
+than dropped, because the properties they protect survive the pill: every state
+at the end of a row is still sized from the shared `--dctk-line` (so it centres
+on the title by construction), and they all share ONE `min-width`, so the
+column does not resize as a rung moves pending → claimable → claimed. Measured
+after: every tick and end-state **0px** off its title, one right edge (961).
+
+### The motion is the studio's own, and gated by construction
+
+The same `cubic-bezier(.2,.8,.2,1)` rise the screens use, staggered 40ms like
+the pricing cards; the progress bar draws itself in; the ring sweeps up from
+zero. **`paintTasksPanel` only assigns innerHTML when the markup actually
+changed**, so the entry runs when the panel opens, a tab switches or a reward
+is claimed -- and an ordinary state poll rewrites nothing and replays nothing.
+No flag to maintain. `backwards`, never `both`.
+
+### THE RING'S FIRST CUT SHOWED THE WRONG NUMBER
+
+It set `--p` to 0 and moved it to the real figure from a nested
+`requestAnimationFrame`, relying on a transition over a registered
+`@property`. **rAF does not fire in a window Chrome thinks is occluded** -- the
+trap this file already records -- so the ring sat at **0% while the account was
+at 60%**. Measured, not reasoned about: `--p` read `0` a second after painting.
+
+The value is now set unconditionally and the sweep is a keyframe carrying only
+a `from`, which animates up to the element's own value. If animations never run
+the ring is still correct: the failure mode is a missing flourish rather than a
+wrong figure. **An animation may never be the thing that computes what is
+displayed.**
+
+### One contrast fault, fixed with a token rather than a hex
+
+`+5` measured **4.07:1** on paper -- under AA -- because the daylight generator
+re-emits any rule holding a hex and its remap of `#A2762C` landed there. Both
+gold states are now written in `var(--dc-gold)` with **no hex fallback**, so the
+generator finds nothing to remap and skips the rule, and the token flips itself
+(#D9B478 night, the AA-clearing #8A6425 on paper). Measured after: **5.34 paper,
+9.58 night.** That is the escape hatch v3.127.0 established, and it is
+self-maintaining in a way a second hex never is.
+
+Four probes proven red -- and the first attempt at one of them EDITED NOTHING
+and reported green, which proves nothing; it was redone with the replacement
+count checked.
