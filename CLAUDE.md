@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1603 JS + 691 Python**
+- `npm test` and `npm run check` must pass. Currently **1613 JS + 691 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -2435,6 +2435,16 @@ already held the higher number the merge kept 3.101.0 -- unchanged against my
 parent -- while pulling in four of their `src/` files. Their `src/` diff, no
 version movement, red branch.
 
+**AND IT HAPPENED THE OTHER WAY ON 7 SEPT 2026: both sides independently
+minted 3.138.0.** This session shipped the confirmation screen as v3.138.0
+while the other session shipped the editor's timeline as v3.138.0 and carried
+on to 3.140.0. Neither did anything wrong -- they simply could not see each
+other -- but the number that is meant to identify a release then named two
+different trees, which is what the worker deploy compares the running container
+against. The merge resolved to **3.141.0**: new against either parent, higher
+than both, and unambiguous. **When you merge, check whether the other side has
+already used YOUR number, not just whether theirs is higher.**
+
 **The rule: when you merge and YOUR side already had the higher version, bump
 again ON the merge commit.** When theirs is higher the merge moves the number
 by itself and there is nothing to do -- which is exactly why the next merge
@@ -2442,6 +2452,28 @@ that day (`deb2191`, resolving to their 3.101.1) went green without anyone
 touching it. A merge is not exempt from the release rule just because it wrote
 no code; the guard is asking what this commit ships, and a merge ships
 everything on the other side.
+
+### A MERGE ALSO SHIPS THE OTHER SIDE'S `worker/`, AND THE STAMP MOVES WITH IT
+
+Hit on 7 Sept 2026, one commit after the note above, and it is a different
+shape. The merge was checked with `git status --porcelain -- worker/` on THIS
+side -- clean, no worker change, no stamp needed. CI disagreed:
+
+    check-version-bump: this commit changes worker/ but worker/RELEASE does
+    not name its version. worker/RELEASE says 3.140.0 and package.json says
+    3.141.0.
+
+The guard diffs against the FIRST PARENT, and the first parent is my own
+commit, which did not have their `worker/clip_worker.py` change. So the merge
+changes `worker/` whatever my side did. **A merge ships everything on the
+other side -- for the stamp exactly as for the version.** Check
+`git diff --name-only HEAD^ -- worker/` on the MERGE, never `git status` on
+the branch before it.
+
+**And `worker/RELEASE` is itself a `worker/` file**, so a commit that only
+restamps it trips the guard again for want of a version bump. The stamp and
+`package.json` move together, in one commit, to the same new number -- or the
+fix is refused for the same reason the merge was.
 
 ### The merge trap that produced that commit in the first place
 
@@ -10223,6 +10255,130 @@ and never to be STOPPED. Every fault below is a stop going wrong.
   status should read `interrupted`, then `resumed: 1` with "Resuming from the
   saved clip plan" in its stage, and the clip count should come back whole.
   Until then the claim is the tests', not the box's.
+
+## The confirmation screen: six cells under one light (v3.138.0, 7 Sept 2026)
+
+Youssef sent a TikTok from @settigation -- a "Verify code SIGNET" component,
+four cells that stand PROUD of the card when empty and sit SUNK in it when
+filled, under a light that follows the pointer -- and asked: "Can you make this
+for accounts that sign up new?"
+
+It lands on the one screen this product already had for it: `/verify`, the
+six-digit email confirmation from v3.100.0, which was one letter-spaced input
+in a plain card. Same palette, same gold, same Fraunces heading as the rest of
+the product -- the component is borrowed, the identity is not.
+
+### Three things about how it is built, and each is the reason it is safe
+
+1. **THE STATE OF A CELL IS CSS, NOT SCRIPT.** `input:placeholder-shown` is what
+   raises an empty cell and sinks a filled one, so the mechanic survives the
+   enhancement file being blocked, slow or 404. Same for the button, which
+   lights on `#vcForm:valid` -- six filled cells, six digits -- and is NEVER
+   given the `disabled` attribute: refusing an incomplete submit is the
+   browser's job (`required`), and a form that cannot be submitted is an
+   account nobody can get into. `placeholder=" "` is load-bearing:
+   `:placeholder-shown` only matches a non-empty placeholder, and without it
+   every cell renders as filled, for ever.
+2. **SIX REAL INPUTS, `code1`..`code6`, JOINED BY THE ROUTE.** Six inputs
+   sharing one name collapse to the last value in `URLSearchParams` -- the code
+   would be one digit -- and assembling it in the browser would mean this
+   screen stops working the moment its script does. The route still prefers a
+   single `code` field where one is sent, which is what every caller and test
+   written before this uses, and what a password manager filling one box
+   produces.
+3. **ONE LIGHT SOURCE.** `--sx`/`--sy` are the direction a SHADOW FALLS, never
+   where the light is: the negation happens once, in `verify-code.js`, which is
+   what keeps every rule in the stylesheet a plain positive multiple. The card,
+   the cells, the lit edge, the button and the confirmed disc all read the same
+   two numbers, so nothing on the page can disagree about the lighting. The
+   default (`.34`/`.72`, light from above and a little left) is declared on
+   `:root`, so a page with no pointer AND no script is fully lit -- the resting
+   pose is the finished one, never a blank.
+
+The raised state's highlight is an `inset` on the side the light is on and the
+sunk state's dark inner wall is on that SAME side -- a well's near lip is what
+casts into it -- so the two multiples are negated relative to each other. That
+is physics, not a preference, and it is why the two states read as one object
+being pushed in rather than as two different boxes.
+
+### The disc is drawn on the server's answer, never on the press
+
+The submit is intercepted with `fetch` so the confirmed gold disc can be shown
+before the redirect. `is-verifying` goes on at the press; `is-done` may only be
+added after a response that did NOT come back to `/verify` -- adding it on
+submit would be this product telling somebody they are verified before it
+knows, which is invariant 4 wearing a different hat. A wrong code follows the
+server's own redirect rather than re-writing the copy here: the route already
+knows which of the three things went wrong (not right / expired / spent), and a
+second version of that wording would drift from the first. `catch` falls back
+to `form.submit()`, which does not re-enter the handler and so cannot loop.
+
+**IT DOES NOT SUBMIT ITSELF ON THE SIXTH DIGIT, deliberately.** The record
+allows six wrong attempts and is then spent, so one mistyped digit submitting
+on its own costs a sixth of somebody's allowance before they have looked at
+what they typed.
+
+### Everything else that had to be got right
+
+- **A pasted or autofilled code arrives as several characters in ONE field.**
+  Truncating to a single digit and dropping the rest is the classic failure of
+  this control; the digits are spread across the cells instead. Only the FIRST
+  cell carries `autocomplete="one-time-code"` -- on every cell, some keyboards
+  offer the code six times over.
+- **The resend countdown is not the server's limit.** The route allows five
+  sends an hour; the 30s cooldown is what stops somebody spending all five in
+  ten seconds, and it is stamped only when a code has ACTUALLY been sent (the
+  page comes back carrying `info`). With the script blocked the button is an
+  ordinary submit and the server's limit is still the real one.
+- **The lamp is bound only for a fine pointer.** On a touch screen it would
+  jump on every tap, which reads as a glitch rather than as lighting.
+- **An inline script here is blocked SILENTLY.** The CSP hashes inline blocks
+  from `index.html` alone, so one in this template would look perfectly correct
+  in the source and never run. `/verify-code.js` is a file, allowlisted in
+  `STUDIO_ASSETS` beside `/auth-enhance.js` -- which also puts it under the
+  break detector's `assets` check for free.
+
+### Measured, not eyeballed
+
+At 1440: one cell width (54.5), one height (58), one top, six identical 9px
+gaps, and the grid and the button sharing both edges exactly (534 / 906). Zero
+page errors. Typing six digits fills six cells and lands on `/app`; the disc
+appears in between.
+
+**Contrast was measured and two things failed it.** The eyebrow at
+`--muted2`/10px came out **3.95:1** and the dim button label **3.66:1** -- both
+under AA, both lifted (the button to `#8a8378`, 5.04:1). The lit button is
+**9.7:1 / 12.72:1** across its gradient stops. *A gradient background defeats a
+DOM ground-walk* (`backgroundColor` reads transparent), so the lit button
+reported a nonsense 1.08 in the sweep and had to be measured against its
+computed stops by hand -- the same trap this file already records for
+photographs.
+
+**Six 44px cells cannot fit across a 320px screen**, and that is arithmetic
+rather than a choice: 6x44 plus gaps needs 284 of the 232 a 320 viewport leaves
+inside the card. The page gives back what it can -- its own padding, the
+card's, the gap -- and the cells stay 56px TALL. Measured **every width from
+320 to 470, not just the round ones**: zero overflow, zero cells under 24px,
+and the cell grows 38.5 -> 53.2px across that range.
+
+### The pkill trap, paid three times in one sitting
+
+`pkill -f 'serve.mjs'` kills the calling shell, because the pattern is in its
+own command line -- which this file has warned about since August. So does
+running it in its own Bash call when the same call also STARTS the server. And
+so does a `/proc/*/cmdline` scan, for the same reason. **The fix is to build
+the pattern at runtime** (`PAT=$(printf 'ver%s/ser%s' 'ify' 've')`) so the
+joined string never appears in the shell's own arguments.
+
+### And a source-string test failed on its own explanation, for the seventh time
+
+`assert.equal((page.match(/placeholder=" "/g) || []).length, 6)` counted SEVEN:
+the stylesheet comment explaining the mechanic contains the string. Comments
+are stripped before the count now. **Strip, do not reword** -- rewording a
+comment to appease a test is how a test stops protecting anything.
+
+All ten assertions were proven RED, each against the behaviour it pins, and
+each probe asserts it actually edited the file before the run.
 
 ## The clip editor, driven control by control, so the gate can come off (v3.137.0, 6 Sept 2026)
 

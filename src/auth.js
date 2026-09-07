@@ -939,45 +939,132 @@ export function loginPage({ error = '', returnTo = '/', info = '' } = {}) {
  * It exists so the confirmation happens WHERE IT MAKES SENSE. Before this the
  * account landed in the app unverified and met "your email address is not
  * confirmed yet, so imports are blocked" later, in the middle of starting a
- * lecture — a dialog about something they did five minutes earlier.
+ * lecture -- a dialog about something they did five minutes earlier.
+ *
+ * SIX CELLS, RAISED WHEN EMPTY AND SUNK WHEN FILLED, under a single moving
+ * light (Youssef's brief, 7 Sept 2026). Three things about how that is built
+ * are load-bearing:
+ *
+ *  1. THE STATE OF A CELL IS CSS, NOT SCRIPT. `input:placeholder-shown` is
+ *     what makes an empty cell stand proud of the card and a filled one sit
+ *     flush in it, so the mechanic survives this page's enhancement file being
+ *     blocked, slow or broken. Same for the button, which lights only on
+ *     `form:valid` -- six filled cells, six digits.
+ *  2. THE CELLS ARE SIX REAL INPUTS in a real form, named code1..code6 and
+ *     joined by the route. Six inputs sharing one name would collapse to the
+ *     last value, and assembling the code in JavaScript would mean this screen
+ *     stops working the moment that file does -- locking somebody out of an
+ *     account they have just created. The route still accepts a single `code`
+ *     field, which is what every existing caller and test sends.
+ *  3. ONE LIGHT SOURCE. Every shadow here is a plain multiple of --sx/--sy, so
+ *     the cells, the card, the button and the disc cannot disagree about where
+ *     the light is. verify-code.js moves those two numbers with the pointer;
+ *     with no pointer and no script they keep the values declared below, which
+ *     is a complete, lit, legible page.
  */
 export function verifyPage({ email = '', error = '', info = '', returnTo = '/app' } = {}) {
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confirm your address · DeenClipped</title><style>
-  :root{color-scheme:dark}
+  // Six cells, written out rather than looped, so the markup reads as what it
+  // is. Only the first carries autocomplete="one-time-code": that is the hook
+  // iOS and Android use to offer the code from the message, and putting it on
+  // every cell makes some keyboards offer it six times over.
+  const cells = [1, 2, 3, 4, 5, 6].map(n => `<label class="vc-cell"><span class="vc-sr">Digit ${n}</span>`
+    + `<input name="code${n}" inputmode="numeric" pattern="[0-9]" maxlength="1" placeholder=" " required`
+    + `${n === 1 ? ' autocomplete="one-time-code" autofocus' : ' autocomplete="off"'}></label>`).join('');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confirm your address · DeenClipped</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..700&family=Outfit:wght@400;500;600;700&display=swap"><style>
+  /* --sx/--sy are the direction a SHADOW FALLS, never where the light is: the
+     negation happens once, in verify-code.js, which is what lets every rule
+     below be a plain positive multiple. This default is light from above and
+     a little left -- the page with no pointer, and the page with no script. */
+  :root{color-scheme:dark;--sx:.34;--sy:.72;--bg:#070607;--card:#131115;--text:#f5f1e8;--muted:#a8a196;--muted2:#736d63;--line:rgba(245,241,232,.11);--gold:#d9b66f;--gold2:#f1d18e;--ease:cubic-bezier(.22,.61,.36,1)}
   *{box-sizing:border-box}
-  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(48% 34% at 50% 0%,rgba(217,182,111,.10),transparent 70%),#070607;color:#f5f1e8;font-family:Outfit,Inter,ui-sans-serif,-apple-system,"Segoe UI",sans-serif}
-  .card{width:100%;max-width:430px;padding:32px;border:1px solid rgba(245,241,232,.17);border-radius:22px;background:linear-gradient(160deg,#131115,#0d0c0e 70%);box-shadow:0 40px 120px rgba(0,0,0,.55)}
-  h1{margin:0 0 9px;font-family:Fraunces,Georgia,serif;font-size:28px;font-weight:460;letter-spacing:-.02em}
-  p{margin:0 0 22px;color:#a8a196;font-size:14px;line-height:1.55}
-  b{color:#f5f1e8;font-weight:600}
-  .alert{margin:0 0 16px;padding:11px 13px;border-radius:12px;font-size:12.5px;line-height:1.45}
-  .bad{border:1px solid rgba(239,107,122,.4);background:rgba(239,107,122,.1);color:#ef6b7a}
-  .good{border:1px solid rgba(111,206,158,.4);background:rgba(111,206,158,.1);color:#6fce9e}
-  /* One field, six digits, and it must not be a spinner: a number input on a
-     phone shows a stepper and lets you paste "1e6" into it. */
-  input{width:100%;padding:15px;border:1px solid rgba(245,241,232,.17);border-radius:13px;background:rgba(245,241,232,.04);color:#f5f1e8;font:700 26px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.34em;text-align:center}
-  input:focus{outline:none;border-color:#d9b66f}
-  button{width:100%;min-height:48px;margin-top:14px;border:0;border-radius:13px;background:#d9b66f;color:#171109;font:700 15px/1 inherit;cursor:pointer}
-  .link{margin-top:18px;display:flex;justify-content:space-between;gap:12px;font-size:12.5px}
-  .link a,.link button.as-link{padding:0;min-height:0;width:auto;margin:0;background:none;border:0;color:#a8a196;font:inherit;font-size:12.5px;text-decoration:none;cursor:pointer}
-  .link a:hover,.link button.as-link:hover{color:#f1d18e}
-</style></head><body><main class="card">
-  <h1>Check your email</h1>
-  <p>We sent a six-digit code to <b>${esc(email || 'your address')}</b>. Enter it here and your workspace is ready.</p>
-  ${error ? `<div class="alert bad">${esc(error)}</div>` : ''}
-  ${info ? `<div class="alert good">${esc(info)}</div>` : ''}
-  <form method="post" action="/auth/verify-code">
-    <input type="hidden" name="returnTo" value="${esc(returnTo)}">
-    <label for="code" style="position:absolute;left:-9999px">Six-digit code</label>
-    <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" placeholder="000000" required autofocus>
-    <button type="submit">Confirm my address</button>
-  </form>
-  <div class="link">
-    <form method="post" action="/auth/verify-resend" style="margin:0"><input type="hidden" name="returnTo" value="${esc(returnTo)}"><button class="as-link" type="submit">Send another code</button></form>
-    <a href="/login">Use a different address</a>
-  </div>
-</main></body></html>`;
+  body{margin:0;min-height:100svh;display:grid;place-items:center;padding:24px;background:radial-gradient(46% 30% at calc(50% - var(--sx) * 22%) calc(18% - var(--sy) * 14%),rgba(217,182,111,.17),transparent 70%),radial-gradient(60% 40% at 50% 100%,rgba(217,182,111,.05),transparent 70%),var(--bg);color:var(--text);font-family:Outfit,Inter,ui-sans-serif,-apple-system,"Segoe UI",sans-serif}
+  .vc-wrap{width:100%;max-width:430px}
+  .vc-lede{text-align:center;margin:0 0 20px}
+  .vc-lede span{display:block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
+  .vc-lede strong{display:block;font-family:Fraunces,Georgia,serif;font-size:27px;font-weight:460;letter-spacing:-.02em;color:var(--text)}
+  /* The card sits under the same light as everything in it. */
+  .vc-card{position:relative;padding:30px 28px 26px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(160deg,var(--card),#0d0c0e 72%);box-shadow:calc(var(--sx) * 26px) calc(var(--sy) * 30px) 70px -22px rgba(0,0,0,.85),0 40px 120px rgba(0,0,0,.5);transition:border-color .3s var(--ease),transform .5s var(--ease)}
+  /* The lit edge and the sheen, both placed by the same two numbers: the gold
+     hairline rides the side the light is on, which is the one thing that makes
+     the whole surface read as a physical object rather than a gradient. */
+  .vc-card:before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;background:radial-gradient(92% 80% at calc(50% - var(--sx) * 56%) calc(50% - var(--sy) * 56%),rgba(217,182,111,.5),rgba(217,182,111,0) 58%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;pointer-events:none;opacity:.85}
+  .vc-card:after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(118% 88% at calc(50% - var(--sx) * 44%) calc(50% - var(--sy) * 44%),rgba(245,241,232,.055),transparent 60%)}
+  .vc-lock{width:42px;height:42px;margin:0 auto 16px;display:grid;place-items:center;border-radius:13px;border:1px solid rgba(217,182,111,.2);background:rgba(217,182,111,.05);box-shadow:calc(var(--sx) * 7px) calc(var(--sy) * 7px) 15px -6px rgba(0,0,0,.8)}
+  .vc-lock svg{width:19px;height:19px;fill:none;stroke:var(--gold);stroke-width:1.7;stroke-linecap:round}
+  .vc-card h1{margin:0 0 7px;text-align:center;font-family:Fraunces,Georgia,serif;font-size:23px;font-weight:500;letter-spacing:-.01em}
+  .vc-to{margin:0 0 22px;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.6}
+  .vc-to b{display:block;margin-top:3px;color:var(--text);font-weight:600;word-break:break-word}
+  .vc-alert{margin:0 0 16px;padding:11px 13px;border-radius:12px;font-size:12.5px;line-height:1.45}
+  .vc-alert.bad{border:1px solid rgba(239,107,122,.4);background:rgba(239,107,122,.1);color:#ef6b7a}
+  .vc-alert.good{border:1px solid rgba(111,206,158,.4);background:rgba(111,206,158,.1);color:#6fce9e}
+  .vc-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  /* RAISED IS EMPTY, SUNK IS FILLED -- and it is CSS, so it holds with the
+     enhancement file blocked. placeholder=" " is what makes :placeholder-shown
+     mean "no digit here". */
+  .vc-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;margin:0 0 20px}
+  .vc-cell{position:relative;display:block}
+  .vc-cell input{width:100%;height:58px;padding:0;border:1px solid rgba(245,241,232,.13);border-radius:14px;background:rgba(245,241,232,.055);color:var(--gold2);caret-color:var(--gold);font:600 24px/1 Outfit,ui-sans-serif,-apple-system,sans-serif;text-align:center;outline:0;-webkit-appearance:none;appearance:none;transition:background .25s var(--ease),border-color .2s var(--ease),box-shadow .28s var(--ease),transform .2s var(--ease);box-shadow:calc(var(--sx) * 9px) calc(var(--sy) * 9px) 16px -5px rgba(0,0,0,.9),calc(var(--sx) * -7px) calc(var(--sy) * -7px) 15px -8px rgba(245,241,232,.14),inset calc(var(--sx) * -5px) calc(var(--sy) * -5px) 9px -6px rgba(245,241,232,.16)}
+  /* Sunk. The dark inner wall is the one TOWARD the light, because that is the
+     edge whose lip casts into the well -- hence the negated multiples. */
+  .vc-cell input:not(:placeholder-shown){border-color:transparent;background:rgba(0,0,0,.45);box-shadow:inset calc(var(--sx) * -8px) calc(var(--sy) * -8px) 14px -3px rgba(0,0,0,.95),inset calc(var(--sx) * 6px) calc(var(--sy) * 6px) 13px -6px rgba(245,241,232,.085)}
+  .vc-cell input:focus{border-color:rgba(217,182,111,.55);box-shadow:calc(var(--sx) * 9px) calc(var(--sy) * 9px) 16px -5px rgba(0,0,0,.9),0 0 0 3px rgba(217,182,111,.14),inset calc(var(--sx) * -5px) calc(var(--sy) * -5px) 9px -6px rgba(245,241,232,.16)}
+  .vc-cell input:focus:not(:placeholder-shown){box-shadow:inset calc(var(--sx) * -7px) calc(var(--sy) * -7px) 13px -3px rgba(0,0,0,.9),0 0 0 3px rgba(217,182,111,.12)}
+  /* Lit only when all six cells hold a digit. :invalid on the form is exactly
+     that question, asked in CSS, so the button cannot claim to be ready when
+     it is not -- and it stays pressable either way, because refusing the press
+     is the browser's job (required) and not a style's. */
+  .vc-go{width:100%;min-height:52px;border:0;border-radius:14px;background:rgba(245,241,232,.045);color:#8a8378;font:700 12.5px/1 Outfit,ui-sans-serif,sans-serif;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;transition:background .3s var(--ease),color .3s var(--ease),box-shadow .3s var(--ease),transform .18s var(--ease);box-shadow:calc(var(--sx) * 7px) calc(var(--sy) * 7px) 15px -7px rgba(0,0,0,.8),inset 0 1px 0 rgba(245,241,232,.05)}
+  #vcForm:valid .vc-go{background:linear-gradient(115deg,var(--gold),var(--gold2));color:#171109;box-shadow:calc(var(--sx) * 9px) calc(var(--sy) * 9px) 24px -9px rgba(217,182,111,.5),inset 0 1px 0 rgba(255,255,255,.28)}
+  #vcForm:valid .vc-go:hover{filter:brightness(1.06)}
+  .vc-go:active{transform:translateY(1px)}
+  .vc-links{margin-top:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12.5px}
+  .vc-links form{margin:0}
+  .vc-links a,.vc-links button{padding:0;margin:0;width:auto;min-height:0;border:0;background:none;color:var(--muted);font:inherit;font-size:12.5px;text-decoration:none;cursor:pointer;transition:color .2s var(--ease)}
+  .vc-links a:hover,.vc-links button:hover{color:var(--gold2)}
+  .vc-links button.is-waiting{color:var(--muted2);cursor:default}
+  .vc-fine{margin:16px 0 0;text-align:center;color:var(--muted);font-size:11.5px;line-height:1.5}
+  /* Pressed, and then confirmed. The disc is drawn only after the server has
+     said so -- never on the press -- for the same reason nothing else in this
+     product draws an outcome it has not been given. */
+  .vc-card.is-verifying .vc-go{background:linear-gradient(115deg,var(--gold),var(--gold2));color:#171109;pointer-events:none}
+  .vc-card.is-verifying .vc-grid{opacity:.55;transition:opacity .3s var(--ease)}
+  .vc-done{position:absolute;inset:0;display:grid;place-items:center;border-radius:inherit;background:linear-gradient(160deg,var(--card),#0d0c0e 72%);opacity:0;visibility:hidden;transition:opacity .3s var(--ease),visibility .3s}
+  .vc-card.is-done{transform:translateY(-4px)}
+  .vc-card.is-done .vc-done{opacity:1;visibility:visible}
+  .vc-coin{width:66px;height:66px;margin:0 auto 15px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(70% 70% at calc(50% - var(--sx) * 26%) calc(50% - var(--sy) * 26%),var(--gold2),#b58c3f);box-shadow:calc(var(--sx) * 10px) calc(var(--sy) * 10px) 26px -8px rgba(0,0,0,.8),0 0 0 10px rgba(217,182,111,.06),0 0 0 22px rgba(217,182,111,.03);animation:vcCoin .5s var(--ease) backwards}
+  .vc-coin svg{width:26px;height:26px;fill:none;stroke:#171109;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:30;stroke-dashoffset:30;animation:vcTick .4s var(--ease) .22s forwards}
+  .vc-done p{margin:0;text-align:center;font-family:Fraunces,Georgia,serif;font-size:20px;font-weight:500}
+  .vc-done small{display:block;margin-top:6px;color:var(--muted);font-family:Outfit,sans-serif;font-size:12.5px}
+  @keyframes vcCoin{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+  @keyframes vcTick{to{stroke-dashoffset:0}}
+  @media(max-width:420px){body{padding:16px 14px}.vc-card{padding:24px 17px 22px;border-radius:20px}.vc-grid{gap:5px}.vc-cell input{height:56px;font-size:21px;border-radius:12px}.vc-lede strong{font-size:24px}}
+  /* The light stops moving and the disc stops growing; nothing is hidden by
+     either, because every resting state above is the finished one. */
+  @media(prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-delay:0s!important}.vc-coin svg{stroke-dashoffset:0}}
+</style></head><body><div class="vc-wrap">
+  <div class="vc-lede"><span>One last step</span><strong>Confirm your address</strong></div>
+  <main class="vc-card" id="vcCard">
+    <div class="vc-lock" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.6"/><path d="M8.2 10.5V7.8a3.8 3.8 0 0 1 7.6 0v2.7"/><path d="M12 14.4v2.3"/></svg></div>
+    <h1>Verify your identity</h1>
+    <p class="vc-to">We sent a 6-digit code to<b>${esc(email || 'your address')}</b></p>
+    ${error ? `<div class="vc-alert bad">${esc(error)}</div>` : ''}
+    ${info ? `<div class="vc-alert good">${esc(info)}</div>` : ''}
+    <form method="post" action="/auth/verify-code" id="vcForm">
+      <input type="hidden" name="returnTo" value="${esc(returnTo)}">
+      <div class="vc-grid">${cells}</div>
+      <button class="vc-go" type="submit">Verify code</button>
+    </form>
+    <div class="vc-links">
+      <form method="post" action="/auth/verify-resend"><input type="hidden" name="returnTo" value="${esc(returnTo)}"><button type="submit" id="vcResend"${info ? ' data-cooldown="30"' : ''}>Send another code</button></form>
+      <a href="/login">Use a different address</a>
+    </div>
+    <p class="vc-fine">Raised is empty, sunk is filled. Check your spam folder if it has not arrived.</p>
+    <div class="vc-done" aria-hidden="true">
+      <div><div class="vc-coin"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.4 4.4L19 7.6"/></svg></div><p>Verified</p><small>Your workspace is ready.</small></div>
+    </div>
+  </main>
+</div><script src="/verify-code.js" defer></script></body></html>`;
 }
 
 /**
