@@ -117,6 +117,10 @@ const STUDIO_ASSETS = {
   // Signed-out page enhancements. A file rather than an inline block because
   // the CSP hashes inline scripts from index.html only.
   '/auth-enhance.js': { file: studioAsset('auth-enhance.js'), type: JS_TYPE },
+  // The confirmation screen's moving light, auto-advance and confirmed disc.
+  // Its own file for the same reason, and everything in it is an enhancement:
+  // the six cells are real inputs in a real form and the page works without it.
+  '/verify-code.js': { file: studioAsset('verify-code.js'), type: JS_TYPE },
   // The browser-tab identity. /favicon.ico is served as PNG -- every modern
   // browser accepts it, and agents that request the path blindly stop 404ing.
   '/favicon.svg': { file: studioAsset('favicon.svg'), type: 'image/svg+xml' },
@@ -1213,7 +1217,19 @@ async function route(req, res, url) {
     const keys = throttle.keysFor(clientIp(req), `verify:${currentUser.id}`);
     const gate = throttle.check(keys);
     if (!gate.allowed) return tooManyAttempts(res, gate.retryAfterSec, back);
-    const result = auth.consumeVerificationCode(currentUser.id, body.code || '');
+    /*
+     * The screen draws six cells, so it posts six fields. They cannot share one
+     * name -- URLSearchParams keeps the last value and the code would be one
+     * digit -- and assembling it in the browser would mean the page stops
+     * working the moment its script does, locking somebody out of an account
+     * they have just created. So the cells are code1..code6 and they are joined
+     * HERE. A single `code` field still wins where one is sent: that is what
+     * every existing caller and test uses, and what a password manager filling
+     * one box produces.
+     */
+    const typed = String(body.code || '').trim()
+      || [1, 2, 3, 4, 5, 6].map(n => String(body[`code${n}`] || '').trim()).join('');
+    const result = auth.consumeVerificationCode(currentUser.id, typed);
     if (result.ok) {
       throttle.succeed(keys);
       return redirect(res, billing.postLoginRedirect(result.user, back));
