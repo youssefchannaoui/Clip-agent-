@@ -334,6 +334,27 @@ export function setMusicSettings(user, next) {
   return musicSettings(user);
 }
 
+/**
+ * The account's own posting-window arrangement: one row per window, each with
+ * a time and whether it is switched on.
+ *
+ * Stored RAW. The plan's allowance is not applied here -- billing.js owns that,
+ * because the cap is a plan question and store.js cannot import billing without
+ * a cycle. Read it through billing.postingWindowsFor(user) unless you genuinely
+ * want the unclamped arrangement.
+ */
+export function postingWindowsRaw(user) {
+  const stored = readSetting(user, 'postingWindows');
+  return Array.isArray(stored) ? stored : null;
+}
+export function setPostingWindowsRaw(user, rows) {
+  const id = userIdOf(user);
+  if (!id) throw new Error('Settings need an account.');
+  writeUserSetting(state, id, 'postingWindows', rows);
+  save();
+  return postingWindowsRaw(user);
+}
+
 export function automationSettings(user) {
   return { ...settingDefaults().automationSettings, ...(readSetting(user, 'automationSettings') || {}) };
 }

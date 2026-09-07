@@ -2545,7 +2545,10 @@
         return empty ? 'No lectures yet — paste a link on Home to make your first clips'
           : plural(ctx.projects.length, 'lecture') + ' · ' + plural(ctx.clips.length, 'clip') + ' generated';
       case 'templates': return 'Set once — every clip renders with it, still editable per clip';
-      case 'schedule': return 'Up to ' + (ctx.postSlots || 0) + ' posts a day · every clip is checked before it goes out';
+      // plural(), because an account that switches three of its four windows
+      // off reads "Up to 1 posts a day" -- and the whole point of the panel is
+      // that one is now a number a customer can choose.
+      case 'schedule': return 'Up to ' + plural(ctx.postSlots || 0, 'post') + ' a day · every clip is checked before it goes out';
       case 'music': return plural(ctx.tracks.length, 'nasheed') + ' · shuffled automatically';
       case 'deenai': return 'Growth advice from your own numbers — nothing leaves this server';
       case 'help': return 'How every part of DeenClipped works, with screenshots of the real app';
@@ -5160,6 +5163,15 @@
     var allScores = clips.map(function (c) { return Number(c.score || 0); }).filter(Boolean).sort(function (a, b) { return a - b; });
     var medianScore = allScores.length ? allScores[Math.floor(allScores.length / 2)] : 0;
     var postTimes = DATA.postTimes || [];
+    // postWindows carries the off rows too; postTimes is only the on ones. A
+    // payload written before this feature has no postWindows at all, so the
+    // rows are derived from postTimes and read as all-on -- which is exactly
+    // what an account that has never touched them has.
+    var postWindowRows = Array.isArray(DATA.postWindows) && DATA.postWindows.length
+      ? DATA.postWindows
+      : postTimes.map(function (at) { return { at: at, on: true }; });
+    var postWindowsOn = postWindowRows.filter(function (r) { return r.on !== false; });
+    var postWindowAllowance = Number(DATA.postWindowAllowance) || postWindowRows.length || 4;
     var todayCount = scheduled.filter(function (c) { return startOfDay(c.scheduledAt) === today; }).length;
 
     // Blockers name a real gap and send you to the screen that fixes it.
@@ -7829,8 +7841,73 @@
       // Says how many windows there are and, on Studio, WHY there are that
       // many. "How do I know I get eight?" is not answered by counting the
       // times yourself -- the card has to attribute them to the plan.
-      postWindowNote: (studioSlots ? daySlots + ' windows a day on Studio · ' : '')
-        + 'Set on the server' + (DATA.timezone ? ' · ' + DATA.timezone : '') + '.',
+      // The card used to say "Set on the server", because it was: the times
+      // were a deployment setting nobody in the app could move. They are the
+      // account's own now, so the note says what the plan allows and where the
+      // clock is, and the rows below it are where it is changed.
+      postWindowNote: postWindowsOn.length + ' of ' + postWindowAllowance + ' on'
+        + (studioSlots ? ' · ' + postWindowAllowance + ' a day on Studio' : '')
+        + (DATA.timezone ? ' · ' + DATA.timezone : ''),
+      // Every window, on AND off. An off row still has to be drawn or there is
+      // nothing to switch back on -- which is why the stored shape is one list
+      // of {at, on} rather than a list of times with the off ones dropped.
+      postWindowRows: postWindowRows.map(function (row, i) {
+        var on = row.on !== false;
+        var send = function (mutate) {
+          var next = postWindowRows.map(function (r) { return { at: r.at, on: r.on !== false }; });
+          mutate(next[i]);
+          if (typeof global.dcSavePostWindows === 'function') global.dcSavePostWindows(next);
+        };
+        return {
+          index: i, at: row.at, on: on,
+          // The phone template cannot hold a conditional: b(x) ? a : c is
+          // always the truthy branch, because b() hands back a binding
+          // DESCRIPTOR at template-build time. So the class and the glyph are
+          // bindings of their own.
+          tickCls: on ? 'is-on' : '', ariaOn: on ? 'true' : 'false', tickMark: on ? '\u2713' : '\u2013',
+          // Both surfaces call these, so the desktop panel and the phone card
+          // cannot end up doing different things with one control.
+          toggle: function (e) {
+            if (e && e.preventDefault) e.preventDefault();
+            if (e && e.stopPropagation) e.stopPropagation();
+            // The last one on may not be switched off: with nothing on, the
+            // scheduler is handed an empty list and nextSlot falls back to the
+            // SERVER's times -- the account would go on posting at exactly the
+            // times it had just turned off. The route refuses it too; this is
+            // so the control says why instead of appearing to do nothing.
+            if (on && postWindowsOn.length <= 1) {
+              if (typeof global.toast === 'function') global.toast('Keep at least one posting time switched on.', 'bad');
+              return;
+            }
+            send(function (r) { r.on = !on; });
+          },
+          set: function (e) {
+            var at = String(e && e.target ? e.target.value : '');
+            if (!/^\d{2}:\d{2}$/.test(at) || at === row.at) return;
+            send(function (r) { r.at = at; });
+          },
+          // 96 quarter-hours, plus this row's own time when it sits off the
+          // grid (a server POST_TIMES of 20:37), or opening the list would
+          // silently move it.
+          options: (function () {
+            var out = [], m = 0, has = false;
+            for (; m < 24 * 60; m += 15) {
+              var at = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+              if (at === row.at) has = true;
+              out.push({ value: at, label: at, on: at === row.at });
+            }
+            if (row.at && !has) { out.push({ value: row.at, label: row.at, on: true }); out.sort(function (a, b) { return a.value < b.value ? -1 : 1; }); }
+            return out;
+          })(),
+        };
+      }),
+      postWindowAllowance: postWindowAllowance,
+      postWindowOnCount: postWindowsOn.length,
+      // Refused by the route, so the panel must not offer it: with nothing on,
+      // the scheduler is handed an empty list and nextSlot falls back to the
+      // SERVER's times -- the account would go on posting at the times it had
+      // just switched off.
+      postWindowCanTurnOff: postWindowsOn.length > 1,
       postWindow1: postTimes[0] || '—',
       postWindow2: postTimes[1] || '—',
       postWindow3: postTimes.slice(2).join(' · ') || '—',

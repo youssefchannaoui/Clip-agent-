@@ -46,9 +46,16 @@ test('every feature the table sells is enforced server-side, tier by tier', () =
   // eight like every other perk (Youssef, 1 Sept 2026: "for admin account
   // should be like studio with all perks"). Extra windows widen one account's
   // own day and take nothing from anybody.
-  assert.match(read('src/agent.js'), /atLeast\(owner, 'studio'\)/);
+  // The check itself moved into billing.postWindowAllowance in v3.145.0, where
+  // every other plan question lives, because the account can now choose its own
+  // windows and three readers -- the scheduler, the /api/state payload and the
+  // DeenAI context -- have to get the SAME answer. Asserting it in agent.js
+  // pinned the address rather than the property.
+  assert.match(read('src/billing.js'), /export function postWindowAllowance[\s\S]{0,400}?atLeast\(user, 'studio'\)/);
   assert.ok(!/paysForAtLeast\(owner, 'studio'\)/.test(read('src/agent.js')),
     'and the paid check is gone from the scheduler, not merely joined');
+  assert.match(read('src/agent.js'), /billing\.postingWindowsFor\(owner\)/,
+    'the scheduler asks the one function rather than working the tier out itself');
 });
 
 test('scheduling, publishing and automation stay free', () => {

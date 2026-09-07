@@ -594,7 +594,22 @@
       ]),
       h('section', { class: 'dcm-card' }, [
         h('div', { class: 'dcm-card-h' }, [h('strong', {}, 'Posting windows')]),
-        h('div', { class: 'dcm-windows' }, [h('span', {}, [tx('postWindow1')]), h('span', {}, [tx('postWindow2')]), h('span', {}, [tx('postWindow3')])]),
+        // A row per window, from the SAME postWindowRows the desktop panel
+        // draws -- and the same toggle and set handlers hang off each row, so
+        // the two surfaces cannot do different things with one control.
+        h('div', { class: 'dcm-pw' }, [each('postWindowRows', 'w', [
+          h('div', { class: 'dcm-pw-row' }, [
+            h('button', {
+              type: 'button', class: cat('dcm-pw-tick ', b('w.tickCls')), role: 'switch',
+              'aria-checked': b('w.ariaOn'), 'aria-label': 'Switch this posting time on or off',
+              on: { click: 'w.toggle' },
+            }, [tx('w.tickMark')]),
+            h('select', {
+              class: 'dcm-pw-time', 'aria-label': 'Posting time',
+              value: b('w.at'), on: { change: 'w.set' },
+            }, [each('w.options', 'o', [h('option', { value: b('o.value'), selected: b('o.on') }, [tx('o.label')])])]),
+          ]),
+        ])]),
         h('p', { class: 'dcm-muted' }, [tx('postWindowNote')]),
         iff('dailyLimitNote', [h('p', { class: 'dcm-muted' }, [tx('dailyLimitNote')])]),
       ]),

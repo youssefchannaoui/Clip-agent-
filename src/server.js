@@ -10,6 +10,7 @@ import {
   state, save, log, logFor, clipSettings, setClipSettings, musicSettings, setMusicSettings,
   automationSettings, setAutomationSettings, publishingSettings, setPublishingSettings,
   importNetworkSettings, setImportNetworkSettings, stateRev, emailNotifsOff,
+  setPostingWindowsRaw,
 } from './store.js';
 import { ownedBy, findOwned } from './tenancy.js';
 import * as audio from './audio.js';
@@ -24,7 +25,7 @@ import * as selfcheck from './selfcheck.js';
 import * as ownerFeed from './owner-feed.js';
 import { fallbackThumb } from './local-engine.js';
 import * as social from './social.js';
-import { formatLocal, postTimesFor } from './slots.js';
+import { formatLocal, normaliseTime } from './slots.js';
 import { checkFfmpeg } from './ffmpeg.js';
 import * as auth from './auth.js';
 import * as billing from './billing.js';
@@ -909,7 +910,14 @@ function appState(user = null) {
     // should be like studio with all perks"). Extra windows only widen the
     // account's OWN schedule, so nothing is taken from a customer -- unlike
     // queue position, which stays on the paid tier in local-engine.js.
-    postTimes: billing.atLeast(user, 'studio') ? postTimesFor(config.postSlotsStudio) : config.postTimes,
+    // postTimes is the account's OWN arrangement now -- its switched-on windows,
+    // from billing.postingWindowsFor, which is the same call the scheduler makes.
+    // postWindows carries every window including the off ones, because the panel
+    // has to draw a row somebody can switch back on.
+    ...(function () {
+      const windows = billing.postingWindowsFor(user);
+      return { postTimes: windows.times, postWindows: windows.rows, postWindowAllowance: windows.allowance };
+    })(),
     timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
     log: logFor(user, 60), directPublishingEnabled: config.socialPublishEnabled,
     publishingSettings: publishingSettings(user), social: social.connectionStatus(user), billing: billing.publicBilling(user),
@@ -2514,6 +2522,36 @@ async function route(req, res, url) {
       log(`Automation template set to "${template.name}". New renders use it.`, 'info', currentUser.id);
       return json(res, 200, { ok: true, template, propagation: { queued: 0, skipped: 0, errors: [] } });
     } catch (error) { return json(res, 400, { error: error.message }); }
+  }
+
+  if (method === 'POST' && pathname === '/api/posting-windows') {
+    const body = await readBody(req);
+    const allowance = billing.postWindowAllowance(currentUser);
+    const rows = [];
+    const seen = new Set();
+    for (const row of Array.isArray(body.windows) ? body.windows : []) {
+      const at = normaliseTime(row && row.at);
+      if (!at) return json(res, 400, { error: 'Every posting time has to be a real time of day.' });
+      // Two windows at one time is one window: nextSlot matches on the resolved
+      // instant, so the second could never be filled and the account would be
+      // told it has a slot it does not.
+      if (seen.has(at)) return json(res, 400, { error: 'Two windows are set to ' + at + '. Give each one its own time.' });
+      seen.add(at);
+      rows.push({ at, on: row.on !== false });
+    }
+    if (!rows.length) return json(res, 400, { error: 'Keep at least one posting time.' });
+    // Refused rather than clamped, because saving MORE than the plan allows and
+    // silently dropping the rest is how a customer ends up believing they post
+    // eight times a day on a plan that posts four.
+    if (rows.length > allowance) return json(res, 400, { error: 'Your plan has ' + allowance + ' posting windows a day.' });
+    // The dangerous save. With nothing switched on the scheduler is handed an
+    // empty list, and nextSlot falls back to the SERVER's configured times --
+    // so an account that switched everything off would go on posting at the
+    // times it had just turned off, with nothing anywhere saying so.
+    if (!rows.some(row => row.on)) return json(res, 400, { error: 'Keep at least one posting time switched on, or nothing can be scheduled.' });
+    setPostingWindowsRaw(currentUser, rows);
+    const windows = billing.postingWindowsFor(currentUser);
+    return json(res, 200, { ok: true, windows: windows.rows, times: windows.times, allowance: windows.allowance });
   }
 
   if (method === 'POST' && pathname === '/api/clip-settings') {

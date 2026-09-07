@@ -164,7 +164,14 @@ test('every plan gate in the app is one of the listed features', () => {
   // way: a new call site fails this until it is argued for here.
   const tierGates = new Map([
     ['src/deenai.js', ['deenaiAccess', 'deenaiAskAccess']],
-    ['src/agent.js', ['scheduleApprovedClip picks the tier\'s posting windows (feature tier: the operator gets Studio\'s eight)']],
+    // agent.js used to hold one, for the posting-window allowance. That moved
+    // into billing.postWindowAllowance in v3.145.0 -- a plan question belongs
+    // beside the FEATURES table -- and the scheduler, the /api/state payload
+    // and the DeenAI context all read billing.postingWindowsFor now instead of
+    // each asking the tier for themselves. That duplication is exactly what
+    // showed a Studio customer four windows while eight were being filled.
+    // billing.js is not counted here: it calls its own atLeast dozens of times
+    // and a count would say nothing. The property is asserted below instead.
     ['src/local-engine.js', ['queuePriority ranks the render queue']],
   ]);
   for (const [file, guards] of tierGates) {
@@ -173,6 +180,20 @@ test('every plan gate in the app is one of the listed features', () => {
     assert.equal(calls, guards.length,
       `${file} has ${calls} tier gates but ${guards.length} are accounted for: ${guards.join(', ')}`);
   }
+  // The posting-window allowance is a FEATURE tier, not a paid one: extra
+  // windows widen the account's own day and take nothing from anybody, so the
+  // operator gets Studio's eight like every other Studio perk. queuePriority
+  // is the zero-sum one and stays on the paid tier.
+  {
+    const billingSrc = src('../src/billing.js');
+    const fn = billingSrc.slice(billingSrc.indexOf('export function postWindowAllowance'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    assert.match(body, /atLeast\(user, 'studio'\)/,
+      'postWindowAllowance must gate on the feature tier');
+    assert.doesNotMatch(body, /paysForAtLeast/,
+      'the operator must not be refused their own posting capacity');
+  }
+
   // And nowhere else reaches for it at all.
   for (const file of ['src/social.js', 'src/agent.js', 'src/slots.js', 'src/backgrounds.js', 'src/uploads.js']) {
     assert.doesNotMatch(src(`../${file}`), /isPaid\(/,

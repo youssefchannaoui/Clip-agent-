@@ -9092,6 +9092,23 @@ StudioAdapter.onProbeSource=async url=>{try{
        switches below call saveBrand directly. */
     window.dcSaveBrand=saveBrand;
 
+    /* Posting windows save through studioDo like every other write on this
+       screen: it refreshes the state and re-renders, so the header's "up to N
+       a day", the day meter and the calendar pips all move with the panel
+       instead of waiting for the next poll.
+
+       It has to be defined HERE and window-pinned. studioDo, api and refresh
+       are scoped to renderStudio, and paintPostWindows lives in a different
+       inline script scope in this file -- the trap that has now cost this
+       codebase eight features, and which fails silently: the panel would
+       apply its change locally, look right, and never reach the server.
+
+       studioDo swallows its own failure and resolves either way, so the
+       revert cannot hang off the returned promise. It goes through onFail. */
+    window.dcSavePostWindows=(rows,onFail)=>studioDo(
+      ()=>api('/api/posting-windows',{method:'POST',body:JSON.stringify({windows:rows})}),
+      '',onFail);
+
       const paintWatermark=()=>{
         try{
           const anchorBtn=document.getElementById('dcSaveAsStyle');
@@ -11098,6 +11115,109 @@ function paintHelp(){
       if(again){again.focus();try{again.setSelectionRange(at,at)}catch{}}};
   }
 }
+/* ── Posting windows ────────────────────────────────────────────────────────
+   Youssef, 7 Sept 2026: "they can select which hours they would like to do ...
+   they can either turn off, like, make it twice a day, not four times a day,
+   or they can change the times."
+
+   Host-rendered into the design's own "Posting windows" card on the Schedule
+   sidebar. The card is found by its HEADING TEXT, never by a class -- every
+   class in that markup is hashed and a design re-import regenerates it.
+
+   The card's two read-only spans are hidden IN PLACE rather than removed:
+   taking a generated node out shortens the live child list against the
+   rendered one and the patcher pairs everything after it one across. */
+const POST_WINDOW_STEP=15;
+function postWindowOptions(current){
+  const out=[];
+  let has=false;
+  for(let m=0;m<24*60;m+=POST_WINDOW_STEP){
+    const at=String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+    if(at===current) has=true;
+    out.push(at);
+  }
+  /* A window already set off the fifteen-minute grid -- a server POST_TIMES of
+     20:37, or a value from before this existed -- must still appear, or opening
+     the dropdown would silently move it. */
+  if(current&&!has){ out.push(current); out.sort(); }
+  return out;
+}
+function paintPostWindows(vals){
+  const rows=Array.isArray(vals.postWindowRows)?vals.postWindowRows:[];
+  const host=[...document.querySelectorAll('#studio section')].find(sec=>{
+    const head=sec.querySelector('span');
+    return head&&head.textContent.trim()==='Posting windows';
+  });
+  if(!host||!rows.length){ const gone=document.getElementById('dcPostWindows'); if(gone)gone.remove(); return }
+
+  /* Hidden, never removed -- see the note above. The times span said the same
+     thing the rows below now say, one row at a time and editable. */
+  [...host.children].forEach(kid=>{
+    const text=(kid.textContent||'').trim();
+    if(kid.id==='dcPostWindows') return;
+    const isTimesLine=/^\d{1,2}:\d{2}(\s*·|$)/.test(text)||text==='—';
+    if(isTimesLine&&!kid.hasAttribute('data-host-pwhid')){
+      kid.setAttribute('data-host-pwhid','');
+      kid.setAttribute('data-host-style','');
+      kid.style.display='none';
+    }
+  });
+
+  let box=document.getElementById('dcPostWindows');
+  if(!box||box.parentNode!==host){
+    if(box) box.remove();
+    box=document.createElement('div');
+    box.id='dcPostWindows';
+    /* data-host-owned: the patcher pairs a container's children by index and
+       skips only the nodes that carry it. Without this every repaint of the
+       sidebar would shift the design's own siblings one place across. */
+    box.setAttribute('data-host-owned','');
+    box.style.cssText='display:flex;flex-direction:column;gap:6px;';
+    host.appendChild(box);
+  }
+
+  const html=rows.map(row=>{
+    const opts=row.options.map(o=>
+      `<option value="${esc(o.value)}"${o.on?' selected':''}>${esc(o.label)}</option>`).join('');
+    return `<div class="dcpw-row" data-pw="${esc(row.index)}">`
+      +`<button type="button" class="dcpw-tick${row.on?' is-on':''}" data-pw-tick="${esc(row.index)}"`
+      +` role="switch" aria-checked="${row.on?'true':'false'}"`
+      +` title="${row.on?'Switched on':'Switched off'}" aria-label="Switch this posting time on or off">`
+      /* The mark is drawn IN THE PAGE, not taken from the icon font. A tick is
+         the only thing that says which state this control is in, and a webfont
+         that is slow, blocked or renamed leaves a gold square that reads as a
+         colour swatch -- measured here at 0x0 with the family falling back to
+         Inter. That is the ph-seedling hazard on a control whose whole job is
+         to be readable at a glance, so it does not depend on a CDN. */
+      +`<svg class="dcpw-mark" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">`
+      +(row.on
+        ?`<path d="M3.2 8.4 6.3 11.5 12.8 5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>`
+        :`<path d="M4 8h8" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>`)
+      +`</svg></button>`
+      +`<select class="dcpw-time" data-pw-time="${esc(row.index)}" aria-label="Posting time">${opts}</select>`
+      +`</div>`;
+  }).join('');
+  /* NO note here. The design's own span directly above these rows already
+     renders postWindowNote -- the same binding, the same sentence -- so one
+     here printed it twice, once above the rows and once below. One question,
+     one answer, and the design's is the one already in place and already
+     styled. */
+  window.dcSetHtml(box,html);
+
+  /* The handlers come off the ROWS, which is where the phone's card gets them
+     too -- one implementation, so the two surfaces cannot end up doing
+     different things with the same control. The refusal to switch the last
+     window off lives there as well. */
+  box.querySelectorAll('[data-pw-tick]').forEach(btn=>{
+    const row=rows[Number(btn.getAttribute('data-pw-tick'))];
+    btn.onclick=row?row.toggle:null;
+  });
+  box.querySelectorAll('[data-pw-time]').forEach(sel=>{
+    const row=rows[Number(sel.getAttribute('data-pw-time'))];
+    sel.onchange=row?row.set:null;
+  });
+}
+
 function paintStudio(){
   if(!DATA||!STUDIO)return;
   const vals=StudioAdapter.bindings(DATA);
@@ -11162,6 +11282,7 @@ function paintStudio(){
   paintOnboarding(vals);
   paintFirstClip(vals);
   paintScheduleWeek();
+  paintPostWindows(vals);
   paintScheduleDrag();
   if(window.paintEmailNotifRow)window.paintEmailNotifRow(DATA);
   /* The watermark row is restored HERE, with every other host-rendered panel,

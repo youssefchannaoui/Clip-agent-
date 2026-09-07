@@ -49,7 +49,11 @@ globalThis.fetch = async (url, options = {}) => {
 
 test.after(() => {
   globalThis.fetch = realFetch;
-  fs.rmSync(dataDir, { recursive: true, force: true });
+  // The state saver is atomic and coalesced, so it can still be writing
+  // state.json.tmp into this directory as the file finishes -- rmSync then
+  // races it and dies ENOTEMPTY after every assertion has passed. A leftover
+  // temp dir on a runner is harmless; failing a green suite over one is not.
+  try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 }); } catch { /* a leftover temp dir must never fail a green suite */ }
 });
 
 function makeUser(id, billingFields = {}) {

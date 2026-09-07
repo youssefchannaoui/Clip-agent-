@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1679 JS + 715 Python**
+- `npm test` and `npm run check` must pass. Currently **1692 JS + 715 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -7165,6 +7165,117 @@ itself, which is the only source that cannot be wrong.
 - **It never prints a value**, only whether one is present, its length and
   whether it carried whitespace — the rule `webhookSecretNote()` already
   follows, because a health payload is not a secure channel.
+
+## The account chooses its own posting times (v3.146.0, 7 Sept 2026)
+
+Youssef: "they can select which hours they would like to do ... so even with
+the four clip, just regular Pro users, they can either turn off, like, make it
+twice a day, not four times a day, or they can change the times." The design
+was delegated ("just figure it out"): a row per window -- a tick that switches
+it on or off, and a dropdown for the time it fires.
+
+### The drift server.js had already written a comment about
+
+The windows were derived in FOUR places. `/api/state` sent `config.postTimes`
+to everybody, `agent.js` asked `slots.postTimesFor` when the owner
+`paysForAtLeast('studio')`, `deenai.js` counted them a third way, and the
+screen read the payload. v3.71.3 had already fixed one half of this by hand
+(a Studio customer shown four windows while eight were being filled) and the
+duplication that caused it was left standing.
+
+**`billing.postingWindowsFor(user)` is the one answer**, and every reader takes
+it: `{ allowance, rows, times, custom }`. The payload spreads it, the scheduler
+reads `.times`, DeenAI counts them. `test/posting-windows.test.mjs` asserts no
+caller derives its own -- no `postTimesFor(`, no `config.postTimes`, in any of
+the three.
+
+- **It lives in billing.js at ZERO new import edges.** `store.js` cannot import
+  billing (billing imports store), `slots.js` deliberately imports only config,
+  and all three readers already import billing. The pure layer
+  (`normaliseWindows`/`resolveWindows`/`normaliseTime`) stays in slots.js so it
+  is callable from anywhere.
+- **`nextSlot` FALLS BACK TO THE SERVER'S OWN TIMES WHEN HANDED AN EMPTY
+  LIST**, which makes "switch them all off" the dangerous arrangement rather
+  than the harmless one: it would post at `config.postTimes` while the screen
+  said nothing was on. It is refused at the route AND `resolveWindows` returns
+  every row's time rather than none if one ever reaches it. Two guards for one
+  hole, because the failure is silent.
+- **A downgrade truncates on READ, never written back** -- the
+  `accountsPerPlatform` precedent. Studio's eight rows survive on disk through
+  a lapse to Pro and come back if the plan does; only four are honoured
+  meanwhile. Over-allowance is REFUSED at the route rather than clamped, or a
+  save would silently discard rows the customer had just arranged.
+- Sorted, de-duplicated, padded from `postTimesFor(allowance)` when short, and
+  a junk time is refused rather than coerced.
+
+### Two faults the measurements could not see
+
+The panel measured perfect -- one left edge per column at 1440/1280/1100 in
+both themes, **0px between every tick's centre and its time's centre on every
+row**, flush with the card header, zero overflow, zero page scroll -- and the
+screenshot showed both of these at once. This is the "a green suite is never
+verification for anything visual" rule earning its keep from a new direction:
+the geometry was right and the CONTENT was wrong.
+
+1. **The card printed its summary sentence twice.** The design's own span
+   directly above the rows already renders `postWindowNote` -- the binding I
+   had rewritten -- so the panel emitting one too said "4 of 8 on · 8 a day on
+   Studio · Australia/Perth" above the rows and again below them. The design's
+   is the one already in place and already styled; the panel renders none.
+2. **THE TICK HAD NO MARK IN IT.** `<i class="ph ph-check">` measured **0x0
+   with its family falling back to Inter** -- the Phosphor CDN is unreachable
+   from an agent container, so an on window was a filled gold square and an off
+   one a grey square: a colour swatch, not a state. That is the `ph-seedling`
+   hazard on the one control whose whole job is to be readable at a glance, so
+   the mark is an inline SVG taking `currentColor` and owes nothing to a
+   webfont. The phone already drew ✓ / – as text and was never affected.
+
+Both are pinned in `test/posting-windows.test.mjs` and both probes were proven
+red. The alignment is by GEOMETRY -- one 22px line is the tick's height, the
+select's height and the row's line, so their centres coincide by construction
+rather than by a nudge.
+
+### The rest, and where it is
+
+- **The desktop panel is host-rendered** (`paintPostWindows`, in paintStudio's
+  list, `data-host-owned`, written through `dcSetHtml`), mounted by finding the
+  card whose heading reads "Posting windows" -- never a hashed class. The
+  design's read-only times span is HIDDEN IN PLACE with `data-host-pwhid` +
+  `data-host-style`; removing it would shorten the live child list against the
+  rendered one and shift every sibling after it (the v3.124.5 lesson).
+- **The phone renders the same `postWindowRows`** with the same `toggle` and
+  `set` handlers hanging off each row, so the two surfaces cannot end up doing
+  different things with one control. Every row 44px, measured at 390.
+- **`window.dcSavePostWindows` is pinned on window** -- `studioDo` and `api`
+  are scoped to `renderStudio` and the painter is in a different inline script
+  scope, the trap this file has now recorded eight times, and here it fails
+  SILENTLY: the panel would apply its change locally, look right, and never
+  reach the server. **The revert goes through studioDo's `onFail`**, never off
+  its returned promise, because studioDo swallows its own failure and resolves
+  either way -- so a refused save left the tick showing the state the server
+  had rejected. Found by driving it: pressing the last remaining tick now
+  leaves it on and says "Keep at least one posting time switched on."
+- **"Up to 1 posts a day"** -- the subline went through `plural()`.
+
+Driven end to end at 1440 on the merged tree: two ticks off -> the note, the
+header subline and the day meter all move together; a time changed -> the
+scheduler's list follows it; every arrangement survives a reload and
+`/api/state` agrees. The scheduler is driven for REAL in the test
+(`agent.scheduleApprovedClip`, then the clip's own `scheduledAt` read back in
+the account's timezone) -- the first version compared `billing.postingWindowsFor`
+against itself and never entered agent.js at all, which is why its red probe
+came back green.
+
+### And the flake that is not this feature's
+
+`test/web-metrics.test.mjs` failed once in a full run and passed alone. It is
+the cleanup race this file already records -- the state saver still writing
+`state.json.tmp` as `test.after` removes the directory -- and the fix applied
+to 34 files on 28 Aug had missed **two**: this one and `billing-cancel`. Both
+carry the guarded removal now (`maxRetries`, `retryDelay`, and a `try/catch`,
+because a leftover temp directory on a runner is harmless and failing a green
+suite over one is not). A file-level failure counts as an extra test, which is
+why that run reported 1671 tests with 1 fail against a real 1670.
 
 ## Open items
 

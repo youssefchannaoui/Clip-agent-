@@ -6,6 +6,8 @@ import * as metrics from './metrics.js';
 import * as referrals from './referrals.js';
 import * as geo from './geo.js';
 import { state, save, log } from './store.js';
+import * as store from './store.js';
+import { normaliseWindows, resolveWindows } from './slots.js';
 
 const now = () => Date.now();
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -405,6 +407,43 @@ function periodOf(planId) {
  */
 export function accountsPerPlatform() {
   return 1;
+}
+
+/**
+ * How many posting windows a day this account may fill.
+ *
+ * atLeast, not paysForAtLeast: extra windows widen the account's OWN day and
+ * take nothing from anybody, so the operator gets Studio's capacity like every
+ * other Studio perk. Queue position is the zero-sum one and stays on the paid
+ * tier in local-engine.js.
+ */
+export function postWindowAllowance(user) {
+  const base = (config.postTimes || []).length || 1;
+  return atLeast(user, 'studio') ? Math.max(base, config.postSlotsStudio) : base;
+}
+
+/**
+ * THE one answer to "what times does this account post at".
+ *
+ * Four places used to work this out for themselves -- the /api/state payload,
+ * the scheduler in agent.js, the DeenAI context and, through the payload, every
+ * count on the Schedule screen. server.js's own comment records what that cost:
+ * a Studio customer was shown four windows while the scheduler used eight,
+ * because the display and the behaviour were derived separately. They read this
+ * now, so they cannot disagree again.
+ *
+ * `rows` returns the arrangement to DRAW (every window, on or off); `times` is
+ * what the scheduler fills.
+ */
+export function postingWindowsFor(user) {
+  const allowance = postWindowAllowance(user);
+  const stored = store.postingWindowsRaw(user);
+  return {
+    allowance,
+    rows: normaliseWindows(allowance, stored),
+    times: resolveWindows(allowance, stored),
+    custom: Array.isArray(stored) && stored.length > 0,
+  };
 }
 
 export function topups() {

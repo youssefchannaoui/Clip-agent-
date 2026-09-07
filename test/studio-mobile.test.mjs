@@ -59,7 +59,13 @@ const DATA = () => ({
   reviewGate: true, templates: [{ id: 'clean-line', name: 'Clean Line' }], selectedTemplate: { id: 'clean-line', name: 'Clean Line' },
   user: { name: 'Yusuf Ali', email: 'y@x.com', role: 'creator' },
   billing: { current: { planName: 'Basic', plan: 'free', tokens: 40, features: {} }, plans: [] },
-  postTimes: ['09:00', '12:00', '17:00', '20:00'], activity: [], emailNotifs: true,
+  postTimes: ['09:00', '17:00', '20:00'],
+  /* One window switched OFF, deliberately. With all four on, every row's
+   * tickCls is 'is-on' and a probe that hardcodes it passes -- the fixture has
+   * to exercise both branches or it proves nothing about either. */
+  postWindows: [{ at: '09:00', on: true }, { at: '12:00', on: false }, { at: '17:00', on: true }, { at: '20:00', on: true }],
+  postWindowAllowance: 4,
+  activity: [], emailNotifs: true,
 });
 
 // Render a template with the runtime's own renderer and return the HTML plus
@@ -147,6 +153,40 @@ function screenRender(sandbox, screen, setup) {
   const mv = sandbox.StudioMobile.vals(vals, data);
   return { ...render(sandbox, sandbox.StudioMobile.template(), mv), vals, mv };
 }
+
+test('the phone can set its own posting windows', () => {
+  /* Youssef works from a phone, and the desktop panel lives inside the Schedule
+   * screen the mobile shell OWNS -- so scoped to #studio it measures 0x0 there
+   * and a phone customer could not reach the feature at all. Measured before
+   * this card existed, which is why it exists.
+   *
+   * The rows come from the SAME postWindowRows binding the desktop panel draws,
+   * carrying the same toggle and set handlers, so the two surfaces cannot end
+   * up doing different things with one control. */
+  const sandbox = makeSandbox();
+  const r = screenRender(sandbox, 'schedule');
+  assert.deepEqual(Array.from(r.missing), [], 'every window control resolves to a handler');
+
+  const rows = r.vals.postWindowRows;
+  assert.ok(Array.isArray(rows) && rows.length >= 1, 'the schedule binds its windows');
+  const ticks = (r.html.match(/class="dcm-pw-tick/g) || []).length;
+  const times = (r.html.match(/class="dcm-pw-time"/g) || []).length;
+  assert.equal(ticks, rows.length, 'a tick per window');
+  assert.equal(times, rows.length, 'a time per window');
+
+  /* b(x) ? a : c in the phone template is ALWAYS the truthy branch -- b() hands
+   * back a binding descriptor at template-build time -- so the class, the glyph
+   * and the aria state have to be bindings of their own. */
+  for (const row of rows) {
+    assert.equal(row.tickCls, row.on ? 'is-on' : '', 'the tick class is a binding, not a ternary');
+    assert.equal(row.ariaOn, row.on ? 'true' : 'false');
+    assert.ok(row.tickMark, 'the tick draws something either way');
+    assert.ok(row.options.length >= 96, 'every quarter hour is offered');
+    assert.ok(row.options.some(o => o.value === row.at && o.on), 'its own time is the selected option');
+  }
+  assert.ok(rows.some(r => r.on) && rows.some(r => !r.on),
+    'the fixture must carry an on window AND an off one, or neither branch is tested');
+});
 
 test('every screen renders through the real bindings with no dead control', () => {
   const sandbox = makeSandbox();

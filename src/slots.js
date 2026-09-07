@@ -110,3 +110,71 @@ export function formatLocal(ms) {
     hour: 'numeric', minute: '2-digit',
   }).format(new Date(ms));
 }
+
+/**
+ * A stored posting-window arrangement, normalised for an account allowed
+ * `allowance` windows a day.
+ *
+ * The stored shape is ONE list of `{ at, on }` rather than a list of times plus
+ * a list of switched-off times. Two lists is two answers to one question, and
+ * an off row has to keep its time or unticking and re-ticking loses it.
+ *
+ * Truncation on a downgrade happens at READ time and is never written back, so
+ * a Studio account that lapses to Pro keeps its eight rows on disk and gets
+ * them all again if it resubscribes. That is the same rule accountsPerPlatform
+ * follows for connected channels, and for the same reason: a settings record
+ * outlives the plan that wrote it.
+ */
+export function normaliseWindows(allowance, stored) {
+  const want = Math.max(1, Math.round(Number(allowance) || 0) || 1);
+  const clean = [];
+  const seen = new Set();
+  for (const row of Array.isArray(stored) ? stored : []) {
+    const at = normaliseTime(row && row.at);
+    // A duplicate time is unreachable rather than harmless: nextSlot matches on
+    // the resolved instant, so a second 07:00 can never be filled and the
+    // account would be told it has a window it does not.
+    if (!at || seen.has(at)) continue;
+    seen.add(at);
+    clean.push({ at, on: row.on !== false });
+  }
+  clean.sort((a, b) => toMinutes(a.at) - toMinutes(b.at));
+  // Short of the allowance (a fresh account, or one that just moved up a tier)
+  // the shipped windows fill the gap, so nobody has to build a schedule before
+  // the product works.
+  if (clean.length < want) {
+    for (const at of postTimesFor(want)) {
+      if (clean.length >= want) break;
+      if (seen.has(at)) continue;
+      seen.add(at);
+      clean.push({ at, on: true });
+    }
+    clean.sort((a, b) => toMinutes(a.at) - toMinutes(b.at));
+  }
+  return clean.slice(0, want);
+}
+
+/** The times an account actually posts at: its on windows, earliest first. */
+export function resolveWindows(allowance, stored) {
+  const rows = normaliseWindows(allowance, stored);
+  const on = rows.filter(row => row.on).map(row => row.at);
+  // An empty list is the dangerous answer, not a quiet one: nextSlot falls back
+  // to the SERVER's configured times when it is handed nothing, so an account
+  // that switched every window off would go on posting at times it had just
+  // turned off. The setter refuses to save that; this refuses to honour it.
+  return on.length ? on : rows.map(row => row.at);
+}
+
+/** "7:00" and "07:00" are one window; anything else is not a window at all. */
+export function normaliseTime(value) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value == null ? '' : value).trim());
+  if (!match) return '';
+  const hh = Number(match[1]), mm = Number(match[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh > 23 || mm > 59) return '';
+  return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+}
+
+function toMinutes(at) {
+  const [hh, mm] = at.split(':').map(Number);
+  return hh * 60 + mm;
+}

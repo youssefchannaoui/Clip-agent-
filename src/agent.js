@@ -8,7 +8,7 @@ import { state, save, log, automationSettings, publishingSettings, ownerOfRecord
 import * as push from './push.js';
 import { ownedBy, ownerOf } from './tenancy.js';
 import { sanitiseClipStyle } from './templates.js';
-import { nextSlot, startOfZonedDay, postTimesFor as slotTimes } from './slots.js';
+import { nextSlot, startOfZonedDay } from './slots.js';
 import * as engine from './local-engine.js';
 import * as social from './social.js';
 import * as nudges from './nudges.js';
@@ -493,7 +493,10 @@ export function scheduleApprovedClip(clip, { at = null, day = null } = {}) {
   // atLeast: the operator schedules on Studio's windows too. This widens one
   // account's own day and takes nothing from anyone, which is why it does not
   // use the paid tier that queuePriority does.
-  const windows = billing.atLeast(owner, 'studio') ? slotTimes(config.postSlotsStudio) : null;
+  // The SAME call the /api/state payload makes, so what the customer is shown
+  // and what actually gets filled cannot drift. It carries the account's own
+  // switched-off windows too: a window turned off is one the scheduler skips.
+  const windows = billing.postingWindowsFor(owner).times;
   let opts;
   if (Number.isFinite(exact) && exact > 0) {
     // nextSlot keeps a 15-minute lead so nothing is scheduled a breath from

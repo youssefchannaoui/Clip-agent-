@@ -516,7 +516,7 @@ export function askContext(user) {
     clipsPosted: clips.filter(c => c.postedAt).length,
     scriptureAwaitingReview: waiting.filter(c => c.reviewRequired).length || undefined,
     averageKeptScore: kept.length ? Math.round(kept.reduce((a, c) => a + (Number(c.score) || 0), 0) / kept.length) : null,
-    postingWindowsPerDay: (config.postTimes || []).length || undefined,
+    postingWindowsPerDay: billing.postingWindowsFor(user).times.length || undefined,
     failedPostsByDestination: failures.length ? failures : undefined,
     recentKeptTitles: kept.slice(-5).map(c => String(c.title || '').slice(0, 80)),
     destinations: [...new Set(clips.flatMap(c => (c.targets || []).map(t => t.provider)))],
