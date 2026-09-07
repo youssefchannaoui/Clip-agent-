@@ -2453,6 +2453,28 @@ touching it. A merge is not exempt from the release rule just because it wrote
 no code; the guard is asking what this commit ships, and a merge ships
 everything on the other side.
 
+### A MERGE ALSO SHIPS THE OTHER SIDE'S `worker/`, AND THE STAMP MOVES WITH IT
+
+Hit on 7 Sept 2026, one commit after the note above, and it is a different
+shape. The merge was checked with `git status --porcelain -- worker/` on THIS
+side -- clean, no worker change, no stamp needed. CI disagreed:
+
+    check-version-bump: this commit changes worker/ but worker/RELEASE does
+    not name its version. worker/RELEASE says 3.140.0 and package.json says
+    3.141.0.
+
+The guard diffs against the FIRST PARENT, and the first parent is my own
+commit, which did not have their `worker/clip_worker.py` change. So the merge
+changes `worker/` whatever my side did. **A merge ships everything on the
+other side -- for the stamp exactly as for the version.** Check
+`git diff --name-only HEAD^ -- worker/` on the MERGE, never `git status` on
+the branch before it.
+
+**And `worker/RELEASE` is itself a `worker/` file**, so a commit that only
+restamps it trips the guard again for want of a version bump. The stamp and
+`package.json` move together, in one commit, to the same new number -- or the
+fix is refused for the same reason the merge was.
+
 ### The merge trap that produced that commit in the first place
 
 `git merge` printed the conflicts, `tail -6` cut the list short, and the
