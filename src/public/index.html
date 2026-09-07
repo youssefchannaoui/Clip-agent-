@@ -10043,6 +10043,27 @@ function paintTasksPanel(){
   let group=groups.find(g=>g.id===dcTaskTab);
   if(!group||group.locked){ group=groups.find(g=>g.id===rows.openGroup)||groups[0]; dcTaskTab=group.id; }
 
+  /* THE RING FROM THE SIDEBAR, IN THE PANEL'S OWN HEADER.
+     Youssef likes the rail card and said so; the panel had no progress mark at
+     all, just two lines of small grey text. Reusing `.dctk-ring` rather than
+     drawing a second one means the two surfaces cannot disagree about the
+     percentage, and it is a conic gradient with a punched-out middle -- no SVG,
+     nothing for a design re-import to touch. */
+  const headEl=root.querySelector('.studio-conn-head');
+  if(headEl){
+    let ring=headEl.querySelector('.dctk-ring');
+    if(!ring){
+      ring=document.createElement('span');
+      ring.className='dctk-ring dctk-ring-lg';
+      ring.setAttribute('data-host-owned','');
+      headEl.insertBefore(ring,headEl.firstChild);
+    }
+    const pc=Math.max(0,Math.min(100,Math.round(rows.percent||0)));
+    ring.style.setProperty('--p',String(pc));
+    const want='<b>'+pc+'%</b>';
+    if(ring.innerHTML!==want)ring.innerHTML=want;
+  }
+
   if(sub){
     const bits=[rows.done+' of '+rows.total+' done'];
     if(rows.claimable>0)bits.push(rows.claimable+' tokens to claim');

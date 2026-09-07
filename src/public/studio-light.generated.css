@@ -585,24 +585,26 @@ body.dc-light #dcTaskCard:hover .dctk-title{color:#7E5B18}
 body.dc-light .dctk-ring{background:conic-gradient(#8A6425 calc(var(--p, 0) * 1%), #D4D4DA 0)}
 body.dc-light .dctk-ring::before{background:#FFFFFF}
 body.dc-light .dctk-ring b{color:#8A6425}
+body.dc-light .dctk-ring-lg::before{background:#FFFFFF}
 body.dc-light .dctk-title{color:#1D1D22}
 body.dc-light .dctk-note{color:#62626B}
 body.dc-light .dctk-go{color:#6A6A72}
 body.dc-light .dctk-earn{background:rgba(162, 118, 44, 0.161);color:#8A6425}
-body.dc-light #dcTasks .dctk-tabs{border:1px solid #E2E2E6;background:#ECECEE}
+body.dc-light #dcTasks .dctk-tabs{border-bottom:1px solid #E2E2E6}
 body.dc-light #dcTasks .dctk-tab{color:#62626B}
-body.dc-light #dcTasks .dctk-tab:hover{background:#FFFFFF;color:#33333A}
-body.dc-light #dcTasks .dctk-tab.is-on{background:#FFFFFF;color:#141418;box-shadow:inset 0 0 0 1px rgba(162, 118, 44, 0.322)}
+body.dc-light #dcTasks .dctk-tab:hover{color:#33333A}
+body.dc-light #dcTasks .dctk-tab.is-on{color:#141418}
+body.dc-light #dcTasks .dctk-tab.is-on::after{background:#8A6425}
 body.dc-light #dcTasks .dctk-tab.is-locked{color:#6A6A72}
 body.dc-light #dcTasks .dctk-tab-n{color:#6A6A72}
 body.dc-light #dcTasks .dctk-tab.is-on .dctk-tab-n{color:#8A6425}
 body.dc-light #dcTasks .dctk-tab-dot{background:#8A6425}
 body.dc-light #dcTasks .dctk-gnote{color:#62626B}
-body.dc-light #dcTasks .dctk-gnote.dctk-nopay{border:1px solid rgba(162, 118, 44, 0.253);background:rgba(162, 118, 44, 0.057);color:#33333A}
-body.dc-light #dcTasks .dctk-foot{border-top:1px solid #E2E2E6;color:#6A6A72}
+body.dc-light #dcTasks .dctk-gnote.dctk-nopay{border-left:2px solid rgba(162, 118, 44, 0.517);color:#62626B}
+body.dc-light #dcTasks .dctk-foot{border-top:1px solid #E2E2E6;color:#62626B}
 body.dc-light #dcTasks .dctk-row{border-top:1px solid #E2E2E6}
 body.dc-light #dcTasks .dctk-row:hover{background:#FFFFFF}
-body.dc-light #dcTasks .dctk-row.is-now{background:rgba(162, 118, 44, 0.069)}
+body.dc-light #dcTasks .dctk-row.is-now{background:linear-gradient(90deg, rgba(162, 118, 44, 0.103), transparent 62%);box-shadow:inset 2px 0 0 #8A6425}
 body.dc-light #dcTasks .dctk-row.is-now strong{color:#7E5B18}
 body.dc-light #dcTasks .dctk-row strong em{background:rgba(162, 118, 44, 0.184);color:#8A6425}
 body.dc-light #dcTasks .dctk-tick{border:1px solid #D4D4DA;color:#6A6A72}

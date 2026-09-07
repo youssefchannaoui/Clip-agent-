@@ -13477,3 +13477,39 @@ for that twice.
 
 Three probes proven red: the unlimited guard removed, the bar's `!done` guard
 removed, and the footnote shown to everyone.
+
+## The tasks panel got the sidebar's own ring, and text tabs (v3.147.4, 8 Sept 2026)
+
+Youssef, on the panel after v3.147.3: "i dont like the look of it, it can look
+sm nicer" -- having already said the rail card is the part he likes.
+
+- **The ring from the rail card, in the panel's header.** The panel had no
+  progress mark at all, just two lines of small grey text; the card he likes is
+  built around a 60% ring. `.dctk-ring` is REUSED rather than a second one
+  drawn, so the two surfaces cannot disagree about the percentage -- and it is
+  a conic gradient with a punched-out middle, so there is no SVG and nothing
+  for a design re-import to touch.
+- **Text tabs under a gold ink bar**, the device the Owner screen already uses.
+  Three filled boxes in a bordered tray read as three buttons competing with
+  each other -- and the browser's focus ring on an UNSELECTED one made it look
+  selected too, so the panel appeared to have two active tabs at once. An ink
+  bar has exactly one position and cannot be confused with focus.
+- **The current row takes a gold EDGE, not a full wash.** The wash tinted the
+  whole width and fought the hover state on its neighbours.
+- **The unlimited note is a quiet aside with a gold rule**, not a bordered
+  slab. As a box it was the loudest thing on a panel whose one line nobody
+  needs to act on.
+
+### Measured, at a real viewport, in both themes
+
+One left edge (513), one right edge (961), one chip width (82), every tick and
+every chip **0px** off its title, all three tabs sharing one baseline (321), and
+row heights differing only where a progress bar genuinely exists (64/65 done,
+75 in progress). The ring centres on the two-line text block it belongs to
+(1px, sub-pixel), NOT on the title alone -- a block with two lines in it is
+what the ring is a mark for.
+
+**One contrast fault found by measuring rather than looking:** the footnote sat
+at **3.7:1** in night -- under AA, on the one line that answers "can these be
+given twice". #6E6E76 -> #8B8B93 takes it to **5.53**. Paper was already 5.36.
+Every other reading passed: tab-on 16.74/18.37, tab-off and note 5.53/6.04.
