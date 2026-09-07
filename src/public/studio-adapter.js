@@ -5341,6 +5341,28 @@
     // The first card is the headline and gets the room; the rest are rows. The
     // server decides which is first -- the screen must not re-rank, or the two
     // halves of one answer would disagree about what matters most.
+    /*
+     * A CARD'S BUTTON. Every insight names a screen -- "open the Review
+     * queue", "the fix is usually the account connection" -- and until now
+     * none of them was clickable, which is invariant 9 wearing a card's
+     * clothes: the advice could not reach the thing it named.
+     *
+     * The server attaches at most ONE action per card, from a frozen table,
+     * and every entry only NAVIGATES. Nothing here approves, schedules or
+     * writes a setting: the person still presses the real control with its
+     * real confirmation in front of them.
+     */
+    function aiActionOf(card) {
+      var a = card && card.action;
+      // A demo card describes a sample account, so its button would go to a
+      // screen that has nothing to do with what the card says.
+      if (!a || !a.step || card.demo) return null;
+      return {
+        show: true,
+        label: String(a.label || 'Open'),
+        go: function (e) { global.StudioAdapter.goToStep(a.step, e); },
+      };
+    }
     var aiHead = aiAllCards[0] || null;
     var aiRows = aiAllCards.slice(1);
     var aiMetricRows = (aiData && aiData.metrics) || [];
@@ -5720,6 +5742,8 @@
         ? 'direction: rtl; text-align: left; font-family: Amiri, serif; font-size: 28px; line-height: 1.5; color: var(--dc-ink, #F2F2F4); text-wrap: pretty;'
         : 'font-family: Outfit, Inter, sans-serif; font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 1.3; color: var(--dc-ink, #F2F2F4); text-wrap: pretty;',
       aiHeadBody: aiHead ? String(aiHead.body || '') : '',
+      // The headline card's own button, from the step it was built from.
+      aiHeadAction: aiHead ? aiActionOf(aiHead) : null,
 
       // the band of figures
       aiMetrics: aiMetricRows.map(function (m, index) {
@@ -5752,6 +5776,7 @@
           titleStyle: 'font-size: 13.5px; font-weight: 600; color: ' + (card.tone === 'warn' ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-ink, #F2F2F4)') + '; text-wrap: pretty;',
           demoStyle: aiDemoChip(card.demo),
           body: String(card.body || ''),
+          action: aiActionOf(card),
         };
       }),
       aiEmpty: Boolean(aiOn && aiData && aiAllCards.length === 0 && aiMetricRows.length === 0),
@@ -9828,6 +9853,7 @@
         review: function () { setUI({ screen: 'queue', queueTab: 'decide' }); },
         connect: function () { global.StudioAdapter.onOpenConnections(); },
         schedule: function () { setUI({ screen: 'schedule' }); },
+        library: function () { setUI({ screen: 'library' }); },
       }[String(action || '')];
       if (!where) return false;
       if (e && e.preventDefault) e.preventDefault();

@@ -2,6 +2,7 @@ import * as billing from './billing.js';
 import * as workerClient from './worker-client.js';
 import { state } from './store.js';
 import * as referrals from './referrals.js';
+import * as actions from './deenai-actions.js';
 import { config } from './config.js';
 
 /**
@@ -129,6 +130,13 @@ function nextActionCard(user) {
     kicker: 'Do this next',
     title: step.title,
     body: step.body,
+    // The step already knows where it goes -- `referrals.nextStep` returns the
+    // action and this card dropped it, so the ONE card whose whole job is "do
+    // this next" was the only place on the screen you could not act, while the
+    // identical step is a button in the task ladder two panels away. Mapped
+    // through the frozen table rather than named here, so the studio keeps one
+    // definition of where a DeenAI card may send you.
+    action: actions.actionForStep(step.key),
   };
 }
 
@@ -291,6 +299,7 @@ export function insights(user) {
       figureNote: 'your best keep rate',
       body: 'More sections of the same lecture are the cheapest good clips you can make: '
         + 'the import is cached, so they cost minutes, not bandwidth.',
+      action: actions.action('open-library'),
     });
   }
 
@@ -301,6 +310,7 @@ export function insights(user) {
       icon: 'ph ph-book-open-text', tone: '',
       title: flagged + ' scripture clip' + (flagged === 1 ? '' : 's') + ' await' + (flagged === 1 ? 's' : '') + ' the shaykh',
       body: 'Quran clips are consistently the strongest performers for accounts like this one, and they publish nothing until a person signs them off. Reviewing these first usually beats making more clips.',
+      action: actions.action('open-review'),
     });
   }
 
@@ -311,6 +321,7 @@ export function insights(user) {
       icon: 'ph ph-warning-circle', tone: 'warn',
       title: providerName(provider) + ' has refused ' + n + ' posts',
       body: 'Every refusal is reach you already paid to render. Open the schedule row\u2019s explanation — the fix is usually the account connection or a platform review, not the clip.',
+      action: actions.action('open-connections'),
     });
   }
 
@@ -341,6 +352,7 @@ export function insights(user) {
       body: days >= 10
         ? 'That regularity is what feeds every platform\u2019s recommendation system. Keep the streak — approved clips take the next free slots automatically.'
         : 'Short-form rewards showing up daily more than any single clip. Keep the review queue clear and enough approved clips banked to fill every posting window.',
+      action: actions.action('open-schedule'),
     });
   }
 

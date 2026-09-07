@@ -5623,13 +5623,98 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        Host-rendered because adding a span to the design export regenerates
        every hashed class name in the app; anchored on that literal label
        rather than on a class, so a re-import cannot renumber it away. */
+    /* A CARD'S BUTTON, so its advice reaches the screen it names.
+       "TikTok has refused 22 posts" with nothing to press is a diagnosis with
+       no door, and it was every card on this screen.
+
+       Host-rendered: adding a button to the design export regenerates every
+       hashed class name in the app. Each card is found by its own TITLE text,
+       which the adapter supplies -- never a hashed class -- and the button is
+       marked data-host-owned so the patcher leaves it alone. Every action only
+       navigates; nothing here mutates anything. */
+    function aiCardButton(host,action){
+      if(!host)return;
+      let btn=host.querySelector(':scope > [data-host-aiact]');
+      if(!action){if(btn)btn.remove();return}
+      if(!btn){
+        btn=document.createElement('button');
+        btn.type='button';
+        btn.setAttribute('data-host-owned','');
+        btn.setAttribute('data-host-aiact','');
+        /* align-self and fit-content, or a flex-column card stretches the
+           button to the full width of the card and it reads as a banner
+           rather than a control. */
+        btn.style.cssText='display:inline-flex;align-self:flex-start;width:fit-content;align-items:center;gap:6px;margin-top:10px;'
+          +'padding:7px 13px;border:1px solid rgba(217,180,120,.5);border-radius:8px;'
+          +'background:rgba(217,180,120,.12);color:var(--dc-gold-lit,#F0D6A6);'
+          +'font:600 12px Outfit,Inter,sans-serif;cursor:pointer';
+        host.appendChild(btn);
+      }
+      if(btn.textContent!==action.label)btn.textContent=action.label;
+      btn.onclick=e=>{e.preventDefault();e.stopPropagation();action.go(e)};
+    }
+    /* The card's own box: the DEEPEST div holding both this card's title and
+       its body. Deepest, because every ancestor up to <main> also contains
+       them and appending to one of those would put the button at the foot of
+       the screen. Matched on the card's own TEXT rather than a class, because
+       every class here is hashed and a design re-import renumbers it.
+
+       NOT startsWith: the box opens with the card's KICKER ("Do this next"),
+       not its title -- a first cut anchored on startsWith and found nothing. */
+    /* BOTH SURFACES. The phone draws its own DeenAI screen (studio-mobile.js)
+       and body.dcm-own hides the desktop one -- so a painter scoped to
+       #studio alone paints the copy nobody can see, which is exactly what
+       happened here: the button measured 0x0 inside a display:none branch.
+       The same lesson v3.119.0 paid for on the "Posts to" row. */
+    /* VISIBILITY IS MEASURED BY RECTS, NEVER BY offsetParent. #dcMobile is
+       position:fixed, and offsetParent is null for a fixed element even when
+       it is plainly on screen -- so a filter built on it dropped the phone's
+       whole surface and the button was appended to the hidden desktop copy,
+       measured at 0x0. getClientRects() is 0 for display:none and non-zero
+       for anything rendered, fixed or not. */
+    function aiShown(el){ return Boolean(el) && el.getClientRects().length > 0; }
+    function aiRoots(){
+      return [...document.querySelectorAll('#dcMobile, #studio')];
+    }
+    function aiQueryAll(sel){
+      const out=[];
+      for(const root of aiRoots())out.push(...root.querySelectorAll(sel));
+      return out;
+    }
+    function aiCardHost(title,body){
+      if(!title)return null;
+      const hit=n=>{
+        const t=n.textContent||'';
+        return t.includes(title)&&(!body||t.includes(body));
+      };
+      const all=aiQueryAll('div').filter(hit);
+      // Deepest = the one with no descendant that also matches. And VISIBLE:
+      // the hidden surface carries the same text, and a button appended there
+      // is a control nobody can press.
+      const deep=all.filter(n=>![...n.querySelectorAll('div')].some(hit));
+      return deep.filter(aiShown).pop()||deep.pop()||null;
+    }
+    function paintAiActions(vals){
+      if(StudioAdapter.ui.screen!=='deenai'){
+        for(const n of document.querySelectorAll('[data-host-aiact]'))n.remove();
+        return;
+      }
+      // Anything left on the surface that is no longer showing -- the desktop
+      // copy when the phone shell takes over, and the reverse on a resize.
+      for(const n of document.querySelectorAll('[data-host-aiact]')){
+        if(!aiShown(n))n.remove();
+      }
+      aiCardButton(aiCardHost(vals.aiHeadTitle,vals.aiHeadBody),vals.aiHeadAction);
+      for(const row of (vals.aiCards||[])){
+        aiCardButton(aiCardHost(row.title,row.body),row.action);
+      }
+    }
     function paintAiAnswerSource(vals){
-      const label=[...document.querySelectorAll('#studio span')]
-        .find(n=>(n.textContent||'').trim()==='DEENAI');
+      const labels=aiQueryAll('span').filter(n=>(n.textContent||'').trim()==='DEENAI');
+      const label=labels.filter(aiShown).pop()||labels[0];
       const row=label&&label.parentElement;
       if(!row||!vals.aiSourceLabel){
-        const old=document.querySelector('#studio [data-host-aisrc]');
-        if(old)old.remove();
+        for(const n of document.querySelectorAll('[data-host-aisrc]'))n.remove();
         return;
       }
       let chip=row.querySelector(':scope > [data-host-aisrc]');
@@ -10665,6 +10750,7 @@ function paintStudio(){
   paintEditorLayout(vals);
   paintEditorTrackLane();
   paintAiAnswerSource(vals);
+  paintAiActions(vals);
   paintTrimTools(vals);
   paintEditorLook(vals);
   paintEditorScrub();

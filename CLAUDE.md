@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1617 JS + 698 Python**
+- `npm test` and `npm run check` must pass. Currently **1623 JS + 698 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -11877,3 +11877,79 @@ removed, the computed layer removed.
 **Worker change, so `deploy-worker.yml` deploys it on push.** The rejection
 gate has been driven against a scripted model, not the box; the first real ask
 after the deploy is what confirms it there.
+
+## Every DeenAI card reaches the screen it names (v3.142.1, 7 Sept 2026)
+
+The cards were diagnoses with no door. "TikTok has refused 22 posts" told you
+where the problem was and gave you nothing to press; "3 scripture clips await
+the shaykh" named the review queue and could not open it. The worst case was
+the HEADLINE: `nextActionCard` is built from `referrals.nextStep`, which
+returns the step AND its action -- and DeenAI dropped the action on the floor.
+So the one card whose entire job is "do this next" was the only place on that
+screen you could not act, while the identical step is a button in the task
+ladder two panels away. Invariant 9, wearing a card's clothes.
+
+**Measured after: 4 of 5 cards carry a button.** The fifth ("your approved
+hooks average N words") is an observation with no single screen to go to, and
+a button that lands nowhere useful is worse than none.
+
+### THE WHOLE TABLE IS 'go', and that ceiling is deliberate
+
+`src/deenai-actions.js` is a frozen table of five destinations and every entry
+only NAVIGATES. Nothing approves, schedules or writes a setting. The reason is
+in this repo's own record rather than in caution: **a bulk-approve from here
+would stamp `approvedBy: 'deenai'`, and `social.js` skips a TikTok target for
+any clip not approved manually** (TikTok's per-post consent rule) -- so an
+"approve these six" button would silently drop a destination the customer pays
+for. An assistant that can only take you to the screen cannot do that, and the
+person still presses the real control with its real confirmation in front of
+them. A test asserts every step is a navigation step and that the module
+imports nothing, so it can reach nothing.
+
+- **The client sends an ID and nothing else** -- never a screen name, never a
+  handler name -- so there is no capability here to escalate.
+- **Own keys only.** `ACTIONS['constructor']` is truthy on any object literal,
+  frozen or not, because Object.prototype is still behind it. Found by a test
+  asking for `'constructor'`, and the id is the only thing on the wire, so it
+  must never resolve to something the table does not name.
+- **It goes through `StudioAdapter.goToStep`**, the studio's ONE destination
+  map, rather than a second one. A test walks every step in the table against
+  that map, so a button can never be drawn for a destination the studio cannot
+  reach.
+- A DEMO card never gets a button: it describes a sample account, so its
+  button would go somewhere that has nothing to do with what the card says.
+
+### Two traps, both measured rather than reasoned about
+
+- **`offsetParent` IS NULL FOR A `position: fixed` ELEMENT, even when it is
+  plainly on screen.** `#dcMobile` is fixed, so a root filter built on
+  offsetParent dropped the phone's entire surface and the button was appended
+  to the hidden desktop copy -- measured at **0x0**. `getClientRects().length`
+  is 0 for display:none and non-zero for anything rendered, fixed or not, and
+  that is what both DeenAI painters use now. The phone draws its own DeenAI
+  screen and `body.dcm-own` hides the desktop one, so a painter scoped to
+  `#studio` alone paints the copy nobody can see -- the same lesson v3.119.0
+  paid for on the "Posts to" row.
+- **The card's box does not START with its title.** It opens with the KICKER
+  ("Do this next"), so a `startsWith` anchor found nothing at all. The host
+  finds the DEEPEST div containing both the card's title and its body --
+  deepest, because every ancestor up to `<main>` contains them too and
+  appending to one of those puts the button at the foot of the screen.
+
+Driven in a browser at 1440 and at 375: the button renders at **152x31** on
+both, inside the right card, navigates to the queue with its tab set,
+**0 DOM operations on an unchanged repaint**, one button after three repaints
+(the same node), and gone the moment the screen changes.
+
+**Three red probes, and TWO OF THEM CAME BACK GREEN FIRST** -- the failure
+this file keeps recording, hit twice in one sitting:
+  1. Deleting `action:` from `nextActionCard` broke nothing, because the test
+     asserted `actionForStep`'s TABLE rather than driving `insights()`. It now
+     seeds a second account in the state that actually produces that card (a
+     finished import nobody has reviewed) and reads the headline's own action.
+     The first account has approved clips and a paid plan, so its next step is
+     'upgrade' and the card correctly declines to tell a paying customer to
+     subscribe -- which is why the naive fixture never produced one.
+  2. Scoping the painter back to `#studio` broke nothing, because the
+     assertion sliced from `aiRoots` to the END OF THE FILE and matched
+     `#dcMobile` in an unrelated painter. Bounded to the function body.
