@@ -1095,6 +1095,33 @@ export function publicMediaUrl(clipId) {
  * expiry it was judged against was the one this function had just invented. It
  * healed itself an hour later, which is precisely what makes it read as random.
  */
+/*
+ * A DEAD CREDENTIAL IS RECORDED WHERE IT IS DISCOVERED.
+ *
+ * `lastTestError` -- the one field `needsReconnect` reads for TikTok, Meta and
+ * a tested YouTube -- was set ONLY by testConnection. So a connection could
+ * fail every publish it was given and the app would never say "reconnect":
+ * the flag appeared only if somebody happened to press Test.
+ *
+ * MEASURED ON THE LIVE ACCOUNT, 7 Sept 2026: 24 TikTok targets failed, 22 of
+ * them "Refresh token is invalid or expired". The refresh token EXISTED, so
+ * `needsReconnect(c)` -- which asks for an expired token with NO refresh token
+ * -- was false, and only a manual test had raised the flag. Without that test
+ * the app would have gone on scheduling into a channel it already knew was
+ * dead, one red row at a time.
+ *
+ * The publish path now records it, so the flag comes from the real signal.
+ */
+function markCredentialDead(userId, provider, accountId, message) {
+  try {
+    const conn = connectionFo(userId, provider, accountId);
+    if (!conn) return;
+    conn.lastTestError = String(message || 'This connection needs reconnecting.');
+    conn.lastTestAt = Date.now();
+    save();
+  } catch { /* never let bookkeeping fail a publish that already failed */ }
+}
+
 function mergeRefreshedToken(previous, refreshed, provider, defaultLifetimeSec) {
   const access = String(refreshed?.access_token || '').trim();
   if (!access) {
@@ -1126,10 +1153,20 @@ async function youtubeToken(userId, accountId = '') {
   if (!token.refresh_token) {
     throw new SocialError('This YouTube connection has no refresh token, so it cannot be renewed. Reconnect the channel.', { provider: 'youtube' });
   }
-  const refreshed = await jsonRequest(config.googleTokenUrl, {
-    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: config.googleClientId, client_secret: config.googleClientSecret, refresh_token: token.refresh_token, grant_type: 'refresh_token' }),
-  }, 'YouTube');
+  let refreshed;
+  try {
+    refreshed = await jsonRequest(config.googleTokenUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: config.googleClientId, client_secret: config.googleClientSecret, refresh_token: token.refresh_token, grant_type: 'refresh_token' }),
+    }, 'YouTube');
+  } catch (error) {
+    // NO NUMBER OF ATTEMPTS TURNS A REJECTED REFRESH TOKEN INTO A LIVE ONE --
+    // the same reasoning the decrypt failure above already carries. Recorded
+    // and made final, so the channel says "reconnect" instead of failing every
+    // clip it is handed.
+    markCredentialDead(userId, 'youtube', accountId, error.message);
+    throw new SocialError(`The YouTube connection has expired: ${error.message} Reconnect the channel in Connections.`, { provider: 'youtube', retryable: false });
+  }
   token = mergeRefreshedToken(token, refreshed, 'YouTube', 3600);
   conn.token = encrypt(token); save();
   return token.access_token;
@@ -1143,10 +1180,18 @@ async function tiktokToken(userId, accountId = '') {
   if (!token.refresh_token) {
     throw new SocialError('This TikTok connection has no refresh token, so it cannot be renewed. Reconnect the account.', { provider: 'tiktok' });
   }
-  const refreshed = await jsonRequest(`${config.tiktokApiBase}/v2/oauth/token/`, {
-    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cache-Control': 'no-cache' },
-    body: new URLSearchParams({ client_key: config.tiktokClientKey, client_secret: config.tiktokClientSecret, grant_type: 'refresh_token', refresh_token: token.refresh_token }),
-  }, 'TikTok');
+  let refreshed;
+  try {
+    refreshed = await jsonRequest(`${config.tiktokApiBase}/v2/oauth/token/`, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cache-Control': 'no-cache' },
+      body: new URLSearchParams({ client_key: config.tiktokClientKey, client_secret: config.tiktokClientSecret, grant_type: 'refresh_token', refresh_token: token.refresh_token }),
+    }, 'TikTok');
+  } catch (error) {
+    // This is the exact failure that produced 22 identical red rows on the
+    // live account before anything said "reconnect TikTok".
+    markCredentialDead(userId, 'tiktok', accountId, error.message);
+    throw new SocialError(`The TikTok connection has expired: ${error.message} Reconnect the account in Connections.`, { provider: 'tiktok', retryable: false });
+  }
   token = mergeRefreshedToken(token, refreshed, 'TikTok', 86400);
   conn.token = encrypt(token); save();
   return token.access_token;

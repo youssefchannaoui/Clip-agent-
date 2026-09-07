@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1658 JS + 715 Python**
+- `npm test` and `npm run check` must pass. Currently **1663 JS + 715 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -12504,3 +12504,44 @@ Every question took 18-80s, against 2-4s an hour earlier on the same context.
 Something else was loading the single Ollama slot. Worth knowing before reading
 a slow answer as a code regression -- and it is exactly the case
 `AI_BUDGET_SECONDS` exists for, which is how the fallback got exercised at all.
+
+## A dead credential failed 24 posts and nothing said "reconnect" (v3.144.5, 7 Sept 2026)
+
+Read off the LIVE account while checking what was actually wrong with it, not
+from a report. 31 clips, 24 posted, 0 waiting -- and every failure on the
+account came down to four causes:
+
+    22x  tiktok    Refresh token is invalid or expired
+     2x  tiktok    401 access_token_invalid
+     3x  facebook  Facebook Reels requires 4-60s; this clip is 61/62 seconds
+     1x  instagram did not finish processing within the allowed time
+
+**The three Facebook ones are the rule v3.135.0 already fixed** (the target is
+no longer built for a clip Facebook cannot take), so they are history. The
+Instagram one is a transient. **All 24 TikTok failures are ONE dead token** --
+which is worth saying plainly, because it means reconnecting fixes them, and
+it is NOT the unaudited-app rule this file has warned about for weeks.
+
+### The gap that let it happen 24 times
+
+`lastTestError` is the one field `needsReconnect` reads for TikTok and Meta,
+and it was set **only by `testConnection`**. `needsReconnect(c)` asks for an
+expired token with NO refresh token -- false here, because the refresh token
+existed and was simply being rejected. So the flag was up only because somebody
+had pressed Test. **Without that, the app would have gone on scheduling into a
+channel it already knew was dead, one red row at a time, saying nothing.**
+
+- `markCredentialDead` records it where it is DISCOVERED -- in the refresh
+  path, on the publish that failed -- so the flag comes from the real signal
+  rather than from a manual test nobody has to run.
+- **It is never retried.** No number of attempts turns a rejected refresh token
+  into a live one, which is the reasoning the decrypt failure two hundred lines
+  above already carries; without it each clip burned five attempts on a
+  doubling backoff against a credential that cannot come back.
+- The refusal names the screen ("Reconnect the account in Connections") rather
+  than repeating the platform's own sentence.
+- The bookkeeping is wrapped in try/catch: it must never fail a publish that is
+  already failing.
+
+Both probes proven red. **Ships for YouTube as well as TikTok** -- the same
+shape, and YouTube's stored token has expired on this account once already.
