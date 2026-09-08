@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1936 JS + 843 Python**
+- `npm test` and `npm run check` must pass. Currently **1941 JS + 851 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9327,6 +9327,130 @@ settings a job now asks for, driven by test and read off the box's own records -
 not about what `medium` and `qwen3:4b` produce. The next real import is the
 measurement, and `project.timings` has existed for a fortnight without once being
 read.
+
+## Rendering was half the job and it ran one clip at a time (v3.173.0, 9 Sept 2026)
+
+The first real end-to-end timings this product has ever had, off Youssef's own
+import (`project.timings`, which v3.77.0 added for exactly this and which
+nobody had read):
+
+    import 0.4 · audio 0.7 · transcribe 331.9 · score 203.0 · render 577.3
+    total 1113.4
+
+**Rendering is 52% of the job.** Nine clips, strictly one after another at ~64s
+each, while ffmpeg used **2.8 of the box's 8 cores** -- five cores idle for nine
+and a half minutes. The other two phases were already at their ceilings and
+neither is fixable in code: Whisper hit 356% of 800% with 8 threads (it does
+not scale past ~3.5 cores) and Ollama sat at **3.09 of 3.42 GiB, 90% of its
+cap**. So the free win was the one phase using least of the machine.
+
+- **`render_lanes(pending, ffmpeg_threads)` sizes the pool from the THREAD
+  BUDGET, not from the core count**, and that is the whole safety argument.
+  service.py already divides the machine per spawn (`child_env` -> `threads_for`),
+  so a lone lecture is handed 8 threads and a box running three is handed 2 --
+  and the lane count follows it down to 1 by itself. Three lectures each
+  spawning three encoders would be nine on eight cores, and nobody has to
+  remember the interaction because the number it is derived from already knows.
+  `RENDER_LANES` overrides it; rubbish in the override is ignored rather than
+  failing the render.
+- **`RENDER_THREADS_PER_LANE = 3`, which gives 2 lanes of 4 threads each on
+  this box** (the constant sizes the COUNT -- `budget // 3` -- and each lane
+  then gets `budget // lanes`, so the divisor and the share are deliberately
+  not the same number). More
+  conservative than 284% of 800% supports -- three encoders' worth of headroom
+  is there -- and deliberately so for a first parallel pass on the most
+  important path in the product. **That number is DERIVED, not measured**, and
+  the honest way to settle it is the next import's `timings`.
+- **PLAN ORDER, NEVER COMPLETION ORDER.** Lanes finish out of order and the
+  clip numbering a customer sees is the plan's; `results` is a dict keyed by
+  index and read back sorted. Clip 7 shipped as clip 1 because it encoded
+  fastest is silent and permanent once uploaded.
+- **`emit` is one locked `sys.stdout.write` of a string that already carries its
+  newline.** `print(x, flush=True)` is TWO writes, so with lanes two events
+  could interleave into a line the service cannot parse -- and an unparseable
+  line is a failed job, not a lost message.
+- **One `publish()` for the whole batch**, called under the render lock so no
+  figure is read half-updated, with the ETA computed from measured throughput
+  (time per finished clip, over what is left, shared across the lanes) rather
+  than guessed. `clip_ready` still fires the moment a clip exists, so the
+  review queue fills while the rest render.
+
+### THE TEST FOR THE ATOMIC WRITE COULD NOT FAIL, AND ONLY PROBING SHOWED IT
+
+The probe that split `emit` into `write(head)` + `write(tail)` with no lock came
+back **GREEN**. Six threads writing to a `StringIO` are essentially never
+preempted between two writes, so the test could not reproduce the fault it was
+written for -- it was passing by luck, on both sides.
+
+A real stdout is a pipe to the service, and a write to it blocks and yields.
+The sink is a `YieldingSink` now: it sleeps 0.5ms per write, which is what a
+pipe gives you. Measured after: **FAILED 3 of 3 with the lock removed, OK 3 of
+3 with it in place**, from green-either-way. That is the eleventh red probe in
+this file to come back green, and the first where the fix was to make the test's
+WORLD realistic rather than its assertion narrower.
+
+### A twelfth source-string test failed against a refactor that changed nothing
+
+`test_render_progress_is_throttled_to_a_readable_rate` asserted the literal
+`report(0.0, force=True)`. The property -- a clip's first progress line is
+forced past the throttle, or the bar shows the previous clip's percentage for
+up to two seconds -- is unchanged; the lane pool spells it "set this lane's
+fraction to 0, then publish forced". It matches either spelling now, and was
+re-proven red by removing the force.
+
+## The monitor warned on the correct behaviour, on every job, for ever (v3.173.0)
+
+The diagnose dispatch that answered the render question above closed with
+**"4 of the 4 newest jobs disagree with this box about what to run"** -- and all
+four were correct.
+
+`compare_to_box` was written when `clip_worker` read `settings["model"]` and
+never looked at the environment, so "asked small, box says medium" meant the run
+used small and the box's configuration was a lie. **v3.162.0 inverted that**:
+the environment wins, so the same line now means the box won, exactly as
+designed. The app has never seen this machine and its payload carries guesses
+that exist for the self-hosted engine, so a disagreement is the NORMAL state of
+every remote deployment -- and the warning fired on all of them, every run.
+
+An alarm that is always on says nothing on the day it is right. That is the
+failure `alerts.js` exists to prevent, pointed at the box instead of at the
+operator, and it would have masked the real drift returning.
+
+- **The question is no longer "do these two differ". It is "did the payload
+  WIN"** -- and the only honest way to answer it is to RUN THE RESOLVER.
+  `resolved_for()` builds the child environment and calls `clip_worker`'s own
+  `whisper_settings` under it. Comparing two numbers is a second implementation
+  of the precedence rule, and the precedence rule is the thing being checked.
+- **`child_env(active_jobs)` in service.py is that environment, as ONE
+  definition.** `run_clip_worker` launches with it and the monitor imports it.
+  A monitor that rebuilds the overlay itself is a second copy of the answer, and
+  device and computeType are set from capacity into the CHILD -- so a monitor
+  reading its own environment would have reported a false mismatch on both.
+- The box overriding the app is a LINE now ("the box won (as designed)"); the
+  payload winning, or something else winning, is the warning. The headline
+  counts the fault rather than the difference.
+- **`test/worker-diagnose.test.mjs` drives the monitor against a COPY of
+  `worker/` with the resolver reverted to payload-first** -- the pre-v3.162.0
+  shape -- and asserts it says PAYLOAD WON. A regression detector nobody has
+  watched fire is not a detector. The other direction asserts the box
+  overriding raises no warning at all.
+
+## A gigabyte moved from the worker's cap to Ollama (v3.173.0)
+
+Measured on the same live import: the scoring server sat at **3.09 of 3.42 GiB,
+90% of its ceiling** -- which is the occupancy this box's 42 OOM kills used to
+happen at. The ceilings already summed to 14G of a 15.2G host, so there was
+nothing to add.
+
+**The worker gave it up and lost no throughput**, which is the only reason the
+trade was taken. Concurrency is `(limit - reserve) / per-job` and `medium` costs
+2.5G, so **10G and 9G both buy three jobs**. 9 + 4.5 + 0.5 = 14G, unchanged
+against the host.
+
+`test_capacity.py`'s box-shaped test is pointed at 9G and says so: if a future
+model or reserve ever makes 9G buy two jobs, that goes red rather than the box
+quietly losing a third of its throughput. SCALING.md carried the old ceilings
+and now carries these.
 
 ## Open items
 

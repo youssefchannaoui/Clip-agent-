@@ -30,6 +30,7 @@ import shutil
 import array
 import subprocess
 import tempfile
+import concurrent.futures
 import sys
 import time
 import threading
@@ -115,8 +116,19 @@ def cv2_problem() -> str | None:
     return None
 
 
+_emit_lock = threading.Lock()
+
+
 def emit(kind: str, **payload: Any) -> None:
-    print(json.dumps({"type": kind, **payload}, ensure_ascii=False), flush=True)
+    # ONE WRITE, UNDER A LOCK. `print(x, flush=True)` is two writes -- the text
+    # and the newline -- so with clips rendering in lanes two events could
+    # interleave into a line the service cannot parse, and an unparseable line
+    # is a failed job rather than a lost message. The newline is part of the
+    # string and the lock makes the pair indivisible.
+    line = json.dumps({"type": kind, **payload}, ensure_ascii=False) + "\n"
+    with _emit_lock:
+        sys.stdout.write(line)
+        sys.stdout.flush()
 
 
 _progress_state: dict[str, Any] = {
@@ -132,6 +144,30 @@ _heartbeat_stop = threading.Event()
 # status file and is polled by the app, so per-clip render progress is throttled
 # to a rate a person can actually read.
 RENDER_PROGRESS_SECONDS = 2.0
+# Threads one ffmpeg needs before a second encoder is worth starting. Measured
+# on a real recitation: one render with eight threads reached 2.8 of eight
+# cores, so five sat idle for the 577 seconds -- half the job -- that nine
+# clips took one after another.
+RENDER_THREADS_PER_LANE = 3
+
+
+def render_lanes(pending: int, ffmpeg_threads: int) -> int:
+    """How many clips of this job may render at once.
+
+    DERIVED FROM FFMPEG_THREADS, which service.py already sets from the jobs
+    actually in flight. So a lone lecture renders several clips at once and a
+    busy box collapses to one lane on its own -- three lectures each spawning
+    three encoders would be nine of them on eight cores, and nobody has to
+    remember the interaction. An explicit RENDER_LANES still wins.
+    """
+    forced = str(os.getenv("RENDER_LANES", "") or "").strip()
+    if forced:
+        try:
+            return max(1, min(int(forced), max(1, pending)))
+        except ValueError:
+            pass
+    lanes = max(1, ffmpeg_threads // RENDER_THREADS_PER_LANE)
+    return max(1, min(lanes, max(1, pending)))
 
 # The first pass transcribes; it must never default to translating.
 #
@@ -6125,12 +6161,15 @@ def render_clip(
     job: dict[str, Any], candidate: Candidate, index: int, source: Path,
     track: dict[str, Any] | None, output_dir: Path,
     on_fraction: Callable[[float], None] | None = None,
+    threads: int | None = None,
 ) -> dict[str, Any]:
     ffmpeg = job["ffmpeg"]
     ffprobe = job["ffprobe"]
     template = job["template"]
     settings = job["settings"]
-    ffmpeg_threads = str(max(1, int(settings.get("ffmpegThreads") or os.getenv("FFMPEG_THREADS", "4"))))
+    # A lane passes its own share; alone, this is the whole budget as before.
+    ffmpeg_threads = str(max(1, int(
+        threads if threads else (settings.get("ffmpegThreads") or os.getenv("FFMPEG_THREADS", "4")))))
     clip_id = str(job.get("clipIdOverride") or f"{job['id']}-{index:02d}")
     output_dir.mkdir(parents=True, exist_ok=True)
     clip_file = output_dir / f"{clip_id}.mp4"
@@ -7266,50 +7305,114 @@ def process(job_file: Path) -> None:
     # the result by its upload_result, so the lecture comes back whole with
     # nothing that already exists rendered twice.
     already_done = {str(clip_id) for clip_id in ((resume or {}).get("uploadedIds") or [])}
-    skipped = 0
+    pending: list[tuple[int, Candidate]] = []
     for index, candidate in enumerate(selected, 1):
         if f"{job['id']}-{index:02d}" in already_done:
-            skipped += 1
             progress(f"Clip {index} of {total} was rendered before the restart", 75 + int((index / max(total, 1)) * 20),
                      currentClip=index, totalClips=total, clipPlan=clip_plan, clipPercent=100, etaSec=None)
             continue
+        pending.append((index, candidate))
+    skipped = total - len(pending)
+
+    # RENDERING IS HALF THE JOB and it was strictly serial. Measured on a real
+    # recitation: 9 clips in 577s of an 1113s run, one encoder at a time using
+    # 2.8 of eight cores. Clips render in LANES now; see render_lanes for why
+    # the count comes from FFMPEG_THREADS rather than from the core count.
+    budget = max(1, int(job["settings"].get("ffmpegThreads") or os.getenv("FFMPEG_THREADS", "4")))
+    lanes = render_lanes(len(pending), budget)
+    lane_threads = max(1, budget // lanes)
+
+    render_lock = threading.Lock()
+    fractions: dict[int, float] = {}
+    results: dict[int, dict[str, Any]] = {}
+    done_count = [skipped]
+    last_emit = [0.0]
+    render_started = time.time()
+
+    def publish(force: bool = False) -> None:
+        """One progress line for the whole batch, however many lanes there are.
+
+        Caller holds render_lock: every figure here is read from state the
+        lanes write, and a half-updated read is a bar that jumps backwards.
+        ffmpeg reports several times a second and every progress() writes the
+        status file, so this stays throttled to something a person can read.
+        """
+        now = time.monotonic()
+        if not force and now - last_emit[0] < RENDER_PROGRESS_SECONDS:
+            return
+        last_emit[0] = now
+        finished = done_count[0]
+        inflight = sum(fractions.values())
+        # Rendering occupies 75-95% of the job, so the batch's progress maps
+        # onto its share of that band rather than pretending to be the whole.
+        done = min(1.0, (finished + inflight) / max(total, 1))
+        # Measured throughput, not a guess: time already spent per completed
+        # clip, applied to what is left and shared across the lanes actually
+        # running. Before the first clip finishes there is nothing to measure,
+        # so no ETA is claimed rather than invented.
+        eta = None
+        if clip_seconds:
+            per_clip = sum(clip_seconds) / len(clip_seconds)
+            left = max(0.0, total - finished - inflight)
+            eta = round(per_clip * left / lanes, 1)
+        # The app draws "clip N of M", so N stays the count finished plus the
+        # one being waited on -- monotonic, and never a lane's arbitrary index.
+        current = min(total, finished + 1)
+        progress(
+            f"Rendering clip {current} of {total}", 75 + int(done * 20),
+            currentClip=current, totalClips=total, clipPlan=clip_plan,
+            clipPercent=int(round(min(1.0, inflight / lanes) * 100)),
+            clipElapsedSec=round(time.time() - render_started, 1),
+            etaSec=eta,
+        )
+
+    def render_one(index: int, candidate: Candidate) -> None:
         clip_started = time.time()
-        # ffmpeg reports several times a second and every progress() writes the
-        # status file, so this is throttled to something a person can read.
-        last_emit = [0.0]
 
-        def report(fraction: float, index: int = index, force: bool = False) -> None:
-            now = time.monotonic()
-            if not force and now - last_emit[0] < RENDER_PROGRESS_SECONDS:
-                return
-            last_emit[0] = now
-            # Rendering occupies 75-95% of the job, so a clip's own progress maps
-            # onto its share of that band rather than pretending to be the whole.
-            done = (index - 1 + fraction) / max(total, 1)
-            # Measured throughput, not a guess: time already spent per completed
-            # clip, applied to what is left. Before the first clip finishes there
-            # is nothing to measure, so no ETA is claimed rather than invented.
-            eta = None
-            if clip_seconds:
-                per_clip = sum(clip_seconds) / len(clip_seconds)
-                eta = round(per_clip * ((total - index) + (1 - fraction)), 1)
-            progress(
-                f"Rendering clip {index} of {total}", 75 + int(done * 20),
-                currentClip=index, totalClips=total, clipPlan=clip_plan,
-                clipPercent=int(round(fraction * 100)),
-                clipElapsedSec=round(time.time() - clip_started, 1),
-                etaSec=eta,
-            )
+        def on_fraction(fraction: float) -> None:
+            with render_lock:
+                fractions[index] = max(0.0, min(1.0, fraction))
+                publish()
 
-        report(0.0, force=True)
+        with render_lock:
+            fractions[index] = 0.0
+            publish(force=True)
         track = shuffled_tracks[(index - 1) % len(shuffled_tracks)] if shuffled_tracks else None
-        rendered.append(render_clip(job, candidate, index, source_file, track, output_dir, on_fraction=report))
-        clip_seconds.append(time.time() - clip_started)
-        # Announced the moment it exists, not when the batch ends: someone who
-        # sees clip 1 at minute six stays; someone staring at a bar for forty
-        # minutes leaves. The service uploads it and the web inserts it into
-        # the review queue while the remaining clips still render.
-        emit("clip_ready", clip=rendered[-1], index=index, total=total)
+        clip = render_clip(job, candidate, index, source_file, track, output_dir,
+                           on_fraction=on_fraction, threads=lane_threads)
+        with render_lock:
+            fractions.pop(index, None)
+            done_count[0] += 1
+            clip_seconds.append(time.time() - clip_started)
+            results[index] = clip
+            # Announced the moment it exists, not when the batch ends: someone
+            # who sees clip 1 at minute six stays; someone staring at a bar for
+            # forty minutes leaves. The service uploads it and the web inserts
+            # it into the review queue while the remaining clips still render.
+            emit("clip_ready", clip=clip, index=index, total=total)
+            publish(force=True)
+
+    if lanes > 1 and len(pending) > 1:
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=lanes, thread_name_prefix="render")
+        try:
+            futures = [pool.submit(render_one, index, candidate) for index, candidate in pending]
+            for future in concurrent.futures.as_completed(futures):
+                # The first failure ends the job, so stop paying for the rest:
+                # a lane that has not started is cancelled and one already
+                # encoding is left to finish rather than killed mid-file.
+                future.result()
+        except BaseException:
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+        finally:
+            pool.shutdown(wait=True)
+    else:
+        for index, candidate in pending:
+            render_one(index, candidate)
+
+    # PLAN ORDER, never completion order: lanes finish out of order and the
+    # clip numbering a customer sees is the plan's.
+    rendered.extend(results[index] for index in sorted(results))
 
     audio_file.unlink(missing_ok=True)
     clock.lap("render")

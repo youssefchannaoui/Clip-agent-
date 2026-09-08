@@ -71,15 +71,24 @@ services:
           # limit, it was a wish, and the kernel's global OOM killer did the
           # capping instead -- taking llama-server, sometimes mid-job.
           #
-          # The box is 8 cores / 15.2G, measured. 10 + 3.5 + 0.5 = 14G of
+          # The box is 8 cores / 15.2G, measured. 9 + 4.5 + 0.5 = 14G of
           # ceilings, leaving 1.2G for the OS and Docker.
+          #
+          # IT GAVE 1G TO OLLAMA AND LOST NO SLOTS, which is why the trade was
+          # taken: capacity.py sizes concurrency as (limit - 0.5 reserve) /
+          # 2.5G-per-medium-job, and that is 3 jobs at 10G and 3 jobs at 9G.
+          # Ollama was measured at 90% of its own ceiling on a live scoring
+          # pass -- 3.09 of 3.42 GiB -- which is where the 42 OOM kills in this
+          # box's dmesg used to live. Spare capacity that costs nothing is
+          # better spent on the cap that is nearly full than held by the one
+          # that is not.
           #
           # This is also the number worker/capacity.py sizes itself against --
           # it reads the CGROUP, not the host -- which is why the worker went
           # on believing it had 2G on a 15.2G machine and would have picked
           # `base` and one job if the forces above had simply been deleted.
           # A smaller box overrides it in worker/.env. See SCALING.md.
-          memory: ${WORKER_MEMORY_LIMIT:-10G}
+          memory: ${WORKER_MEMORY_LIMIT:-9G}
 
   # Local clip ranking and titling. Without this, refine_with_ollama() returns
   # its candidates untouched and every clip is named from a raw transcript
@@ -113,9 +122,15 @@ services:
         limits:
           # qwen3:4b is 2.5G on disk and measured at 2.4-3.0G RSS. It did not
           # fit beside Whisper and ffmpeg on the old 3.7G box -- that is what
-          # the OOM kills were -- and it does on this one. 3.5G leaves it real
-          # headroom without eating into the worker's.
-          memory: ${OLLAMA_MEMORY_LIMIT:-3500M}
+          # the OOM kills were -- and it does on this one.
+          #
+          # 3.5G was NOT real headroom: measured on a live scoring pass the
+          # server sat at 3.09 of 3.42 GiB, 90% of its ceiling, which is the
+          # occupancy the old box's kills happened at. The extra gigabyte comes
+          # from the worker's cap and costs it no concurrency (see above), so
+          # this is spare capacity moved to where it is actually needed rather
+          # than the box being asked for more than it has.
+          memory: ${OLLAMA_MEMORY_LIMIT:-4500M}
 
   # Mints YouTube proof-of-origin tokens for yt-dlp. Hetzner's address ranges
   # get YouTube's bot wall -- playability LOGIN_REQUIRED, "Sign in to confirm

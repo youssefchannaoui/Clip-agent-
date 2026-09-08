@@ -34,18 +34,28 @@ one job on a 15.2G machine. **Both the forces and the ceiling had to move.**
 Four of the five are gone now and follow the machine again. `WHISPER_MODEL` is
 still set, deliberately and with its reason written beside it.
 
-## Measured on the current box (8 vCPU, 15.2G host, 10G worker container)
+## Measured on the current box (8 vCPU, 15.2G host, 9G worker container)
 
 | | |
 |---|---|
 | Whisper | `medium`, `int8`, CPU |
 | Concurrent jobs | 3 (`min(cores/2, (RAM-reserve)/per-job)`) |
-| ffmpeg threads | 2 (cores split between the jobs) |
-| Scoring model | `qwen3:4b`, capped at 3.5G |
+| ffmpeg threads | 2 when three jobs run; a lone job gets all 8 |
+| Render lanes | up to 2 within one job, sized from the thread budget |
+| Scoring model | `qwen3:4b`, capped at 4.5G |
 
-The ceilings are 10G + 3.5G + 0.5G = **14G against a 15.2G host**, which is the
+The ceilings are 9G + 4.5G + 0.5G = **14G against a 15.2G host**, which is the
 rule the 42 OOM kills bought: a limit above what the machine has is not a
 limit, it is a wish, and the kernel does the capping instead.
+
+**The worker gave a gigabyte to Ollama and lost no throughput**, which is the
+only reason that trade was taken. Concurrency is
+`(limit - reserve) / per-job`, and `medium` costs 2.5G a job -- so 10G and 9G
+both buy three. Ollama, meanwhile, was measured at **3.09 of 3.42 GiB, 90% of
+its ceiling**, on a live scoring pass; that is the occupancy the old box's
+kills happened at. `test_capacity.py` pins the half that makes it safe: if 9G
+ever stops buying three jobs, that test goes red rather than the box quietly
+losing a third of its throughput.
 
 **How to check rather than assume**, from anywhere, without SSH:
 

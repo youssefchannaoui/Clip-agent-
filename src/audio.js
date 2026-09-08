@@ -79,6 +79,11 @@ function sameNasheed(a, b) {
   return Boolean(left) && left === key(b);
 }
 
+// The id every track seeded from assets/nasheeds carries. ONE definition: the
+// list needs it to know what may be hidden, and the seeder to mint it, and two
+// copies of a prefix is how a starter stops being recognised as one.
+const STARTER_ID_PREFIX = 'dc-starter-';
+
 export function listNasheeds(user) {
   const userId = user?.id || user || '';
   if (!userId) return [];
@@ -88,8 +93,23 @@ export function listNasheeds(user) {
   // the shared one is HIDDEN FROM HIM rather than deleted: his copy wins, no
   // other account loses a track, and if he ever removes his own the starter
   // comes back by itself. Nothing is destroyed to tidy a list.
-  const mine = all.filter(entry => entry && !entry.shared && entry.userId === userId);
-  const hidden = entry => entry.shared && mine.some(own => sameNasheed(own.name, entry.name));
+  // WHAT IS HIDDEN IS THE STARTER, and the test is the starter's own id rather
+  // than the shared flag. The first cut asked whether the account's copy was
+  // PRIVATE -- true for a customer's upload, and false for the operator's own
+  // legacy tracks, which have always been marked shared because that flag has
+  // always meant "the app's own". So on the one account that had uploaded this
+  // nasheed before the starter library shipped, neither copy hid the other and
+  // "Allah Allah (Muffled)" sat beside "Allah Allah", both captioned as
+  // shipping with the studio. That is the duplicate that was reported, fixed
+  // once and still on screen.
+  //
+  // A starter cannot hide another starter, so the shipped set can never eat
+  // itself; and the copy that survives is the one somebody actually uploaded,
+  // which is what "keep this one" meant.
+  const isStarter = entry => String(entry?.id || '').startsWith(STARTER_ID_PREFIX);
+  const visible = entry => entry.shared || entry.userId === userId;
+  const uploaded = all.filter(entry => entry && !isStarter(entry) && visible(entry));
+  const hidden = entry => isStarter(entry) && uploaded.some(own => sameNasheed(own.name, entry.name));
   // `owned` is derived here rather than left to each caller to work out from
   // userId: the browser needs to know whether Remove can do anything (a
   // starter track is not the account's to delete), and deriving it there would
@@ -230,7 +250,7 @@ function ensureStarterFile(entry) {
 
 /** STABLE across deploys, or every boot seeds a second copy of all nine. */
 function starterId(file) {
-  return 'dc-starter-' + path.basename(file, path.extname(file));
+  return STARTER_ID_PREFIX + path.basename(file, path.extname(file));
 }
 
 function readStarterManifest() {

@@ -83,3 +83,69 @@ test('the script runs end to end against a synthetic failed job and reports the 
   assert.match(printed, /:\/\/\*\*\*@/, 'and redacts the userinfo in the error');
   assert.ok(!printed.includes('كلمات'), 'without printing the transcript');
 });
+
+/**
+ * THE CHECK USED TO WARN ON THE CORRECT BEHAVIOUR.
+ *
+ * It was written when clip_worker read settings["model"] and never looked at
+ * the environment, so "asked small, box says medium" meant the run used small
+ * and the box's configuration was a lie. v3.162.0 made the environment win --
+ * and the same line then meant the box won, exactly as designed, on every job
+ * of every run. Measured on the real box, 8 Sept 2026: "4 of the 4 newest jobs
+ * disagree with this box about what to run", where all four were correct.
+ *
+ * An alarm that is always on says nothing on the day it is right. So these two
+ * pin the two directions apart, and the second one is driven against a COPY of
+ * worker/ with the resolver reverted -- the monitor is only worth having if it
+ * can be shown catching the fault it was built for.
+ */
+const diagnose = (dir, code, env = {}) => execFileSync('python3', ['.github/scripts/worker-diagnose.py'], {
+  env: { ...process.env, WORKER_DATA_DIR: dir, DC_WORKER_CODE: code, ...env },
+  encoding: 'utf8',
+});
+
+const seedJob = () => {
+  const dir = fs.mkdtempSync('/tmp/deenclipped-precedence-');
+  fs.mkdirSync(`${dir}/jobs/job_p`, { recursive: true });
+  fs.writeFileSync(`${dir}/jobs/job_p/status.json`, JSON.stringify({ status: 'completed', stage: 'completed', progress: 100 }));
+  fs.writeFileSync(`${dir}/jobs/job_p/payload.json`, JSON.stringify({
+    title: 'A lecture',
+    // What the WEB APP guesses. It has never seen this box, and these fields
+    // exist for the self-hosted engine, which has no such environment.
+    settings: { model: 'small', device: 'cpu', computeType: 'int8', ollamaModel: 'qwen3:1.7b' },
+    template: { id: 'clean-line' },
+  }));
+  return dir;
+};
+
+test('the box overriding the app is reported as a line, never as an alarm', () => {
+  const dir = seedJob();
+  const printed = diagnose(dir, new URL('../worker', import.meta.url).pathname, { WHISPER_MODEL: 'medium' });
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.match(printed, /the box won \(as designed\)/, 'says the box won');
+  assert.match(printed, /whisper model: box 'medium' over the payload's 'small'/);
+  assert.ok(!/::warning::.*whisper model/.test(printed), 'and does NOT raise a warning for it');
+  assert.match(printed, /all \d+ newest jobs ran what this box decided/, 'the headline stays quiet');
+});
+
+test('the payload beating the box IS the alarm, and the monitor catches it', () => {
+  // Revert the resolver to what shipped before v3.162.0 -- payload first, the
+  // environment never read -- in a copy, and check the monitor says so. A
+  // regression detector nobody has watched fire is not a detector.
+  const dir = seedJob();
+  const code = fs.mkdtempSync('/tmp/deenclipped-oldworker-');
+  fs.cpSync(new URL('../worker', import.meta.url).pathname, code, { recursive: true });
+  const file = `${code}/clip_worker.py`;
+  const before = fs.readFileSync(file, 'utf8');
+  const broken = before.replace(
+    /        value = str\(os\.getenv\(env_name\) or ""\)\.strip\(\)\n        if value:\n            return value\n/,
+    '        value = str(settings.get(payload_key) or "").strip()\n        if value:\n            return value\n');
+  assert.notEqual(broken, before, 'the probe must actually edit the resolver');
+  fs.writeFileSync(file, broken);
+  const printed = diagnose(dir, code, { WHISPER_MODEL: 'medium' });
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(code, { recursive: true, force: true });
+  assert.match(printed, /PAYLOAD WON {2}whisper model: asked 'small', box 'medium', ran 'small'/);
+  assert.match(printed, /::warning::job job_p: whisper model -- the PAYLOAD won/);
+  assert.match(printed, /did NOT run what this box decided/, 'and the headline names it');
+});
