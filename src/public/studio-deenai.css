@@ -191,3 +191,284 @@
 @media (prefers-reduced-motion: reduce) {
   #dcAi .dcai-caret { animation: none; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * THE LOOK (v3.153.0)
+ *
+ * Youssef, 8 Sept 2026: "Deen Ai page looks so ugly layout is so bad needs to
+ * be 100x better there no ai look to it".
+ *
+ * MEASURED BEFORE ANYTHING MOVED, on a seeded account at 1440x900: the screen
+ * was SEVEN equal bordered boxes stacked down 1632px of a 785px viewport, each
+ * on the same #17171A, with the ask -- the one thing on this screen no other
+ * screen can do -- FOURTH and below the fold. Nothing on it moved and nothing
+ * said a model was involved. Everything the screen DOES was right; what was
+ * missing was a spine and a voice.
+ *
+ * So: console left, context right; the console is the only card carrying
+ * light; the answer is a reply rather than another box. No section was
+ * removed, no control was moved out of the card it belongs to, and the section
+ * builders in studio-deenai.js are otherwise untouched.
+ *
+ * NOTHING BELOW USES --dc-ink-faint. It is 4.54:1 against the PAGE (v3.127.3
+ * set that floor) and every surface here is a CARD, where the same token
+ * measures 3.70 -- under AA on the 10-11px notes this screen is full of.
+ * --dc-ink-dim is 5.53 there. The distinction is the ground, not the token.
+ *
+ * MOTION is `backwards`, never `both`: a forwards fill leaves the last
+ * keyframe beating ordinary declarations for the element's life, which is how
+ * this repo has killed a hover three times. Each animation is named in the
+ * reduced-motion block, because a bare `*` rule never matches a pseudo-element.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── the header ──────────────────────────────────────────────────────────── */
+#dcAi .dcai-title {
+  font-family: Outfit, Inter, system-ui, sans-serif;
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  line-height: 32px;
+}
+#dcAi .dcai-sub { font-size: 12.5px; line-height: 19px; }
+
+/* ── console left, context right ─────────────────────────────────────────── */
+/* minmax(0,1fr), never 1fr: a grid track's automatic minimum is min-content,
+   so one long unbroken answer would inflate the column and push the rail off
+   the screen -- the trap the public site's journey scene paid for at three
+   nested levels. */
+#dcAi .dcai-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+@media (min-width: 1180px) {
+  #dcAi .dcai-grid { grid-template-columns: minmax(0, 1fr) 300px; }
+}
+#dcAi .dcai-main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+#dcAi .dcai-side { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+/* The rail is reference rather than work, so it is quieter: a hairline box on
+   the page rather than a raised card competing with the console beside it. */
+#dcAi .dcai-side .dcai-card { background: transparent; padding: 16px 17px; }
+
+/* ── the console ─────────────────────────────────────────────────────────── */
+#dcAi .dcai-card.is-console {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: rgba(217, 180, 120, .3);
+  background: var(--dc-bg, #121214);
+  padding: 20px 22px 22px;
+}
+#dcAi .dcai-aurora {
+  position: absolute;
+  z-index: -1;
+  inset: -70% -20% auto -20%;
+  height: 250px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(217, 180, 120, .17), rgba(217, 180, 120, 0) 100%);
+  animation: dcaiBreathe 9s ease-in-out infinite;
+}
+@keyframes dcaiBreathe {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: .72; }
+  50% { transform: translate3d(0, 12px, 0) scale(1.09); opacity: 1; }
+}
+#dcAi .dcai-cbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+#dcAi .dcai-label.is-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--dc-gold-lit, #F0D6A6);
+}
+#dcAi .dcai-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dc-gold, #D9B478);
+  animation: dcaiPulse 2.4s ease-in-out infinite;
+}
+@keyframes dcaiPulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+#dcAi .dcai-where {
+  margin-left: auto;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dc-ink-dim, #8B8B93);
+}
+/* The field is the widest, tallest thing on the screen, and it rings when it
+   has focus -- the one control the whole screen is built around. */
+#dcAi .dcai-card.is-console .dcai-field {
+  min-height: 86px;
+  border-radius: 12px;
+  background: var(--dc-bg-alt, #1A1A1E);
+  font-size: 14px;
+  line-height: 21px;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+#dcAi .dcai-card.is-console .dcai-field:focus {
+  border-color: rgba(217, 180, 120, .55);
+  box-shadow: 0 0 0 3px rgba(217, 180, 120, .1);
+}
+#dcAi .dcai-card.is-console .dcai-btn.is-primary { height: 38px; padding: 0 20px; font-size: 13px; }
+
+/* ── the reply ───────────────────────────────────────────────────────────── */
+/* A GRID, NOT FLEX-WRAP. The card's children are avatar, head, body, [note],
+   [row] -- a flat list -- and a wrapping flex row put the streaming answer on
+   the SAME LINE as the "DEENAI" label, hard against the right edge. Measured,
+   not reasoned about: my first cut named a `.dcai-answer` element that does
+   not exist in this card, so the basis that was supposed to force the wrap
+   matched nothing. As a grid the avatar owns column one and everything else
+   is column two, whatever sections the card happens to hold. */
+#dcAi .dcai-card.is-reply {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  column-gap: 13px;
+  row-gap: 11px;
+  align-content: start;
+  padding: 20px 22px;
+  border-color: rgba(217, 180, 120, .22);
+  border-left: 2px solid var(--dc-gold, #D9B478);
+  border-radius: 4px 12px 12px 4px;
+  background: var(--dc-bg, #121214);
+}
+#dcAi .dcai-card.is-reply > :not(.dcai-avatar) { grid-column: 2; min-width: 0; }
+#dcAi .dcai-card.is-reply > .dcai-avatar { grid-column: 1; grid-row: 1; }
+#dcAi .dcai-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  border: 1px solid rgba(217, 180, 120, .4);
+  background: rgba(217, 180, 120, .09);
+}
+/* The mark is drawn rather than loaded: the Phosphor CDN is a third party and
+   a missing glyph is an empty ring (the ph-seedling rule). */
+#dcAi .dcai-avatar::before {
+  content: "";
+  width: 13px;
+  height: 13px;
+  background: var(--dc-gold-lit, #F0D6A6);
+  clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+}
+#dcAi .dcai-card.is-reply .dcai-body { font-size: 13.5px; line-height: 22px; color: var(--dc-ink, #F2F2F4); }
+
+/* THE THINKING STATE. The step chips were the only sign a model was working
+   and they read as tags; while the stream is live the last one breathes and a
+   shimmer stands where the answer will land, so the wait looks like writing
+   rather than like a page that has stopped. */
+#dcAi .dcai-step.is-live { animation: dcaiPulse 1.6s ease-in-out infinite; }
+
+/* ── today, as ranked cards ──────────────────────────────────────────────── */
+/* The first action is the one to take, and the server orders them -- the
+   screen must not re-rank, or the two halves of one answer disagree about what
+   matters most. It may say so louder, which is what this does. */
+#dcAi .dcai-do:first-child {
+  border-color: rgba(217, 180, 120, .34);
+  background: linear-gradient(180deg, rgba(217, 180, 120, .06), rgba(217, 180, 120, 0) 70%), var(--dc-bg, #121214);
+}
+/* THREE ACROSS, NOT TWO AND A STRAY. Measured at 1440: the main column gives
+   the card 774px of content and the 260px floor needs 780 for three, so it
+   fell to two and left the third action alone on a row beside a gap -- which
+   reads as something failing to load rather than as a list of three. 236
+   fits three at 1440 and still falls to two and then one as the column
+   narrows. */
+#dcAi .dcai-todo { grid-template-columns: repeat(auto-fit, minmax(236px, 1fr)); }
+/* The counted insights are longer prose than an action, so they sit two across
+   rather than three -- at 250px a paragraph becomes a column. */
+#dcAi .dcai-insights { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 12px; }
+/* Only the FIRST ACTION is highlighted, never the first insight: the server
+   ranks the actions and the top one is the one to take, where the insights are
+   a set of equally true facts. `:first-child` matched both. */
+#dcAi .dcai-insights .dcai-do:first-child { border-color: var(--dc-line, #26262A); background: var(--dc-bg, #09090A); }
+#dcAi .dcai-do { transition: border-color .16s ease, transform .16s ease; }
+#dcAi .dcai-do:hover { border-color: rgba(217, 180, 120, .3); transform: translateY(-1px); }
+#dcAi .dcai-do h4 { font-size: 13.5px; line-height: 19px; }
+/* THE TRAILING BUTTON SITS ON THE CARD'S FOOT, so every action in a row shares
+   one y by construction. The grid already stretches the cards to one height
+   (measured 233 each) and the content is top-aligned, so without this the two
+   buttons landed 17px apart and 33px vs 16px above their own card's bottom
+   edge -- a ragged row of the only controls on it. */
+#dcAi .dcai-do .dcai-btn { margin-top: auto; align-self: flex-start; }
+
+/* ── the rail's goal list ────────────────────────────────────────────────── */
+/* A rail is 300px, so five goals across it is five 44px slivers. One per line,
+   which is also what a list of mutually exclusive choices should look like. */
+@media (min-width: 1180px) {
+  #dcAi .dcai-side .dcai-goals { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+  #dcAi .dcai-side .dcai-goal { padding: 9px 12px; }
+  #dcAi .dcai-side .dcai-metrics { grid-template-columns: minmax(0, 1fr); }
+  #dcAi .dcai-side .dcai-convos { flex-direction: column; align-items: stretch; }
+  #dcAi .dcai-side .dcai-convo { max-width: none; }
+}
+
+/* ── contrast ────────────────────────────────────────────────────────────── */
+/* --dc-ink-faint is 3.70:1 on a card. Every one of these is a note somebody
+   reads, so they take --dc-ink-dim (5.53) instead. */
+#dcAi .dcai-label,
+#dcAi .dcai-note,
+#dcAi .dcai-meta,
+#dcAi .dcai-step,
+#dcAi .dcai-was,
+#dcAi label.dcai-lab { color: var(--dc-ink-dim, #8B8B93); }
+
+/* ── entry ───────────────────────────────────────────────────────────────── */
+/* The screen is rebuilt only when its signature changes (studio-deenai.js), so
+   a state poll cannot replay this -- the gate is the rebuild itself, and there
+   is no flag to maintain. It must NOT be put on the reply: that node is
+   rebuilt on every stream delta, and an entry animation there would restart
+   forty times a second. */
+#dcAi .dcai-main > .dcai-card:not(.is-reply),
+#dcAi .dcai-side > .dcai-card {
+  animation: dcaiRise .34s cubic-bezier(.2, .8, .2, 1) backwards;
+}
+#dcAi .dcai-main > .dcai-card:nth-child(2) { animation-delay: .05s; }
+#dcAi .dcai-main > .dcai-card:nth-child(3) { animation-delay: .1s; }
+#dcAi .dcai-side > .dcai-card:nth-child(2) { animation-delay: .08s; }
+@keyframes dcaiRise {
+  from { opacity: 0; transform: translate3d(0, 9px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #dcAi .dcai-aurora,
+  #dcAi .dcai-dot,
+  #dcAi .dcai-step.is-live,
+  #dcAi .dcai-main > .dcai-card:not(.is-reply),
+  #dcAi .dcai-side > .dcai-card { animation: none; }
+  #dcAi .dcai-do:hover { transform: none; }
+  /* The streaming caret keeps its blink: it is STATUS motion, and a frozen
+     caret reads as an answer that has stopped arriving. */
+}
+
+/* THE ONE COLOUR ON THIS SCREEN THAT DOES NOT FLIP.
+ *
+ * Everything else here is tokenised, so daylight flips it for free and this
+ * sheet is deliberately NOT in build-light-theme.mjs's SOURCES -- measured
+ * both ways in a real light session: ZERO text under AA either way. (An
+ * earlier reading of this said 21 failures and was wrong: it toggled the
+ * dc-light CLASS by hand, which the next paint reverts from the stored
+ * preference, so it measured a half-applied theme. Set localStorage.dcTheme
+ * and RELOAD, then read the page ground back before believing a theme number.)
+ *
+ * #E08770 is the app's "something failed" red, and scripts/theme-palette.mjs
+ * deliberately leaves a saturated colour alone -- red still means failed. On
+ * near-black that is 6.9:1; on the paper card it measures 2.67:1, which was
+ * the one real failure the sweep found.
+ *
+ * Overridden HERE rather than in the palette, because the palette's rule is
+ * app-wide and the same red sits on the generated export's own failure rows
+ * (.sa3, .sh7) -- moving it is a decision about every screen, not this one.
+ * #B4462C is the same hue at 5.45:1 on the card and 4.62 on the page. */
+body.dc-light #dcAi .dcai-err,
+body.dc-light #dcAi .dcai-pill.is-warn { color: #B4462C; }
+body.dc-light #dcAi .dcai-pill.is-warn { border-color: rgba(180, 70, 44, .45); }

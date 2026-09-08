@@ -178,8 +178,32 @@
   function stepFor(id) { return ACTION_STEPS[id] || ''; }
 
   function askCard(payload, vals) {
-    var card = el('section', 'dcai-card');
-    card.appendChild(el('p', 'dcai-label', 'Ask DeenAI'));
+    /*
+     * THE CONSOLE, and it is the hero of the screen.
+     *
+     * Youssef, 8 Sept 2026: "Deen Ai page looks so ugly layout is so bad needs
+     * to be 100x better there no ai look to it". Measured before anything
+     * moved: this screen was SEVEN equal bordered boxes stacked down 1632px of
+     * a 785px viewport, and the ask -- the one thing on it no other screen can
+     * do -- was the FOURTH, below the fold. Nothing on the screen moved and
+     * nothing said a model was involved.
+     *
+     * So it is a card with light on it (the only one), it is first, and it
+     * carries an aurora and a live dot. `is-console` is the only thing that
+     * changes; every control inside is the one that was already here.
+     */
+    var card = el('section', 'dcai-card is-console');
+    var aurora = el('span', 'dcai-aurora');
+    aurora.setAttribute('aria-hidden', 'true');
+    card.appendChild(aurora);
+    var bar = el('div', 'dcai-cbar');
+    var eyebrow = el('p', 'dcai-label is-live');
+    eyebrow.appendChild(el('span', 'dcai-dot'));
+    eyebrow.appendChild(el('span', '', 'Ask DeenAI'));
+    bar.appendChild(eyebrow);
+    bar.appendChild(el('span', 'dcai-where',
+      'on DeenClipped\u2019s own server \u2014 your numbers, never your transcripts'));
+    card.appendChild(bar);
 
     var modes = el('div', 'dcai-modes');
     (payload.modes || []).forEach(function (mode) {
@@ -266,7 +290,13 @@
 
   function answerCard() {
     if (!M.answer && !M.streaming) return null;
-    var card = el('section', 'dcai-card');
+    // A REPLY, not another box in the stack: the gold rail, the avatar and the
+    // shape say a model wrote this, which is the one thing the screen could
+    // not say before. It sits directly under the console it came from.
+    var card = el('section', 'dcai-card is-reply');
+    var avatar = el('span', 'dcai-avatar');
+    avatar.setAttribute('aria-hidden', 'true');
+    card.appendChild(avatar);
     var head = el('div', 'dcai-head');
     head.appendChild(el('p', 'dcai-label', 'DeenAI'));
     head.appendChild(el('div', 'dcai-spacer'));
@@ -476,12 +506,18 @@
     if (!cards.length && !head) return null;
     var card = el('section', 'dcai-card');
     card.appendChild(el('p', 'dcai-label', 'Counted from your own clips'));
+    // Two across, not a stack. Appended straight to the card these ran the
+    // full width of the column -- measured up to ~120 characters a line, which
+    // is roughly twice the length prose stays readable at, and it made the one
+    // section of hard numbers read as the densest thing on the screen.
+    var grid = el('div', 'dcai-insights');
     cards.forEach(function (c) {
       var box = el('div', 'dcai-do');
       box.appendChild(el('h4', '', c.line || c.title || ''));
       if (c.body) box.appendChild(el('p', '', c.body));
-      card.appendChild(box);
+      grid.appendChild(box);
     });
+    card.appendChild(grid);
     return card;
   }
 
@@ -751,18 +787,43 @@
           'No model is configured for this deployment, so asking is switched off. Everything below is computed without one.'));
         next.appendChild(none);
       }
-      next.appendChild(goalCard(payload));
-      next.appendChild(todayCard(payload));
-      next.appendChild(askCard(payload, vals));
+      /*
+       * CONSOLE LEFT, CONTEXT RIGHT -- the layout an assistant actually has,
+       * and the fix for "layout is so bad".
+       *
+       * Every section below is the one that was already here; only WHERE they
+       * are drawn changed. As one column they were seven equal boxes running
+       * 1632px down a 785px viewport with the ask fourth, so the screen had no
+       * spine and its own feature was below the fold.
+       *
+       * MAIN carries the working loop, in the order somebody uses it: ask ->
+       * the reply -> the drafts it produced -> what to do next -> what the
+       * numbers say. SIDE carries what is TRUE OF THE ACCOUNT rather than what
+       * you do with it: the goal (a setting, chosen once), imported results,
+       * and earlier conversations. A rail is where you look things up; a
+       * column is where you work.
+       */
+      var grid = el('div', 'dcai-grid');
+      var main = el('div', 'dcai-main');
+      var side = el('aside', 'dcai-side');
+
+      main.appendChild(askCard(payload, vals));
       var answer = answerCard();
-      if (answer) next.appendChild(answer);
+      if (answer) main.appendChild(answer);
       var drafts = draftsCard();
-      if (drafts) next.appendChild(drafts);
-      var history = historyCard(payload);
-      if (history) next.appendChild(history);
-      next.appendChild(metricsCard(payload));
+      if (drafts) main.appendChild(drafts);
+      main.appendChild(todayCard(payload));
       var insights = insightsCard(vals);
-      if (insights) next.appendChild(insights);
+      if (insights) main.appendChild(insights);
+
+      side.appendChild(goalCard(payload));
+      side.appendChild(metricsCard(payload));
+      var history = historyCard(payload);
+      if (history) side.appendChild(history);
+
+      grid.appendChild(main);
+      grid.appendChild(side);
+      next.appendChild(grid);
     }
     root.textContent = '';
     root.appendChild(next);
