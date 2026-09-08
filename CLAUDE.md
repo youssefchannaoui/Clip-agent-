@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1892 JS + 804 Python**
+- `npm test` and `npm run check` must pass. Currently **1900 JS + 804 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9027,6 +9027,119 @@ Ten red probes proven, and two existing tests failed against correct code:
 A third assertion of my own went red against a correctly generated daylight
 sheet: it looked for `#dcAffScreen`, and the generator re-emits only rules that
 name a COLOUR -- the screen root sets layout alone. It asserts a `.dcaf-` rule.
+
+## The operator's three channels reach the Schedule, marked BETA (v3.167.0, 8 Sept 2026)
+
+Youssef: "for my specific email ... give permission to have three accounts for
+each social media, so then I can post more, but only for me and state it as a
+beta testing just for owner. No other account should ever see it ... And then
+also the whole, like, schedule thing should be different for me because then I
+would be able to post to more than one account. But, again, only for me, for
+nobody else ever until I give you the word."
+
+**Half of it shipped in v3.158.0 and half did not**, and driving it rather than
+reading it is what showed which.
+
+### Three channels bought NOTHING, and the measurement is the whole entry
+
+Driven through the real store, billing, social and agent with three YouTube
+channels connected and six approved clips:
+
+    every clip -> youtube:y1, youtube:y2, youtube:y3
+    six clips  -> SIX different posting windows
+
+Per-channel slots (v3.115.0) were intact and useless: every clip mirrored to
+all three channels, so all three lanes were busy on every slot and nothing ever
+occupied one lane alone. **Three channels meant the SAME clip three times**,
+which is not posting more of anything.
+
+`shareOut` gives each clip ONE channel per platform, in turn. Measured on the
+same fixture:
+
+    c1 -> y1   c2 -> y2   c3 -> y3   c4 -> y1   c5 -> y2   c6 -> y3
+    six clips  -> TWO posting windows
+
+- **MIRRORING STAYS THE DEFAULT.** Turning share-out on silently would reroute
+  an account's posts the moment it deployed, and where somebody's content goes
+  is their decision rather than a release's. The Connections dialog puts the
+  choice in front of the one account that can make it, in two options with a
+  sentence each.
+- **The rotation is the clip's position in its own lecture**, ordered by
+  `addedAt` then id. It runs at schedule time AND again when targets are
+  rebuilt, so an index that drifted between the two would move a clip to a
+  different channel after it had been scheduled -- a test asks twice.
+
+### It cannot reach a customer BY CONSTRUCTION, not by a check
+
+`billing.accountsPerPlatform` is 1 for anyone who is not the operator, so
+`capped.length > 1` is false for them and the share-out branch cannot run. The
+same number gates every surface. So the setting is accepted from any account,
+stored, and can do nothing -- which is the honest shape: refusing it at the
+route would be a SECOND place deciding who has several channels, and the two
+would eventually disagree.
+
+Driven at the wire, with `/api/state` rewritten to the payload a creator gets:
+
+| | customer (cap 1) | operator (cap 3) |
+|---|---|---|
+| Connections | no share-out row, no beta chip | the row, **OWNER BETA** |
+| channel list | "posts to the first of these" | "each clip goes to one of these 3, in turn" |
+| Schedule subline | "Up to 8 posts a day" | "Up to 8 posts a day on each of your 3 channels" |
+| day count | "3 of 8 scheduled" | "3 of 24 scheduled" |
+| a day card | the logo alone | the logo **and the channel's name** |
+
+**The channel's name came back, and v3.116.0's own lesson is why**: "A logo is
+a name only while there is one of the thing." Two identical YouTube marks on
+one day, going to different channels, say nothing at all. It is gated on
+`accountsPerPlatform > 1`, so a customer's row is exactly what v3.125.0 left.
+
+### What was NOT rebuilt, deliberately
+
+The lane switcher, its chips and the per-lane filtering stay deleted. They are
+what made the schedule "very confusing" for two releases running (v3.115.4,
+v3.116.0), and `one-channel.test.mjs` still forbids every one of them. What
+came back is the two things that make three channels mean anything -- the
+share-out and the channel's NAME -- and nothing else.
+
+That law file was updated rather than weakened: it now DRIVES the publish path
+with `shareOut: true` on a creator holding two stored channels and asserts one
+target comes back, and it asserts the per-channel subline is **gated** rather
+than absent. Banning the words outright would have to be reversed the moment
+the operator needs them, and a law nobody can keep is not a law.
+
+### The month cell draws one pip per WINDOW, never per post
+
+With clips shared out the day's capacity is 24, and twenty-four dots in a
+101px month cell is a grey mesh rather than a reading -- six rows of four,
+measured. A cell answers "how full is this DAY", and a day is its posting
+windows however many channels each one now serves. Filled counts distinct
+INSTANTS used, because three clips at 07:00 fill one window rather than three.
+`windowsPerDay` equals `daySlots` for everybody with one channel, so nothing
+about a customer's month moved.
+
+### Traps paid for
+
+- **THE WALKTHROUGH STEERS THE SCREEN, and it broke an adapter test silently.**
+  With nothing in localStorage the tour is live and its first step forces
+  `UI.screen` to 'home' on every `bindings()` call -- so a Schedule assertion
+  read the Home subline and failed with a nasheed count. A vm sandbox has to
+  answer `dcTour:*` from storage the way a browser that has been round the
+  product once does.
+- **`window.DATA` is a DIFFERENT object from the studio's scoped DATA**, so a
+  customer-vs-operator probe cannot flip the payload from `page.evaluate`.
+  Rewrite it on the WIRE with a Playwright route instead. Seventh occurrence.
+- **The YouTube compliance sweep clears a connection's `name` and `avatar`
+  after 30 days, and an UNSTAMPED record counts as expired** (policy III.E.4,
+  the conservative reading and the right one). A seeded channel therefore
+  renders nameless and looks like a bug in the dialog; stamp `youtubeDataAt`.
+- **A local `maxAccounts` collided with a RETIRED binding of the same name**
+  that `one-channel.test.mjs` forbids. Renamed rather than the law weakened.
+- **THREE VERSIONS OF ONE RED PROBE CAME BACK GREEN**, and all three were the
+  probe's fault. The cap gates share-out in TWO places -- the condition and
+  the index -- so rewriting either alone leaves behaviour identical: with the
+  condition changed the capped list is still one id long, and with the index
+  changed the condition is still false. A probe that changes no behaviour
+  proves nothing. Eleven probes red in the end.
 
 ## Open items
 

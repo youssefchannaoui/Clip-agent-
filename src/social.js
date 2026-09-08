@@ -1198,6 +1198,56 @@ export function plannedChannelsFor(clip) {
   }));
 }
 
+/*
+ * MIRROR TO EVERY CHANNEL, OR SHARE THE CLIPS OUT BETWEEN THEM.
+ *
+ * Youssef, 8 Sept 2026, on the operator's three channels per platform: "the
+ * whole, like, schedule thing should be different for me because then I would
+ * be able to post to more than one account."
+ *
+ * Measured before this existed, with three YouTube channels connected: every
+ * clip went to all three, so all three lanes were busy and six clips took six
+ * different slots. Per-channel slots (v3.115.0) bought nothing, because
+ * nothing ever occupied one lane alone. Three channels meant the SAME clip
+ * three times, which is not posting more of anything.
+ *
+ * Sharing out gives each clip ONE channel per platform in turn, so three
+ * channels carry three different clips in the same window.
+ *
+ * IT IS INERT FOR EVERY CUSTOMER, BY CONSTRUCTION rather than by a check
+ * somebody has to remember: `accountsPerPlatform` is 1 for anyone who is not
+ * the operator, so `capped.length > 1` can never be true for them and this
+ * setting cannot resurrect the multi-channel feature v3.125.0 retired.
+ *
+ * MIRRORING IS THE DEFAULT, deliberately. Turning it on silently would reroute
+ * an account's posts the moment it deployed, and where somebody's content goes
+ * is their decision, not a release's. The Connections dialog puts the choice in
+ * front of the one account that can make it.
+ */
+export function shareOut(owner) {
+  return publishingSettings(owner).shareOut === true;
+}
+
+/**
+ * Where this clip sits in its own lecture.
+ *
+ * Deterministic, so asking twice gives the same answer: this runs at schedule
+ * time AND again when targets are rebuilt, and a rotation that drifted between
+ * the two would move a clip to a different channel after it had already been
+ * scheduled for the first. Ordered by `addedAt` then id, because addedAt ties
+ * on clips minted in the same millisecond and the id is the only stable
+ * tie-break.
+ */
+export function clipOrdinal(clip) {
+  const projectId = String(clip?.projectId || '');
+  if (!projectId) return 0;
+  const siblings = (state.clips || [])
+    .filter(row => String(row.projectId || '') === projectId)
+    .sort((a, b) => (Number(a.addedAt || 0) - Number(b.addedAt || 0)) || String(a.id).localeCompare(String(b.id)));
+  const at = siblings.findIndex(row => String(row.id) === String(clip.id));
+  return at < 0 ? 0 : at;
+}
+
 export function laneKeysForClip(clip) {
   try { return enabledTargetsForClip(clip, { quiet: true }).map(target => target.id); }
   catch { return []; }
@@ -1289,7 +1339,12 @@ export function enabledTargetsForClip(clip, { quiet = false, assumeConsent = fal
     const named = item.accountIds?.length ? item.accountIds
       : (connected.length > 1 && allowed >= connected.length) ? connected
         : [item.accountId];
-    const chosen = named.slice(0, allowed);
+    const capped = named.slice(0, allowed);
+    // MIRROR, or SHARE OUT. Inert for everybody with one channel, which is
+    // every customer -- see shareOut above.
+    const chosen = shareOut(owner) && capped.length > 1
+      ? [capped[clipOrdinal(clip) % capped.length]]
+      : capped;
     if (named.length > allowed) {
       // Counts, because the allowance is 1 for a customer and 3 for the
       // operator. "the first one" beside a cap of three is a line that would

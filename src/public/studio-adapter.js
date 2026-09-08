@@ -2056,6 +2056,10 @@
     cancelled: { word: 'cancelled', colour: 'var(--dc-ink-faint, #85858E)' },
   };
   function destinations(clip) {
+    // LAST_DATA rather than DATA: this is a module-level helper and the
+    // payload is not in scope here. It is assigned on bindings()'s first line,
+    // so it is the current payload by the time this runs (v3.116.0).
+    var multiChannel = Number((((LAST_DATA || {}).social) || {}).accountsPerPlatform || 1) > 1;
     return (clip.targets || []).map(function (t) {
       var platform = t.platform || t.provider || '';
       var state = TARGET_STATES[t.status] || TARGET_STATES.scheduled;
@@ -2073,18 +2077,22 @@
       // that needs a person keeps its text; waiting, posting and posted do not.
       var quiet = t.status === 'scheduled' || t.status === 'publishing' || t.status === 'posted';
       /*
-       * THE CHANNEL'S NAME WAS DRAWN HERE WHILE A PLATFORM COULD MEAN THREE
-       * (v3.116.0), and comes off with the feature (v3.125.0). One channel per
-       * platform means the logo identifies the destination on its own, which
-       * is what Youssef asked for in the first place -- "dont be writing just
-       * put logos that are posting". The whole sentence stays on hover.
+       * THE CHANNEL'S NAME IS DRAWN ONLY WHERE A PLATFORM CAN MEAN MORE THAN
+       * ONE, which is the operator alone.
        *
-       * Kept as a binding rather than deleted: the template names `who`, and a
-       * missing binding is a render error.
+       * v3.116.0's own lesson, restated: "A logo is a name only while there is
+       * one of the thing." With one channel per platform the mark identifies
+       * the destination on its own, which is what Youssef asked for -- "dont
+       * be writing just put logos that are posting" -- and two identical
+       * YouTube marks on one day, going to different channels, say nothing at
+       * all. `multiChannel` is `accountsPerPlatform > 1`, derived from billing
+       * and true for nobody else, so a customer's row is unchanged.
+       *
+       * The whole sentence stays on hover either way.
        */
       return {
         name: '',
-        who: '',
+        who: multiChannel && t.accountName ? ' ' + t.accountName : '',
         state: quiet ? '' : ' ' + state.word,
         // The whole sentence is still there, on hover, for the rows that no
         // longer print it.
@@ -2710,7 +2718,17 @@
       // plural(), because an account that switches three of its four windows
       // off reads "Up to 1 posts a day" -- and the whole point of the panel is
       // that one is now a number a customer can choose.
-      case 'schedule': return 'Up to ' + plural(ctx.postSlots || 0, 'post') + ' a day';
+      case 'schedule':
+        // WITH SEVERAL CHANNELS THE ALLOWANCE IS PER CHANNEL, and saying so is
+        // the point: v3.116.0 removed this wording because it confused a
+        // customer who had one channel, and `ctx.shareLanes` is 1 for every
+        // one of them -- only the operator, sharing clips out, ever reads the
+        // second half.
+        if ((ctx.shareLanes || 1) > 1) {
+          return 'Up to ' + plural(ctx.windowsPerDay || 0, 'post') + ' a day on each of your '
+            + ctx.shareLanes + ' channels';
+        }
+        return 'Up to ' + plural(ctx.postSlots || 0, 'post') + ' a day';
       case 'music': return plural(ctx.tracks.length, 'nasheed') + ' · shuffled automatically';
       case 'deenai': return 'Growth advice counted from your own clips';
       case 'help': return 'How every part of DeenClipped works';
@@ -2928,7 +2946,32 @@
     // Falls back to four for a payload that carries no postTimes at all --
     // an older browser, or a misconfigured server -- rather than claiming the
     // day holds nothing and reading as "Today is full" beside empty days.
-    var daySlots = (DATA.postTimes || []).length || 4;
+    var windowsPerDay = (DATA.postTimes || []).length || 4;
+    /*
+     * HOW MANY CHANNELS THIS ACCOUNT SHARES ITS CLIPS OUT TO.
+     *
+     * 1 for every customer, by construction: `accountsPerPlatform` is 1 for
+     * anyone who is not the operator, so the branch below cannot fire and
+     * nothing on this screen changes for them. That is what keeps this from
+     * being the multi-channel schedule v3.125.0 retired for being confusing.
+     *
+     * It only counts when the account is SHARING OUT. Mirroring sends one clip
+     * to all three channels, so the day still holds `windowsPerDay` clips --
+     * saying otherwise would draw twenty-four empty slots for a day that can
+     * take eight.
+     */
+    var perPlatformCap = Number((((DATA.social || {}).accountsPerPlatform)) || 1);
+    var shareOutOn = Boolean((DATA.publishingSettings || {}).shareOut) && perPlatformCap > 1;
+    var shareLanes = 1;
+    if (shareOutOn) {
+      PLATFORMS.forEach(function (key) {
+        var info = providerInfo(DATA, key);
+        if (!info.connected || !info.enabled) return;
+        shareLanes = Math.max(shareLanes, Math.min(perPlatformCap, (info.accounts || []).length || 1));
+      });
+    }
+    // The day's real capacity: the account's windows, on each channel it fills.
+    var daySlots = windowsPerDay * shareLanes;
     // Whether the extra windows come from the PLAN. Read from the tier rather
     // than inferred from "more than four", because the base window count is a
     // server setting and an operator could configure six of them tomorrow.
@@ -2940,7 +2983,7 @@
       for (var i = 0; i < n; i += 1) out.push(i);
       return out;
     }
-    var ctx = { projects: projects, clips: clips, tracks: tracks, needsCount: needsCount, planLabel: planLabel, postSlots: daySlots };
+    var ctx = { projects: projects, clips: clips, tracks: tracks, needsCount: needsCount, planLabel: planLabel, postSlots: daySlots, windowsPerDay: windowsPerDay, shareLanes: shareLanes };
 
     var providers = PLATFORMS.map(function (k) { return providerInfo(DATA, k); });
     // "Does this account have anywhere to post RIGHT NOW" -- the same test the
@@ -3476,6 +3519,13 @@
         for (var cd = 0; cd < 7; cd += 1) {
           (function (ds) {
             var items = dayItemsAt(ds);
+            // Distinct posting instants used, not clips: with clips shared out
+            // across channels three of them legitimately sit on one window.
+            var usedWindows = (function () {
+              var seen = {}, n = 0;
+              items.forEach(function (c) { var at = Number(c.scheduledAt); if (at && !seen[at]) { seen[at] = 1; n += 1; } });
+              return n || items.length;
+            })();
             var inMonth = new Date(ds).getMonth() === anchorDate.getMonth();
             var isToday = ds === today;
             var past = ds < today;
@@ -3523,11 +3573,25 @@
               // hung on a hashed name that a design re-import regenerates
               // silently. The cell is already position:relative, so absolute
               // pips need nothing from the export and cannot be broken by it.
-              pips: (items.length || (!past && inMonth)) ? countTo(daySlots).map(function (n) {
+              /*
+               * ONE PIP PER WINDOW, never per post.
+               *
+               * With clips shared out across three channels the day's capacity
+               * is 24, and twenty-four dots in a month cell is a grey mesh
+               * rather than a reading -- measured at 1440: six rows of four
+               * inside a 101px cell. A cell answers "how full is this DAY",
+               * and a day is its posting windows however many channels each
+               * one now serves. `windowsPerDay` is `daySlots` for everybody
+               * with one channel, so nothing about a customer's month moves.
+               */
+              pips: (items.length || (!past && inMonth)) ? countTo(windowsPerDay).map(function (n) {
                 var row = Math.floor(n / 4);
                 var col = n % 4;
-                var perRow = Math.min(4, daySlots);
-                var filled = n < items.length;
+                var perRow = Math.min(4, windowsPerDay);
+                // How many WINDOWS this day has something in -- with several
+                // channels sharing one instant, three clips at 07:00 fill one
+                // window, not three.
+                var filled = n < Math.min(windowsPerDay, usedWindows);
                 // The EXTRA windows -- the ones past the four every plan gets
                 // -- are a different colour from the base four, so the second
                 // row reads as the capacity this subscription added rather
@@ -10213,6 +10277,7 @@
     onTestConnection: function () {},
     onOpenConnections: function () {},
     onPublishingToggle: function () {},
+    onShareOut: function () {},
     onPostNow: function () {},
     onSendBack: function () {},
     onUnschedule: function () {},

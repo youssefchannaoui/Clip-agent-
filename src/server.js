@@ -2254,6 +2254,18 @@ async function route(req, res, url) {
         // way out. Where a clip goes is the per-platform ticks below; whether
         // it goes at all is the approval. See store.publishingSettings.
         enabled: true,
+        /*
+         * Mirror, or share the clips out between the channels on a platform.
+         *
+         * Accepted from any account and INERT for all but the operator, which
+         * is the honest shape: `accountsPerPlatform` is 1 for everybody else,
+         * so there is never a second channel to share with and the stored
+         * value can do nothing. Refusing it here instead would mean a second
+         * place that decides who has several channels, and the two would
+         * eventually disagree -- the fault this file's own allowance check
+         * exists to avoid.
+         */
+        shareOut: Boolean(body.shareOut),
         youtube: { ...current.youtube, ...withCap('youtube', body.youtube || {}), enabled: Boolean(body.youtube?.enabled) },
         instagram: { ...current.instagram, ...withCap('instagram', body.instagram || {}), enabled: Boolean(body.instagram?.enabled), shareToFeed: body.instagram?.shareToFeed !== false },
         facebook: { ...current.facebook, ...withCap('facebook', body.facebook || {}), enabled: Boolean(body.facebook?.enabled) },

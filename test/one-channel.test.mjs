@@ -113,15 +113,44 @@ test('a CUSTOMER record holding three still posts to one, and says which', () =>
     'the extras being ignored is recorded');
 });
 
-test('the share-out mode is gone from the store, the route and the publish path', () => {
-  // It only ever meant anything with more than one channel to share between,
-  // so leaving it would be a stored setting no code path can act on -- the
-  // dead flag this repo already paid for once (v3.116.0, the master publishing
-  // switch that had been false in production for the life of the product).
+test('the OLD share-out mode is gone, and its replacement cannot reach a customer', () => {
+  // `spread` was the multi-channel share-out and it is gone: it only ever
+  // meant anything with more than one channel to share between, so leaving it
+  // would be a stored setting no code path can act on -- the dead flag this
+  // repo already paid for once (v3.116.0, the master publishing switch that
+  // had been false in production for the life of the product).
   assert.ok(!/spread/.test(code('src/social.js')), 'the publish path');
   assert.ok(!/rotationIndex/.test(code('src/social.js')), 'and the ordinal it needed');
   assert.ok(!/spread:/.test(code('src/store.js')), 'the stored default');
   assert.ok(!/body\.spread/.test(code('src/server.js')), 'and the route that wrote it');
+
+  /*
+   * `shareOut` REPLACES it for the operator alone (v3.167.0), and the guard
+   * that keeps it away from customers is not a check anybody has to remember
+   * -- it is the allowance. Asserted by CALLING the publish path with the
+   * setting turned on for a creator, because a source test could not tell a
+   * working gate from a forgotten one.
+   */
+  const userId = 'u_share';
+  state.authUsers = [{ id: userId, email: 's@example.com', role: 'creator',
+    billing: { plan: 'studio_yearly', status: 'active' } }];
+  state.socialConnections = { [userId]: { youtube: [
+    { provider: 'youtube', accountId: 'y1', name: 'Main', tokens: {} },
+    { provider: 'youtube', accountId: 'y2', name: 'Shorts', tokens: {} },
+  ] } };
+  state.userSettings = { [userId]: { publishingSettings: {
+    enabled: true, shareOut: true,
+    youtube: { enabled: true, accountId: 'y1', accountIds: ['y1', 'y2'] },
+    tiktok: { enabled: false }, instagram: { enabled: false }, facebook: { enabled: false },
+  } } };
+  state.projects = [{ id: 'ps', userId }];
+  const clips = [0, 1, 2].map(i => ({ id: 'cs' + i, userId, projectId: 'ps', title: 'S' + i,
+    addedAt: i, targets: [], approvedBy: 'manual' }));
+  state.clips = clips;
+  for (const clip of clips) {
+    assert.deepEqual(social.enabledTargetsForClip(clip, { quiet: true }).map(t => t.id), ['youtube:y1'],
+      'a customer posts to the first channel whatever is stored -- no rotation, no second channel');
+  }
 });
 
 test('no surface offers a channel to switch between', () => {
@@ -146,14 +175,28 @@ test('no surface offers a channel to switch between', () => {
   assert.ok(!adapter.includes('maxAccounts'), 'and its binding');
 });
 
-test('the schedule has ONE denominator again', () => {
+test('the schedule has ONE denominator for a customer', () => {
   // "3 of 4 scheduled" beside "Up to 8 posts a day" beside "0 of 8 scheduled
   // today" is the three-numbers-disagreeing bug that multi-channel caused and
   // v3.116.0 papered over by removing the denominator entirely.
   const adapter = code('src/public/studio-adapter.js');
   assert.match(adapter, /schedDayCount: schedDayItems\.length \+ ' of ' \+ daySlots \+ ' scheduled'/);
-  assert.ok(!/on each of your/.test(adapter), 'no per-channel wording anywhere');
   assert.ok(!/across your channels/.test(adapter));
+  /*
+   * The per-channel wording came BACK for the operator in v3.167.0, and the
+   * thing that keeps it away from a customer is `shareLanes`, which is 1 for
+   * anyone whose allowance is 1. So this asserts the GATE rather than the
+   * absence of the sentence -- banning the words outright would have to be
+   * reversed the moment the operator needs them, and a law nobody can keep is
+   * not a law. What it must never be is unconditional.
+   */
+  const at = adapter.indexOf("case 'schedule':");
+  assert.ok(at > 0);
+  const arm = adapter.slice(at, adapter.indexOf("case 'music'", at));
+  assert.match(arm, /shareLanes \|\| 1\) > 1/, 'the per-channel subline must be gated');
+  assert.match(arm, /on each of your/, 'and that is the branch it is gated in');
+  assert.ok(arm.indexOf('shareLanes') < arm.indexOf('on each of your'),
+    'the gate has to come before the sentence it guards');
 });
 
 test('the plan sells the two things it actually gives', () => {

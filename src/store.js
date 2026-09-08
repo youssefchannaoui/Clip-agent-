@@ -58,6 +58,20 @@ export function settingDefaults() {
       // read-time correction in publishingSettings() below for why this
       // needed both halves.
       enabled: true,
+      /*
+       * Mirror every clip to every connected channel on a platform, or share
+       * the clips out between them one each in turn.
+       *
+       * FALSE is today's behaviour and stays the default: turning it on
+       * silently would reroute an account's posts the moment it deployed, and
+       * where somebody's content goes is their decision.
+       *
+       * Inert for every customer BY CONSTRUCTION, not by a check anybody has
+       * to remember: `accountsPerPlatform` is 1 for anyone who is not the
+       * operator, so there is never a second channel to share with. See
+       * shareOut() in social.js.
+       */
+      shareOut: false,
       // Each provider carries accountIds -- the destinations a clip goes to on
       // that platform -- with accountId kept as its first entry so every reader
       // written before multi-account keeps working. See withAccountList and
@@ -442,6 +456,11 @@ export function publishingSettings(user) {
   const current = readSetting(user, 'publishingSettings') || {};
   return {
     ...fresh, ...current,
+    // A boolean, never whatever was on disk: a record written by a build that
+    // did not know the field carries `undefined`, and `=== true` in social.js
+    // would answer correctly but every SURFACE reading it would have to guard
+    // for itself.
+    shareOut: current.shareOut === true,
     // The master switch is RETIRED, and this is the read-time correction that
     // retires it -- the same device as the YouTube privacy line below.
     //

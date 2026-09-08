@@ -843,6 +843,25 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
   text-transform: uppercase; color: var(--dc-n-8a8a93, #8A8A93); margin-bottom: 2px; }
 /* The headroom line under a single connected channel: what the plan still
    allows, in the place where somebody would go looking for it. */
+/* MIRROR OR SHARE OUT -- owner-only beta, so this block is dead markup for
+   every customer: shareOutRow() returns '' unless accountsPerPlatform > 1. */
+#studioConnList .studio-conn-share { display: flex; flex-direction: column; gap: 10px; margin-top: 4px;
+  padding: 14px 16px; border: 1px solid rgba(217,180,120,.24); border-radius: 12px; background: rgba(217,180,120,.045); }
+#studioConnList .studio-conn-share-h { display: flex; align-items: center; gap: 9px; }
+#studioConnList .studio-conn-share-h b { font-size: 12.5px; font-weight: 600; color: var(--dc-ink-bright, #E9E9ED); }
+#studioConnList .studio-conn-beta { display: inline-flex; align-items: center; height: 18px; padding: 0 7px;
+  border-radius: 20px; border: 1px solid rgba(217,180,120,.4); background: rgba(217,180,120,.1);
+  font-size: 8.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--dc-gold-lit, #F0D6A6); }
+#studioConnList .studio-conn-share-opts { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+#studioConnList .studio-conn-share-opt { display: block; text-align: left; cursor: pointer; min-height: 44px;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--dc-line, #26262A);
+  background: var(--dc-bg-deep, #101013); font: inherit; color: var(--dc-ink-dim, #8B8B93); }
+#studioConnList .studio-conn-share-opt b { display: block; font-size: 12.5px; font-weight: 600; color: var(--dc-ink-bright, #E9E9ED); }
+#studioConnList .studio-conn-share-opt span { display: block; margin-top: 3px; font-size: 11.5px; line-height: 1.5; }
+#studioConnList .studio-conn-share-opt:hover { border-color: rgba(217,180,120,.5); }
+#studioConnList .studio-conn-share-opt.is-on { border-color: var(--dc-gold, #D9B478); background: rgba(217,180,120,.12); }
+#studioConnList .studio-conn-share-opt.is-on b { color: var(--dc-n-f2e4c9, #F2E4C9); }
 #studioConnList .studio-conn-account { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto;
   align-items: center; gap: 10px; cursor: pointer; font-size: 12px; padding: 7px 9px; margin-top: 6px;
   border-radius: 10px; border: 1px solid var(--dc-line-soft, #1E1E22); background: var(--dc-bg, #121214);
@@ -7462,9 +7481,50 @@ function renderStudio(){
             ? 'DeenClipped posts to the first of these. Disconnect the others to change it.'
             : `DeenClipped posts to the first ${live} of these. Disconnect the others to change it.`}</span>`
         : accounts.length>1
-          ? `<span class="studio-conn-accounts-h">Every clip goes to all ${accounts.length}.</span>`
+          ? `<span class="studio-conn-accounts-h">${shareOutOn()
+              ? `Each clip goes to ONE of these ${accounts.length}, in turn.`
+              : `Every clip goes to all ${accounts.length}.`}</span>`
           : '';
       return `<div class="studio-conn-accounts">${extra}${accountRows(r,i,accounts,live)}</div>`;
+    }
+
+    /* ------------------------------------------------------------------
+       MIRROR, OR SHARE THE CLIPS OUT. Owner-only beta.
+
+       Youssef, 8 Sept 2026: "the whole, like, schedule thing should be
+       different for me because then I would be able to post to more than one
+       account. But, again, only for me, for nobody else ever."
+
+       Measured before this existed, with three YouTube channels connected:
+       every clip went to all three, so all three lanes were busy and six clips
+       took six different slots. Per-channel slots bought nothing, because
+       nothing ever occupied one lane alone -- three channels meant the SAME
+       clip three times, which is not posting more of anything.
+
+       DRAWN ONLY WHERE A PLATFORM CAN MEAN MORE THAN ONE, which is the
+       operator alone: `accountsPerPlatform` is 1 for every customer, so this
+       row does not exist for them and cannot resurrect the multi-channel
+       schedule v3.125.0 retired. Marked BETA because it is exactly that: one
+       account, testing whether the shape works before anybody else sees it. */
+    const shareOutAllowed=()=>Math.max(1,Number((DATA&&DATA.social&&DATA.social.accountsPerPlatform)||1))>1;
+    const shareOutOn=()=>Boolean(DATA&&DATA.publishingSettings&&DATA.publishingSettings.shareOut);
+    function shareOutRow(){
+      if(!shareOutAllowed())return '';
+      const on=shareOutOn();
+      return `<div class="studio-conn-share" data-host-owned>
+        <div class="studio-conn-share-h">
+          <b>How your channels share the clips</b>
+          <span class="studio-conn-beta">Owner beta</span>
+        </div>
+        <div class="studio-conn-share-opts">
+          <button type="button" class="studio-conn-share-opt${on?'':' is-on'}" data-share-out="0">
+            <b>Mirror</b><span>Every clip goes to all of your channels on a platform, at the same time.</span>
+          </button>
+          <button type="button" class="studio-conn-share-opt${on?' is-on':''}" data-share-out="1">
+            <b>Share out</b><span>Each clip goes to one channel in turn, so your channels carry different clips and the day holds more.</span>
+          </button>
+        </div>
+      </div>`;
     }
 
     /* One row per connected channel: avatar, name, handle where the platform
@@ -7505,7 +7565,10 @@ function renderStudio(){
       const rows=StudioAdapter.bindings(DATA).connections;
       const live=rows.filter(r=>/^Active$/.test(r.note)&&!r.needsReconnect).length;
       connEls.summary.textContent=`${live} of ${rows.length} ready to publish`;
-      connEls.list.innerHTML=rows.map((r,i)=>{
+      /* The share-out row leads the list: it governs every platform below it,
+         and appended it sat under all four where nobody would read it before
+         deciding anything. */
+      connEls.list.innerHTML=shareOutRow()+rows.map((r,i)=>{
         const colour=(r.heroDotStyle.match(/background: (#[0-9A-Fa-f]{6})/)||[])[1]||'var(--dc-ink-faint, #85858E)';
         const off=/Not configured/.test(r.note);
         const linked=!off&&!/Connect to publish/.test(r.note);
@@ -7542,6 +7605,18 @@ function renderStudio(){
             ${linked?`<button type="button" data-conn-test="${esc(r.key)}" title="Ask ${esc(r.name)} for this account's current settings"><i class="ph ph-check-circle"></i>Test</button>`:''}
             <button type="button" class="danger" data-conn-disconnect="${i}" ${linked?'':'disabled'}>Disconnect</button>
           </span>${accountPicker(r,i)}</div>`}).join('');
+      /* Mirror or share out. It writes through the SAME publishing-settings
+         route every other control in this dialog uses, so there is one save
+         path and one validator rather than a second road into stored
+         settings. Optimistic like its neighbours -- the row reads its new
+         state at once and studioDo reconciles when the write lands. */
+      $$('[data-share-out]').forEach(b=>b.onclick=async()=>{
+        const next=b.dataset.shareOut==='1';
+        if(next===shareOutOn())return;
+        if(DATA&&DATA.publishingSettings)DATA.publishingSettings.shareOut=next;
+        paintConnections();
+        await StudioAdapter.onShareOut(next);
+      });
       /* TEST CONNECTION, which the studio dialog did not offer at all.
          Youssef, 4 Sept 2026, trying to switch Facebook on after swapping the
          TikTok credentials to production: the save is refused account-wide
@@ -7892,6 +7967,23 @@ function renderStudio(){
       if(window.DCNotify)window.DCNotify.switched(DEST_NAME[key]||key,on,
         on?'Approved clips will post here':'Clips will skip this destination');
       else toast('Publishing updated','good');});
+    /* Mirror, or share the clips out. It goes through the SAME
+       publishing-settings route every other control in this dialog uses, so
+       there is one save path and one validator -- a second road into stored
+       settings is how two answers to one question get written. */
+    StudioAdapter.onShareOut=on=>studioDo(async()=>{
+      const cur=DATA?.publishingSettings||{};
+      await api('/api/publishing-settings',{method:'POST',body:JSON.stringify({...cur,shareOut:Boolean(on)})});
+      if(window.DCNotify)window.DCNotify.switched('Share clips out',Boolean(on),
+        on?'Each clip goes to one channel in turn':'Every clip goes to all your channels');
+      else toast('Publishing updated','good');
+    },null,()=>{
+      /* THE REVERT GOES THROUGH studioDo's onFail, never off its returned
+         promise: studioDo swallows its own failure and resolves either way, so
+         a .then() would leave the row showing a state the server refused. */
+      if(DATA&&DATA.publishingSettings)DATA.publishingSettings.shareOut=!on;
+      paintConnections();
+    });
     StudioAdapter.onTestConnection=name=>studioDo(()=>api(`/api/social/${encodeURIComponent(name)}/test`,{method:'POST',body:JSON.stringify({})}),'Connection looks healthy');
     /* Resolve the pasted link first, so the range picker and the token estimate
        are based on the real source duration rather than a guess. */
