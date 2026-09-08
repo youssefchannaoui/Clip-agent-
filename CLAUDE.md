@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1835 JS + 801 Python**
+- `npm test` and `npm run check` must pass. Currently **1837 JS + 801 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -8169,6 +8169,75 @@ pass. Daylight is fine at 5.36.
 "overflowing" element is a `.dcm-chip` inside `.dcm-chips`, a deliberate
 horizontal scroller; no page scrolls sideways at any width. Read the flag, not
 the count.
+
+
+## Three channels came back, for the operator only (v3.158.0, 8 Sept 2026)
+
+Youssef: "bring back three channels in terms of, like, for all different social
+medias just for owner only. So just for mine. So my email only."
+
+Multi-channel shipped v3.41.0 and he retired it himself on 4 Sept 2026 having
+watched it in use. **That judgement stands for customers** and the reason is
+this repo's own record: three channels needed a lane switcher, a share-out
+mode, a per-channel denominator on every count and a name beside every logo,
+and two releases running went on the schedule being "very confusing" as a
+direct result. He runs several DeenClipped channels and is the one person who
+both wants the fan-out and has already seen the schedule with it on.
+
+- **`accountsPerPlatform` is 3 for the operator and 1 for everyone else**, and
+  the gate is `isUnlimited` -- a ROLE, which a customer cannot set on
+  themselves. Deliberately NOT `atLeast('studio')`: a tier check would hand
+  three channels to every Studio subscriber, which is the thing that was
+  removed. `test/one-channel.test.mjs` asserts both halves, and that no plan
+  reaches it.
+- **WHAT DID NOT COME BACK**: the lane switcher, the rotate/mirror mode and the
+  per-channel counts on the Schedule. Those are what made it confusing. A clip
+  goes to every connected account on a platform, which is the plain reading of
+  "post to my three channels".
+- **The plumbing never left.** v3.125.0 capped the ALLOWANCE and migrated
+  nothing, exactly so this would be reversible; every credential path still
+  resolves by account id and a slot may still be a list.
+
+### The half that would have made it useless
+
+**Nothing writes `accountIds` on connect.** `enableOnConnect` switches the
+platform on and never names an account, so the settings list is empty on every
+ordinary account -- and `enabledTargetsForClip` fell back to `[item.accountId]`,
+also empty, which `oneOf` honours **only when there is exactly one connection**
+(v3.56.0, and rightly: with several, picking one is how a clip lands on the
+wrong channel).
+
+So with three channels connected the dialog listed all three and the clip
+posted **NOWHERE**, while the dialog said "DeenClipped posts to the first of
+these". The screen and the publish path disagreed, and that was true before
+this release for anybody holding several connections.
+
+The fallback is now every CONNECTED account -- **but only when the allowance
+covers all of them**. A first cut fell back unconditionally and broke v3.56.0's
+guarantee outright; `test/multi-connection.test.mjs` caught it in one run
+("two connections and no chosen id publishes nowhere rather than guessing").
+`allowed >= connected.length` is what makes it not a guess: every connected
+account gets the clip, so no choice is being made for anybody. Where the
+allowance would have to CHOOSE, it still refuses.
+
+### One number, sent rather than typed
+
+`connectionStatus` now carries `accountsPerPlatform`, derived from the same
+billing function the route and the publish path use. The dialog hardcoded "posts
+to the first of these" and would have told Youssef his three channels post to
+one -- the "three numbers disagreeing" fault two releases were spent on. The
+`is-on` marker follows it too, so the rows marked live are exactly the slice
+`enabledTargetsForClip` takes.
+
+**Five law tests failed and none was deleted.** Four had `role: 'owner'`
+fixtures, which now assert a cap against the one account exempt from it -- they
+would have passed for the wrong reason. They are customers now, with the
+operator's three asserted separately.
+
+Driven at 1440 with three YouTube and two TikTok connections seeded: the dialog
+lists five rows, all marked live, headed "Every clip goes to all 3"; and
+`/api/state` returns a clip with `willPostTo` naming **y1, y2, y3, t1, t2** with
+no configuration touched.
 
 
 ## Open items

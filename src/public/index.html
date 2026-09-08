@@ -7449,19 +7449,32 @@ function renderStudio(){
     function accountPicker(r, i){
       const accounts=r.accounts||[];
       if(accounts.length===0)return '';
-      const extra=accounts.length>1
-        ? `<span class="studio-conn-accounts-h">DeenClipped posts to the first of these. Disconnect the others to change it.</span>`
-        : '';
-      return `<div class="studio-conn-accounts">${extra}${accountRows(r,i,accounts)}</div>`;
+      /* HOW MANY OF THESE ACTUALLY POST, from the server rather than from a
+         number typed here. It is 1 for a customer and 3 for the operator, and
+         a hardcoded sentence would have told Youssef his three channels post
+         to one -- the screen and the publish path disagreeing, which is the
+         fault this dialog already carried before the allowance could vary. */
+      const allowed=Math.max(1,Number((DATA&&DATA.social&&DATA.social.accountsPerPlatform)||1));
+      const live=Math.min(allowed,accounts.length);
+      const extra=accounts.length>live
+        ? `<span class="studio-conn-accounts-h">${live===1
+            ? 'DeenClipped posts to the first of these. Disconnect the others to change it.'
+            : `DeenClipped posts to the first ${live} of these. Disconnect the others to change it.`}</span>`
+        : accounts.length>1
+          ? `<span class="studio-conn-accounts-h">Every clip goes to all ${accounts.length}.</span>`
+          : '';
+      return `<div class="studio-conn-accounts">${extra}${accountRows(r,i,accounts,live)}</div>`;
     }
 
     /* One row per connected channel: avatar, name, handle where the platform
        gives us one, a tick for "post here", and its own disconnect. */
-    function accountRows(r,i,accounts){
+    function accountRows(r,i,accounts,live){
       const ownCredential=r.key==='youtube'||r.key==='tiktok';
+      const posting=Math.max(1,Number(live)||1);
       return accounts.map((a,n)=>{
-        // The first is the one that posts, so it is the one marked live.
-        const on=n===0;
+        // Marked live if it is one of the ones that posts -- the first `live`
+        // of them, which is exactly the slice enabledTargetsForClip takes.
+        const on=n<posting;
         const label=a.name||a.id;
         /* TikTok is the one platform that hands us a real username. Everywhere
            else we have a display name and nothing else, and an @ invented from

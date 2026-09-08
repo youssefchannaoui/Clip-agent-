@@ -386,27 +386,45 @@ function periodOf(planId) {
 /**
  * How many accounts on ONE platform this account may publish a clip to.
  *
- * ONE, FOR EVERYBODY. Studio sold three channels per platform from v3.41.0
- * until v3.125.0, and Youssef retired it on 4 Sept 2026 having watched it in
- * use: "REMOVE ALL THINGS TO DO WITH 3 CHANNELS ... ITS NOT PRCATICAL THEY
- * JUST GET 8 UPLAODS AND MORE TOKENS". He is right, and the reason is in this
+ * ONE FOR EVERY CUSTOMER, THREE FOR THE OPERATOR.
+ *
+ * Studio sold three per platform from v3.41.0 until v3.125.0, and Youssef
+ * retired it on 4 Sept 2026 having watched it in use: "REMOVE ALL THINGS TO DO
+ * WITH 3 CHANNELS ... ITS NOT PRCATICAL THEY JUST GET 8 UPLAODS AND MORE
+ * TOKENS". That judgement stands for CUSTOMERS and the reason is in this
  * repo's own record: three channels needed a lane switcher, a share-out mode,
  * a per-channel denominator on every count and a name beside every logo, and
- * two releases in a row (v3.115.4, v3.116.0) were spent on the schedule being
- * "very confusing" as a direct result. Studio is more capacity on one channel
- * now -- eight windows a day and the larger token allowance -- which needs no
- * explaining.
+ * two releases running (v3.115.4, v3.116.0) were spent on the schedule being
+ * "very confusing" as a direct result. Studio is still more capacity on one
+ * channel -- eight windows a day and the larger token allowance.
  *
- * IT STAYS A FUNCTION, and the plumbing under it stays too. Every credential
- * path resolves by account id and a stored connection may still be a LIST: an
- * account that connected three channels while it was sold has three on disk,
- * and reading only the first is exactly what capping here does. Ripping the
- * list handling out would touch every publish path to change nothing a
- * customer can see -- and the paths that would break are the ones that put a
- * clip on the wrong channel.
+ * He asked for it back for himself on 8 Sept 2026: "bring back three channels
+ * in terms of, like, for all different social medias just for owner only. So
+ * just for mine. So my email only." He runs several DeenClipped channels and
+ * is the one person who both wants the fan-out and already knows what the
+ * schedule looks like with it on.
+ *
+ * `isUnlimited` IS THE RIGHT GATE, and deliberately not `atLeast('studio')`.
+ * It reads `user.role`, which a customer cannot set on themselves, so this
+ * opens no plan hole -- where a tier check would hand three channels to every
+ * Studio subscriber, which is the thing that was removed. It is the same gate
+ * that already decides the unlimited wallet.
+ *
+ * WHAT DID NOT COME BACK, and must not without being asked for: the lane
+ * switcher, the rotate/mirror mode and the per-channel counts on the Schedule.
+ * Those are what made it confusing. A clip goes to every account TICKED on a
+ * platform, which is the plain reading of "post to my three channels" and is
+ * the behaviour the ticks in Connections already describe.
+ *
+ * THE PLUMBING NEVER LEFT. Every credential path resolves by account id and a
+ * stored connection may be a LIST (v3.56.0), so the accounts Youssef connected
+ * while it was sold are still on disk and start posting again the moment this
+ * returns 3 -- nothing was migrated away, which is exactly why that decision
+ * was made at the time.
  */
-export function accountsPerPlatform() {
-  return 1;
+export const OPERATOR_ACCOUNTS_PER_PLATFORM = 3;
+export function accountsPerPlatform(user) {
+  return isUnlimited(user) ? OPERATOR_ACCOUNTS_PER_PLATFORM : 1;
 }
 
 /**

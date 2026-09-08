@@ -717,6 +717,20 @@ export function connectionStatus(user) {
   const publicBaseUrlReady = Boolean(config.publicBaseUrl);
   return {
     securityReady, publicBaseUrlReady, globalAvailable: config.socialPublishEnabled,
+    /*
+     * HOW MANY ACCOUNTS ON ONE PLATFORM THIS ACCOUNT POSTS TO.
+     *
+     * Derived from `billing.accountsPerPlatform`, the same function the route
+     * and the publish path use, so the dialog cannot say "posts to the first
+     * of these" while three of them post. It became necessary the moment the
+     * allowance stopped being 1 for everybody (v3.157.0, three for the
+     * operator): a screen that hardcodes the number is the "three numbers
+     * disagreeing" fault this repo spent two releases on.
+     *
+     * It is a NUMBER TO RENDER, never a permission -- the caps that matter are
+     * enforced in billing, at the route and again at target-build time.
+     */
+    accountsPerPlatform: billing.accountsPerPlatform(userById(userId), ''),
     // Sent so the job panel can warn about a length before it is cut rather
     // than after it is refused. Same object platformRefusal reads.
     lengthLimits: PLATFORM_LENGTH_LIMITS,
@@ -759,6 +773,28 @@ function oneOf(provider, accountId, userId) {
   const list = connections(userId, provider);
   if (!accountId) return list.length === 1 ? list[0] : null;
   return list.find(item => String(item?.accountId || '') === String(accountId)) || null;
+}
+
+/*
+ * Every account CONNECTED on a platform, in the order they were connected.
+ *
+ * The settings' `accountIds` is the authority when it holds anything, and this
+ * is the fallback for when it does not -- which is the ordinary case, because
+ * nothing writes that list on connect: `enableOnConnect` switches the platform
+ * on and never names an account. With ONE connection that was invisible,
+ * because `oneOf` honours a blank id when there is exactly one; with several it
+ * refused and the clip posted NOWHERE while the dialog said "DeenClipped posts
+ * to the first of these". The screen and the publish path disagreed.
+ */
+function connectedAccountIds(provider, userId) {
+  if (provider === 'youtube' || provider === 'tiktok') {
+    return connections(userId, provider).map(item => String(item?.accountId || '')).filter(Boolean);
+  }
+  // Facebook and Instagram are Pages inside ONE Meta login, so their ids come
+  // off that connection's own list rather than from a connection each.
+  const accounts = connection(userId, 'meta')?.accounts || [];
+  const key = provider === 'facebook' ? 'pageId' : 'instagramId';
+  return accounts.map(item => String(item?.[key] || '')).filter(Boolean);
 }
 
 function selectedAccount(provider, accountId, userId) {
@@ -1040,9 +1076,35 @@ export function enabledTargetsForClip(clip, { quiet = false, assumeConsent = fal
     // v3.125.0) still has three ids on disk, and the render path must not keep
     // posting to all three because a past subscription once permitted it.
     const allowed = billing.accountsPerPlatform(owner, provider);
-    const chosen = (item.accountIds?.length ? item.accountIds : [item.accountId]).slice(0, allowed);
-    if (item.accountIds?.length > allowed) {
-      say(`${provider} has ${item.accountIds.length} accounts stored; DeenClipped posts to the first one.`, 'warn');
+    /*
+     * The settings first; failing those, EVERY connected account -- but only
+     * when the allowance covers all of them.
+     *
+     * Nothing writes `accountIds` on connect (`enableOnConnect` switches the
+     * platform on and never names an account), so an operator who connects a
+     * second and third channel had them listed in the dialog and posting
+     * nowhere: `oneOf` honours a blank id only when there is exactly one
+     * connection. That rule is v3.56.0's and it is RIGHT -- with several
+     * stored, picking one is how a clip lands on the wrong channel, and a
+     * first cut of this fallback broke exactly that guarantee.
+     *
+     * `allowed >= connected.length` is what makes it not a guess: every
+     * connected account gets the clip, so there is no choice being made for
+     * anybody. Where the allowance would have to CHOOSE it refuses as before,
+     * and the customer picks in Connections.
+     */
+    const connected = connectedAccountIds(provider, userId);
+    const named = item.accountIds?.length ? item.accountIds
+      : (connected.length > 1 && allowed >= connected.length) ? connected
+        : [item.accountId];
+    const chosen = named.slice(0, allowed);
+    if (named.length > allowed) {
+      // Counts, because the allowance is 1 for a customer and 3 for the
+      // operator. "the first one" beside a cap of three is a line that would
+      // send somebody looking for a bug that is not there.
+      say(allowed === 1
+        ? `${provider} has ${named.length} accounts stored; DeenClipped posts to the first one.`
+        : `${provider} has ${named.length} accounts stored; DeenClipped posts to the first ${allowed}.`, 'warn');
     }
     for (const accountId of chosen) {
       if (provider === 'tiktok' && !consented(accountId)) {

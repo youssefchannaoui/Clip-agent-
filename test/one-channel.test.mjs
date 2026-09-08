@@ -44,14 +44,20 @@ const { state } = await import('../src/store.js');
 const billing = await import('../src/billing.js');
 const social = await import('../src/social.js');
 
-test('the allowance is one, on every plan and every platform', () => {
-  // Not "one unless Studio". A function that still branches on the tier is a
-  // feature waiting to be switched back on by a config change nobody reviews.
+test('the allowance is one for every customer, on every plan and platform', () => {
+  /*
+   * NOT "one unless Studio". The tier must not buy this back: that is the
+   * thing v3.125.0 removed, and a function branching on the tier is it
+   * returning by a config change nobody reviews.
+   *
+   * The operator is the one exception (v3.157.0, below) and the gate is a
+   * ROLE, which a customer cannot set on themselves -- so no plan reaches it.
+   */
   for (const user of [
     null,
-    { id: 'u', role: 'owner' },
     { id: 'u', role: 'creator', billing: { plan: 'studio_yearly', status: 'active' } },
     { id: 'u', role: 'creator', billing: { plan: 'pro_monthly', status: 'active' } },
+    { id: 'u', role: 'creator', billing: { plan: 'free' } },
   ]) {
     for (const provider of ['youtube', 'tiktok', 'instagram', 'facebook', '']) {
       assert.equal(billing.accountsPerPlatform(user, provider), 1);
@@ -59,12 +65,29 @@ test('the allowance is one, on every plan and every platform', () => {
   }
 });
 
-test('a record holding three still posts to one, and says which', () => {
+test('the operator gets three, and only by their role', () => {
+  // Youssef, 8 Sept 2026: "bring back three channels ... just for owner only.
+  // So my email only." He runs several DeenClipped channels and is the one
+  // person who both wants the fan-out and has seen the schedule with it on.
+  for (const role of ['owner', 'admin']) {
+    for (const provider of ['youtube', 'tiktok', 'instagram', 'facebook', '']) {
+      assert.equal(billing.accountsPerPlatform({ id: 'o', role }, provider), 3);
+    }
+  }
+  // A paid plan does NOT reach it, which is what keeps this out of Studio.
+  assert.equal(billing.accountsPerPlatform({ id: 'u', role: 'creator', billing: { plan: 'studio_yearly', status: 'active' } }), 1);
+  assert.equal(billing.OPERATOR_ACCOUNTS_PER_PLATFORM, 3);
+});
+
+test('a CUSTOMER record holding three still posts to one, and says which', () => {
   // Nothing was migrated, deliberately: an account that connected three while
   // they were sold has three on disk, and capping the ALLOWANCE stops the
   // extras without a migration that could lose a working credential.
   const userId = 'u_one';
-  state.authUsers = [{ id: userId, email: 'o@example.com', role: 'owner' }];
+  // A creator, not an owner: the operator's allowance is three (above), so an
+  // owner fixture here would assert the cap against the one account exempt
+  // from it and pass for the wrong reason.
+  state.authUsers = [{ id: userId, email: 'c@example.com', role: 'creator' }];
   state.socialConnections = { [userId]: { youtube: [
     { provider: 'youtube', accountId: 'y1', name: 'Main', tokens: {} },
     { provider: 'youtube', accountId: 'y2', name: 'Shorts', tokens: {} },

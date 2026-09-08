@@ -39,7 +39,7 @@ const social = await import('../src/social.js');
 const userId = 'user_where';
 
 function seed({ tiktok = true } = {}) {
-  state.authUsers = [{ id: userId, email: 'w@example.com', role: 'owner' }];
+  state.authUsers = [{ id: userId, email: 'w@example.com', role: 'creator' }];
   state.socialConnections = {
     [userId]: {
       youtube: [
@@ -72,7 +72,7 @@ test('a clip waiting for review already knows where it is going', () => {
   assert.ok(social.plannedChannelsFor(first).length, 'and it can still answer');
 });
 
-test('one channel per platform, whatever the record holds', () => {
+test('one channel per platform for a customer, whatever the record holds', () => {
   // Three YouTube channels are stored and the preview names the first, on
   // every clip. It named a different one per clip while the share-out mode
   // existed; that is the whole of what came off.
@@ -113,15 +113,24 @@ test('a lecture that narrows its platforms narrows the preview too', () => {
 test('the cap applies to the preview, so it cannot promise more than it posts', () => {
   // A settings record outlives the plan that wrote it, and now outlives the
   // FEATURE: three ids stay on disk from when Studio sold three channels. The
-  // preview must not keep naming all three, on any plan -- including the
-  // operator's, who was the one account that used to get them.
+  // preview must not keep naming all three on a plan that does not have them.
   const [a] = seed();
-  const asOwner = social.plannedChannelsFor(a).filter(c => c.provider === 'youtube');
-  assert.equal(asOwner.length, 1, 'the operator is capped like everybody else');
-  state.authUsers[0].role = 'user';
+  const asCreator = social.plannedChannelsFor(a).filter(c => c.provider === 'youtube');
+  assert.equal(asCreator.length, 1, 'a customer is capped');
   state.authUsers[0].billing = { plan: 'studio_monthly', status: 'active' };
   const asStudio = social.plannedChannelsFor(a).filter(c => c.provider === 'youtube');
-  assert.equal(asStudio.length, 1, 'and so is a paying Studio subscriber');
+  assert.equal(asStudio.length, 1, 'and so is a paying Studio subscriber — the tier does not buy it back');
+});
+
+test('the operator sees all three, because the operator posts to all three', () => {
+  // The preview and the publish path read the SAME allowance, so a screen that
+  // promised one while three posted -- or the reverse -- cannot happen.
+  const [a] = seed();
+  state.authUsers[0].role = 'owner';
+  const asOwner = social.plannedChannelsFor(a).filter(c => c.provider === 'youtube');
+  assert.deepEqual(asOwner.map(c => c.accountName), ['Main', 'Shorts', 'Arabic']);
+  assert.equal(social.enabledTargetsForClip(a, { assumeConsent: true })
+    .filter(t => t.provider === 'youtube').length, 3, 'and the real build agrees');
 });
 
 test('the browser is told, never left to work it out', () => {

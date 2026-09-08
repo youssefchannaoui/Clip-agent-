@@ -2116,7 +2116,12 @@ async function route(req, res, url) {
         const ids = [...new Set(supplied.map(value => String(value || '')).filter(Boolean))];
         const allowed = billing.accountsPerPlatform(currentUser, provider);
         if (ids.length > allowed) {
-          throw new Error(`DeenClipped posts to one ${provider} account. Choose which one.`);
+          // The allowance is 1 for a customer and 3 for the operator, so the
+          // sentence has to count rather than say "one" -- a refusal that
+          // names the wrong number reads as a bug in the refusal.
+          throw new Error(allowed === 1
+            ? `DeenClipped posts to one ${provider} account. Choose which one.`
+            : `DeenClipped posts to ${allowed} ${provider} accounts. Choose which ${allowed}.`);
         }
         return ids;
       };
