@@ -788,11 +788,18 @@ test('failures lead the feed and are tagged', () => {
   assert.match(vals.activity[0].iconStyle, /#E3928C/);
 });
 
-test('error text is stripped of URLs and kept to one line', () => {
+test('a raw error never reaches the row, with or without a URL in it', () => {
+  // This used to assert the row QUOTED the raw error with its URLs stripped
+  // and folded onto one line. v3.168.0 took the raw off the row altogether,
+  // which is strictly stronger: there is no URL to strip and no second line to
+  // fold, because the platform's own words are not there at all. They survive
+  // verbatim behind "The original message", which is what a bug report quotes.
   const vals = StudioAdapter.bindings(BROKEN_STATE);
   const lecture = vals.activity.find(a => /Failed lecture/.test(a.text));
-  assert.doesNotMatch(lecture.meta, /https?:/);
-  assert.match(lecture.meta, /yt-dlp failed/);
+  assert.doesNotMatch(lecture.meta, /https?:/, 'no URL');
+  assert.doesNotMatch(lecture.meta, /\n/, 'one line');
+  assert.doesNotMatch(lecture.meta, /yt-dlp/i, 'and the tool that failed is not a message');
+  assert.match(lecture.full, /yt-dlp failed: https/, 'while nothing is lost');
 });
 
 test('the badge counts failures as well as clips awaiting review', () => {
