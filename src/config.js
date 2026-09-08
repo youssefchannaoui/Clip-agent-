@@ -378,6 +378,39 @@ export const config = {
   metaGraphBase: (process.env.META_GRAPH_BASE || 'https://graph.facebook.com').replace(/\/+$/, ''),
   metaDialogBase: (process.env.META_DIALOG_BASE || 'https://www.facebook.com').replace(/\/+$/, ''),
 
+  /*
+   * INSTAGRAM LOGIN -- a SECOND way to connect Instagram, and the one most
+   * people can actually use.
+   *
+   * Youssef, 8 Sept 2026: "whenever I log in to Instagram, it gives me Meta,
+   * and some people don't have Meta connected with Facebook ... make it a bit
+   * easier so people can log in with either one."
+   *
+   * He is describing a real requirement of the path this app has always used.
+   * Facebook Login + `instagram_content_publish` reaches an Instagram account
+   * ONLY through a Facebook Page it is linked to, so a creator with a
+   * professional Instagram and no Page -- or no Facebook at all -- cannot
+   * connect however many times they try.
+   *
+   * Meta's "Instagram API with Instagram Login" authorises the Instagram
+   * account DIRECTLY (www.instagram.com/oauth/authorize) and publishes through
+   * graph.instagram.com with no Page in the chain. It is a different app id
+   * and secret from the Facebook one: in the Meta dashboard it is the
+   * Instagram product's own "Instagram app ID" and "Instagram app secret".
+   *
+   * INERT WITHOUT THEM. With these unset the Instagram row behaves exactly as
+   * it does today and connects through Meta -- the same shape as Turnstile and
+   * Stripe, so an unconfigured deployment loses nothing.
+   */
+  instagramClientId: String(process.env.INSTAGRAM_CLIENT_ID || '').trim(),
+  instagramClientSecret: String(process.env.INSTAGRAM_CLIENT_SECRET || '').trim(),
+  instagramRedirectUri: process.env.INSTAGRAM_REDIRECT_URI || '',
+  // Three different hosts, and they are not interchangeable: the dialog lives
+  // on www, the code exchange on api, everything afterwards on graph.
+  instagramAuthBase: (process.env.INSTAGRAM_AUTH_BASE || 'https://www.instagram.com').replace(/\/+$/, ''),
+  instagramApiBase: (process.env.INSTAGRAM_API_BASE || 'https://api.instagram.com').replace(/\/+$/, ''),
+  instagramGraphBase: (process.env.INSTAGRAM_GRAPH_BASE || 'https://graph.instagram.com').replace(/\/+$/, ''),
+
   // Trimmed, like Stripe's and Turnstile's above, and for the same reason --
   // this repo has now paid for that lesson three times. A credential pasted
   // into Render's variable field picks up a trailing newline routinely, and

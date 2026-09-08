@@ -56,11 +56,25 @@ test('recording it can never fail the publish that is already failing', () => {
 
 test('needsReconnect still reads that field for the providers that matter', () => {
   // The flag has to be READ from it, or recording it changes nothing on screen.
+  /*
+   * BRACE-MATCHED, not sliced to the end of the line. A status row may be
+   * written across several lines -- Instagram's is, since it gained a second
+   * way to connect -- and reading to the first newline then finds only
+   * `instagram: {` and reports the flag missing from code that has it. The
+   * braces are the boundary; a byte offset is not.
+   */
   for (const provider of ['tiktok', 'instagram', 'facebook', 'youtube']) {
-    const at = social.indexOf(`${provider}: { configured:`);
+    const at = social.indexOf(`${provider}: { configured:`) >= 0
+      ? social.indexOf(`${provider}: { configured:`)
+      : social.indexOf(`${provider}: {`);
     assert.ok(at > -1, `${provider} has a status row`);
-    const row = social.slice(at, social.indexOf('\n', at));
-    assert.match(row, /needsReconnect:.*lastTestError/,
+    let i = social.indexOf('{', at), depth = 0, end = i;
+    for (; i < social.length; i++) {
+      if (social[i] === '{') depth++;
+      else if (social[i] === '}' && --depth === 0) { end = i; break; }
+    }
+    const row = social.slice(at, end);
+    assert.match(row, /needsReconnect:[\s\S]*lastTestError/,
       `${provider}'s needsReconnect reads lastTestError`);
   }
 });

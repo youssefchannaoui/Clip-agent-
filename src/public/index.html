@@ -7511,7 +7511,14 @@ function renderStudio(){
         /* The pill beside the name says what state this is in, so the line
            under it is just the account. It used to repeat the state as words
            as well, and the two together truncated mid-sentence. */
-        const detail=off?'Not set up on the server yet':linked?r.handle:'No account linked';
+        /* For Instagram, WHICH login gets you in -- the one thing somebody with
+           no Facebook account needs to know before pressing anything. */
+        const detail=off?'Not set up on the server yet':linked?r.handle
+          :r.key==='instagram'
+            ?(r.connectWith==='Instagram'
+              ?'Log in with Instagram — no Facebook Page needed'
+              :'Needs a professional Instagram linked to a Facebook Page')
+            :'No account linked';
         /* A credential that cannot be renewed (expired with no refresh token,
            or a failed test) read "Publishing" here until a post failed on it.
            It is its own state now, and it never counts as ready. */
@@ -7529,7 +7536,7 @@ function renderStudio(){
             aria-label="Publish to ${esc(r.name)}" title="${linked?(on?'Switched on — approved clips can post here':'Switched off — connected, but nothing will post'):'Connect an account first'}"
             data-conn-toggle="${i}" ${linked?'':'disabled'}><i></i></button>
           <span class="studio-conn-actions">
-            <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}>${linked?'Reconnect':'Connect'}</button>
+            <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}>${linked?'Reconnect':`Connect with ${esc(r.connectWith||r.name)}`}</button>
             ${HAS_SETTINGS[r.key]&&linked?`<button type="button" data-conn-settings="${esc(r.key)}"><i class="ph ph-sliders-horizontal"></i>Settings</button>`:''}
             ${linked?`<button type="button" data-conn-test="${esc(r.key)}" title="Ask ${esc(r.name)} for this account's current settings"><i class="ph ph-check-circle"></i>Test</button>`:''}
             <button type="button" class="danger" data-conn-disconnect="${i}" ${linked?'':'disabled'}>Disconnect</button>

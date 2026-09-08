@@ -2096,9 +2096,25 @@
   }
   // The names the existing dashboard shows, which say which surface is posted to.
   var PLATFORM_TITLES = { youtube: 'YouTube Shorts', instagram: 'Instagram Reels', tiktok: 'TikTok', facebook: 'Facebook Reels' };
-  // Instagram and Facebook are one Meta connection: connecting, testing or
-  // disconnecting either affects both.
+  /*
+   * WHICH OAUTH FLOW A PLATFORM'S BUTTONS USE.
+   *
+   * Facebook is always the Meta login. INSTAGRAM HAS TWO ROADS and the server
+   * says which are available: with the Instagram app configured it gets its
+   * OWN login (instagram.com), which needs no Facebook Page and is the only
+   * way in for a creator who has no Facebook -- Youssef, 8 Sept 2026: "some
+   * people don't have Meta connected with Facebook ... make it a bit easier so
+   * people can log in with either one."
+   *
+   * DERIVED FROM THE PAYLOAD, never assumed: a deployment may have the Meta
+   * app, the Instagram app, both or neither, and a hardcoded answer here would
+   * send somebody to a dialog that cannot load.
+   */
   var OAUTH_OF = { youtube: 'youtube', instagram: 'meta', facebook: 'meta', tiktok: 'tiktok' };
+  function oauthFor(key, status) {
+    if (key === 'instagram' && status && status.instagramLogin) return 'instagram';
+    return OAUTH_OF[key] || key;
+  }
   var PLATFORMS = ['youtube', 'tiktok', 'instagram', 'facebook'];
 
   /**
@@ -2173,7 +2189,24 @@
     return {
       key: key,
       title: PLATFORM_TITLES[key] || key,
-      oauth: OAUTH_OF[key] || key,
+      oauth: oauthFor(key, status),
+      /*
+       * WHICH LOGIN THIS BUTTON OPENS, said on the button.
+       *
+       * The whole of Youssef's complaint: "whenever I log in to Instagram, it
+       * gives me Meta". A button reading "Connect" that opens Facebook is what
+       * makes somebody with no Facebook account think the product is broken.
+       * Naming the login is free and it is the difference between an expected
+       * hand-off and a confusing one.
+       */
+      /*
+       * PLATFORM_NAMES, not PLATFORM_TITLES: the titles are the SURFACE a clip
+       * lands on ("YouTube Shorts", "Facebook Reels") and you do not log in
+       * with a surface. It rendered "Connect with YouTube Shorts" for a
+       * release-and-a-half of a minute before this was measured.
+       */
+      connectWith: oauthFor(key, status) === 'meta' ? 'Facebook'
+        : PLATFORM_NAMES[key] || key,
       icon: key === 'youtube' ? 'ph ph-youtube-logo' : key === 'instagram' ? 'ph ph-instagram-logo'
         : key === 'tiktok' ? 'ph ph-tiktok-logo' : 'ph ph-facebook-logo',
       status: status,
@@ -8482,6 +8515,9 @@
       connBtnIconStyle: 'font-size: 15px;' + (conn && !conn.configured ? ' opacity: .45;' : ''),
       // Instagram and Facebook share one Meta connection, so say so before
       // someone disconnects both by accident.
+      // "Connecting or disconnecting this also affects the other" -- true of
+      // the Meta login, and NOT true of the direct Instagram one, which is its
+      // own credential and leaves Facebook alone.
       connShared: Boolean(conn) && conn.oauth === 'meta',
       connEnabled: Boolean(conn) && conn.enabled,
       connToggleTrack: switchTrack(Boolean(conn) && conn.enabled),
@@ -9935,6 +9971,16 @@
           // here, so there is no `maxAccounts` for a surface to disagree with.
           accounts: p.accounts,
           accountIds: p.accountIds,
+          /*
+           * WHICH LOGIN THE BUTTON OPENS. Explicitly carried, because this
+           * binding picks its fields one by one rather than spreading
+           * providerInfo -- and the omission was invisible: the button falls
+           * back to the platform's own name, so "Connect with Instagram"
+           * rendered correctly while `connectWith` was undefined and the line
+           * under it said the opposite. Found by reading the row's DETAIL,
+           * not the button.
+           */
+          connectWith: p.connectWith,
           // Opens the combined dialog rather than a per-platform one: seeing all
           // four at once is what makes the publishing picture legible.
           open: function (e) { stop(e); global.StudioAdapter.onOpenConnections(p.key); },

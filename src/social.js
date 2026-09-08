@@ -11,6 +11,16 @@ const referralCodeFor = user => referralCodeForUser(state, user);
 
 const PROVIDERS = ['youtube', 'instagram', 'facebook', 'tiktok'];
 const META_SCOPES = 'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish,business_management';
+/*
+ * The DIRECT Instagram login's scopes. Deliberately the minimum that can
+ * publish: basic identity and content publishing, and nothing about comments
+ * or messages -- this app reads neither, and a permission asked for and unused
+ * is one more thing for Meta's review to ask about.
+ *
+ * `instagram_business_*` replaced the older bare `business_*` names; the old
+ * ones are deprecated and refused.
+ */
+const INSTAGRAM_SCOPES = 'instagram_business_basic,instagram_business_content_publish';
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -69,6 +79,7 @@ function redirectUri(provider) {
     youtube: config.googleRedirectUri,
     meta: config.metaRedirectUri,
     tiktok: config.tiktokRedirectUri,
+    instagram: config.instagramRedirectUri,
   }[provider];
   return explicit || `${baseUrl()}/auth/${provider}/callback`;
 }
@@ -77,7 +88,21 @@ function providerConfigured(provider) {
   if (provider === 'youtube') return Boolean(config.googleClientId && config.googleClientSecret);
   if (provider === 'meta') return Boolean(config.metaAppId && config.metaAppSecret);
   if (provider === 'tiktok') return Boolean(config.tiktokClientKey && config.tiktokClientSecret);
+  // The DIRECT Instagram login, which is its own app id and secret. Kept
+  // separate from 'meta' on purpose: a deployment may have either, both or
+  // neither, and the Instagram ROW is offered when EITHER can reach it.
+  if (provider === 'instagram') return Boolean(config.instagramClientId && config.instagramClientSecret);
   return false;
+}
+/*
+ * Can this deployment connect an Instagram account at all, by either road?
+ *
+ * Instagram is the one platform with two: through a Facebook Page (the Meta
+ * app) or directly (Instagram Login). The dialog asks THIS, and which button
+ * it draws is a separate question -- `instagramLoginReady` below.
+ */
+function instagramConfigured() {
+  return providerConfigured('instagram') || providerConfigured('meta');
 }
 
 function pruneOauthStates() {
@@ -204,7 +229,7 @@ async function jsonRequest(url, options = {}, provider = '') {
 }
 
 export function oauthStartUrl(provider, userId) {
-  if (!['youtube', 'meta', 'tiktok'].includes(provider)) throw new SocialError('Unknown social provider.');
+  if (!['youtube', 'meta', 'tiktok', 'instagram'].includes(provider)) throw new SocialError('Unknown social provider.');
   if (!providerConfigured(provider)) throw new SocialError(`${provider} OAuth is not configured in the deployment environment.`);
   const stateText = signState(provider, userId);
   if (provider === 'youtube') {
@@ -219,6 +244,25 @@ export function oauthStartUrl(provider, userId) {
       state: stateText,
     });
     return `${config.googleAuthBase}/o/oauth2/v2/auth?${query}`;
+  }
+  if (provider === 'instagram') {
+    /*
+     * INSTAGRAM LOGIN. The dialog lives on www.instagram.com -- not on
+     * facebook.com and not on graph -- and the three hosts in this flow are
+     * not interchangeable (dialog on www, code exchange on api, everything
+     * after on graph). Getting that wrong is an opaque redirect failure.
+     *
+     * `instagram_business_basic` is required alongside the publishing scope;
+     * asking for the publish scope alone is refused.
+     */
+    const query = new URLSearchParams({
+      client_id: config.instagramClientId,
+      redirect_uri: redirectUri('instagram'),
+      response_type: 'code',
+      scope: INSTAGRAM_SCOPES,
+      state: stateText,
+    });
+    return `${config.instagramAuthBase}/oauth/authorize?${query}`;
   }
   if (provider === 'meta') {
     // Facebook Login for Business names its permissions in a saved CONFIGURATION
@@ -538,6 +582,85 @@ async function connectTikTok(code, userId) {
   }
 }
 
+/*
+ * CONNECT AN INSTAGRAM ACCOUNT DIRECTLY, with no Facebook Page in the chain.
+ *
+ * Three hosts, in this order, and they are not interchangeable:
+ *   api.instagram.com     exchange the code for a short-lived token
+ *   graph.instagram.com   exchange that for a long-lived one (60 days)
+ *   graph.instagram.com   read who it belongs to
+ *
+ * The code exchange is a FORM POST, unlike Meta's, which takes its parameters
+ * in the query string. Sending Instagram's as a query string returns an opaque
+ * refusal rather than a useful error.
+ */
+async function connectInstagram(code, userId) {
+  const short = await jsonRequest(`${config.instagramApiBase}/oauth/access_token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: config.instagramClientId,
+      client_secret: config.instagramClientSecret,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri('instagram'),
+      code,
+    }),
+  }, 'Instagram');
+  if (!short?.access_token) throw new SocialError('Instagram did not return an access token.', { provider: 'instagram' });
+
+  /*
+   * The short-lived token lasts an hour. The long-lived one lasts 60 days and
+   * can be refreshed, so a failure HERE is worth reporting rather than
+   * swallowing: without it the connection stops working within the hour and
+   * nothing would say why.
+   */
+  const longQuery = new URLSearchParams({
+    grant_type: 'ig_exchange_token',
+    client_secret: config.instagramClientSecret,
+    access_token: short.access_token,
+  });
+  const long = await jsonRequest(`${config.instagramGraphBase}/access_token?${longQuery}`, {}, 'Instagram');
+  const accessToken = long?.access_token || short.access_token;
+  const expiresIn = Number(long?.expires_in || 0);
+
+  const me = await jsonRequest(
+    `${config.instagramGraphBase}/me?fields=user_id,username,name,profile_picture_url&access_token=${encodeURIComponent(accessToken)}`,
+    {}, 'Instagram');
+  /*
+   * `user_id` is the Instagram-scoped id the publish endpoints take. `id` on
+   * the same object is the APP-scoped id and is NOT interchangeable -- posting
+   * with it is rejected. Fall back to `id` only because an older API version
+   * returns just that, and never silently: with neither there is nothing to
+   * post to and saying so beats storing a connection that cannot publish.
+   */
+  const accountId = String(me?.user_id || me?.id || '');
+  if (!accountId) throw new SocialError('Instagram did not say which account was connected.', { provider: 'instagram' });
+
+  addConnection(userId, 'instagram', {
+    provider: 'instagram',
+    accountId,
+    name: me?.username ? `@${me.username}` : (me?.name || 'Instagram'),
+    avatar: me?.profile_picture_url || '',
+    // Marks this as the DIRECT connection wherever both kinds meet. A Page's
+    // Instagram has no such flag, so the two can always be told apart.
+    viaInstagramLogin: true,
+    /*
+     * `token`, not `tokens`, and `expiresAt`, not `expires_at`: the house
+     * shape, which `needsReconnect` and the whole credential layer read. A
+     * private spelling here would have made this the one connection the
+     * "needs reconnecting" flag could never see.
+     */
+    token: encrypt({
+      access_token: accessToken,
+      // 60 days by default, and refreshable -- see instagramToken.
+      expiresAt: Date.now() + (expiresIn || 60 * 24 * 60 * 60) * 1000,
+    }),
+    connectedAt: Date.now(),
+  }, { max: billing.accountsPerPlatform(userById(userId), 'instagram') });
+  enableOnConnect(userId, ['instagram']);
+  log(`Connected Instagram account "${me?.username || accountId}".`, 'info', userId);
+}
+
 export async function completeOAuth(provider, callbackUrl) {
   const url = callbackUrl instanceof URL ? callbackUrl : new URL(callbackUrl);
   const error = url.searchParams.get('error');
@@ -563,6 +686,7 @@ export async function completeOAuth(provider, callbackUrl) {
     if (provider === 'youtube') await connectYouTube(code, userId);
     else if (provider === 'meta') await connectMeta(code, userId);
     else if (provider === 'tiktok') await connectTikTok(code, userId);
+    else if (provider === 'instagram') await connectInstagram(code, userId);
     else throw new SocialError('Unknown OAuth provider.');
   } catch (error) {
     log(`Could not connect ${provider}: ${error.message}`, 'error', userId);
@@ -581,8 +705,14 @@ export async function completeOAuth(provider, callbackUrl) {
 export async function disconnect(provider, user, accountId = '') {
   const userId = user?.id || user;
   if (!userId) throw new SocialError('Sign in to disconnect an account.');
+  /*
+   * Disconnecting META unlinks BOTH platforms it carries. Disconnecting the
+   * direct Instagram connection unlinks Instagram alone -- and deliberately
+   * leaves any Page-derived Instagram in place, because the two roads are
+   * independent and taking one away must not take the other with it.
+   */
   const affected = provider === 'meta' ? ['instagram', 'facebook'] : [provider];
-  if (!['youtube', 'meta', 'tiktok'].includes(provider)) throw new SocialError('Unknown provider.');
+  if (!['youtube', 'meta', 'tiktok', 'instagram'].includes(provider)) throw new SocialError('Unknown provider.');
   // Meta is one login carrying its Pages inside it, so there is no per-account
   // credential to remove -- disconnecting it is all or nothing, and an account
   // id here would silently match nothing and remove nothing.
@@ -702,6 +832,37 @@ function metaSummaries(kind, userId) {
     ? { id: item.pageId, name: item.pageName, avatar: '' }
     : { id: item.instagramId, name: item.instagramName || `${item.pageName} Instagram`, avatar: item.instagramAvatar || '', pageId: item.pageId });
 }
+/*
+ * Instagram accounts connected DIRECTLY, through Instagram Login.
+ *
+ * Its own connection slot, so it survives a Facebook disconnect: the two roads
+ * to Instagram are independent and unlinking one must not unlink the other.
+ */
+function instagramDirect(userId) {
+  return connections(userId, 'instagram').map(c => ({
+    id: c.accountId, name: c.name, avatar: c.avatar || '', viaInstagramLogin: true, needsReconnect: needsReconnect(c),
+  }));
+}
+/*
+ * EVERY Instagram account, however it was connected, direct first.
+ *
+ * Direct first because it is the one that keeps working: a Page-derived
+ * account stops the moment the Page is unshared, and where somebody has
+ * connected the same account both ways the direct token is the better one to
+ * post with. De-duplicated by id, or an account reachable both ways would be
+ * listed twice and posted to twice.
+ */
+function instagramSummaries(userId) {
+  const seen = new Set();
+  const out = [];
+  for (const item of [...instagramDirect(userId), ...metaSummaries('instagram', userId)]) {
+    const id = String(item.id || '');
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(item);
+  }
+  return out;
+}
 function tiktokSummary(userId) {
   return connections(userId, 'tiktok').map(c => ({
     id: c.accountId, name: c.name, avatar: c.avatar || '', creatorInfo: c.creatorInfo || null, needsReconnect: needsReconnect(c),
@@ -712,6 +873,7 @@ export function connectionStatus(user) {
   const userId = user?.id || user || '';
   const youtube = connection(userId, 'youtube');
   const meta = connection(userId, 'meta');
+  const instagramConn = connection(userId, 'instagram');
   const tiktok = connection(userId, 'tiktok');
   const securityReady = Boolean(config.socialTokenKey && config.socialTokenKey.length >= 32);
   const publicBaseUrlReady = Boolean(config.publicBaseUrl);
@@ -744,7 +906,21 @@ export function connectionStatus(user) {
       // a credential that cannot be renewed, or a connection whose last test
       // failed. Never derived from "configured but not connected".
       youtube: { configured: providerConfigured('youtube'), connected: youtubeSummary(userId).length > 0, accounts: youtubeSummary(userId), lastTestAt: youtube?.lastTestAt || null, lastTestError: youtube?.lastTestError || null, needsReconnect: youtubeSummary(userId).some(a => a.needsReconnect) || Boolean(youtube?.lastTestError) },
-      instagram: { configured: providerConfigured('meta'), connected: metaSummaries('instagram', userId).length > 0, accounts: metaSummaries('instagram', userId), lastTestAt: meta?.lastTestAt || null, lastTestError: meta?.lastTestError || null, needsReconnect: Boolean(meta?.lastTestError) },
+      // Instagram is the one platform with TWO roads in, and the row reports
+      // both: `configured` is whether either can reach it, `instagramLogin`
+      // is whether the direct one is available, which is what decides the
+      // button the dialog draws.
+      instagram: {
+        configured: instagramConfigured(),
+        instagramLogin: providerConfigured('instagram'),
+        metaLogin: providerConfigured('meta'),
+        connected: instagramSummaries(userId).length > 0,
+        accounts: instagramSummaries(userId),
+        lastTestAt: instagramConn?.lastTestAt || meta?.lastTestAt || null,
+        lastTestError: instagramConn?.lastTestError || meta?.lastTestError || null,
+        needsReconnect: instagramDirect(userId).some(a => a.needsReconnect) || Boolean(instagramConn?.lastTestError)
+          || (instagramDirect(userId).length === 0 && Boolean(meta?.lastTestError)),
+      },
       facebook: { configured: providerConfigured('meta'), connected: metaSummaries('facebook', userId).length > 0, accounts: metaSummaries('facebook', userId), lastTestAt: meta?.lastTestAt || null, lastTestError: meta?.lastTestError || null, needsReconnect: Boolean(meta?.lastTestError) },
       tiktok: { configured: providerConfigured('tiktok'), connected: tiktokSummary(userId).length > 0, accounts: tiktokSummary(userId), requiresManualApproval: true, lastTestAt: tiktok?.lastTestAt || null, lastTestError: tiktok?.lastTestError || null, needsReconnect: tiktokSummary(userId).some(a => a.needsReconnect) || Boolean(tiktok?.lastTestError) },
     },
@@ -790,18 +966,34 @@ function connectedAccountIds(provider, userId) {
   if (provider === 'youtube' || provider === 'tiktok') {
     return connections(userId, provider).map(item => String(item?.accountId || '')).filter(Boolean);
   }
-  // Facebook and Instagram are Pages inside ONE Meta login, so their ids come
-  // off that connection's own list rather than from a connection each.
+  // Instagram has two roads in, so it asks the same merged list the dialog
+  // shows -- otherwise a directly-connected account would be listed on screen
+  // and absent from the fallback, which is the screen-and-publish-path
+  // disagreement this fallback exists to end.
+  if (provider === 'instagram') return instagramSummaries(userId).map(item => String(item.id || '')).filter(Boolean);
+  // Facebook Pages come off the ONE Meta login rather than a connection each.
   const accounts = connection(userId, 'meta')?.accounts || [];
-  const key = provider === 'facebook' ? 'pageId' : 'instagramId';
-  return accounts.map(item => String(item?.[key] || '')).filter(Boolean);
+  return accounts.map(item => String(item?.pageId || '')).filter(Boolean);
 }
 
 function selectedAccount(provider, accountId, userId) {
   if (!userId) return null;
   if (provider === 'youtube') return oneOf('youtube', accountId, userId);
   if (provider === 'facebook') return (connection(userId, 'meta')?.accounts || []).find(item => item.pageId === accountId) || null;
-  if (provider === 'instagram') return (connection(userId, 'meta')?.accounts || []).find(item => item.instagramId === accountId) || null;
+  if (provider === 'instagram') {
+    /*
+     * DIRECT FIRST. An account reachable both ways posts with the Instagram
+     * Login token, which is the one that survives the Page being unshared --
+     * and resolving to the Page's copy while the direct connection exists is
+     * how a working connection quietly starts using a token that may not be.
+     *
+     * `oneOf` handles the blank-id case for the direct list exactly as it does
+     * for YouTube and TikTok: honoured only when there is exactly one.
+     */
+    const direct = oneOf('instagram', accountId, userId);
+    if (direct) return direct;
+    return (connection(userId, 'meta')?.accounts || []).find(item => item.instagramId === accountId) || null;
+  }
   if (provider === 'tiktok') return oneOf('tiktok', accountId, userId);
   return null;
 }
@@ -1135,7 +1327,18 @@ export function enabledTargetsForClip(clip, { quiet = false, assumeConsent = fal
         // selectedAccount accepts an empty id and means "the one connection".
         id: `${provider}:${accountId || 'default'}`,
         userId,
-        provider, accountId, accountName: provider === 'facebook' ? account.pageName : provider === 'instagram' ? account.instagramName : account.name,
+        provider, accountId,
+        /*
+         * The name to SHOW for this destination. Instagram has two shapes: a
+         * Page-derived account carries `instagramName`, a directly connected
+         * one carries the ordinary `name` -- so reading only the former left
+         * every direct connection nameless, which is "facebook, facebook,
+         * facebook" by another door on the one platform now able to be
+         * connected two ways.
+         */
+        accountName: provider === 'facebook' ? account.pageName
+          : provider === 'instagram' ? (account.instagramName || account.name)
+            : account.name,
         status: 'scheduled', attempts: 0, nextTryAt: clip.scheduledAt || Date.now(), // A TikTok target carries ITS OWN audience and interaction choices; every
         // other platform has nothing per-account to carry.
         settings: structuredClone(provider === 'tiktok'
@@ -1220,6 +1423,53 @@ function mergeRefreshedToken(previous, refreshed, provider, defaultLifetimeSec) 
     refresh_token: refreshed.refresh_token || previous.refresh_token,
     expiresAt: Date.now() + Number(refreshed.expires_in || defaultLifetimeSec) * 1000,
   };
+}
+
+/*
+ * The DIRECT Instagram token, refreshed when it is getting old.
+ *
+ * Instagram's long-lived token lasts 60 days and is refreshed by presenting
+ * ITSELF -- there is no refresh_token, which is why this cannot go through the
+ * same path as YouTube's. Meta will only refresh a token that is still valid
+ * AND at least 24 hours old, so once it has expired there is nothing any code
+ * path can do and the honest answer is "reconnect".
+ *
+ * Refreshed at seven days out rather than at the last minute: this app posts
+ * on a schedule and may not touch a given account for a fortnight, so leaving
+ * it until expiry is how a connection dies between two posts.
+ */
+const INSTAGRAM_REFRESH_AT_MS = 7 * 24 * 60 * 60 * 1000;
+async function instagramToken(userId, accountId = '') {
+  const conn = connectionFo(userId, 'instagram', accountId);
+  if (!conn?.token) throw new SocialError('Instagram is not connected.', { provider: 'instagram' });
+  let token = decrypt(conn.token);
+  const expiresAt = Number(token?.expiresAt || 0);
+  if (expiresAt > Date.now() + INSTAGRAM_REFRESH_AT_MS) return token.access_token;
+  if (expiresAt && expiresAt <= Date.now()) {
+    markCredentialDead(userId, 'instagram', accountId, 'the 60-day token expired');
+    throw new SocialError('The Instagram connection has expired and cannot be renewed. Reconnect the account in Connections.', { provider: 'instagram', retryable: false });
+  }
+  let refreshed;
+  try {
+    const query = new URLSearchParams({ grant_type: 'ig_refresh_token', access_token: token.access_token });
+    refreshed = await jsonRequest(`${config.instagramGraphBase}/refresh_access_token?${query}`, {}, 'Instagram');
+  } catch (error) {
+    /*
+     * NOT fatal, unlike YouTube's. The token in hand is still valid -- that is
+     * the only state this branch is reachable in -- so the post can go out and
+     * the refresh can be tried again next time. Failing the clip here would
+     * turn a transient Meta error into a week of lost posts.
+     */
+    log(`The Instagram token could not be refreshed, so the current one is being used: ${error.message}`, 'warn', userId);
+    return token.access_token;
+  }
+  if (refreshed?.access_token) {
+    token = { ...token, access_token: refreshed.access_token };
+  }
+  token.expiresAt = Date.now() + (Number(refreshed?.expires_in || 0) || 60 * 24 * 60 * 60) * 1000;
+  conn.token = encrypt(token);
+  save();
+  return token.access_token;
 }
 
 async function youtubeToken(userId, accountId = '') {
@@ -1526,6 +1776,38 @@ function metaPage(accountId, kind, userId) {
   return { account, accessToken: decrypt(account.token)?.access_token };
 }
 
+/*
+ * WHERE TO PUBLISH AN INSTAGRAM REEL, and with what.
+ *
+ * The Content Publishing calls are the SAME two -- /media then /media_publish
+ * -- on either road. What differs is the host, the id and the token:
+ *
+ *   through a Page   graph.facebook.com   the Page's IG id   the PAGE token
+ *   direct           graph.instagram.com  the IG user id     the USER token
+ *
+ * Mixing them is the failure to avoid: a Page token on graph.instagram.com is
+ * refused, and the two id kinds are not interchangeable. Answered ONCE here so
+ * the container call and the publish call cannot disagree about which account
+ * they are talking to -- a half-published Reel is the worst outcome on this
+ * path, and the publish step already carries a "this has been attempted
+ * before" guard for exactly that reason.
+ */
+async function instagramTarget(accountId, userId) {
+  const account = selectedAccount('instagram', accountId, userId);
+  if (!account) throw new SocialError('The selected instagram account is no longer connected.');
+  if (account.viaInstagramLogin) {
+    const accessToken = await instagramToken(userId, String(account.accountId || ''));
+    return { account, accessToken, base: config.instagramGraphBase, version: config.metaGraphVersion, id: String(account.accountId || '') };
+  }
+  return {
+    account,
+    accessToken: decrypt(account.token)?.access_token,
+    base: config.metaGraphBase,
+    version: config.metaGraphVersion,
+    id: String(account.instagramId || ''),
+  };
+}
+
 async function uploadFacebook(clip, target, file, userId) {
   // The same answer the preview gives, so a customer cannot be told one thing
   // on the review card and another in the failure. `assumeKnown` because by
@@ -1590,26 +1872,32 @@ async function uploadFacebook(clip, target, file, userId) {
 }
 
 async function startInstagram(clip, target, userId) {
-  const { account, accessToken } = metaPage(target.accountId, 'instagram', userId);
+  const { accessToken, base, version, id } = await instagramTarget(target.accountId, userId);
   const body = new URLSearchParams({
     media_type: 'REELS', video_url: publicMediaUrl(clip.id), caption: captionText(clip, 2200),
     share_to_feed: target.settings.shareToFeed === false ? 'false' : 'true', access_token: accessToken,
   });
-  const container = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(account.instagramId)}/media`, {
+  const container = await jsonRequest(`${base}/${version}/${encodeURIComponent(id)}/media`, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
   }, 'Instagram');
   if (!container?.id) throw new SocialError('Instagram did not return a media container ID.', { retryable: true, provider: 'instagram' });
-  target.externalId = String(container.id); target.providerState = { stage: 'container', instagramId: account.instagramId }; save();
+  target.externalId = String(container.id);
+  // `instagramId` is kept under its old name so a container created before
+  // this release still finishes: pollInstagram reads it as the fallback.
+  target.providerState = { stage: 'container', instagramId: id };
+  save();
   return { pending: true, externalId: String(container.id), providerState: target.providerState };
 }
 
 async function pollInstagram(target, userId) {
-  const { account, accessToken } = metaPage(target.accountId, 'instagram', userId);
+  // The SAME resolver the container call used, so the poll cannot end up
+  // asking a different host about a container it did not create.
+  const { accessToken, base, version, id } = await instagramTarget(target.accountId, userId);
   if (target.providerState?.stage === 'published' && target.providerState?.publishedId) {
     return { postId: target.providerState.publishedId, postUrl: target.providerState.postUrl || '' };
   }
   const containerId = target.externalId;
-  const status = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(containerId)}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`, {}, 'Instagram');
+  const status = await jsonRequest(`${base}/${version}/${encodeURIComponent(containerId)}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`, {}, 'Instagram');
   if (status?.status_code === 'ERROR' || status?.status_code === 'EXPIRED') throw new SocialError(`Instagram could not prepare the Reel: ${status.status || status.status_code}`, { provider: 'instagram' });
   if (status?.status_code !== 'FINISHED') return { pending: true, externalId: containerId, providerState: { ...target.providerState, platformStatus: status?.status_code || status?.status || 'IN_PROGRESS' } };
   // media_publish CREATES the post, so the attempt is recorded before it is
@@ -1622,7 +1910,7 @@ async function pollInstagram(target, userId) {
   target.providerState = { ...target.providerState, stage: 'publishing', publishAttemptedAt: Date.now() };
   save();
   const body = new URLSearchParams({ creation_id: containerId, access_token: accessToken });
-  const published = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(account.instagramId)}/media_publish`, {
+  const published = await jsonRequest(`${base}/${version}/${encodeURIComponent(id || target.providerState?.instagramId || '')}/media_publish`, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
   }, 'Instagram');
   if (!published?.id) {
@@ -1636,7 +1924,7 @@ async function pollInstagram(target, userId) {
   const publishedId = String(published.id);
   let postUrl = '';
   try {
-    const details = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(publishedId)}?fields=permalink&access_token=${encodeURIComponent(accessToken)}`, {}, 'Instagram');
+    const details = await jsonRequest(`${base}/${version}/${encodeURIComponent(publishedId)}?fields=permalink&access_token=${encodeURIComponent(accessToken)}`, {}, 'Instagram');
     postUrl = details?.permalink || '';
   } catch {}
   target.providerState = { stage: 'published', publishedId, postUrl };

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1840 JS + 801 Python**
+- `npm test` and `npm run check` must pass. Currently **1853 JS + 801 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -8388,6 +8388,98 @@ mid-probe.
   and popped rather than committing at 3.158.0 and owing a merge bump -- and
   then verified every one of their index.html hunks survived the pop by
   grepping for each added line, because a clean stash pop is not proof.
+
+
+## Instagram can be connected with Instagram (v3.160.0, 8 Sept 2026)
+
+Youssef: "in terms of connecting to Instagram and Facebook, Instagram should be
+connecting by Instagram logins, Facebook should be by Facebook ... whenever I
+log in to Instagram it gives me Meta, and some people don't have Meta connected
+with Facebook ... so their Instagram is a bit difficult. Make it a bit easier so
+people can log in with either one."
+
+**He is describing a real requirement of the path this app has always used, not
+a preference.** Facebook Login plus `instagram_content_publish` reaches an
+Instagram account ONLY through a Facebook Page it is linked to. A creator with a
+professional Instagram and no Page -- or no Facebook at all -- cannot connect,
+however many times they try, and the button said "Connect" while opening
+Facebook.
+
+Meta's **Instagram API with Instagram Login** authorises the account directly
+and publishes through `graph.instagram.com` with no Page in the chain. Both
+roads are live now; the row says which one it will open.
+
+- **THREE HOSTS, NOT INTERCHANGEABLE**: the dialog is on `www.instagram.com`,
+  the code exchange on `api.instagram.com`, everything afterwards on
+  `graph.instagram.com`. And Instagram's code exchange is a **form POST** where
+  Meta's takes a query string.
+- **`user_id`, never `id`.** The same `/me` object carries an APP-scoped `id`
+  which is not interchangeable; posting with it is rejected.
+- **Scopes are `instagram_business_basic` + `instagram_business_content_publish`
+  and nothing else.** The bare `business_*` names are deprecated and refused,
+  and this app reads no comments or messages -- a permission asked for and
+  unused is one more thing app review asks about.
+- Every endpoint above was checked against Meta's own documentation during the
+  build rather than written from memory.
+
+### The two roads must never be mixed
+
+The Content Publishing calls are the SAME two on either road -- `/media` then
+`/media_publish`. What differs is the host, the id and the token:
+
+    through a Page   graph.facebook.com    the Page's IG id   the PAGE token
+    direct           graph.instagram.com   the IG user id     the USER token
+
+`instagramTarget` answers all three ONCE, so the container call and the publish
+call cannot disagree about which account they are talking to. A half-published
+Reel is the worst outcome on this path -- it already carries a "this has been
+attempted before" guard for exactly that -- and a test forbids either function
+naming `config.metaGraphBase` or `account.instagramId` directly.
+
+**A directly connected account wins over the same one reached through a Page.**
+It is the token that survives the Page being unshared. They are also
+de-duplicated by id, because listed twice is POSTED to twice.
+
+### Refresh, and why its failure is not fatal
+
+Instagram's 60-day token is refreshed by presenting ITSELF -- there is no
+refresh token -- and Meta refuses to refresh one that has already expired. So
+`instagramToken` refreshes at **seven days out**, not at the last minute: this
+app posts on a schedule and may not touch an account for a fortnight.
+
+A failed refresh is a WARNING, not a failure, unlike YouTube's: the token in
+hand is still valid (that is the only state the branch is reachable in), so the
+post goes out and the refresh is tried again. Failing the clip would turn a
+transient Meta error into a week of lost posts.
+
+### Two bugs the browser found and no test would have
+
+1. **`connectWith` never reached the dialog.** The connections binding picks its
+   fields one by one rather than spreading `providerInfo`, and the omission was
+   INVISIBLE: the button falls back to the platform's own name, so "Connect with
+   Instagram" rendered perfectly while the value was undefined. Found by reading
+   the row's DETAIL line, which said the opposite of the button above it.
+2. **"Connect with YouTube Shorts."** `PLATFORM_TITLES` is the SURFACE a clip
+   lands on; you do not log in with a surface. `PLATFORM_NAMES` is the login.
+
+A third came from a test rather than the browser: a directly connected account
+had **no name** on its publish target, because the target builder read only
+`instagramName` (the Page-derived shape) and a direct connection carries the
+ordinary `name`. That is "facebook, facebook, facebook" by another door.
+
+### Inert without keys, and what is NOT proven
+
+`INSTAGRAM_CLIENT_ID` / `INSTAGRAM_CLIENT_SECRET` are the **Instagram product's
+own** app id and secret in the Meta dashboard -- different values from
+`META_APP_ID`/`META_APP_SECRET`. With them unset the Instagram row behaves
+exactly as it did and connects through Meta, the same shape as Turnstile and
+Stripe. Both are trimmed: a credential pasted into Render's field picks up a
+trailing newline routinely and nothing about the failure says so.
+
+**NO TOKEN HAS EVER BEEN EXCHANGED WITH INSTAGRAM FROM THIS CODEBASE.** The
+endpoints are asserted against Meta's documentation and the whole of our own
+side is driven, but the first real connect is the proof and it needs the two
+credentials set.
 
 
 ## Open items

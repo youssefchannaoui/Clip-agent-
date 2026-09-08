@@ -1576,7 +1576,9 @@ async function route(req, res, url) {
     });
     return res.end(body);
   }
-  const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok)\/callback$/);
+  // `instagram` is the DIRECT Instagram Login, alongside `meta` which reaches
+  // Instagram through a Facebook Page. Both roads land here.
+  const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok|instagram)\/callback$/);
   if (method === 'GET' && oauthCallback) {
     const provider = oauthCallback[1];
     try {
@@ -2082,12 +2084,12 @@ async function route(req, res, url) {
   }
 
 
-  const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/connect$/);
+  const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok|instagram)\/connect$/);
   if (method === 'POST' && socialConnect) {
     try { return json(res, 200, { url: social.oauthStartUrl(socialConnect[1], currentUser?.id) }); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
-  const socialDisconnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/disconnect$/);
+  const socialDisconnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok|instagram)\/disconnect$/);
   if (method === 'POST' && socialDisconnect) {
     try {
       const body = await readBody(req).catch(() => ({}));
@@ -2096,7 +2098,7 @@ async function route(req, res, url) {
     }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
-  const socialTest = pathname.match(/^\/api\/social\/(youtube|meta|tiktok)\/test$/);
+  const socialTest = pathname.match(/^\/api\/social\/(youtube|meta|tiktok|instagram)\/test$/);
   if (method === 'POST' && socialTest) {
     const body = await readBody(req);
     try { return json(res, 200, { ok: true, result: await social.testConnection(socialTest[1], String(body.accountId || ''), currentUser), social: social.connectionStatus(currentUser) }); }
