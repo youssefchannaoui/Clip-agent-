@@ -97,6 +97,44 @@ test('every account gets them, credited rather than merely shared', () => {
   assert.equal(new Set(asCustomer.map(t => t.name)).size, 9);
 });
 
+test('a track somebody uploaded hides the starter of the same nasheed', () => {
+  // THE OPERATOR'S OWN LEGACY TRACKS ARE MARKED `shared`, because that flag has
+  // always meant "the app's own" -- so the first version of this rule, which
+  // asked whether the account's copy was PRIVATE, never fired for him. The
+  // duplicate he reported ("Allah Allah (Muffled)" beside "Allah Allah", both
+  // captioned as shipping with the studio) was fixed once and stayed on screen.
+  resetLibrary();
+  audio.seedStarterNasheeds('owner-1');
+  const file = path.join(MUSIC, 'library.json');
+  const library = JSON.parse(fs.readFileSync(file, 'utf8'));
+  library.push({
+    id: 'legacy-allah-allah', name: 'Allah Allah (Muffled)',
+    userId: 'owner-1', shared: true, file: 'legacy.mp3', durationSec: 434,
+  });
+  fs.writeFileSync(file, JSON.stringify(library));
+
+  const names = audio.listNasheeds('owner-1').map(t => t.name);
+  assert.equal(names.filter(n => n.startsWith('Allah Allah')).length, 1,
+    'one nasheed, listed once');
+  assert.ok(names.includes('Allah Allah (Muffled)'), 'the uploaded copy is the one kept');
+  assert.equal(names.length, 9, 'and nothing else was lost hiding it');
+});
+
+test('the starter comes back if that upload is removed', () => {
+  // Hidden, never deleted: tidying a list must not destroy a file.
+  resetLibrary();
+  audio.seedStarterNasheeds('owner-1');
+  assert.ok(audio.listNasheeds('owner-1').some(t => t.name === 'Allah Allah'));
+});
+
+test('a starter never hides another starter', () => {
+  // Otherwise the shipped set could eat itself the day two beds are named
+  // alike, and a library would quietly shrink with nothing saying why.
+  resetLibrary();
+  audio.seedStarterNasheeds('owner-1');
+  assert.equal(audio.listNasheeds('owner-1').length, 9);
+});
+
 test('booting copies NO audio: 27MB per boot was a real cost in the wrong place', () => {
   resetLibrary();
   assert.equal(audio.seedStarterNasheeds('owner-1'), 9);

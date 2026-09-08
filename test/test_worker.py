@@ -306,7 +306,14 @@ class RenderProgressTests(unittest.TestCase):
         self.assertGreaterEqual(worker.RENDER_PROGRESS_SECONDS, 1.0)
         source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
         self.assertIn("now - last_emit[0] < RENDER_PROGRESS_SECONDS", source)
-        self.assertIn("report(0.0, force=True)", source)
+        # And a clip's FIRST line is forced past the throttle, or the bar keeps
+        # showing the previous clip's percentage for up to two seconds after
+        # this one starts. Pinned as the property rather than as one spelling:
+        # the serial loop wrote report(0.0, force=True) and the lane pool sets
+        # the lane's fraction to 0 and then publishes forced. Both are "reset,
+        # then say so immediately"; a test naming either is a test that goes
+        # red on a refactor that changed nothing -- which is what happened.
+        self.assertRegex(source, r"(report\(0\.0, force=True\)|fractions\[index\] = 0\.0\s*\n\s*publish\(force=True\))")
 
     def test_the_clip_plan_names_every_clip_before_they_render(self):
         # So the app can list all four by name while only the second is running,

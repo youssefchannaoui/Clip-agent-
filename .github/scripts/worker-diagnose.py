@@ -114,37 +114,160 @@ def recent_jobs() -> list[tuple[float, Path, dict]]:
     return rows[:JOBS]
 
 
-def compare_to_box(job_id: str, settings: dict, decided: dict) -> int:
-    """What this job ASKED FOR beside what this container DECIDED.
+def import_posture() -> None:
+    """WHAT THE DOWNLOADER ACTUALLY HAS, because the refusal makes a claim.
 
-    Returns how many of the four disagree. Loud on purpose, and as a workflow
-    annotation as well as a line: this mismatch is the finding, and it has
-    already hidden behind a green log for a fortnight once.
+    A YouTube 403 comes back to the customer as one of two sentences, and
+    which one is chosen decides whether they read it as their video or as our
+    server:
+
+        "A proxy or cookies are configured and were used, so this looks like
+         the video itself rather than the address it was asked from."
+        "Every client failed, which usually means this server's IP is blocked."
+
+    _download_failure picks between them by asking whether the options dict
+    carries a proxy or a cookie file -- so the first sentence is a claim about
+    this box's configuration, and until now NOTHING anywhere could check it.
+    A pool file that failed to parse, or an empty VIDEO_IMPORT_PROXIES, leaves
+    the second sentence unreachable while the first is false, and the customer
+    is told to go and download a video that our own address was refused.
+
+    COUNTS AND SHAPES ONLY. A proxy URL carries its credentials in its
+    userinfo, so not one address is printed here -- the pool's SIZE is what
+    answers the question, and a burned pool and a missing pool look identical
+    from the message alone.
     """
-    mismatched = 0
-    agree, absent, unknown = [], [], []
+    out("== the way in ==")
+    try:
+        import import_providers  # noqa: PLC0415
+    except Exception as exc:  # noqa: BLE001
+        out(f"  import_providers did not import: {type(exc).__name__}: {redact(str(exc))[:160]}")
+        out()
+        return
+    try:
+        pool = import_providers.proxy_pool()
+        options = import_providers.youtube_network_options()
+    except Exception as exc:  # noqa: BLE001
+        out(f"  could not read the network options: {type(exc).__name__}: {redact(str(exc))[:160]}")
+        out()
+        return
+
+    provider = str(os.getenv("VIDEO_IMPORT_PROVIDER", "") or "").strip() or "(unset)"
+    pool_file = str(os.getenv("VIDEO_IMPORT_PROXY_FILE", "") or "").strip()
+    where = "pool file" if pool_file and Path(pool_file).is_file() else "VIDEO_IMPORT_PROXIES"
+    cookie_file = str(options.get("cookiefile") or "")
+    out(f"  provider           {provider}")
+    out(f"  proxy pool         {len(pool)} address(es), from {where}")
+    out(f"  cookies            {'yes' if cookie_file else 'no'}"
+        + (f" ({Path(cookie_file).name})" if cookie_file else ""))
+    out(f"  PO token server    {'yes' if options.get('extractor_args') else 'no'}")
+    out(f"  clients tried      {len(getattr(import_providers, 'YOUTUBE_CLIENTS', []))} per plan, two plans")
+    try:
+        import yt_dlp  # noqa: PLC0415
+        out(f"  yt-dlp             {yt_dlp.version.__version__}")
+    except Exception:  # noqa: BLE001
+        out("  yt-dlp             not importable here")
+
+    # THE CLAIM ITSELF, stated rather than left to be worked out. This is the
+    # branch _download_failure takes, evaluated against what is really set.
+    blames_video = bool(options.get("proxy") or options.get("cookiefile")
+                        or options.get("cookiesfrombrowser"))
+    if blames_video:
+        out("  a 403 on every client will be reported as THE VIDEO"
+            " (a proxy or cookies were used), which is true here.")
+    else:
+        out("::warning::a 403 will be reported as this server being blocked -- no proxy and no cookies are live")
+        out("  !! a 403 on every client will be reported as THIS SERVER'S ADDRESS being blocked,")
+        out("     because neither a proxy nor cookies reached the downloader. If the pool is")
+        out("     configured but reads 0 above, the pool file or VIDEO_IMPORT_PROXIES is the fault.")
+    out()
+
+
+def resolved_for(settings: dict) -> dict[str, str]:
+    """What THIS JOB would actually run, by asking the code that decides.
+
+    Not a comparison of two numbers: clip_worker's own resolver, called under
+    the same environment service.py launches a child with. Anything else is a
+    second implementation of the precedence rule, and the precedence rule is
+    the thing being checked.
+    """
+    try:
+        import capacity  # noqa: F401  (imported for its side-effect-free plan)
+        import service
+        import clip_worker
+    except Exception as exc:  # pragma: no cover - reported, never fatal
+        return {"error": f"{type(exc).__name__}: {exc}"}
+    saved = dict(os.environ)
+    try:
+        os.environ.update(service.child_env(1))
+        model, device, compute = clip_worker.whisper_settings(settings)
+        ollama = str(os.getenv("OLLAMA_MODEL") or "").strip() or str(settings.get("ollamaModel") or "qwen3:1.7b")
+    except Exception as exc:  # pragma: no cover
+        return {"error": f"{type(exc).__name__}: {exc}"}
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+    return {"model": model, "device": device, "computeType": compute, "ollamaModel": ollama}
+
+
+def compare_to_box(job_id: str, settings: dict, decided: dict) -> int:
+    """What this job asked for, what the box decided, AND WHAT ACTUALLY RAN.
+
+    Returns how many settings the JOB PAYLOAD won -- which is the fault, and is
+    not the same question as whether the two differ.
+
+    THIS CHECK USED TO WARN ON THE CORRECT BEHAVIOUR. It was written when
+    clip_worker read settings["model"] and never looked at the environment, so
+    "asked small, box says medium" meant the run used small and the box's
+    configuration was a lie. v3.162.0 made the environment win, so that same
+    line now means the box won -- exactly as designed -- and the warning fired
+    on four of four jobs, on every run, for ever. An alarm that is always on
+    says nothing on the day it is right, which is the failure alerts.js exists
+    to prevent, pointed at the box instead of at the operator.
+
+    So the question is no longer "do these two differ". It is "did the payload
+    WIN", and the only honest way to answer it is to run the resolver.
+    """
+    resolved = resolved_for(settings)
+    if resolved.get("error"):
+        out("  could not resolve what this job would run: " + resolved["error"])
+        return 0
+    payload_won = 0
+    lines, agree, absent = [], [], []
     for payload_key, box_key, label in JOB_VS_BOX:
         asked = str(settings.get(payload_key) or "").strip()
         box = str(decided.get(box_key) or "").strip()
+        ran = str(resolved.get(payload_key) or "").strip()
         if not asked:
             # The self-hosted engine spawns clip_worker with no such payload,
-            # and an older payload predates the key. Silence is not a mismatch.
+            # and an older payload predates the key. Silence is nothing.
             absent.append(payload_key)
-        elif not box:
-            unknown.append(payload_key)
-        elif asked == box:
-            agree.append(f"{payload_key}={asked}")
+            continue
+        if ran and ran == asked and box and box != asked:
+            # The payload beat the box. THE fault this check exists for.
+            payload_won += 1
+            out(f"::warning::job {job_id}: {label} -- the PAYLOAD won: asked {asked!r}, "
+                f"box configured {box!r}, and {asked!r} is what ran")
+            out(f"  !! PAYLOAD WON  {label}: asked {asked!r}, box {box!r}, ran {asked!r}")
+        elif box and ran and ran != box:
+            # Neither side's value -- something else is setting it. Worth a look.
+            payload_won += 1
+            out(f"::warning::job {job_id}: {label} ran {ran!r}, which is neither the "
+                f"payload's {asked!r} nor the box's {box!r}")
+            out(f"  !! UNEXPECTED  {label}: ran {ran!r}, payload {asked!r}, box {box!r}")
+        elif asked != box:
+            # The box overrode the app's guess. Correct, and the normal state on
+            # every remote deployment -- reported as a line, never as an alarm.
+            lines.append(f"{label}: box {box!r} over the payload's {asked!r}")
         else:
-            mismatched += 1
-            out(f"::warning::job {job_id}: asked for {label} {asked!r}, this container decided {box!r}")
-            out(f"  !! MISMATCH  {label}: this job asked for {asked!r}, this container decided {box!r}")
+            agree.append(f"{payload_key}={asked}")
+    if lines:
+        out("  the box won (as designed): " + "; ".join(lines))
     if agree:
-        out("  agrees with the box on: " + ", ".join(agree))
+        out("  payload and box already agree on: " + ", ".join(agree))
     if absent:
         out("  not named by this payload: " + ", ".join(absent))
-    if unknown:
-        out("  this container decided nothing for: " + ", ".join(unknown))
-    return mismatched
+    return payload_won
 
 
 def describe_job(mtime: float, folder: Path, status: dict, decided: dict) -> dict:
@@ -410,6 +533,7 @@ def machine() -> dict[str, str]:
     except Exception:  # noqa: BLE001
         pass
     out()
+    import_posture()
     # capacity.plan() already folds each environment override in, so this IS
     # what the container decided rather than a heuristic beside it. Ollama's
     # model is not part of that plan -- it is read straight from the container's
@@ -440,19 +564,24 @@ def main() -> int:
         out("  none under " + str(DATA / "jobs"))
     described = [describe_job(*row, decided=decided) for row in jobs]
 
-    # THE HEADLINE. A per-job mismatch is easy to scroll past in a long log, and
-    # the whole reason this readout exists is that the drift was invisible.
-    disagreeing = sum(1 for item in described if item["mismatches"])
-    if described and disagreeing:
+    # THE HEADLINE, and it counts the FAULT rather than the difference. A job
+    # asking for something the box overrides is the normal state of every
+    # remote deployment -- the app has never seen this machine -- so counting
+    # that put a warning on every job of every run and made the real one
+    # invisible. What is counted here is the payload having WON, measured by
+    # running the resolver rather than by comparing two numbers.
+    overridden = sum(1 for item in described if item["mismatches"])
+    if described and overridden:
         out()
-        out(f"::warning::{disagreeing} of the {len(described)} newest jobs disagree with this box about what to run")
-        out(f"  !! {disagreeing} of the {len(described)} newest jobs disagree with this box about what to run.")
-        out("     The box is authoritative: worker/service.py puts capacity's device, compute type and")
-        out("     model into clip_worker's environment. A build that reads the payload FIRST runs the")
-        out("     job's value instead, and nothing anywhere says so -- which is this drift exactly.")
+        out(f"::warning::{overridden} of the {len(described)} newest jobs did NOT run what this box decided")
+        out(f"  !! {overridden} of the {len(described)} newest jobs did NOT run what this box decided.")
+        out("     The box is authoritative: worker/service.py's child_env puts capacity's device,")
+        out("     compute type and model into clip_worker's environment, and whisper_settings reads")
+        out("     the environment FIRST. A build that reads the payload first runs the job's value")
+        out("     instead and nothing anywhere says so -- which is this drift exactly.")
     elif described:
         out()
-        out(f"  every one of the {len(described)} newest jobs asked for what this container decided.")
+        out(f"  all {len(described)} newest jobs ran what this box decided.")
 
     # The newest job's own settings, then the defaults the worker would use
     # with none -- so a run that never sent a range is still replayed.

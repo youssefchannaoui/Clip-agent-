@@ -1217,6 +1217,38 @@ class JobStore:
         return recovered
 
 
+def child_env(active_jobs: int) -> dict[str, str]:
+    """The environment a clip_worker child is launched with.
+
+    ONE DEFINITION, TWO READERS, and that is the whole point of it being a
+    function. run_clip_worker launches with it; worker-diagnose.py imports it
+    to answer "what would this job actually resolve to", by building this
+    environment and calling clip_worker's own resolver under it. A monitor that
+    rebuilds the overlay itself is a second copy of the answer, and this file
+    already records what happens when two things answer one question.
+
+    THE THREAD BUDGET IS DECIDED PER SPAWN, FROM LIVE LOAD, not from the plan.
+    CAPACITY's figures describe a FULL box -- the right number to report and to
+    size a machine against, and the wrong one to hand a job running ALONE. A
+    lone lecture was being given the two threads it gets when three are
+    fighting, so six of eight cores sat idle while the customer waited.
+    """
+    share = capacity.threads_for(active_jobs)
+    return {
+        **os.environ,
+        "WHISPER_DEVICE": CAPACITY["device"],
+        "WHISPER_COMPUTE_TYPE": CAPACITY["computeType"],
+        "WHISPER_MODEL": CAPACITY["model"],
+        "FFMPEG_THREADS": str(share["ffmpegThreads"]),
+        # The transcriber's share of the machine. Told nothing, ctranslate2
+        # sizes its pool from every core it can see, so concurrent lectures
+        # each ask for a whole machine. The number comes from capacity.py and
+        # is never typed here -- one machine, one answer to how it is divided
+        # up, and it moves when the box does.
+        "WHISPER_CPU_THREADS": str(share["cpuThreads"]),
+    }
+
+
 class Processor:
     def __init__(self, store: JobStore) -> None:
         self.store = store
@@ -1552,27 +1584,9 @@ class Processor:
         return int(max(90, selected_min * 4) * 60)
 
     def run_clip_worker(self, job_id: str, job_file: Path, result_path: Path) -> dict[str, Any]:
-        # THE THREAD BUDGET IS DECIDED HERE, FROM LIVE LOAD, not from the plan.
-        # CAPACITY's figures describe a FULL box -- the right number to report
-        # and to size a machine against, and the wrong one to hand a job running
-        # ALONE. A lone lecture was being given the two threads it gets when
-        # three are fighting, so six of eight cores sat idle while the customer
-        # waited. self.running holds the jobs already in flight; this one is not
-        # in it yet (it is added below), hence the +1.
-        share = capacity.threads_for(len(self.running) + 1)
-        env = {
-            **os.environ,
-            "WHISPER_DEVICE": CAPACITY["device"],
-            "WHISPER_COMPUTE_TYPE": CAPACITY["computeType"],
-            "WHISPER_MODEL": CAPACITY["model"],
-            "FFMPEG_THREADS": str(share["ffmpegThreads"]),
-            # The transcriber's share of the machine. Told nothing, ctranslate2
-            # sizes its pool from every core it can see, so concurrent lectures
-            # each ask for a whole machine. The number comes from capacity.py
-            # and is never typed here -- one machine, one answer to how it is
-            # divided up, and it moves when the box does.
-            "WHISPER_CPU_THREADS": str(share["cpuThreads"]),
-        }
+        # self.running holds the jobs already in flight; this one is not in it
+        # yet (it is added below), hence the +1.
+        env = child_env(len(self.running) + 1)
         # ITS OWN SESSION, so the ffmpeg and Whisper it starts are one process
         # group with it and stop_child() can reach all of them. See stop_child.
         child = subprocess.Popen(

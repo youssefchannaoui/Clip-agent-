@@ -126,17 +126,23 @@ class CapacityTests(unittest.TestCase):
     def test_a_bigger_model_costs_a_job_slot(self):
         """medium is roughly twice small's weights, and four of them do not fit.
 
-        The box after the CPX41 resize: 8 cores, a 10G container. Left alone
-        the model would be `small` and four jobs would fit; forcing `medium`
-        (which the compose file does, deliberately) has to cost a slot, or the
-        container OOM killer takes the fourth job mid-render.
+        The box as it stands: 8 cores, a 9G container. Left alone the model
+        would be `small` and four jobs would fit; forcing `medium` (which the
+        compose file does, deliberately) has to cost a slot, or the container
+        OOM killer takes the fourth job mid-render.
+
+        9G, not 10: the compose file moved a gigabyte to Ollama, which was
+        sitting at 90% of its own ceiling. THIS TEST IS WHY THAT WAS SAFE --
+        the trade only holds while 9G still buys three medium jobs, and if a
+        future model or reserve makes it buy two, this goes red rather than
+        the box quietly losing a third of its throughput.
         """
-        small = self.plan(cores=8, ram=10.0, reserved=0.5)
+        small = self.plan(cores=8, ram=9.0, reserved=0.5)
         self.assertEqual(small["model"], "small")
         self.assertEqual(small["maxConcurrentJobs"], 4)
 
         os.environ["WHISPER_MODEL"] = "medium"
-        big = self.plan(cores=8, ram=10.0, reserved=0.5)
+        big = self.plan(cores=8, ram=9.0, reserved=0.5)
         self.assertEqual(big["model"], "medium")
         self.assertEqual(big["maxConcurrentJobs"], 3)
         self.assertEqual(big["ffmpegThreads"], 2, "8 cores across 3 jobs")
