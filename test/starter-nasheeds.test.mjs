@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -39,6 +40,17 @@ process.env.AUTH_REQUIRED = 'false';
 await import('../src/store.js');
 const audio = await import('../src/audio.js');
 const MUSIC = path.join(DIR, 'music');
+
+/* CI HAS NO WORKING FFMPEG -- that is why seven Python tests skip there, and it
+   caught this file on its first run: asserting nine measured durations fails on
+   the runner and passes everywhere else, which is the worst shape a red branch
+   can have. The behaviour is split in two instead: the half that must hold
+   WITHOUT the binary always runs, and only the measuring half is skipped, with
+   its reason, so it is counted rather than vanishing. */
+const HAVE_FFPROBE = (() => {
+  try { execFileSync(process.env.FFPROBE_PATH || 'ffprobe', ['-version'], { stdio: 'ignore' }); return true; }
+  catch { return false; }
+})();
 
 function resetLibrary() {
   fs.rmSync(path.join(MUSIC, 'library.json'), { force: true });
@@ -97,14 +109,23 @@ test('the worker is handed a real path inside musicDir for each one', () => {
   assert.deepEqual(fs.readdirSync(MUSIC).filter(f => f.includes('..')), [], 'nothing escaped musicDir');
 });
 
-test('durations are measured after boot, not in front of it', async () => {
+test('seeding does not shell out, and a box with no ffprobe still boots', async () => {
   resetLibrary();
   assert.equal(audio.seedStarterNasheeds('owner-1'), 9);
-  // Seeding must not shell out: nine ffprobe processes before the server
-  // starts listening, on every restart, for a label.
+  // Nine ffprobe processes before the server starts listening, on every
+  // restart, for a LABEL, is the wrong trade -- so seeding measures nothing.
   assert.ok(audio.listNasheeds('owner-1').every(t => t.durationSec === 0), 'no probing during boot');
+  // And where the binary is missing this must degrade to a row with no
+  // duration, never to a throw: the nasheed still mixes, it just has no "3:22".
   const filled = await audio.fillStarterDurations();
-  assert.equal(filled, 9);
+  assert.equal(typeof filled, 'number');
+  assert.equal(audio.listNasheeds('owner-1').length, 9, 'the library survives either way');
+});
+
+test('durations are filled in afterwards', { skip: HAVE_FFPROBE ? false : 'ffprobe is not installed' }, async () => {
+  resetLibrary();
+  audio.seedStarterNasheeds('owner-1');
+  assert.equal(await audio.fillStarterDurations(), 9);
   assert.ok(audio.listNasheeds('owner-1').every(t => t.durationSec > 60), 'every bed is over a minute');
   assert.equal(await audio.fillStarterDurations(), 0, 'and it does not re-measure what it has');
 });
