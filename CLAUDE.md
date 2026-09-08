@@ -9665,10 +9665,36 @@ meant a customer submitting a whole job.
   takes the same base64 carriage as every other probe: a JSON literal in the
   script, never a shell command.
 
-**And the honest limit**: the retry, the branch and the message are driven
-against a fake yt-dlp, and the freshness is proven by the build. What settles
-it is a real 403 -- the probe above is how to ask for one deliberately rather
-than waiting for a customer to find it.
+### AND THE VIDEO I CALLED BLOCKED IMPORTED IN 17 SECONDS
+
+The first thing the probe was pointed at was the lecture that started all of
+this, off the box's own records, ninety minutes after it failed:
+
+    records        11 job(s) on the box, 2 failed, 4 with a link
+    url            https://www.youtube.com/watch?v=vrZOeod3jdE
+    IMPORTED in 17.2s
+    title          144: A Very Strange Spiritual Feeling in The World Today …
+    bytes          2,039,938        windowed True    source length 1936.0
+
+**First attempt. No retry needed.** So the refusal was transient, Youssef was
+right, and the diagnosis I gave him -- *"it's that video, download it and use
+Upload MP4"* -- was wrong. I had reasoned it from the shape of the failure (six
+client/plan combinations refused at the media fetch, another lecture importing
+minutes earlier) and every one of those observations was true. **A confident
+reading of true observations is still a guess until something goes and asks.**
+It cost him a manual retry and me most of a session pointed at the wrong thing.
+
+That is also why the probe exists rather than a better argument: the answer to
+"is this video fetchable" changes between one minute and the next, so it can
+only ever be measured, never deduced.
+
+**What this does NOT prove**: that the rounds rescue a live 403. There was no
+403 left to rescue -- the probe imported on its first attempt, so the backoff
+never ran. The retry, the branch and the message are driven against a fake
+yt-dlp; the freshness is proven by the build; the video is proven fetchable.
+The next real refusal is what closes the last of it, and it should now clear
+itself twice over -- three rounds on the box, then the app's five-minute retry
+-- before anybody is told to download anything.
 
 ## Open items
 
