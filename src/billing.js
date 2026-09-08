@@ -600,6 +600,7 @@ function trialState(billing = {}) {
 export function ensureBillingState() {
   if (!Array.isArray(state.billingEvents)) state.billingEvents = [];
   if (!Array.isArray(state.revenueEvents)) state.revenueEvents = [];
+  if (!Array.isArray(state.refundEvents)) state.refundEvents = [];
   if (!Array.isArray(state.processedStripeEvents)) state.processedStripeEvents = [];
   if (!state.billingSettings || typeof state.billingSettings !== 'object') state.billingSettings = {};
   for (const user of state.authUsers || []) ensureUserBilling(user);
@@ -1966,7 +1967,35 @@ function clearSubscription(subscription = {}) {
  * Stripe is still the authority for history -- this only accrues from now on,
  * and is what lets the dashboard show revenue when Stripe is unreachable.
  */
-function recordRevenue({ kind, userId = '', amountMinor = 0, currency = '', description = '', stripeId = '', eventId = '' }) {
+/**
+ * A payment that went back out, kept only so a commission can be voided.
+ *
+ * Deduped on the Stripe object id like every other ledger here, because Stripe
+ * retries any non-2xx and a replayed refund must not be recorded twice. Trimmed
+ * by count rather than by age on purpose: a commission can be paid out months
+ * after the payment, so a refund event has to outlive the hold window by a long
+ * way to still be able to void one.
+ */
+function recordRefund({ stripeId = '', chargeId = '', invoiceId = '', amountMinor = 0, currency = '', reason = '', eventId = '' }) {
+  ensureBillingState();
+  state.refundEvents ||= [];
+  const id = String(stripeId || chargeId || '');
+  if (id && state.refundEvents.some(item => String(item?.stripeId || '') === id)) return;
+  state.refundEvents.unshift({
+    stripeId: id,
+    chargeId: String(chargeId || ''),
+    invoiceId: String(invoiceId || ''),
+    amountMinor: Math.round(Number(amountMinor) || 0),
+    currency: String(currency || '').toLowerCase(),
+    reason: String(reason || ''),
+    eventId,
+    createdAt: now(),
+  });
+  state.refundEvents = state.refundEvents.slice(0, 5000);
+  save();
+}
+
+function recordRevenue({ kind, userId = '', amountMinor = 0, currency = '', description = '', stripeId = '', chargeId = '', eventId = '' }) {
   const amount = Math.round(Number(amountMinor) || 0);
   if (!amount) return;
   ensureBillingState();
@@ -1977,7 +2006,11 @@ function recordRevenue({ kind, userId = '', amountMinor = 0, currency = '', desc
     id: `rev_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`,
     kind, userId, amountMinor: amount,
     currency: String(currency || '').toLowerCase(),
-    description, stripeId, eventId, createdAt: now(),
+    // The CHARGE behind the invoice, kept only so a refund can be matched back
+    // to the payment it reverses -- Stripe's refund and dispute events name the
+    // charge, and an invoice id alone cannot be joined to them. Affiliate
+    // commission is voided on that join (src/affiliates.js).
+    description, stripeId, chargeId: String(chargeId || ''), eventId, createdAt: now(),
   });
   state.revenueEvents = state.revenueEvents.slice(0, 5000);
 
@@ -2078,10 +2111,55 @@ export function handleWebhookEvent(event) {
         kind: 'subscription', userId: user?.id || '',
         amountMinor: object.amount_paid, currency: object.currency,
         description: object.lines?.data?.[0]?.description || 'Subscription invoice',
-        stripeId: String(object.id || ''), eventId,
+        stripeId: String(object.id || ''),
+        chargeId: String(typeof object.charge === 'string' ? object.charge : object.charge?.id || ''),
+        eventId,
       });
       ownerFeed.revenue('invoice', user, object.amount_paid, object.currency,
         object.lines?.data?.[0]?.description || 'Subscription invoice').catch(() => {});
+      break;
+    }
+    /*
+     * REFUNDS AND DISPUTES, watched for exactly one reason.
+     *
+     * Affiliate commission sits in a hold window so the refund window closes
+     * first -- and a hold that nothing checks is only a delay. These two events
+     * are what make it mean something: a commission whose payment appears here
+     * is VOID, and one already paid out becomes a reported clawback rather than
+     * a silent deduction (src/affiliates.js).
+     *
+     * They are recorded in `state.refundEvents`, NOT as a negative row in
+     * `state.revenueEvents`. The Owner screen's Money in is gross today, and
+     * quietly making it net would change what the books say without anybody
+     * deciding to -- that is a separate call, and this one must not smuggle it.
+     */
+    case 'charge.refunded': {
+      recordRefund({
+        stripeId: String(object.id || ''),
+        chargeId: String(object.id || ''),
+        invoiceId: String(typeof object.invoice === 'string' ? object.invoice : object.invoice?.id || ''),
+        amountMinor: object.amount_refunded,
+        currency: object.currency,
+        reason: 'refund',
+        eventId,
+      });
+      break;
+    }
+    case 'charge.dispute.created': {
+      // A dispute is not yet lost, and that distinction is deliberately NOT
+      // made here: money under dispute is money that may leave, and paying
+      // commission on it is the case the hold exists for. If it is won, the
+      // operator can pay the commission by hand -- which is the safe direction
+      // to be wrong in.
+      recordRefund({
+        stripeId: String(object.id || ''),
+        chargeId: String(typeof object.charge === 'string' ? object.charge : object.charge?.id || ''),
+        invoiceId: '',
+        amountMinor: object.amount,
+        currency: object.currency,
+        reason: 'dispute',
+        eventId,
+      });
       break;
     }
     case 'invoice.payment_failed': {

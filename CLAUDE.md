@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1855 JS + 804 Python**
+- `npm test` and `npm run check` must pass. Currently **1883 JS + 804 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -8756,6 +8756,144 @@ and the container's whole capacity environment is one line, `WHISPER_MODEL=mediu
 verify-deploy reports `qwen3:4b loaded` and every font, filter and dependency OK.
 From one job, two threads and `small` in a 2G container, on the same hardware,
 three hours earlier.
+
+## The affiliate programme (v3.165.0, 8 Sept 2026)
+
+Youssef: "we're gonna make a affiliate program ... just kinda look at Opus and
+see how they how they do it ... we'll kinda copy the exact same thing because
+it's just affiliate ... because I'm not a hundred percent sure how it works,
+so you're gonna have to figure it out for me. Do a lot of research before,
+make this very optimal, make this very promising, and then secure as well."
+
+### The research, and what was copied
+
+OpusClip's published terms, read in September 2026: **25% recurring for the
+first 12 months of each new subscriber, a 60-day cookie, a 30-day pending
+period, US$20 minimum, paid on the 15th to PayPal.** Checked against the field
+rather than taken alone -- Pictory 20-50% recurring / 90-day, vidyo.ai up to
+40% / 60-day, InVideo 50% monthly / 25% annual / 120-day, Creatify 25-30% for
+12 months / 30-day, Descript 15% one-off. 25% for twelve months on a 60-day
+cookie is the middle of that and is exactly what the tool this product gets
+compared with pays, so it is what shipped. The numbers live in `config.js`
+with that research beside them.
+
+What every serious programme forbids, and now so does this one: **self-referral
+(self, family, a business you control), brand bidding on paid search, coupon
+and deal sites, leaked or expired codes, and claims the product cannot
+support.** The field guidance that shaped the payout rules: collect the payout
+details at APPLICATION, because paying first and chasing the details afterwards
+is the commonest operational mistake; and a floor more than 30% of affiliates
+never reach is set too high.
+
+### FIVE DECISIONS, each a way the money could otherwise go wrong
+
+1. **What is OWED is DERIVED; what was PAID is STORED.** `commissions()` walks
+   `state.revenueEvents` -- Stripe's own paid invoices, already deduped on the
+   Stripe object id -- every time it is asked. So it is retroactive, needs no
+   migration, and cannot drift from the books. A PAYOUT is a fact nothing can
+   re-derive, so `state.affiliatePayouts` holds it. Storing what is owed as
+   well would be two answers to one question about somebody's money.
+2. **NOTHING CONVERTS MONEY.** A commission is in the currency Stripe charged
+   in; balances are a map of currency -> minor units and are never summed
+   across. Same rule the pricing pages hold. The operator's ledger prints the
+   ISO CODE rather than the symbol, because USD's symbol is a bare "$" that an
+   Australian operator reads as AUD -- the "two products at $29 in different
+   dollars" fault, inside one table. Found by looking at the render.
+3. **ONE CODE, ONE COOKIE, ONE ATTRIBUTION.** There is no second affiliate
+   link. `referrals.js` already owns the code, `/r/CODE`, `dc_ref` and
+   `user.referredBy`; an affiliate is a referrer whose application was
+   approved. What changes is what the referrer is PAID -- cash INSTEAD OF the
+   50-token referral bonus, which makes "never both" true by construction
+   rather than by a check somebody has to remember. The cookie went 30 -> 60
+   days to match the field, and **the privacy policy names that number**, so
+   it reads it from config now rather than saying 30.
+4. **THE HOLD IS ONLY MEANINGFUL BECAUSE REFUNDS ARE WATCHED.** A 30-day delay
+   that nothing checks is just a delay. `billing.js` had NO refund or dispute
+   handling at all -- `charge.refunded` and `charge.dispute.created` were not
+   subscribed. They are now, into `state.refundEvents`, and a commission whose
+   payment appears there is VOID. They are deliberately NOT negative rows in
+   `revenueEvents`: the Owner screen's Money in is gross today, and quietly
+   making it net would change the books without anybody deciding to.
+   `invoice.paid` also records the CHARGE id now, because a refund names the
+   charge and an invoice id alone cannot be joined to it.
+5. **NOBODY IS APPROVED AUTOMATICALLY AND NOTHING IS PAID AUTOMATICALLY.** An
+   application is `pending` until a person approves it; a commission becomes
+   `paid` only when a person records a payout, and the payout takes the KEYS
+   rather than an amount, so the batch says exactly what it settled and the
+   figure is computed rather than typed.
+
+### The rules that decide who gets paid, and the probe that nearly missed two
+
+Twelve guards were proven red -- and **A (the approval gate) and B (the
+self-referral guard) came back GREEN first**, which is the failure this file
+records more than any other, landing on the two most important rules in the
+module. They were masking each other: the declined applicant had no paying
+customer, so removing the approval gate changed nothing, and the self-referring
+account had no approved application, so the approval gate caught it before the
+self-referral guard could. The fixture now gives each guard a case where it is
+the ONLY thing refusing -- a customer referred by the declined applicant, and
+the approved affiliate's own account naming itself -- and both go red.
+
+### Privacy, which is a design decision here rather than a precaution
+
+**An affiliate's statement never names the customers behind it.** They are owed
+a number, not a list of other people's accounts, and a dashboard that names
+them hands one customer's identity to another. Counts and amounts only, and a
+test plants the emails and asserts none reaches the payload. The payout detail
+is the one piece of personal data this module holds and it is returned by the
+OPERATOR's route alone -- never by the affiliate's own, which has no reason to
+carry a bank account back to a browser.
+
+### The surfaces
+
+- **`/affiliates`** -- the public terms, with every number read from `config`.
+  A rate quoted in prose that the engine does not apply is the fault this
+  codebase has paid for with prices, trial lengths and posting windows, and
+  here the disagreement would be about somebody's commission. Registered,
+  in the sitemap, and **linked from the footer** -- a page nothing links to is
+  indexed late or never, and the crawl law caught exactly that.
+  Its own prohibition ("do not promise ... growth") tripped the
+  invented-numbers guard, which cannot tell a ban from a promise; reworded
+  rather than excused.
+- **Tokens & billing** -- apply, then the statement. Mounted on WHICHEVER
+  SURFACE IS SHOWING: measured at 390px before that existed, the panel landed
+  in the hidden desktop tree and came back **0x0**, so a phone user could not
+  apply at all -- the v3.119.0 "Posts to" fault again, and Youssef works from a
+  phone. It is re-seated when the surface changes rather than merely checked
+  for presence.
+- **Owner -> Money out** -- applications, the per-currency ledger, one-click
+  approve and Mark paid. Driven with real clicks: due AUD 22.50 -> 0, paid
+  22.50, one batch of three keys with its reference; a **second press settles
+  nothing**, because the server recomputes and refuses anything not `due`.
+
+### Measured
+
+    desktop 1440, both themes: 0 elements overflowing, no page scroll,
+      0 DOM operations across three unchanged repaints, 0 page errors
+    phone 320/375/390/430, both themes: mounted inside #dcMobile, every
+      control 44px or taller, 0 overflowing, 0 page errors, and 0 text under
+      AA on a paper phone
+    16 red probes proven, 27 new tests (17 engine, 10 over HTTP)
+
+### Left undone, and said rather than implied
+
+- **Payouts are recorded, not made.** Automatic transfers need Stripe Connect
+  and its KYC, or a PayPal Payouts integration; claiming otherwise would be the
+  stale-claim failure this file keeps paying for. The operator pays by the rail
+  they already use and records it, and the panel says so.
+- **`charge.refunded` and `charge.dispute.created` have to be enabled on the
+  Stripe endpoint.** The code handles them; whether Stripe SENDS them depends
+  on how the endpoint is configured, and an endpoint set to a selected list
+  will not. Until that is checked, the hold window is a delay again.
+- **No tax form is collected.** The field guidance is to gate the payout on a
+  W-9 or W-8BEN, and the terms say the affiliate is responsible for their own
+  tax. For an Australian business paying an overseas affiliate who is not
+  carrying on business in Australia, no-ABN withholding generally does not
+  apply and the service is generally GST-free -- that is general, it is not
+  advice, and the terms deliberately state no tax position as fact.
+- **A clawback is reported, never deducted.** Taking money back out of a
+  balance without telling somebody is how a programme loses its affiliates;
+  the terms permit it and the screen is where the decision is made.
 
 ## Open items
 

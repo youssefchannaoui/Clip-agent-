@@ -382,3 +382,21 @@ test('the phone is night by default and paper only behind body.dcm-light', () =>
   assert.equal(mv.m.themeDarkCls, 'on', 'night with nothing stored');
   assert.equal(mv.m.themeLightCls, '');
 });
+
+test('the affiliate panel mounts on whichever surface is showing', () => {
+  // Measured before this existed: at 390px the panel mounted inside the hidden
+  // desktop tree and came back 0x0, so a phone user could not apply at all --
+  // the same fault the "Posts to" row shipped with in v3.119.0. The painter
+  // has to KNOW about `#dcMobile`, and a source test is the only way to say so
+  // without a browser, which CI does not have.
+  const host = fs.readFileSync(path.join(root, 'src/public/index.html'), 'utf8');
+  const at = host.indexOf('const paintAffiliate=');
+  assert.ok(at > 0, 'the affiliate panel painter is gone');
+  const body = host.slice(at, host.indexOf('window.dcPaintAffiliate=', at));
+  assert.match(body, /#dcMobile \.dcm-body/,
+    'the painter must mount into the phone shell, not only into #dcPlanGrid');
+  assert.match(body, /dcm-own/, 'and must know which surface owns the screen');
+  // Re-seated rather than merely present: a resize across the 820px seam would
+  // otherwise leave it in the tree that is now hidden.
+  assert.match(body, /box\.parentNode!==host/, 'the panel is re-seated when the surface changes');
+});

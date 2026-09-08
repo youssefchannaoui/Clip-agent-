@@ -8733,6 +8733,113 @@ StudioAdapter.onProbeSource=async url=>{try{
          the export's own classes so it is indistinguishable from the sections
          beside it. The pill comes from StudioAdapter.owPill, the one the KPI
          tiles use, rather than a second copy of those colours. */
+      /* ------------------------------------------------------------------
+         THE AFFILIATE LEDGER, on Owner > Money out.
+
+         Money out is where an outgoing cost is decided, and a commission is
+         one. Same shape as the self-check panel below it: mounted off a
+         section the export already draws, taking the card class from that
+         section's own first child rather than naming a hashed one, and in
+         paintStudio's list so it appears on a TAB SWITCH -- which changes no
+         data and fires no fetch.
+
+         Nothing here computes a commission. The server does, and this draws
+         what it is told: two answers to "what is owed" is exactly the fault
+         `affiliates.js` is written to avoid. */
+      const paintAffiliateLedger=()=>{
+        try{
+          const onMoneyOut=StudioAdapter.ui.screen==='owner'&&(StudioAdapter.ui.ownerTab||'overview')==='cost';
+          let box=document.getElementById('dcowAff');
+          const data=window.DC_AFFILIATES||null;
+          const anchorSec=document.querySelector('#dcOwnerScreen .dcow-s');
+          const parent=anchorSec&&anchorSec.parentNode;
+          if(!onMoneyOut||!parent||!data){ if(box)box.remove(); return; }
+          if(!box||box.parentNode!==parent){
+            if(box)box.remove();
+            box=document.createElement('div'); box.id='dcowAff';
+            box.setAttribute('data-host-owned','');
+            parent.appendChild(box);
+          }
+          const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+          const host=anchorSec.firstElementChild;
+          const cls=(host&&host.className)||'';
+          const pending=(data.applications||[]).filter(a=>a.status==='pending');
+          const led=data.ledger||[];
+          const flags=data.flags||[];
+
+          const apps=pending.length?pending.map(a=>
+            '<tr><td class="sgl">'+esc(a.userId)+'</td><td class="sgl">'+esc(a.audience||'')+'</td>'
+            +'<td class="sgl">'+esc(a.payoutMethod||'')+' &middot; '+esc(a.payoutDetail||'')+'</td>'
+            +'<td class="sgl"><button type="button" data-aff-yes="'+esc(a.userId)+'" style="padding:5px 11px;border-radius:8px;border:0;cursor:pointer;background:var(--dc-gold-solid);color:var(--dc-on-gold);font:inherit;font-size:11.5px;font-weight:700;">Approve</button> '
+            +'<button type="button" data-aff-no="'+esc(a.userId)+'" style="padding:5px 11px;border-radius:8px;border:1px solid var(--dc-line, #26262A);cursor:pointer;background:none;color:var(--dc-ink-dim, #8B8B93);font:inherit;font-size:11.5px;">Decline</button></td></tr>'
+          ).join(''):'<tr><td class="sgl" colspan="4">No applications waiting.</td></tr>';
+
+          /* The CODE, never the symbol. This table puts several currencies on
+             top of each other, and USD's symbol is a bare "$" -- which the
+             operator reading it in Australia takes for AUD. Same reason the
+             pricing pages keep A$ and CA$ rather than narrowing them. */
+          const money=(m,c)=>{ const code=String(c||'aud').toUpperCase(); try{
+            const f=new Intl.NumberFormat(undefined,{style:'currency',currency:code,currencyDisplay:'code'});
+            return f.format(Number(m||0)/Math.pow(10,f.resolvedOptions().maximumFractionDigits)); }
+            catch(e){ return code+' '+(Number(m||0)/100).toFixed(2); } };
+          const owed=led.length?led.flatMap(row=>row.currencies.map(cur=>
+            '<tr><td class="sgl">'+esc(row.email||row.affiliateId)+'</td>'
+            +'<td class="sgl">'+esc(row.status)+'</td>'
+            +'<td class="sgl">'+esc(money(cur.due,cur.currency))+'</td>'
+            +'<td class="sgl">'+esc(money(cur.pending,cur.currency))+' held</td>'
+            +'<td class="sgl">'+esc(money(cur.paid,cur.currency))+' paid</td>'
+            +'<td class="sgl">'+esc((row.payoutMethod||'')+' '+(row.payoutDetail||''))+'</td>'
+            +'<td class="sgl">'+(cur.keys.length
+              ? '<button type="button" data-aff-pay="'+esc(row.affiliateId)+'" data-aff-cur="'+esc(cur.currency)+'" style="padding:5px 11px;border-radius:8px;border:1px solid rgba(217,180,120,.4);cursor:pointer;background:rgba(217,180,120,.1);color:var(--dc-gold, #D9B478);font:inherit;font-size:11.5px;font-weight:600;">Mark paid</button>'
+              : '<span style="color:var(--dc-ink-faint, #85858E);">nothing due</span>')+'</td></tr>'
+          )).join(''):'<tr><td class="sgl" colspan="7">No commission earned yet.</td></tr>';
+
+          window.dcSetHtml(box,'<div class="'+esc(cls)+'">'
+            +'<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px;"><span style="font:600 10px Outfit,Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--dc-ink-faint, #85858E);">Affiliates</span>'
+            +'<span style="font-size:11.5px;color:var(--dc-ink-dim, #8B8B93);">'+esc(data.terms.percent)+'% for '+esc(data.terms.months)+' months &middot; held '+esc(data.terms.holdDays)+' days &middot; nothing is paid automatically</span></div>'
+            +(flags.length?'<div style="margin-bottom:8px;padding:8px 10px;border-radius:8px;background:rgba(230,183,112,.08);font-size:11.5px;color:var(--dc-n-e6b770, #E6B770);">'
+              +flags.map(f=>esc(f.detail)).join('<br>')+'</div>':'')
+            +'<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
+            +'<thead><tr><th class="sgl">Waiting</th><th class="sgl">Audience</th><th class="sgl">Pay to</th><th class="sgl"></th></tr></thead><tbody>'+apps+'</tbody></table></div>'
+            +'<div style="overflow:auto;margin-top:14px"><table style="width:100%;border-collapse:collapse;font-size:12px;">'
+            +'<thead><tr><th class="sgl">Affiliate</th><th class="sgl">Status</th><th class="sgl">Due</th><th class="sgl">Held</th><th class="sgl">Paid</th><th class="sgl">Pay to</th><th class="sgl"></th></tr></thead><tbody>'+owed+'</tbody></table></div>'
+            +'</div>');
+
+          if(!box.dataset.wired){
+            box.dataset.wired='1';
+            box.addEventListener('click',async(ev)=>{
+              const t=ev.target.closest('[data-aff-yes],[data-aff-no],[data-aff-pay]');
+              if(!t) return;
+              ev.preventDefault();
+              const yes=t.getAttribute('data-aff-yes'), no=t.getAttribute('data-aff-no'), pay=t.getAttribute('data-aff-pay');
+              try{
+                if(yes||no){
+                  const r=await api('/api/owner/affiliates/decide',{method:'POST',body:JSON.stringify({userId:yes||no,status:yes?'approved':'declined'})});
+                  if(r&&r.error) return toast(r.error,'bad');
+                  toast(yes?'Approved':'Declined','good');
+                } else if(pay){
+                  const cur=t.getAttribute('data-aff-cur');
+                  const row=(window.DC_AFFILIATES.ledger||[]).find(x=>x.affiliateId===pay);
+                  const bucket=row&&row.currencies.find(c=>c.currency===cur);
+                  if(!bucket||!bucket.keys.length) return toast('Nothing due in that currency','bad');
+                  /* The KEYS go up, never an amount: the server recomputes and
+                     refuses anything not payable, so a stale screen cannot pay
+                     a commission twice or jump the hold. */
+                  const reference=prompt('Payment reference (optional)')||'';
+                  const r=await api('/api/owner/affiliates/payout',{method:'POST',body:JSON.stringify({userId:pay,keys:bucket.keys,method:row.payoutMethod,reference})});
+                  if(r&&r.error) return toast(r.error,'bad');
+                  toast('Recorded as paid','good');
+                }
+                const fresh=await api('/api/owner/affiliates').catch(()=>null);
+                if(fresh) window.DC_AFFILIATES=fresh;
+                paintAffiliateLedger();
+              }catch(e){ toast(String(e&&e.message||e),'bad'); }
+            });
+          }
+        }catch(e){}
+      };
+      window.dcPaintAffiliateLedger=paintAffiliateLedger;
+
       const paintSelfChecks=()=>{
         try{
           const onHealth=StudioAdapter.ui.screen==='owner'&&(StudioAdapter.ui.ownerTab||'overview')==='health';
@@ -9528,6 +9635,143 @@ StudioAdapter.onProbeSource=async url=>{try{
       };
       window.dcPaintWatermark=paintWatermark;
 
+      /* ------------------------------------------------------------------
+         THE AFFILIATE PANEL.
+
+         Sits directly under the invite panel, because they answer the same
+         question from two sides: the invite pays TOKENS to a customer who
+         brings a friend, and the affiliate programme pays CASH to somebody
+         with an audience. One code, one link, one cookie -- what differs is
+         what the referrer is paid, which is why this panel never draws a
+         second link.
+
+         Host-rendered off #dcPlanGrid like its neighbour: a new section in the
+         design export regenerates every hashed class name in the app. */
+      let dcAff=null, dcAffInFlight=null;
+      const loadAffiliate=async(force)=>{
+        if(force){ dcAff=null; }
+        if(dcAff) return dcAff;
+        if(dcAffInFlight) return dcAffInFlight;
+        /* Latches on SUCCESS only. An early call before the session settles
+           would otherwise cache a null for the life of the page -- the exact
+           fault the invite panel shipped with and had to be fixed for. */
+        dcAffInFlight=api('/api/affiliate')
+          .then(v=>{ if(v) dcAff=v; return v; })
+          .catch(()=>null)
+          .finally(()=>{ dcAffInFlight=null; });
+        return dcAffInFlight;
+      };
+      /* Money, per currency, never summed across them. `Intl` knows where the
+         minor unit sits, so a zero-decimal currency is not divided by a
+         hundred and advertised at a hundredth of its value. */
+      const affMoney=(minor,currency)=>{
+        const code=String(currency||'aud').toUpperCase();
+        try{
+          const f=new Intl.NumberFormat(undefined,{style:'currency',currency:code,currencyDisplay:'symbol'});
+          const digits=f.resolvedOptions().maximumFractionDigits;
+          return f.format(Number(minor||0)/Math.pow(10,digits));
+        }catch(e){ return (Number(minor||0)/100).toFixed(2)+' '+code; }
+      };
+      const paintAffiliate=async()=>{
+        try{
+          /* THE PHONE DRAWS ITS OWN TOKENS SCREEN, and `body.dcm-own` hides
+             the desktop one -- so a panel mounted only off #dcPlanGrid lands
+             in a hidden tree and measures 0x0. Measured at 390px before this
+             existed: mounted true, width 0, and a phone user could not apply
+             at all. Same fault as the "Posts to" row in v3.119.0, and Youssef
+             works from a phone. */
+          const phone=document.body.classList.contains('dcm-own')
+            && StudioAdapter.ui.screen==='tokens'
+            && document.querySelector('#dcMobile .dcm-body');
+          const grid=document.getElementById('dcPlanGrid');
+          const drop=()=>{ const gone=document.getElementById('dcAffiliate'); if(gone)gone.remove(); };
+          if(!phone&&!grid){ drop(); return; }
+          const a=await loadAffiliate();
+          if(!a||!a.enabled){ drop(); return; }
+          let box=document.getElementById('dcAffiliate');
+          const host=phone||(grid&&grid.parentNode);
+          if(!host){ drop(); return; }
+          /* Re-seated rather than merely present: switching between the two
+             surfaces without a reload would otherwise leave it in the tree it
+             was first built in, which is the tree that is now hidden. */
+          if(box&&box.parentNode!==host){ box.remove(); box=null; }
+          if(!box){
+            box=document.createElement('div'); box.id='dcAffiliate'; box.setAttribute('data-host-owned','');
+            if(phone) host.appendChild(box);
+            else host.insertBefore(box, (document.getElementById('dcInvite')||grid).nextSibling);
+          }
+          const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+          const t=a.terms||{};
+          const head='<div style="font:600 10px Outfit,Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--dc-gold, #D9B478);margin-bottom:8px;">Affiliate programme</div>';
+          let body='';
+          if(a.status==='approved'&&a.statement){
+            const st=a.statement, sums=st.totals||{};
+            const codes=Object.keys(sums);
+            const rows=codes.length?codes.map(c=>
+              '<div style="display:flex;align-items:baseline;gap:10px;padding:7px 0;border-top:1px solid var(--dc-line-soft, #1E1E22);">'
+              +'<span style="font:600 13px Outfit,Inter,sans-serif;color:var(--dc-ink-bright, #E9E9ED);min-width:96px;">'+affMoney(sums[c].due,c)+'</span>'
+              +'<span style="font-size:11.5px;color:var(--dc-ink-dim, #8B8B93);">ready to pay</span>'
+              +'<span style="margin-left:auto;font-size:11.5px;color:var(--dc-ink-faint, #85858E);">'
+              +affMoney(sums[c].pending,c)+' held &middot; '+affMoney(sums[c].paid,c)+' paid</span></div>'
+            ).join(''):'<div style="padding:8px 0;font-size:12.5px;color:var(--dc-ink-dim, #8B8B93);">Nothing yet. Commission appears here the first time somebody you sent subscribes.</div>';
+            body='<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:10px;">'
+              +[['Sent',st.referred],['Made clips',st.activated],['Subscribed',st.subscribed]].map(([k,v])=>
+                '<span><span style="font:700 17px Outfit,Inter,sans-serif;color:var(--dc-gold, #D9B478);">'+Number(v||0)+'</span>'
+                +'<span style="display:block;font-size:11px;color:var(--dc-ink-dim, #8B8B93);">'+k+'</span></span>').join('')
+              +'</div>'+rows
+              +'<p style="margin:10px 0 0;font-size:11.5px;color:var(--dc-ink-faint, #85858E);line-height:1.55;">'
+              +esc(t.percent)+'% of every payment for the first '+esc(t.months)+' months, held '+esc(t.holdDays)
+              +' days while the refund window closes. Balances are kept in the currency each customer paid in and are never converted. '
+              +'Paid by hand once a balance clears '+affMoney(t.minimumMinor,'aud')+' &mdash; ask any time if you would like it sooner.</p>';
+          } else if(a.status==='pending'){
+            body='<p style="margin:0;font-size:12.5px;color:var(--dc-ink-body, #BCBCC3);line-height:1.6;">Your application is with us. We read every one by hand, so give it a day or two &mdash; we will email you either way.</p>';
+          } else if(a.status==='suspended'||a.status==='declined'){
+            body='<p style="margin:0;font-size:12.5px;color:var(--dc-ink-body, #BCBCC3);line-height:1.6;">This account is not in the programme. If you think that is wrong, reply to any DeenClipped email and we will look again.</p>';
+          } else {
+            const methods=(a.methods||[]).map(m=>'<option value="'+esc(m.id)+'">'+esc(m.label)+'</option>').join('');
+            body='<p style="margin:0 0 10px;font-size:12.5px;color:var(--dc-ink-body, #BCBCC3);line-height:1.6;">'
+              +'Earn <strong style="color:var(--dc-gold, #D9B478);">'+esc(t.percent)+'%</strong> of what everyone you send pays us, for their first '+esc(t.months)+' months. '
+              +'Your invite link is your affiliate link &mdash; there is only one. '
+              +'<a href="/affiliates" target="_blank" rel="noopener" style="color:var(--dc-gold, #D9B478);">Read the terms</a>.</p>'
+              +'<div style="display:grid;gap:8px;">'
+              +'<input id="dcAffAudience" placeholder="Where would you share it? (a channel, a group, a newsletter)" '
+              +'style="min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid var(--dc-line, #26262A);background:var(--dc-bg-deep, #101013);color:var(--dc-ink-bright, #E9E9ED);font:inherit;font-size:12.5px;">'
+              +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+              +'<select id="dcAffMethod" style="flex:0 0 140px;min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid var(--dc-line, #26262A);background:var(--dc-bg-deep, #101013);color:var(--dc-ink-bright, #E9E9ED);font:inherit;font-size:12.5px;">'+methods+'</select>'
+              +'<input id="dcAffDetail" placeholder="The account we should pay" style="flex:1 1 200px;min-width:0;min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid var(--dc-line, #26262A);background:var(--dc-bg-deep, #101013);color:var(--dc-ink-bright, #E9E9ED);font:inherit;font-size:12.5px;">'
+              +'</div>'
+              +'<label style="display:flex;gap:8px;align-items:flex-start;min-height:44px;padding:6px 0;font-size:11.5px;color:var(--dc-ink-dim, #8B8B93);line-height:1.5;">'
+              +'<input type="checkbox" id="dcAffAgree" style="margin-top:2px;flex:none;">'
+              +'<span>I have read the affiliate terms. I will not bid on the DeenClipped name, list codes on coupon sites, or refer myself.</span></label>'
+              +'<button id="dcAffApply" type="button" style="justify-self:start;min-height:44px;padding:10px 18px;border-radius:10px;border:0;cursor:pointer;'
+              +'background:var(--dc-gold-solid);color:var(--dc-on-gold);font:inherit;font-size:12.5px;font-weight:700;">Apply to the programme</button>'
+              +'</div>';
+          }
+          window.dcSetHtml(box,
+            '<section data-host-owned style="margin-top:14px;padding:16px 18px;border-radius:14px;'
+            +'border:1px solid rgba(217,180,120,.24);background:rgba(217,180,120,.045);">'+head+body+'</section>');
+          const apply=document.getElementById('dcAffApply');
+          if(apply&&!apply.dataset.wired){
+            apply.dataset.wired='1';
+            apply.onclick=async()=>{
+              apply.disabled=true;
+              const r=await api('/api/affiliate/apply',{method:'POST',body:JSON.stringify({
+                audience:(document.getElementById('dcAffAudience')||{}).value||'',
+                payoutMethod:(document.getElementById('dcAffMethod')||{}).value||'',
+                payoutDetail:(document.getElementById('dcAffDetail')||{}).value||'',
+                agreed:Boolean((document.getElementById('dcAffAgree')||{}).checked),
+              })}).catch(e=>({error:String(e&&e.message||e)}));
+              apply.disabled=false;
+              if(r&&r.error){ toast(r.error,'bad'); return; }
+              toast('Application sent','good');
+              await loadAffiliate(true);
+              paintAffiliate();
+            };
+          }
+        }catch(e){}
+      };
+      window.dcPaintAffiliate=paintAffiliate;
+
       window.dcPaintInvite=paintInvite;
       /* The app re-renders through innerHTML on every state poll, so the panel
          has to be reattached rather than rendered once. Debounced into a
@@ -9543,7 +9787,10 @@ StudioAdapter.onProbeSource=async url=>{try{
       const queueInvite=()=>{
         if(invitePending) return;
         invitePending=true;
-        setTimeout(()=>{ invitePending=false; paintInvite(); },0);
+        // Both panels ride one queue: they mount off the same grid, and two
+        // observers reacting to one mutation is two chances to disagree about
+        // whether the screen is up.
+        setTimeout(()=>{ invitePending=false; paintInvite(); paintAffiliate(); },0);
       };
       window.dcQueueInvite=queueInvite;
       try{
@@ -9552,7 +9799,8 @@ StudioAdapter.onProbeSource=async url=>{try{
           const panel=document.getElementById('dcInvite');
           // Repaint when the grid appears without the panel, or clean up when
           // the grid goes away and the panel is orphaned.
-          if((grid&&!panel)||(!grid&&panel)) queueInvite();
+          const aff=document.getElementById('dcAffiliate');
+          if((grid&&!panel)||(!grid&&panel)||(grid&&!aff)||(!grid&&aff)) queueInvite();
           // Same shape for the watermark control on the Templates screen.
           const styleBtn=document.getElementById('dcSaveAsStyle');
           const wm=document.getElementById('dcWatermark');
@@ -9615,6 +9863,12 @@ StudioAdapter.onProbeSource=async url=>{try{
         if(acc.status==='fulfilled')window.DC_OWNER.analytics=acc.value;
         if(web.status==='fulfilled')window.DC_OWNER.webmetrics=web.value;
         if(grw.status==='fulfilled')window.DC_OWNER.growth=grw.value;
+        /* Cached on `window` like DC_OWNER and DC_DEENAI, because /api/state
+           replaces DATA wholesale and a poll would otherwise wipe the ledger
+           mid-read. Swallowed: an affiliate ledger that cannot load must never
+           stop the books painting. */
+        try{ window.DC_AFFILIATES=await api('/api/owner/affiliates'); }catch(e){}
+        try{window.dcPaintAffiliateLedger&&setTimeout(window.dcPaintAffiliateLedger,0)}catch(e){}
         if(DATA){DATA.ownerData=window.DC_OWNER;DATA.webmetrics=window.DC_OWNER.webmetrics||null}
         try{window.dcPaintLandingTable&&setTimeout(window.dcPaintLandingTable,0)}catch(e){}
         try{window.dcPaintFirst100&&setTimeout(window.dcPaintFirst100,0)}catch(e){}
@@ -11852,6 +12106,7 @@ function paintStudio(){
   if(window.paintRedeem)window.paintRedeem(vals);
   try{window.dcPaintSelfChecks&&window.dcPaintSelfChecks()}catch(e){}
   try{window.dcPaintOwnerCodes&&window.dcPaintOwnerCodes()}catch(e){}
+  try{window.dcPaintAffiliateLedger&&window.dcPaintAffiliateLedger()}catch(e){}
   paintClipWaveforms(vals);
   paintClipDestinations(vals,DATA);
   paintLibraryAside(vals);

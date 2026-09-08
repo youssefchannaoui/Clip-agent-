@@ -36,6 +36,7 @@ import * as marketing from './marketing.js';
 import * as seoPages from './seo-pages.js';
 import * as financeAudit from './finance-audit.js';
 import * as referrals from './referrals.js';
+import * as affiliates from './affiliates.js';
 import * as growth from './growth.js';
 import * as push from './push.js';
 import * as onboarding from './onboarding.js';
@@ -311,8 +312,14 @@ function settleReferralRewards() {
   for (const change of changes) {
     const referrer = (state.authUsers || []).find(u => String(u.id) === String(change.referrerId));
     if (!referrer) continue;
+    // NEVER BOTH. There is one code, one cookie and one attribution record; an
+    // approved affiliate is simply a referrer who is paid in CASH instead of
+    // tokens, so the token grant stands down here rather than being prevented
+    // by a check somewhere else that could be forgotten. Paying both would be
+    // paying twice for one introduction.
+    const cashInstead = config.affiliatesEnabled && affiliates.isApproved(state, referrer.id);
     const minutes = change.kind === 'activated' ? config.referralBonusActivated : config.referralBonusPaid;
-    if (minutes > 0) grantReferralMinutes(referrer, minutes, change.kind, change.userId);
+    if (minutes > 0 && !cashInstead) grantReferralMinutes(referrer, minutes, change.kind, change.userId);
     metrics.event(change.kind === 'activated' ? 'referral_activated' : 'referral_paid');
   }
   save();
@@ -1483,9 +1490,14 @@ async function route(req, res, url) {
   if (method === 'GET' && invite) {
     const secure = config.publicBaseUrl.startsWith('https://') ? '; Secure' : '';
     const prior = res.getHeader('Set-Cookie');
-    // 30 days: long enough for someone to think about it over a weekend,
-    // short enough that a stale code does not follow them for a year.
-    const cookie = `dc_ref=${encodeURIComponent(referrals.normaliseCode(invite[1]))}; Max-Age=2592000; Path=/; SameSite=Lax; HttpOnly${secure}`;
+    // The attribution window, and there is ONE of them: this cookie carries
+    // both the token referral and an affiliate's commission claim, so a second
+    // number would eventually mean the two disagreed about whether a signup
+    // counted. 60 days is what the field pays (OpusClip, vidyo.ai) and what
+    // `config.affiliateCookieDays` says; long enough for someone to think about
+    // it, short enough that a stale code does not follow them for a year.
+    const maxAge = Math.round(Math.max(1, config.affiliateCookieDays) * 24 * 60 * 60);
+    const cookie = `dc_ref=${encodeURIComponent(referrals.normaliseCode(invite[1]))}; Max-Age=${maxAge}; Path=/; SameSite=Lax; HttpOnly${secure}`;
     res.writeHead(302, {
       Location: '/islamic-video-clipper',
       'Set-Cookie': prior ? [].concat(prior, cookie) : [cookie],
@@ -1523,6 +1535,7 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/pricing') return html(res, 200, pricingPage(req));
   if (method === 'GET' && pathname === '/contact') return html(res, 200, contactPage(req));
   if (method === 'GET' && pathname === '/privacy') return html(res, 200, privacyPage(req));
+  if (method === 'GET' && pathname === '/affiliates') return html(res, 200, marketing.affiliates(marketingContext(req)));
   if (method === 'GET' && pathname === '/terms') return html(res, 200, termsPage(req));
   if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
     // Google OAuth verification must always see a public homepage here.
@@ -1964,6 +1977,89 @@ async function route(req, res, url) {
             ...(await billing.referralCouponSummary() || { label: '' }) }
         : null,
     });
+  }
+  /*
+   * THE AFFILIATE PROGRAMME.
+   *
+   * Every read here is scoped to `currentUser` by construction -- none of them
+   * takes an account id from the request -- which is the shape this codebase
+   * requires of anything tenant-scoped: the lookup itself is owner-scoped
+   * rather than a check bolted on after a fetch.
+   *
+   * The two operator routes are the ONLY place a payout detail is ever
+   * returned. An affiliate's own statement carries counts and amounts and
+   * never names the customers behind them: they are owed a number, not a list
+   * of other people's accounts.
+   */
+  if (method === 'GET' && pathname === '/api/affiliate') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in first.' });
+    affiliates.useConfig(config);
+    const view = affiliates.publicView(state, currentUser, config);
+    return json(res, 200, {
+      ...view,
+      url: `${publicBase(req)}/r/${referrals.codeFor(state, currentUser)}`,
+    });
+  }
+  if (method === 'POST' && pathname === '/api/affiliate/apply') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in first.' });
+    if (!config.affiliatesEnabled) return json(res, 400, { error: 'The affiliate programme is not open yet.' });
+    // Not throttled by IP but by the thing itself: `apply` refuses a second
+    // application outright, so there is nothing here to hammer.
+    const body = await readBody(req);
+    affiliates.useConfig(config);
+    const result = affiliates.apply(state, currentUser, body || {});
+    if (!result.ok) return json(res, 400, { error: result.error });
+    // Minting the code here rather than lazily: an approved affiliate whose
+    // link does not exist yet is an affiliate who cannot start.
+    referrals.codeFor(state, currentUser);
+    save();
+    // `feed` is the general channel; there is no affiliate-specific one and
+    // inventing a wrapper for one line would be a second thing to keep in step.
+    ownerFeed.feed(`New affiliate application from ${currentUser.email || currentUser.id}`, 'handshake').catch(() => {});
+    return json(res, 200, { ok: true, status: result.application.status });
+  }
+  if (method === 'GET' && pathname === '/api/owner/affiliates') {
+    try {
+      requireOperator(currentUser);
+      affiliates.useConfig(config);
+      return json(res, 200, {
+        applications: (state.affiliates || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+        ledger: affiliates.ledger(state, config),
+        payouts: (state.affiliatePayouts || []).slice(0, 200),
+        flags: affiliates.review(state, config),
+        terms: affiliates.termsSnapshot(config),
+        methods: affiliates.payoutMethods(),
+      });
+    } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+  if (method === 'POST' && pathname === '/api/owner/affiliates/decide') {
+    try {
+      requireOperator(currentUser);
+      const body = await readBody(req);
+      affiliates.useConfig(config);
+      const result = affiliates.decide(state, body?.userId, String(body?.status || ''), { by: currentUser.email || currentUser.id, note: body?.note });
+      if (!result.ok) return json(res, 400, { error: result.error });
+      save();
+      return json(res, 200, { ok: true, application: result.application });
+    } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
+  }
+  if (method === 'POST' && pathname === '/api/owner/affiliates/payout') {
+    try {
+      requireOperator(currentUser);
+      const body = await readBody(req);
+      affiliates.useConfig(config);
+      // The KEYS decide the amount, never a number off the wire: a typed
+      // amount is how a payout and a ledger come to disagree about what was
+      // settled, and `recordPayout` refuses anything that is not payable.
+      const result = affiliates.recordPayout(state, body?.userId, {
+        keys: Array.isArray(body?.keys) ? body.keys : [],
+        method: body?.method, reference: body?.reference,
+        by: currentUser.email || currentUser.id,
+      }, config);
+      if (!result.ok) return json(res, 400, { error: result.error });
+      save();
+      return json(res, 200, { ok: true, payout: result.payout });
+    } catch (error) { return json(res, error.statusCode || 404, { error: error.message }); }
   }
   if (method === 'GET' && pathname === '/api/owner/growth') {
     try {

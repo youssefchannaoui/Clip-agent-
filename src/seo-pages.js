@@ -391,6 +391,17 @@ export const SEO_PAGES = [
     links: ['/terms', '/contact'],
   },
   {
+    path: '/affiliates',
+    breadcrumb: 'Affiliates',
+    kind: KIND.COMMERCE,
+    title: 'Affiliate programme — DeenClipped',
+    description: 'Earn a recurring share of what everyone you introduce pays DeenClipped, with the full terms, the hold period and the payout rules stated up front.',
+    intent: 'deenclipped affiliate program',
+    cluster: 'commerce',
+    lastmod: '2026-09-08',
+    links: ['/pricing', '/terms'],
+  },
+  {
     path: '/terms',
     breadcrumb: 'Terms',
     kind: KIND.LEGAL,

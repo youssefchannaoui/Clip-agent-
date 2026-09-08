@@ -265,8 +265,38 @@ test('nothing pays out that has not actually been decided', async () => {
   // otherwise in as many words.
   assert.equal(config.referralBonusInvited, 0);
   assert.equal(config.referralBonusActivated, 0);
-  assert.equal(config.affiliatesEnabled, false);
-  assert.equal(config.affiliateCommissionPercent, 0);
+
+  // Decided 8 Sept 2026 by Youssef, who named the benchmark: "just kinda look
+  // at Opus and see how they how they do it ... we'll kinda copy the exact
+  // same thing". 25% for twelve months on a 60-day cookie is OpusClip's
+  // published deal, read off their terms and checked against the field.
+  assert.equal(config.affiliatesEnabled, true);
+  assert.equal(config.affiliateCommissionPercent, 25);
+  assert.equal(config.affiliateCommissionMonths, 12);
+
+  // AND THIS IS WHAT REPLACES THE ZERO AS THE GUARD. A cash rate that is on by
+  // default would pay before anybody decided to -- unless nothing can be paid
+  // without a person deciding, which is the property actually worth pinning.
+  // Both are driven rather than read, because a comment saying "manual" is not
+  // a mechanism.
+  const affiliates = await import('../src/affiliates.js');
+  const state = {
+    authUsers: [{ id: 'a' }, { id: 'b', referredBy: { referrerId: 'a' } }],
+    // An application NOBODY has decided on.
+    affiliates: [{ userId: 'a', status: 'pending', createdAt: 1, terms: { percent: 25 } }],
+    revenueEvents: [{ kind: 'subscription', userId: 'b', amountMinor: 2999, currency: 'aud', stripeId: 'in_x', createdAt: 2 }],
+    refundEvents: [], affiliatePayouts: [],
+  };
+  assert.deepEqual(affiliates.commissions(state, config, { now: 9e12 }), [],
+    'a pending application earns nothing, whatever the rate is');
+
+  affiliates.decide(state, 'a', 'approved', { by: 'a person' });
+  state.affiliates[0].approvedAt = 1;
+  const earned = affiliates.commissions(state, config, { now: 9e12 });
+  assert.equal(earned.length, 1, 'approving is what starts it, and approving is a person');
+  assert.equal(earned[0].state, 'due', 'past the hold, but still not PAID');
+  assert.deepEqual(state.affiliatePayouts, [],
+    'nothing moves money until recordPayout is called, which only an operator route calls');
 });
 
 // ── the invite link over HTTP ───────────────────────────────────────────────

@@ -198,15 +198,43 @@ export const config = {
 
   // Affiliates are an application, not an open door: nobody is approved
   // automatically and no payout runs without a person deciding.
-  affiliatesEnabled: boolean(process.env.AFFILIATES_ENABLED, false),
-  affiliateCommissionPercent: Math.min(50, Math.max(0, number(process.env.AFFILIATE_COMMISSION_PERCENT, 0))),
-  // How many months of a subscription earn commission. 0 = first payment only.
-  affiliateCommissionMonths: Math.max(0, number(process.env.AFFILIATE_COMMISSION_MONTHS, 0)),
+  //
+  // ON by default as of v3.165.0, and that is a smaller decision than it looks
+  // -- switching it on lets somebody APPLY and lets an approved affiliate
+  // accrue a balance. It moves no money: a commission is only ever paid by an
+  // operator creating a payout batch by hand. The "code that pays out by
+  // default pays out before anybody decided to" rule (referrals.js) is about
+  // automatic GRANTS, and there are none here.
+  affiliatesEnabled: boolean(process.env.AFFILIATES_ENABLED, true),
+
+  // THE NUMBERS ARE OPUSCLIP'S, deliberately (Youssef, 8 Sept 2026: "just kinda
+  // look at Opus and see how they how they do it ... we'll kinda copy the exact
+  // same thing because it's just affiliate"). Read off their published terms in
+  // September 2026 and checked against the field: Pictory 20-50% recurring /
+  // 90-day cookie, vidyo.ai up to 40% / 60-day, InVideo 50% monthly / 120-day,
+  // Creatify 25-30% for 12 months / 30-day, Descript 15% one-off. 25% for
+  // twelve months on a 60-day cookie is squarely the middle of that and is
+  // exactly what the tool this product is compared with pays.
+  affiliateCommissionPercent: Math.min(50, Math.max(0, number(process.env.AFFILIATE_COMMISSION_PERCENT, 25))),
+  // How many months of a subscription earn commission, from that account's
+  // FIRST paid invoice. 0 = first payment only.
+  affiliateCommissionMonths: Math.max(0, number(process.env.AFFILIATE_COMMISSION_MONTHS, 12)),
   // Days a commission is held before it is payable, so a refund window closes
   // first. A commission paid before the refund window is a commission clawed
-  // back from someone who has already spent it.
-  affiliatePendingDays: Math.max(0, number(process.env.AFFILIATE_PENDING_DAYS, 45)),
-  affiliateMinimumPayoutMinor: Math.max(0, number(process.env.AFFILIATE_MIN_PAYOUT_MINOR, 5000)),
+  // back from someone who has already spent it. 30 is OpusClip's; the hold is
+  // only meaningful because `charge.refunded` and `charge.dispute.created` are
+  // now watched and void a commission that is still inside it.
+  affiliatePendingDays: Math.max(0, number(process.env.AFFILIATE_PENDING_DAYS, 30)),
+  // Per CURRENCY, in minor units, and not an absolute wall -- the operator may
+  // pay a smaller balance. It exists so a transfer does not cost more in fees
+  // than it moves. A$20 against OpusClip's US$20; the field guidance is that a
+  // threshold more than 30% of affiliates never reach is set too high, and at
+  // 25% of A$29.99 this is three months of one referred subscriber.
+  affiliateMinimumPayoutMinor: Math.max(0, number(process.env.AFFILIATE_MIN_PAYOUT_MINOR, 2000)),
+  // The attribution window, in days. The `dc_ref` cookie carries it, so this is
+  // also how long an invite link is remembered for the token referral -- one
+  // cookie, one answer, and 60 days is the market's own (OpusClip, vidyo.ai).
+  affiliateCookieDays: Math.max(1, number(process.env.AFFILIATE_COOKIE_DAYS, 60)),
 
   timezone: process.env.TIMEZONE || 'Australia/Perth',
   postTimes: (process.env.POST_TIMES || '07:00,12:00,17:00,20:30')
