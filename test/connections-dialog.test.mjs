@@ -57,25 +57,32 @@ test('Connect says it is doing something', () => {
     'and recovers if the hand-off never happens, rather than sticking on Opening…');
 });
 
-test('nothing in the dialog offers a second channel any more', () => {
+test('a second channel is offered only where the allowance permits one', () => {
   // Studio sold three per platform from v3.41.0 until Youssef retired it on
   // 4 Sept 2026: "REMOVE ALL THINGS TO DO WITH 3 CHANNELS REMOVE IT, ITS NOT
-  // PRCATICAL". With one channel per platform there is nothing to choose
-  // between, so a tick box with one option in it is a control that does
-  // nothing (invariant 9) -- and a button reading "Add another" points at a
-  // limit that is now always reached.
-  assert.ok(!host.includes('Press Connect again to add another.'));
-  assert.ok(!host.includes('studio-conn-headroom'));
-  assert.ok(!host.includes("'Add another'"), 'the Connect button no longer offers a second');
-  assert.ok(!/of \$\{max\} allowed/.test(host), 'and no allowance is quoted');
+  // PRCATICAL". It came back on 8 Sept for the OPERATOR alone, so this test
+  // moved from "nothing offers a second" to "nothing offers a second unless
+  // billing says so" -- the gate, not the words. Banning the words outright
+  // would have to be reversed the moment the operator needs them, and a law
+  // nobody can keep is not a law.
+  const cond = /const canAdd=([^;]+);/.exec(host)[1];
+  assert.match(cond, /<\s*allowedHere/, 'gated on the allowance, never offered flat');
+  assert.match(/const perPlatform=([^;]+);/.exec(host)[1], /accountsPerPlatform/,
+    'and that allowance is the server\'s, from billing.accountsPerPlatform');
+
+  // WHAT DID NOT COME BACK, and must not without being asked for: the tick-box
+  // picker, the lane switcher and the per-channel counts on the Schedule.
+  // Those are what made it confusing.
+  assert.ok(!host.includes('Press Connect again to add another.'),
+    'the sentence beside the button is gone -- the button says what it does');
   assert.ok(!host.includes('data-conn-account'), 'no picker, and no handler for one');
-  assert.ok(!host.includes('maxAccounts'), 'the cap is not read here at all');
+  assert.ok(!host.includes('maxAccounts'), 'the retired binding stays retired');
   // An account that connected several while it WAS sold still has them on
   // disk, so they are still listed and still individually disconnectable --
   // hiding them would read as the app having lost them.
   assert.ok(host.includes('data-conn-drop'), 'the extras can still be tidied away');
   assert.ok(/DeenClipped posts to the first of these/.test(host),
-    'and the screen says which one actually posts');
+    'and past the allowance the screen says which one actually posts');
 });
 
 test('creator_info cannot outlive the gateway', () => {

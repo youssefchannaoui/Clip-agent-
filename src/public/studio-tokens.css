@@ -372,15 +372,36 @@ body.dc-light {
     /* Room for the collapse row, which is absolutely positioned against the
        rail -- without this the Owner item slides underneath it. */
     padding-bottom: 46px;
-    /* A BACKSTOP, never the normal state. The list fits at every desktop
-       height today (17px of slack at the tightest, 1366x768), but a rail item
-       added without re-measuring would otherwise spill over the collapse row
-       and out of the rail with nothing saying so. Scrolling is the honest
-       failure; clipping is not. */
+    scrollbar-width: none;
+  }
+  /* THE BACKSTOP LIVES ON THE OPEN RAIL ONLY, and that is not a preference.
+     An `overflow` of anything but `visible` clips absolutely-positioned
+     descendants -- and setting one axis makes the browser compute the other
+     from `visible` to `auto`, so `overflow-y: auto` clipped horizontally too.
+     The collapsed rail's hover tooltip sits at `left: calc(100% + 10px)`,
+     outside the nav's box, so it was computed, positioned, opaque and drawn
+     NOWHERE: measured at 1440x950, opacity 1, rect 67..166 against a nav
+     clipping at 57, and the pixels byte-identical with and without hover.
+
+     Scoping it costs nothing the collapsed rail had. Measured open vs
+     collapsed at four heights, the collapsed list is never the taller of the
+     two (1280x720: 627 against 648; 1280x700: 607 against 644; identical
+     above that), and it overflows at none of them -- so the state that keeps
+     the scroll is the state that can actually need it, and it is also the
+     state with no tooltip to lose (`tipStyle` is `display: none` when open).
+
+     `data-host-rail`, never `data-rail`: #dcRailNav is a GENERATED node and
+     syncAttributes strips any attribute the render does not carry -- the
+     v3.124.5 lesson, where the waveform's own signature was wiped every
+     paint. The data-host-* family is the one the patcher never touches. It is
+     stamped by paintRailState from the adapter's own railOpen
+     flag. Reading the rail's WIDTH here does not work: it animates over 180ms
+     and the paint that collapses it still measures 228. */
+  #dcRailNav[data-host-rail="open"] {
     overflow-y: auto;
     scrollbar-width: none;
   }
-  #dcRailNav::-webkit-scrollbar { width: 0; height: 0; }
+  #dcRailNav[data-host-rail="open"]::-webkit-scrollbar { width: 0; height: 0; }
   @media (min-height: 860px) {
     #dcRailNav { gap: clamp(16px, 3.2vh, 40px); }
   }

@@ -7466,6 +7466,23 @@ function renderStudio(){
        disk. They are all listed, and the first is the one that posts -- which
        is what capping accountsPerPlatform to 1 does. The extras keep their own
        disconnect so they can be tidied away. */
+    /* HOW MANY ACCOUNTS ON ONE PLATFORM THIS ACCOUNT POSTS TO, from the
+       server rather than from a number typed here. `billing.accountsPerPlatform`
+       is 1 for every customer and 3 for the operator, and it is the same
+       function the route and the publish path use -- so the dialog cannot
+       offer a channel the publish path would then refuse, and cannot say
+       "posts to the first of these" while three of them post. */
+    const perPlatform=()=>Math.max(1,Number((DATA&&DATA.social&&DATA.social.accountsPerPlatform)||1));
+    /* Where connecting again ADDS a channel rather than replacing the one
+       there. Meta is the exception and it is structural, not a preference: one
+       Facebook login carries every Page, so its accounts come from that login's
+       Page list and connecting again re-runs it. Everywhere else the platform
+       stores its own credential per channel (tenancy.addConnection), and past
+       a limit of one it appends. Read from `r.oauth`, which the server derives
+       -- never a list of platform names typed here, which is what left direct
+       Instagram out of the per-account disconnect below. */
+    const addsAccounts=r=>r.oauth!=='meta';
+
     function accountPicker(r, i){
       const accounts=r.accounts||[];
       if(accounts.length===0)return '';
@@ -7474,17 +7491,29 @@ function renderStudio(){
          a hardcoded sentence would have told Youssef his three channels post
          to one -- the screen and the publish path disagreeing, which is the
          fault this dialog already carried before the allowance could vary. */
-      const allowed=Math.max(1,Number((DATA&&DATA.social&&DATA.social.accountsPerPlatform)||1));
+      const allowed=perPlatform();
       const live=Math.min(allowed,accounts.length);
+      /* THE COUNT, WHENEVER MORE THAN ONE IS ALLOWED. Youssef, 8 Sept 2026,
+         with one channel connected on each platform: "to add, like, more than
+         one account, I don't see a button in the connections to add another
+         account". He was right and this was the silent half of it -- with one
+         account and three allowed the picker said NOTHING, so the screen never
+         admitted the other two slots existed. "How do I know I get three?" is
+         a real question and this is the screen that answers it (v3.72.1); the
+         sentence telling him which button to press is gone, because the button
+         now says what it does. */
+      const headroom=allowed>accounts.length
+        ? `<span class="studio-conn-accounts-h">${accounts.length} of ${allowed} channels connected</span>`
+        : '';
       const extra=accounts.length>live
         ? `<span class="studio-conn-accounts-h">${live===1
             ? 'DeenClipped posts to the first of these. Disconnect the others to change it.'
             : `DeenClipped posts to the first ${live} of these. Disconnect the others to change it.`}</span>`
-        : accounts.length>1
+        : (accounts.length>1
           ? `<span class="studio-conn-accounts-h">${shareOutOn()
               ? `Each clip goes to ONE of these ${accounts.length}, in turn.`
               : `Every clip goes to all ${accounts.length}.`}</span>`
-          : '';
+          : '')+headroom;
       return `<div class="studio-conn-accounts">${extra}${accountRows(r,i,accounts,live)}</div>`;
     }
 
@@ -7506,7 +7535,7 @@ function renderStudio(){
        row does not exist for them and cannot resurrect the multi-channel
        schedule v3.125.0 retired. Marked BETA because it is exactly that: one
        account, testing whether the shape works before anybody else sees it. */
-    const shareOutAllowed=()=>Math.max(1,Number((DATA&&DATA.social&&DATA.social.accountsPerPlatform)||1))>1;
+    const shareOutAllowed=()=>perPlatform()>1;
     const shareOutOn=()=>Boolean(DATA&&DATA.publishingSettings&&DATA.publishingSettings.shareOut);
     function shareOutRow(){
       if(!shareOutAllowed())return '';
@@ -7592,6 +7621,27 @@ function renderStudio(){
            reconnect, connected but switched off, and not connected at all. */
         const stateClass=on?'on':linked?'idle':'';
         const stateWord=off?'Unavailable':stale?'Needs reconnecting':on?'Publishing':linked?'Paused':'Not connected';
+        /* WHAT PRESSING THIS ACTUALLY DOES, said on the button.
+
+           Youssef, 8 Sept 2026: "to add, like, more than one account, I don't
+           see a button in the connections to add another account ... I only
+           have one on each." There was no such button and there did not need
+           to be: connecting again on a platform that keeps its own credentials
+           ADDS a channel whenever the allowance has room (tenancy.addConnection
+           appends past a limit of one, and replaces in place when the SAME
+           account comes back). The affordance was working and wearing the wrong
+           word -- "Reconnect" is exactly what you call replacing the one you
+           have, so nothing on screen suggested a second channel was possible.
+
+           A dead credential still says Reconnect, because that is the urgent
+           thing and it is what the state pill beside it is reporting. */
+        const allowedHere=perPlatform();
+        const canAdd=linked&&!stale&&addsAccounts(r)&&(r.accounts||[]).length<allowedHere;
+        const connectLabel=off||!linked?`Connect with ${r.connectWith||r.name}`:canAdd?'Add another':'Reconnect';
+        const connectTip=off?'Not set up on the server yet'
+          :!linked?`Sign in with ${r.connectWith||r.name} to publish here`
+          :canAdd?`Connect another ${r.name} channel — ${(r.accounts||[]).length} of ${allowedHere} connected. Signing in with the same one refreshes it instead.`
+          :`Sign in again to refresh this ${r.name} connection`;
         return `<div class="studio-conn-row">
           <span class="studio-conn-mark"><i class="${esc(r.icon)}" style="color:${esc(colour)}"></i></span>
           <span class="who"><b>${esc(r.name)}</b><span>${esc(detail)}</span></span>
@@ -7600,7 +7650,8 @@ function renderStudio(){
             aria-label="Publish to ${esc(r.name)}" title="${linked?(on?'Switched on — approved clips can post here':'Switched off — connected, but nothing will post'):'Connect an account first'}"
             data-conn-toggle="${i}" ${linked?'':'disabled'}><i></i></button>
           <span class="studio-conn-actions">
-            <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}>${linked?'Reconnect':`Connect with ${esc(r.connectWith||r.name)}`}</button>
+            <button type="button" class="primary" data-conn-connect="${i}" ${off?'disabled':''}
+              title="${esc(connectTip)}">${esc(connectLabel)}</button>
             ${HAS_SETTINGS[r.key]&&linked?`<button type="button" data-conn-settings="${esc(r.key)}"><i class="ph ph-sliders-horizontal"></i>Settings</button>`:''}
             ${linked?`<button type="button" data-conn-test="${esc(r.key)}" title="Ask ${esc(r.name)} for this account's current settings"><i class="ph ph-check-circle"></i>Test</button>`:''}
             <button type="button" class="danger" data-conn-disconnect="${i}" ${linked?'':'disabled'}>Disconnect</button>
@@ -11037,6 +11088,30 @@ document.addEventListener('keydown',event=>{
   if(event.key==='Escape')closeTasks();
 });
 
+/* IS THE RAIL COLLAPSED, said in a way CSS can read.
+
+   The collapsed rail's hover tooltip is absolutely positioned OUTSIDE the
+   nav's box, so it cannot survive an `overflow` on the nav -- and the
+   backstop added with the Affiliate item (v3.166.0) clipped it away
+   completely. studio-tokens.css scopes that backstop to the open rail; this
+   is what tells it which state it is in.
+
+   `data-host-rail`, because #dcRailNav is a GENERATED node: syncAttributes
+   rewrites a generated node's attributes from the render and drops anything
+   the render does not carry, and data-host-* is the one family it never
+   touches (v3.124.5).
+
+   The adapter's railOpen flag rather than the rail's measured width: the
+   width animates over 180ms, so the paint that collapses the rail still
+   measures 228. Same answer paintTaskCard already computes for `is-tight`. */
+function paintRailState(){
+  const nav=document.getElementById('dcRailNav');
+  if(!nav)return;
+  const open=StudioAdapter.ui.railOpen&&(window.innerWidth||1280)>820;
+  const want=open?'open':'tight';
+  if(nav.getAttribute('data-host-rail')!==want)nav.setAttribute('data-host-rail',want);
+}
+
 function paintBrandSeal(){
   /* The marketing site's rotating seal, on the rail's arch mark. Youssef,
      1 Sept 2026: "that cool, like, animated top left logo on the main website
@@ -12387,6 +12462,7 @@ function paintStudio(){
      (it waits on /api/affiliate and /api/referral) and returns on its own,
      so nothing here awaits it. */
   try{window.dcPaintAffiliateScreen&&window.dcPaintAffiliateScreen()}catch(e){}
+  paintRailState();
   paintBrandSeal();
   paintTaskCard();
   paintTasksPanel();

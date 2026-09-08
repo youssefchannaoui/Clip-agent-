@@ -252,6 +252,11 @@ test('the button names the login it opens', () => {
   assert.match(adapter, /connectWith:[\s\S]{0,120}PLATFORM_NAMES\[key\]/);
   assert.ok(!/connectWith:[\s\S]{0,120}PLATFORM_TITLES/.test(adapter));
   const host = read('src/public/index.html');
-  assert.match(host, /Connect with \$\{esc\(r\.connectWith/);
+  // The PROPERTY, not the expression: the label moved into `connectLabel` when
+  // the button learned to say "Add another" (v3.172.0), and pinning the old
+  // spelling turned this red against code whose behaviour had not moved -- the
+  // thirteenth time in this repo. What must stay true is that the not-yet-
+  // connected label names the LOGIN rather than the platform.
+  assert.match(host, /Connect with \$\{r\.connectWith\|\|r\.name\}/);
   assert.match(host, /no Facebook Page needed/);
 });

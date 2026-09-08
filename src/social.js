@@ -636,7 +636,7 @@ async function connectInstagram(code, userId) {
   const accountId = String(me?.user_id || me?.id || '');
   if (!accountId) throw new SocialError('Instagram did not say which account was connected.', { provider: 'instagram' });
 
-  addConnection(userId, 'instagram', {
+  addConnection(state.socialConnections, userId, 'instagram', {
     provider: 'instagram',
     accountId,
     name: me?.username ? `@${me.username}` : (me?.name || 'Instagram'),

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1930 JS + 843 Python**
+- `npm test` and `npm run check` must pass. Currently **1936 JS + 843 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -16342,3 +16342,140 @@ ground, which is exactly the false failure this file already warns about.
 
 Seven new tests, **all seven probes proven red**, each asserting it actually
 edited the file first.
+
+## The button that added a channel said "Reconnect" (v3.172.0, 8 Sept 2026)
+
+Youssef, with one account connected on each of the four platforms: "because
+I'm an owner, of course. By the way, please confirm that it's only me, my
+account that can do that. Secondly, to add, like, more than one account, I
+don't see a button in the connections to add another account. on each social
+media. Like, I only have one on each."
+
+### The confirmation, and it was already law
+
+`billing.accountsPerPlatform(user)` is `isUnlimited(user) ? 3 : 1`, and
+`isUnlimited` reads `user.role` -- which a customer cannot set on themselves.
+Deliberately NOT `atLeast('studio')`: a tier check would hand three channels to
+every Studio subscriber, which is the thing v3.125.0 removed.
+`test/one-channel.test.mjs` already drove it both ways before this release --
+every plan including `studio_yearly` returns 1, and only `owner`/`admin`
+returns 3. Nothing here loosened it, and the negative was re-driven in a
+browser: with the payload rewritten to 1, the dialog shows no "Add another"
+on any row, no channel count, and no share-out block.
+
+### THE AFFORDANCE WAS WORKING AND WEARING THE WRONG WORD
+
+Nothing needed building. `tenancy.addConnection` appends past a limit of one
+and replaces in place when the SAME account comes back, so pressing the
+platform's own button already added a channel. It said **"Reconnect"** --
+which is exactly what you call replacing the one you have. So the one control
+that does the thing described it as the opposite, and nothing on screen ever
+suggested a second channel was possible.
+
+- The button reads **"Add another"** when the platform keeps its own
+  credentials, the allowance has room, and the credential is not dead. A dead
+  one still says Reconnect, because that is the urgent thing and the state pill
+  beside it is already reporting it. Its title says what pressing it does, and
+  that signing in with the same channel refreshes it instead.
+- **`addsAccounts` is `r.oauth !== 'meta'`, read from the server rather than a
+  list of platform names typed into the host.** Meta is the exception and it is
+  structural: one Facebook login carries every Page, so a Meta row's accounts
+  come from that login's Page list and connecting again re-runs it. A typed
+  list is exactly what left DIRECT Instagram Login out of the per-account
+  disconnect beside it, which is still the case and is noted rather than
+  quietly widened -- an Instagram row mixes direct connections with Pages, and
+  a per-account × on a Page would tear out the Meta login.
+- **The picker said NOTHING at one of three.** `accountPicker` printed a line
+  only at two or more, so an account with one channel and three allowed was
+  never told the other two slots existed -- the silent half of the complaint.
+  It now says "1 of 3 channels connected" whenever there is room, ALONGSIDE the
+  behaviour line rather than instead of it (2 of 3 says both). The sentence
+  telling somebody which button to press is gone, because the button now says
+  what it does -- which is the v3.102.0 call, kept.
+- **ONE reader.** `perPlatform()` is the only thing in the dialog that touches
+  `DATA.social.accountsPerPlatform`; the share-out row was a second copy and now
+  calls it. Two copies of "how many channels" is how a screen comes to say
+  "posts to the first of these" while three of them post.
+
+Driven as the operator with two YouTube channels and one TikTok: YouTube reads
+"EVERY CLIP GOES TO ALL 2 / 2 OF 3 CHANNELS CONNECTED" with **Add another**,
+TikTok reads "1 OF 3 CHANNELS CONNECTED" with **Add another**, and every
+customer sees Reconnect and no counts.
+
+### A LATENT CRASH ON THE FIRST REAL INSTAGRAM LOGIN
+
+Found in the same file. `tenancy.addConnection` takes
+`(socialConnections, userId, provider, connection, opts)`.
+`completeInstagramLogin` called it with **four** arguments, the first a string:
+
+    addConnection(userId, 'instagram', { ... }, { max: ... })
+
+ES modules are strict, so assigning a property on a string primitive throws
+`TypeError: Cannot create property 'instagram' on string '<userId>'` rather
+than failing quietly. It has never run -- v3.160.0 leaves the direct login
+inert without `INSTAGRAM_CLIENT_ID`/`SECRET`, and no token has ever been
+exchanged with Instagram from this codebase -- so it would have thrown the
+moment those credentials were set, which is the very next thing anybody does
+to get an Instagram login working. Fixed, and the test asserts the first
+argument of EVERY `addConnection` call in social.js rather than the one that
+was wrong.
+
+## The rail's hover tooltip was computed, opaque and drawn nowhere (v3.172.0)
+
+Youssef: "hover name tab on clolapsed sidebar is gone."
+
+**The rule was firing perfectly.** Measured at 1440x950 with a real hover:
+`opacity: 1`, `matches(':hover')` true, the tooltip's rect at **x 67..166** --
+and the nav's box clipping at **x 57**. The pixels of that region were
+**byte-identical with and without hover**.
+
+- **`overflow-y: auto` on `#dcRailNav`**, added with the Affiliate item
+  (v3.166.0) as a backstop against a future rail item spilling over the
+  collapse row. An `overflow` of anything but `visible` clips
+  absolutely-positioned descendants -- and **setting one axis makes the browser
+  compute the other from `visible` to `auto`**, so a `-y` value clipped
+  horizontally too. The tooltip sits at `left: calc(100% + 10px)`, outside the
+  nav.
+- **The backstop is scoped to the OPEN rail, and the measurement is why.**
+  Open against collapsed at four heights, the collapsed list is never the
+  taller (1280x720: 627 against 648; 1280x700: 607 against 644; identical at
+  1366x768 and 1440x950) and it overflows at none of them. So the state that
+  keeps the scroll is the state that can actually need it -- and it is also the
+  state with no tooltip to lose, since `tipStyle` is `display: none` when open.
+  Re-measured after: at 1280x700 the open rail still scrolls (`overflow: auto`,
+  `scrollHeight > clientHeight`), the collapsed one is `visible`, does not
+  scroll, and its last item sits at 640 against a rail bottom of 700.
+- **`data-host-rail`, never `data-rail`.** `#dcRailNav` is a GENERATED node and
+  `syncAttributes` strips any attribute the render does not carry -- the
+  v3.124.5 lesson, where the waveform's own signature was wiped every paint.
+  `data-host-*` is the family the patcher never touches. `paintRailState` reads
+  the adapter's `railOpen` flag rather than the rail's width, which animates
+  over 180ms and still measures 228 on the paint that collapses it.
+- **`test/rail-nav.test.mjs` already asserted BOTH halves of this tooltip and
+  both passed while it drew nothing.** A third assertion now requires every
+  overflow rule on the nav to name the open state. A source test, because CI
+  has no browser and this is exactly the shape that is invisible when it
+  breaks: the app renders, the suite stays green, and the collapsed rail goes
+  back to being unlabelled icons.
+
+**The CSP inline-script hash is computed at server start**, so the preview
+server has to be restarted after every index.html edit or the app renders its
+shell and never boots. Ninth recorded occurrence, and it cost a run here.
+
+### And the black band under the live bar is the room it was given
+
+Youssef, same sitting: "why is there a black bar behind the hpapenign now".
+Sampled from the live DOM rather than guessed: the band resolves to `BODY` at
+`rgb(9,9,10)` -- the page ground, with nothing drawn in it. It is
+`body.dc-livebar #studio main { padding-bottom: 92px }` (v3.125.0), which
+shrinks the scroller so the floating bar never covers a control -- measured
+then as 3 covered controls on the queue at 1280 and 1 on the library at 1100,
+0 after. On the Schedule both cards STRETCH to their container, so shrinking it
+ends them 92px early and exposes the ground.
+
+**It is not fixed here, and the reason is a trade rather than an oversight.**
+Removing the reservation puts the bar back over the Posting-windows card's last
+row; keeping it leaves the band. Anything in between (reserving only when the
+screen scrolls) feeds itself -- the padding is what makes it scroll, which is
+the self-measuring trap v3.75.4 records. It is Youssef's call which way it
+goes, and it is on the list rather than guessed at.

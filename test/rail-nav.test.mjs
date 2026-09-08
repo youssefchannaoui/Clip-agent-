@@ -138,6 +138,54 @@ test('a collapsed rail names its icons on hover', () => {
   assert.match(css, rule, 'studio-tokens.css reveals the tooltip on hover');
 });
 
+test('the collapsed rail does not clip the tooltip it just revealed', () => {
+  /*
+   * The two halves above BOTH passed while the tooltip drew nothing at all.
+   *
+   * v3.166.0 gave #dcRailNav `overflow-y: auto` as a backstop against a future
+   * rail item spilling over the collapse row. An `overflow` of anything but
+   * `visible` clips absolutely-positioned descendants -- and setting one axis
+   * makes the browser compute the other from `visible` to `auto`, so it
+   * clipped horizontally too. The tooltip sits at `left: calc(100% + 10px)`,
+   * outside the nav's box.
+   *
+   * Measured at 1440x950 before the fix: opacity 1, matches(':hover') true,
+   * rect 67..166 against a nav clipping at 57, and the pixels of that region
+   * BYTE-IDENTICAL with and without hover. The rule was firing perfectly and
+   * the tooltip was drawn nowhere.
+   *
+   * A source test because CI has no browser, and because this is exactly the
+   * shape that is invisible when it breaks: the app renders, the suite stays
+   * green, and the collapsed rail goes back to being unlabelled icons.
+   */
+  const css = fs.readFileSync(path.join(root, 'src/public/studio-tokens.css'), 'utf8');
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  // Every rule that puts an overflow on the nav must name the OPEN state.
+  const overflows = bare.split('\n')
+    .map((line, i) => ({ line, i }))
+    .filter(({ line }) => /overflow[-a-z]*\s*:/.test(line));
+  // Find which selector block each belongs to by walking back to the nearest
+  // `#dcRailNav...{` -- a byte offset is not a boundary (this repo's own rule).
+  const navBlocks = [...bare.matchAll(/#dcRailNav([^{}]*)\{([^}]*)\}/g)]
+    .filter(m => /overflow[-a-z]*\s*:\s*(?!visible)/.test(m[2]));
+  assert.ok(navBlocks.length > 0, 'the nav still carries its scroll backstop');
+  for (const m of navBlocks) {
+    assert.match(m[1], /\[data-host-rail="open"\]/,
+      'a nav overflow rule must be scoped to the OPEN rail, or it clips the tooltip');
+  }
+  assert.ok(overflows.length >= 0);
+
+  // And the state has to be stamped, in the family the patcher never strips.
+  const html = fs.readFileSync(path.join(root, 'src/public/index.html'), 'utf8');
+  const fn = /function paintRailState\(\)\{[\s\S]*?\n\}/.exec(html);
+  assert.ok(fn, 'paintRailState exists');
+  assert.match(fn[0], /data-host-rail/,
+    'stamped as data-host-* -- #dcRailNav is generated, and syncAttributes strips anything else');
+  assert.match(fn[0], /railOpen/, 'read from the adapter flag, not the animating width');
+  const paint = /function paintStudio\(\)\{[\s\S]*?\n\}/.exec(html)[0];
+  assert.match(paint, /paintRailState\(\)/, 'and it runs on every paint, like every other host panel');
+});
+
 test('the brand seal is painted with the other host panels, not on an observer', () => {
   // The rotating seal is injected into the generated template's brand row, and
   // the studio renders through innerHTML -- so it is destroyed on every paint
