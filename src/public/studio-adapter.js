@@ -2267,7 +2267,7 @@
       // inline !important is the one thing a stylesheet :hover cannot override.
       enter: null,
       leave: null,
-      style: 'position: relative; display: flex; align-items: center; gap: 10px; padding: ' + (open ? '8px 10px' : '9px 0') + '; ' + (open ? '' : 'justify-content: center; ') +
+      style: 'position: relative; display: flex; align-items: center; gap: 9px; padding: ' + (open ? '6px 9px' : '9px 0') + '; ' + (open ? '' : 'justify-content: center; ') +
         'border-radius: 8px; font-weight: ' + (on ? '500' : '400') + '; cursor: pointer; white-space: nowrap; transition: background .14s ease, color .14s ease; border-left: 2px solid ' +
         (on ? 'var(--dc-gold, #D9B478); background: rgba(217,180,120,.09) !important; color: var(--dc-gold-lit, #F0D6A6) !important;' : 'transparent; color: var(--dc-ink-soft, #A2A2AA);'),
       labelStyle: open ? 'overflow: hidden; text-overflow: ellipsis;' : 'display: none;',
@@ -2310,8 +2310,8 @@
     var item = navItem('owner', 'Owner', 'ph ph-coins', '');
     var on = UI.screen === 'owner';
     var open = UI.railOpen && (global.innerWidth || 1280) > 820;
-    item.style = 'position: relative; display: flex; align-items: center; gap: 10px; margin-top: 18px; ' +
-      'padding: ' + (open ? '10px 12px' : '11px 0') + '; ' + (open ? '' : 'justify-content: center; ') +
+    item.style = 'position: relative; display: flex; align-items: center; gap: 9px; margin-top: 16px; ' +
+      'padding: ' + (open ? '7px 10px' : '11px 0') + '; ' + (open ? '' : 'justify-content: center; ') +
       'border-radius: 10px; font-weight: 600; cursor: pointer; white-space: nowrap; ' +
       'transition: background .14s ease, color .14s ease, border-color .14s ease; border: 1px solid ' +
       (on
@@ -5690,7 +5690,7 @@
     var vals = {
       // ── shell: rail ──
       railOpen: open,
-      railStyle: 'position: relative; align-self: stretch; height: 100%; min-height: 0; ' + (open ? 'overflow-y: auto; overflow-x: hidden; ' : 'overflow: visible; ') + 'display: flex; flex-direction: column; gap: 18px; width: ' + (open ? '228px' : '68px') + '; padding: 16px 12px; border-right: 1px solid var(--dc-line-soft, #1E1E22); background: linear-gradient(180deg, var(--dc-bg-deep, #101013), var(--dc-page-2, #0B0B0D)); transition: width .18s ease;',
+      railStyle: 'position: relative; align-self: stretch; height: 100%; min-height: 0; ' + (open ? 'overflow-y: auto; overflow-x: hidden; ' : 'overflow: visible; ') + 'display: flex; flex-direction: column; gap: 15px; width: ' + (open ? '206px' : '68px') + '; padding: 14px 10px; border-right: 1px solid var(--dc-line-soft, #1E1E22); background: linear-gradient(180deg, var(--dc-bg-deep, #101013), var(--dc-page-2, #0B0B0D)); transition: width .18s ease;',
       brandRowStyle: 'display: flex; align-items: center; gap: 10px; padding: ' + (open ? '4px 6px' : '4px 0') + '; ' + (open ? '' : 'flex-direction: column;'),
       brandTextStyle: open ? 'display: flex; flex-direction: column; line-height: 1.2; min-width: 0;' : 'display: none;',
       // The channel banner's own device: a hairline between the arch and the

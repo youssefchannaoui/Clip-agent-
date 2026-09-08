@@ -325,8 +325,14 @@ test('a thumbnail URL cannot break out of the CSS url() it lands in', () => {
 test('collapsing the rail changes its width and hides labels', () => {
   const wide = renderScreen('home', { railOpen: true }).vals;
   const narrow = renderScreen('home', { railOpen: false }).vals;
-  assert.match(wide.railStyle, /width: 228px/);
-  assert.match(narrow.railStyle, /width: 68px/);
+  // The PROPERTY, not the number: this pinned `width: 228px` and went red at
+  // v3.162.0 when the rail was narrowed to 206 -- a test naming a value rather
+  // than a behaviour, which this repo has now been caught by a dozen times.
+  const px = (style) => Number((style.match(/width: (\d+)px/) || [])[1]);
+  assert.ok(px(wide.railStyle) > px(narrow.railStyle),
+    'an open rail must be wider than a collapsed one');
+  assert.equal(px(narrow.railStyle), 68,
+    'the collapsed width is 68px, and the collapse control is centred on it');
   assert.match(narrow.navHome[0].labelStyle, /display: none/);
 });
 

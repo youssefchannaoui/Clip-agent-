@@ -335,6 +335,25 @@ body.dc-light {
  * means that stops being something anyone has to remember.
  */
 @media (min-width: 821px) {
+  /* THE RAIL READS AS A BLOCK BECAUSE THE ROWS ARE BIG AND HAVE NO AIR BETWEEN
+     THEM (Youssef, 8 Sept 2026: "the left hand side with the old tabs starting
+     to get pretty clunk up. There's quite a lot of pages now ... make it, like,
+     maybe smaller or whatever, so then it looks more spacious").
+     Measured before touching it: a 38px row on a 40px pitch -- TWO pixels of
+     gap -- ten of them, in a 228px column. Nothing was overflowing at any
+     height (the tail is anchored to the foot, so it fits at 700px too); what
+     was wrong was the density. So the rows get SMALLER and the space between
+     them gets LARGER, which is the whole of "smaller so it looks spacious":
+     34px on a 40px pitch, the same block, with air you can see.
+     The row's own padding and the rail's width are INLINE styles from the
+     adapter, because an inline style is the one thing a stylesheet cannot
+     outrank -- they moved there. Only the gaps and the type are here, and both
+     are named by id and tag so a design re-import cannot renumber them away:
+     .s8 (gap 2px) and .s7 (gap 14px) are hashed and must never be selected. */
+  #dcRailNav { gap: 16px; }
+  #dcRailNav > div { gap: 6px; }
+  #dcRailNav a { font-size: 13px; }
+  #dcRailNav a > i { font-size: 15.5px; }
   /* The nav has to fill the column before anything inside it can be pushed to
      the bottom of one. */
   #dcRailNav {

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1853 JS + 801 Python**
+- `npm test` and `npm run check` must pass. Currently **1855 JS + 801 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -8568,6 +8568,82 @@ Found on the way and NOT fixed, so it is written down where the constants live
 
 Night is untouched: `--dc-gold` and `--dc-gold-lit` are still #D9B478 and
 #F0D6A6, and every night value in the generated token sheet is byte-identical.
+
+## The rail's rows are smaller and its list is not (v3.162.0, 8 Sept 2026)
+
+Youssef: "the left hand side with the old tabs starting to get pretty clunk up.
+There's quite a lot of pages now. So we need to make it, like, maybe smaller or
+whatever, so then it looks more spacious."
+
+### MEASURED FIRST, and the obvious diagnosis was wrong
+
+Nothing was overflowing, at any height. The tail is anchored to the foot, so
+the rail fits at 700px as it does at 1080 -- measured at 700 / 768 / 800 / 900 /
+950 / 1080, with the same 62px of slack under the last item every time. It is
+not a crowding problem and shortening the list would have fixed nothing.
+
+What IS wrong is the DENSITY: **a 38px row on a 40px pitch. Two pixels of gap**,
+ten times over, in a 228px column -- so the items read as one solid block with a
+296px void under them. The answer is therefore the opposite of what "make it
+smaller" sounds like: the rows get smaller and the space between them gets
+LARGER, so the block is the same height and has air you can see.
+
+    row height       38 -> 33px        gap between rows    2 -> 6px
+    rail width      228 -> 206px       row font          13.5 -> 13px
+    group gap        14 -> 16px        rail padding    16/12 -> 14/10px
+
+### WHERE each half lives is not a preference
+
+- **The row's padding and the rail's width are INLINE styles from the adapter**,
+  so that is where they moved. An inline style is the one thing a stylesheet
+  cannot outrank -- this file has now paid for that four times (the live-row
+  spinner, the rail tooltips, the Templates brand switches, the phone paste
+  field), and a CSS "fix" here would have measured as doing nothing at all.
+- **The gaps and the type are hand-written CSS**, because the generated ones are
+  `.s7 { gap: 14px }` and `.s8 { gap: 2px }` -- HASHED, and renumbered by any
+  design re-import. `#dcRailNav > div` is (1,0,2) against their (0,1,0), so an
+  id and a tag win without an `!important` and without naming anything the
+  export owns.
+- **Inside `@media (min-width: 821px)`, like every other rail rule.** Measured:
+  the desktop rail is `display: none` at 320-430 and the phone draws its own
+  five tabs, so this is belt-and-braces today rather than load-bearing -- and it
+  stays, because a rail rule that escaped the query would lay a tab out as a
+  list row.
+- **Owner came down with them** (`10px 12px` -> `7px 10px`). It is deliberately
+  set apart in its own gold ring, but at 42.8px against the new 32.8 it was
+  10px taller than its neighbours instead of 6, which reads as an accident
+  rather than as emphasis. 36.8 now.
+
+### The void under the list is DELIBERATE and was left alone
+
+It is v3.147.2, from Youssef's own instruction the same day ("move your tasks on
+side bar lower"): the tasks card carries `margin-top: auto`, which collects all
+the rail's free space above it so the card sits just over the tail. Closing that
+gap would reverse an instruction one release old.
+
+### Measured after
+
+    1280x720, 1366x768, 1440x950, 1920x1080, night and daylight, all eight:
+      ONE left edge (10), ONE right edge (195), row heights 32.8 and 36.8
+      every icon 0.39px off the centre of its own label TEXT
+      0 clipped labels, 0 elements overflowing, no page scroll
+      0 DOM operations on a forced repaint, and 0 on two more after it
+
+    collapsed: 68px, all ten items, the collapse control centred at x=34
+    phone 320-430 both themes: 0 sub-44 controls, 0 page errors, lowest
+      contrast 5.12 -- v3.157.0's own numbers -- and the More sheet's 18 rows
+      all 44px or taller
+
+### A twelfth source-string test named a value rather than a behaviour
+
+`studio-design`'s "collapsing the rail changes its width and hides labels"
+asserted the literal `width: 228px`, so narrowing the rail turned it red against
+code whose behaviour had not moved. It compares the two widths now -- open wider
+than collapsed, collapsed exactly 68 because the collapse control is centred on
+it -- and was re-proven red by making the open rail narrower than the collapsed
+one. `rail-nav.test.mjs` pins the new relationship the same way: rows smaller
+than the design draws them, gaps larger than the design leaves, and no hashed
+class named. All five probes proven red.
 
 ## Open items
 

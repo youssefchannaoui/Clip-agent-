@@ -152,3 +152,57 @@ test('the brand seal is painted with the other host panels, not on an observer',
   // the ring once the ring is in, and wraps the wrapper on every paint.
   assert.match(html, /querySelector\('svg\[viewBox="0 0 40 52"\]'\)/);
 });
+
+/*
+ * THE RAIL'S DENSITY (Youssef, 8 Sept 2026: "the old tabs starting to get
+ * pretty clunk up ... make it, like, maybe smaller or whatever, so then it
+ * looks more spacious").
+ *
+ * Silent in the same way as everything else in this file: the app renders, the
+ * suite stays green, the sidebar just goes back to being a solid block. What
+ * is pinned is the RELATIONSHIP -- rows smaller than the design draws them,
+ * with more air between them than the design leaves -- and WHERE each half has
+ * to live, which is not a preference:
+ *
+ *  - the row's own padding and the rail's width are INLINE styles from the
+ *    adapter, because an inline style is the one thing a stylesheet cannot
+ *    outrank (this repo has paid for that four times: the live-row spinner,
+ *    the rail tooltips, the brand switches, the phone paste field);
+ *  - the gaps and the type are hand-written CSS, because the generated ones
+ *    (.s7 gap 14px, .s8 gap 2px) are HASHED and renumber on a design re-import.
+ */
+const tokens = fs.readFileSync(path.join(root, 'src/public/studio-tokens.css'), 'utf8')
+  .replace(/\/\*[\s\S]*?\*\//g, '');   // strip comments: they quote the values they replace
+
+const railBlock = (() => {
+  // The desktop block only. The same nav is the phone's bottom tab bar, so a
+  // rail rule that escaped this query would lay a tab out as a list row.
+  const at = tokens.indexOf('@media (min-width: 821px)');
+  assert.ok(at > 0, 'the desktop rail block is gone');
+  let depth = 0, i = tokens.indexOf('{', at);
+  for (let j = i; j < tokens.length; j++) {
+    if (tokens[j] === '{') depth++;
+    else if (tokens[j] === '}' && --depth === 0) return tokens.slice(at, j + 1);
+  }
+  throw new Error('unbalanced media query');
+})();
+
+test('the rail gives its rows air, and never by naming a hashed class', () => {
+  const gap = railBlock.match(/#dcRailNav\s*>\s*div\s*\{[^}]*gap:\s*([\d.]+)px/);
+  assert.ok(gap, 'nothing sets the gap between nav rows, so .s8 wins at 2px and they read as one block');
+  assert.ok(Number(gap[1]) > 2,
+    `rows need more air than the design's 2px, got ${gap[1]}px`);
+  assert.doesNotMatch(railBlock, /\.s[0-9][0-9a-z]{0,2}\b/,
+    'a rail rule names a generated class, which a design re-import renumbers');
+});
+
+test('a nav row is smaller than the design draws it, and the rail narrower', () => {
+  // Both are inline styles, so they can only be changed where they are written.
+  const row = source.match(/gap: 9px; padding: ' \+ \(open \? '(\d+)px (\d+)px'/);
+  assert.ok(row, 'the nav row no longer sets its own padding inline');
+  assert.ok(Number(row[1]) < 8, `a row's vertical padding must be under the design's 8px, got ${row[1]}px`);
+  const width = source.match(/width: ' \+ \(open \? '(\d+)px' : '68px'\)/);
+  assert.ok(width, 'the rail no longer sets its own width inline');
+  assert.ok(Number(width[1]) < 228, `the rail must be narrower than 228px, got ${width[1]}px`);
+  assert.equal(source.includes("'68px'"), true, 'the collapsed width must stay 68px: the collapse control is centred on it');
+});
