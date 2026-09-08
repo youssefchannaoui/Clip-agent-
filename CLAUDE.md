@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1944 JS + 851 Python**
+- `npm test` and `npm run check` must pass. Currently **1946 JS + 857 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9526,6 +9526,108 @@ seven minutes earlier through the same pool, all six client/plan combinations
 were refused at the MEDIA fetch rather than at extraction, and the box runs
 today's yt-dlp. So the message was right -- and it is now checkable rather than
 believed.
+
+## The import gave up in seconds on a refusal that clears (v3.174.0, 9 Sept 2026)
+
+Youssef, on a lecture that failed and then imported when he pressed Retry:
+**"I NEED TO RETRY THEN THE LECTURE WORKS."** That sentence is the whole
+finding, and it disproves what I had told him three hours earlier -- that the
+403 was the video. The same URL, the same box, minutes apart, and the second
+attempt succeeds. **The refusal is TRANSIENT, and the product was asking a
+customer to be its retry loop at two in the morning.**
+
+Three causes, each real, each found by measuring rather than by reading.
+
+### THE APP'S OWN AUTOMATIC RETRY HAD BEEN DEAD CODE FOR A FORTNIGHT
+
+`local-engine.js` has had a one-shot retry -- five minutes later, fresh worker
+job id, exactly what he does by hand -- since the SocialKit days. Its trigger:
+
+    /never started delivering|SocialKit download timed out/i
+
+**Both strings are SocialKit's, and SocialKit was removed on 26 Aug 2026.** So
+from that day nothing could match it and the retry never ran once. This file
+even recorded it -- *"the app's one-shot import auto-retry are no-ops without a
+hosted provider but stay tested in case one returns"* -- filed as harmless,
+which is exactly what made it invisible. It was not harmless: it is the fix for
+the complaint, already written, switched off by a string.
+
+- **What may be retried is the whole safety of it.** A YouTube refusal the
+  worker met on every client after its own rounds is a fact about that minute.
+  A private, deleted or members-only video is true for ever, and retrying it
+  spends five minutes, a worker slot and a second identical answer.
+- **The worker had made those two indistinguishable**, which is why the widened
+  trigger needed a worker change too: BOTH exhaustion paths raised
+  `_download_failure`, so a private video was reported as *"refused from every
+  client tried"* -- which it was not; it failed on the first one. A non-blocked
+  refusal keeps its own words now (*"YouTube would not release this video:
+  Private video…"*), and that is what the app tests against.
+- Both directions are pinned and both were proven red: the stale
+  SocialKit-only trigger fails the retry test, and `transientImport = true`
+  fails the gone-video test.
+
+### THE ROTATION HAD NO TIME IN IT
+
+Ten client/plan attempts, each failing fast, run inside a few seconds -- so
+every one of them asks YouTube the same question at the same instant. Whatever
+relaxes in between (a rate limit, a PO token minted late, an extractor
+half-broken by a YouTube change) needs TIME, and there was none anywhere in
+this path.
+
+`IMPORT_ROUNDS` (3) with a 20s/60s backoff. Bounded deliberately: clip_worker
+gives the whole job four times the selected stretch floored at 90 minutes, so
+~80s is nothing against it. **The two layers cover different timescales** --
+the worker's rounds handle seconds, the app's five-minute retry handles
+minutes -- and a customer gets two attempts separated by five minutes without
+touching anything.
+
+- **A block is the only thing worth waiting for.** A gone video refuses at the
+  first attempt, before any backoff. Driven: exactly one attempt, no wait.
+- **The wait is cancellable**, because the app hands the worker slot back the
+  moment it cancels and a box asleep in a backoff would hold it for a job
+  nobody wants.
+- **The proxy is re-picked per attempt**, and a test asserts the pool actually
+  rotates -- ten attempts down one burned exit is one attempt repeated.
+
+### THE BOX WAS THREE WEEKS BEHIND ON yt-dlp, ON A CONTAINER REBUILT THAT MORNING
+
+The import-posture readout shipped an hour earlier answered this in one
+dispatch: **19 proxies, no cookies, PO token yes, yt-dlp 2026.08.19** -- three
+weeks old on 9 Sept.
+
+The Dockerfile's own comment claimed otherwise: *"--upgrade so a rebuild takes
+the current yt-dlp rather than a cached wheel."* **`--upgrade` upgrades within
+that layer; it does not make a REBUILD take a newer one.** The layer is cached
+on `requirements.txt`'s own bytes, that file changes maybe twice a year, so
+the pip never ran again and the deploy log stayed perfectly clean. This is the
+Dockerfile-ENV fault of v3.162.0 in a new place: **a build that cannot deliver
+what its comment promises, invisible because nothing reads the result.**
+
+- yt-dlp gets **a layer of its own**, busted by `ARG YTDLP_REFRESH` which
+  `deploy.sh` sets to the commit. One small layer misses the cache every
+  deploy; the expensive one above it (torch, opencv, mediapipe) still hits it.
+- **bgutil-ytdlp-pot-provider is deliberately NOT upgraded there.** It is
+  pinned `==` to the token server's image in docker-compose.yml and the plugin
+  mints nothing when they differ -- the same 403 by another door. Caught by the
+  repo's own pin before it shipped.
+- `verify-deploy.sh` reports the version **and its age in days**, warning past
+  21 -- not fatal, because failing the deploy would leave the box on something
+  older still. The version is named in the refusal too, so the next one of
+  these is answerable without a dispatch.
+
+### What is NOT fixed, and it is the strongest defence
+
+**Cookies are not configured** (`cookies: no`, measured). A cookies.txt from a
+signed-in Google account is what makes YouTube stop treating the box as
+anonymous, and `server.js` already has the operator page for it. That is
+Youssef's to paste; the box uses it the moment it exists and now reports
+whether it does.
+
+**And the honest limit on all of this**: nothing here has been through a real
+YouTube refusal. The retry, the branch and the message are driven against a
+fake yt-dlp; the freshness is proven by the build. The next import that meets a
+403 is what confirms it -- and if it now imports on its own, that is the whole
+change working.
 
 ## Open items
 

@@ -3,6 +3,14 @@ services:
     build:
       context: ..
       dockerfile: worker/Dockerfile
+      args:
+        # Set per deploy by worker/deploy.sh so the yt-dlp layer misses the
+        # cache and the box takes today's extractor. Unset (a hand-run
+        # `docker compose build`) leaves the Dockerfile's own default, which
+        # caches -- so a hand rebuild is as stale as it ever was, deliberately:
+        # a value that changed on its own would rebuild that layer on every
+        # local `up` as well.
+        YTDLP_REFRESH: ${YTDLP_REFRESH:-unset}
     restart: unless-stopped
     # Time for service.py's SIGTERM handler to mark every running job
     # `interrupted` and stop its ffmpeg/Whisper process group before Docker

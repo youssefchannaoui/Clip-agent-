@@ -1201,23 +1201,42 @@ export function acceptRemoteUpdate(projectId, update) {
       }).catch(() => {});
     }
   } else if (update.status === 'failed') {
-    // A slow first fetch is not a dead job. The import service keeps fetching
-    // after our budget runs out and caches the result, so one automatic retry
-    // a few minutes later usually imports in seconds. Once, not forever: a
-    // second identical failure means something else is wrong, and it fails
-    // with the classified error below like any other.
-    const slowImport = /never started delivering|SocialKit download timed out/i.test(String(update.error || ''));
-    if (slowImport && Number(project.importRetries || 0) < 1) {
+    // ONE AUTOMATIC RETRY, FIVE MINUTES LATER, FOR A REFUSAL THAT CLEARS.
+    //
+    // THIS TRIGGER HAD BEEN DEAD CODE FOR A FORTNIGHT. It named two SocialKit
+    // strings, and SocialKit was removed on 26 Aug 2026 -- so from that day no
+    // failure could match it and the retry never ran once. CLAUDE.md even
+    // recorded it as "a no-op without a hosted provider", filed as harmless.
+    //
+    // It was not harmless. Youssef, 9 Sept 2026, on a lecture that failed and
+    // then imported when he retried it by hand: "I NEED TO RETRY THEN THE
+    // LECTURE WORKS." The app was built to do exactly that for him, five
+    // minutes later, with a fresh worker job id -- and its condition had gone
+    // stale underneath it.
+    //
+    // WHAT MAY BE RETRIED, and the distinction is the whole safety of it: a
+    // YouTube refusal that the worker met on every client after three rounds
+    // of its own backoff, i.e. something that was true of this minute. NEVER a
+    // private, deleted or members-only video -- that is true for ever, and the
+    // worker gives it its own wording ("YouTube would not release this video:
+    // …") precisely so this test can tell them apart. Retrying a permanent
+    // failure costs five minutes, a worker slot and a second identical answer.
+    //
+    // Once, not forever: a second identical failure means the minute was not
+    // the problem, and it fails with the classified error below like any other.
+    const transientImport = /never started delivering|SocialKit download timed out|refused this download from every client/i
+      .test(String(update.error || ''));
+    if (transientImport && Number(project.importRetries || 0) < 1) {
       project.importRetries = Number(project.importRetries || 0) + 1;
       // Fresh worker job id, same reason as manual retry: the worker keys jobs
       // by id and would hand back the old failure otherwise.
       project.workerJobId = `${project.id}-retry-${Date.now().toString(36)}`;
       project.status = 'queued';
-      project.stage = 'Import was slow — retrying while the import service finishes fetching';
+      project.stage = 'YouTube refused the download — trying again in a few minutes';
       project.error = null; project.errorCode = null;
       project.nextRetryAt = Date.now() + IMPORT_RETRY_DELAY_MS;
       project.updatedAt = Date.now(); save();
-      log(`"${project.title}" hit the import service's slow first fetch; retrying automatically in ${Math.round(IMPORT_RETRY_DELAY_MS / 60_000)} minutes.`, 'warn', ownerOf(project));
+      log(`"${project.title}" was refused by YouTube; retrying automatically in ${Math.round(IMPORT_RETRY_DELAY_MS / 60_000)} minutes.`, 'warn', ownerOf(project));
       // unref: a pending five-minute timer must not hold the process open --
       // it hung the test runner, and would do the same to a graceful shutdown.
       // The pump also runs on every state change, so losing the timer at exit

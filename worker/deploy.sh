@@ -41,6 +41,15 @@ fi
 # worker/drain.sh (DEPLOY_DRAIN_MINUTES=0 skips it for an emergency fix).
 bash worker/drain.sh
 
+# YTDLP_REFRESH busts the small yt-dlp layer on every deploy (see the ARG in
+# worker/Dockerfile). Without it Docker reuses the cached pip layer and the box
+# keeps whatever yt-dlp it was first built with -- measured 9 Sept 2026 at
+# three weeks old on a container rebuilt minutes earlier. Any value that
+# changes per deploy will do; the commit is the one that is meaningful in a
+# build log. `git rev-parse` cannot fail the deploy: a shallow or detached
+# checkout falls back to the clock, which still changes every time.
+YTDLP_REFRESH="$(git rev-parse --short HEAD 2>/dev/null || date +%s)"
+export YTDLP_REFRESH
 docker compose -f worker/docker-compose.yml up -d --build
 # The layer cache from --build accumulates invisibly; eight rebuilds once
 # grew it to 25.7GB and read as a full disk. See CLAUDE.md Deploys.

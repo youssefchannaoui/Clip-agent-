@@ -5,6 +5,7 @@ import http.client
 import ipaddress
 import json
 import os
+import re
 import socket
 import random
 import threading
@@ -445,6 +446,62 @@ def job_network_options(source: dict, scratch: Path) -> dict[str, Any]:
     return options
 
 
+# HOW MANY TIMES THE WHOLE ROTATION IS TRIED, AND HOW LONG IT WAITS BETWEEN.
+#
+# Youssef, 9 Sept 2026, on a lecture that failed and then imported: "I NEED TO
+# RETRY THEN THE LECTURE WORKS." That is the measurement that matters -- the
+# same URL, the same box, minutes apart, and the second attempt succeeds. So
+# the refusal is TRANSIENT, and a pipeline that gives up after one rotation is
+# asking a customer to be its retry loop.
+#
+# The rotation itself is not a wait: ten client/plan attempts, each failing
+# fast, run inside a few seconds and every one of them asks YouTube the same
+# question at the same moment. Whatever relaxes in between -- a rate limit, a
+# PO token minted late, an extractor half-broken by a YouTube change -- needs
+# TIME, and there was none anywhere in this path.
+#
+# Bounded deliberately. clip_worker gives the whole job four times the selected
+# stretch (floored at 90 minutes), so ~80 seconds of waiting is nothing against
+# it -- and a customer watching a progress bar will wait a minute to avoid
+# downloading a 1.5GB lecture by hand.
+IMPORT_ROUNDS = max(1, int(os.getenv("IMPORT_RETRY_ROUNDS", "3") or 3))
+IMPORT_BACKOFF_SEC = (20.0, 60.0)
+
+
+def _wait_before_retry(seconds: float, cancelled: Callable[[], bool]) -> bool:
+    """Sleep, but stay cancellable. False means the job was cancelled.
+
+    A bare time.sleep here would make Cancel appear dead for a minute on the
+    one screen where somebody is already waiting -- and the app gives the
+    worker slot back the moment it cancels, so the box would hold it while
+    sleeping for a job nobody wants any more.
+    """
+    deadline = time.monotonic() + max(0.0, seconds)
+    while time.monotonic() < deadline:
+        if cancelled():
+            return False
+        time.sleep(min(1.0, deadline - time.monotonic()))
+    return not cancelled()
+
+
+def _clean_ytdlp(message: str) -> str:
+    """yt-dlp's own reason, with its scaffolding taken off.
+
+    "ERROR: [youtube] abc123: Private video. Sign in if you've been granted
+    access" is a perfectly good sentence wearing a prefix nobody outside this
+    file needs. The reason is what a customer and the retry rule both read.
+    """
+    text = re.sub(r"^ERROR:\s*", "", str(message or "").strip())
+    text = re.sub(r"^\[[^\]]+\]\s*", "", text)
+    text = re.sub(r"^[\w-]{6,20}:\s*", "", text)
+    # yt-dlp QUOTES THE PROXY IT USED, userinfo and all, and this text reaches
+    # the job record, the callback and the owner's activity feed. clip_worker's
+    # clean_error scrubs it downstream, but a message built here must not
+    # depend on somebody else's redaction to be safe to print.
+    text = re.sub(r"://[^@/\s]+@", "://***@", text)
+    return text[:300]
+
+
 def _download_failure(failures: list[str]) -> str:
     """One message naming every client that was tried.
 
@@ -454,6 +511,17 @@ def _download_failure(failures: list[str]) -> str:
     break older versions regularly and that is usually the fix.
     """
     tried = "; ".join(failures[-len(YOUTUBE_CLIENTS):])
+    # WHICH yt-dlp, because a stale one fails in exactly this shape. Measured
+    # 9 Sept 2026: the box was three weeks behind on a container rebuilt that
+    # morning, because the pip layer is cached on requirements.txt's own bytes
+    # and that file had not changed. Naming the version in the refusal is what
+    # makes the next one of these answerable without a dispatch.
+    try:
+        import yt_dlp as _ytdlp_for_version  # noqa: PLC0415
+        version = f" yt-dlp {_ytdlp_for_version.version.__version__}."
+    except Exception:  # noqa: BLE001
+        version = ""
+    rounds = f" Tried {IMPORT_ROUNDS} times over several minutes." if IMPORT_ROUNDS > 1 else ""
     network = youtube_network_options()
     if network.get("proxy") or network.get("cookiefile") or network.get("cookiesfrombrowser"):
         remedy = ("A proxy or cookies are configured and were used, so this looks like the "
@@ -466,7 +534,8 @@ def _download_failure(failures: list[str]) -> str:
                   "than the downloader being out of date. Set VIDEO_IMPORT_PROXY to route the "
                   "request elsewhere, or VIDEO_IMPORT_COOKIES to a cookies.txt from a signed-in "
                   "account. Uploading the MP4 avoids YouTube entirely.")
-    return f"YouTube refused this download from every client tried. {remedy} Attempts: {tried}"[:900]
+    return (f"YouTube refused this download from every client tried.{rounds} {remedy}"
+            f"{version} Attempts: {tried}")[:900]
 
 
 class YtDlpImportProvider(ManagedImportProvider):
@@ -591,54 +660,87 @@ class YtDlpImportProvider(ManagedImportProvider):
             args=(destination, cancelled, watch_stop, hook_spoke),
             daemon=True,
         ).start()
+        last_exc: Exception | None = None
         try:
-            for plan in plans:
-                section_pass = bool(plan)
-                for attempt, client in enumerate(YOUTUBE_CLIENTS):
-                    if cancelled():
+            # ROUNDS, NOT ONE ROTATION. See IMPORT_ROUNDS: the ten client/plan
+            # attempts below all run within a few seconds, so they ask YouTube
+            # the same question at the same instant. A refusal that clears on a
+            # manual retry needs TIME, and this is the only place to spend it.
+            for round_no in range(1, IMPORT_ROUNDS + 1):
+                if round_no > 1:
+                    delay = IMPORT_BACKOFF_SEC[min(round_no - 2, len(IMPORT_BACKOFF_SEC) - 1)]
+                    if not _wait_before_retry(delay, cancelled):
                         raise ImportProviderError("Job cancelled.")
-                    options = dict(ydl_opts)
-                    options.update(plan)
-                    options.update(job_network_options(source, destination.parent))
-                    if client:
-                        # Merged, not assigned: youtube_network_options() may already
-                        # carry the PO-token server in extractor_args, and replacing
-                        # the dict wholesale would silently drop it -- the exact
-                        # rotation that runs when the box is blocked is the one that
-                        # needs the token most.
-                        extractor = dict(options.get("extractor_args") or {})
-                        extractor["youtube"] = {"player_client": [client]}
-                        options["extractor_args"] = extractor
-                    try:
-                        with yt_dlp.YoutubeDL(options) as ydl:
-                            info = ydl.extract_info(youtube_url, download=True)
-                            info_holder["title"] = info.get("title", "") if isinstance(info, dict) else ""
-                            produced = Path(ydl.prepare_filename(info))
-                            if produced.suffix != ".mp4":
-                                produced = produced.with_suffix(".mp4")
-                            # Claimed only when a range was actually requested on
-                            # this attempt. It is still a claim, not a measurement:
-                            # an extractor that ignores ranges returns the whole
-                            # lecture and looks identical from here, so the caller
-                            # checks the file's real duration against the window
-                            # before trusting it (process() in clip_worker.py).
-                            windowed = bool(section_pass and learned.get("asked"))
+                for plan in plans:
+                    section_pass = bool(plan)
+                    for attempt, client in enumerate(YOUTUBE_CLIENTS):
+                        if cancelled():
+                            raise ImportProviderError("Job cancelled.")
+                        options = dict(ydl_opts)
+                        options.update(plan)
+                        options.update(job_network_options(source, destination.parent))
+                        if client:
+                            # Merged, not assigned: youtube_network_options() may already
+                            # carry the PO-token server in extractor_args, and replacing
+                            # the dict wholesale would silently drop it -- the exact
+                            # rotation that runs when the box is blocked is the one that
+                            # needs the token most.
+                            extractor = dict(options.get("extractor_args") or {})
+                            extractor["youtube"] = {"player_client": [client]}
+                            options["extractor_args"] = extractor
+                        try:
+                            with yt_dlp.YoutubeDL(options) as ydl:
+                                info = ydl.extract_info(youtube_url, download=True)
+                                info_holder["title"] = info.get("title", "") if isinstance(info, dict) else ""
+                                produced = Path(ydl.prepare_filename(info))
+                                if produced.suffix != ".mp4":
+                                    produced = produced.with_suffix(".mp4")
+                                # Claimed only when a range was actually requested on
+                                # this attempt. It is still a claim, not a measurement:
+                                # an extractor that ignores ranges returns the whole
+                                # lecture and looks identical from here, so the caller
+                                # checks the file's real duration against the window
+                                # before trusting it (process() in clip_worker.py).
+                                windowed = bool(section_pass and learned.get("asked"))
+                            break
+                        except yt_dlp.utils.DownloadError as exc:
+                            message = str(exc)
+                            if "cancelled" in message.lower():
+                                raise ImportProviderError("Job cancelled.") from exc
+                            last_exc = exc
+                            failures.append(
+                                f"r{round_no}/{'section' if section_pass else 'full'}"
+                                f"/{client or 'default'}: {message[:200]}")
+                            # A BLOCK IS THE ONLY THING WORTH WAITING FOR. A private,
+                            # deleted or members-only video answers the same way on
+                            # every client, in every round, for ever -- so it refuses
+                            # NOW rather than making somebody watch three rounds of
+                            # backoff arrive at the answer it already had.
+                            if not _looks_blocked(message):
+                                if section_pass:
+                                    break  # give the plain full download its turn
+                                # ITS OWN WORDS, not the block message. A private,
+                                # deleted or members-only video was NOT "refused
+                                # from every client tried" -- it failed on the
+                                # first one and would fail identically on all of
+                                # them. Dressing it in the block's sentence made
+                                # the two indistinguishable downstream, and the
+                                # app cannot decide whether to retry a failure it
+                                # cannot tell apart from a permanent one.
+                                raise ImportProviderError(
+                                    f"YouTube would not release this video: {_clean_ytdlp(message)}"
+                                ) from exc
+                            if attempt == len(YOUTUBE_CLIENTS) - 1:
+                                # This plan is spent for this round. The full pass
+                                # follows; when that is spent too the round ends and
+                                # the backoff above buys the time a retry needs.
+                                break
+                    if produced is not None:
                         break
-                    except yt_dlp.utils.DownloadError as exc:
-                        message = str(exc)
-                        if "cancelled" in message.lower():
-                            raise ImportProviderError("Job cancelled.") from exc
-                        failures.append(f"{'section' if section_pass else 'full'}/{client or 'default'}: {message[:200]}")
-                        # Only a block is worth trying another client for. A private or
-                        # deleted video fails the same way on every one of them, and
-                        # walking the whole list just makes the user wait longer for the
-                        # same answer.
-                        if not _looks_blocked(message) or attempt == len(YOUTUBE_CLIENTS) - 1:
-                            if section_pass:
-                                break  # give the plain full download its turn
-                            raise ImportProviderError(_download_failure(failures)) from exc
                 if produced is not None:
                     break
+            if produced is None:
+                raise ImportProviderError(_download_failure(failures)) from last_exc
         finally:
             watch_stop.set()
 

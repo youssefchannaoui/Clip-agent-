@@ -67,10 +67,14 @@ RUN deno --version
 
 WORKDIR /app
 COPY worker/requirements.txt /app/worker/requirements.txt
-# --upgrade so a rebuild takes the current yt-dlp rather than a cached wheel.
-# YouTube changes its extractor faster than anything else here, and a months-old
-# yt-dlp fails in exactly the same 403 way a missing runtime does. The version
-# caps in requirements.txt still hold -- this upgrades within them.
+# --upgrade upgrades WITHIN this layer. It does NOT make a rebuild take a newer
+# yt-dlp, and the comment that used to sit here claimed it did.
+#
+# THIS LAYER IS CACHED ON requirements.txt's OWN BYTES. That file changes maybe
+# twice a year, so Docker reuses the layer on every rebuild and this pip never
+# runs again -- measured 9 Sept 2026 on a box rebuilt minutes earlier, still
+# carrying yt-dlp 2026.08.19, three weeks old, while the deploy log looked
+# perfectly clean. The refresh below is what actually keeps it current.
 RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install --upgrade -r /app/worker/requirements.txt \
     # mediapipe drags in opencv-contrib-python, the GUI build, whose cv2
@@ -81,6 +85,28 @@ RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip uninstall -y opencv-contrib-python \
     && python -m pip install --upgrade --force-reinstall --no-deps \
        "opencv-python-headless>=4.10.0.84,<5.0.0"
+
+# YT-DLP IS UPGRADED IN A LAYER OF ITS OWN, ON EVERY DEPLOY.
+#
+# YouTube changes its extractor faster than anything else this image depends
+# on, and a stale yt-dlp fails as "HTTP Error 403: Forbidden" on the media
+# fetch -- indistinguishable from a blocked address, which is what sent two
+# sessions looking at proxies and cookies. `deploy.sh` passes the commit as
+# YTDLP_REFRESH, so this ONE small layer misses the cache every deploy while
+# the expensive layer above it (torch, opencv, mediapipe) still hits it.
+#
+# yt-dlp-ejs moves with it -- it is the JavaScript half of the same extractor
+# and both are uncapped in requirements.txt.
+#
+# bgutil-ytdlp-pot-provider is DELIBERATELY NOT UPGRADED HERE. It is pinned
+# `==` to the version of the token server in docker-compose.yml, and the plugin
+# warns and mints nothing when the two differ -- which is the same 403 by
+# another door. test/test_worker.py pins those two files to each other, so the
+# pair is bumped together or not at all.
+ARG YTDLP_REFRESH=unset
+RUN echo "yt-dlp refresh: ${YTDLP_REFRESH}" \
+    && python -m pip install --upgrade --no-cache-dir "yt-dlp[default]" yt-dlp-ejs \
+    && python -c "import yt_dlp; print('yt-dlp', yt_dlp.version.__version__)"
 
 COPY package.json /app/package.json
 COPY worker /app/worker

@@ -137,6 +137,41 @@ else
   fi
 fi
 
+# HOW OLD IS THE EXTRACTOR, because a stale one fails as a 403 on the media
+# fetch -- indistinguishable from a blocked address, and it sent two sessions
+# looking at proxies and cookies. Measured 9 Sept 2026: the box was carrying
+# yt-dlp 2026.08.19, three weeks old, on a container rebuilt that morning,
+# because the pip layer is cached on requirements.txt's own bytes and that file
+# had not changed. worker/Dockerfile's YTDLP_REFRESH layer is the fix; this is
+# the alarm that says whether it worked, so a deploy log stops being silent
+# about the one dependency YouTube breaks on purpose.
+ytdlp_version=$(docker exec "$CONTAINER" python -c 'import yt_dlp;print(yt_dlp.version.__version__)' 2>/dev/null || true)
+if [ -z "$ytdlp_version" ]; then
+  bad "yt-dlp version" "could not be read from the running container"
+else
+  # yt-dlp versions are dates (2026.09.09), so the age is arithmetic rather
+  # than a lookup -- no network call, and it works on a box with no registry.
+  ytdlp_days=$(python3 - "$ytdlp_version" <<'PYAGE' 2>/dev/null || echo -1
+import datetime, re, sys
+match = re.match(r"^(\d{4})\.(\d{2})\.(\d{2})", sys.argv[1])
+if not match:
+    print(-1)
+else:
+    released = datetime.date(*(int(part) for part in match.groups()))
+    print((datetime.date.today() - released).days)
+PYAGE
+)
+  if [ "$ytdlp_days" -lt 0 ] 2>/dev/null; then
+    ok "yt-dlp $ytdlp_version (age unknown)"
+  elif [ "$ytdlp_days" -gt 21 ]; then
+    # Not fatal: an old yt-dlp still imports most videos, and failing the
+    # deploy would leave the box on something older still.
+    warn "yt-dlp $ytdlp_version is $ytdlp_days days old -- YouTube breaks older extractors, and it fails as a 403"
+  else
+    ok "yt-dlp $ytdlp_version ($ytdlp_days days old)"
+  fi
+fi
+
 # yt-dlp needs an external JavaScript runtime to solve YouTube's signature
 # challenge. Without one YouTube answers 403 on the media URLs, and the error
 # says only "unable to download video data: HTTP Error 403: Forbidden" -- which

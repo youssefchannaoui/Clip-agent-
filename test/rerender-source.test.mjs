@@ -56,9 +56,20 @@ test('a 403 is retried against other clients rather than surfaced', () => {
 });
 
 test('only a block is retried, not a video that is simply gone', () => {
-  // A private or deleted video fails the same way on every client; walking the
-  // list just makes the user wait longer for the same answer.
-  assert.match(providers, /if not _looks_blocked\(message\) or attempt == len\(YOUTUBE_CLIENTS\) - 1:/);
+  // A private or deleted video fails the same way on every client, in every
+  // round; walking the list just makes the user wait longer for the same
+  // answer -- and once the rotation gained a backoff, waiting through it too.
+  //
+  // THIS PINNED THE EXPRESSION, NOT THE PROPERTY, and went red against a
+  // refactor that changed no behaviour: the one condition
+  // `not _looks_blocked(message) or attempt == last` became two branches when
+  // rounds were added, because a block and an exhausted rotation now do
+  // different things. Thirteenth time in this repo. What it protects is
+  // DRIVEN in test/test_import_retry.py, which asserts a gone video costs
+  // exactly one attempt and no wait at all; this keeps the cheap structural
+  // half CI can see without a fake yt-dlp.
+  assert.match(providers, /if not _looks_blocked\(message\):/,
+    'a non-block is decided on its own, separately from the rotation ending');
   assert.match(providers, /"http error 403", "forbidden"/);
 });
 
@@ -75,8 +86,20 @@ test('the failure names what was tried and what to do about it', () => {
 });
 
 test('cancelling still wins over retrying', () => {
-  // Otherwise a cancelled job walks all five clients before stopping.
-  const loop = /for attempt, client in enumerate\(YOUTUBE_CLIENTS\):[\s\S]*?raise ImportProviderError\(_download_failure/.exec(providers)[0];
-  assert.match(loop, /if cancelled\(\):/);
-  assert.match(loop, /"cancelled" in message\.lower\(\)/);
+  // Otherwise a cancelled job walks all five clients before stopping -- and
+  // now also sleeps through the backoff between rounds, holding a worker slot
+  // the app has already given back.
+  //
+  // Bounded to the attempt loop itself. It used to run to the final
+  // `raise ImportProviderError(_download_failure`, which moved OUT of the loop
+  // when rounds were added -- so the window silently grew to most of the
+  // function and the two assertions below became trivially true of it.
+  const loop = /for attempt, client in enumerate\(YOUTUBE_CLIENTS\):[\s\S]*?if attempt == len\(YOUTUBE_CLIENTS\) - 1:/.exec(providers);
+  assert.ok(loop, 'the attempt loop is still findable');
+  assert.match(loop[0], /if cancelled\(\):/);
+  assert.match(loop[0], /"cancelled" in message\.lower\(\)/);
+  // And the wait between rounds is cancellable, which is where a cancel now
+  // spends most of its time.
+  assert.match(providers, /def _wait_before_retry/);
+  assert.match(providers, /if not _wait_before_retry\(delay, cancelled\):/);
 });

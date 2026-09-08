@@ -82,3 +82,50 @@ test('the stall message from the worker also qualifies as slow, not dead', () =>
   assert.equal(project.status, 'queued');
   assert.equal(project.importRetries, 1);
 });
+
+/**
+ * THE TRIGGER HAD BEEN DEAD CODE FOR A FORTNIGHT.
+ *
+ * It matched two SocialKit strings, and SocialKit was removed on 26 Aug 2026 --
+ * so from that day nothing could match it and this retry never ran once.
+ * CLAUDE.md filed it as "a no-op without a hosted provider", which read as
+ * harmless and was not: Youssef's own import failed on 9 Sept and imported
+ * when he retried it by hand, which is precisely what this code exists to do
+ * for him.
+ *
+ * These two are the pair. Either alone is worse than neither: retrying nothing
+ * is the bug being fixed, and retrying everything spends five minutes and a
+ * worker slot arriving at an answer already in hand.
+ */
+const REFUSED = 'ytdlp: YouTube refused this download from every client tried. '
+  + 'Tried 3 times over several minutes. A proxy or cookies are configured and were used, '
+  + 'so this looks like the video itself rather than the address it was asked from. '
+  + 'yt-dlp 2026.09.09. Attempts: r3/full/tv: ERROR: unable to download video data: HTTP Error 403: Forbidden';
+
+// The worker's own wording for a NON-blocked refusal. It exists so this test
+// can tell a permanent failure from a transient one -- before it, both came
+// back as "refused from every client tried" and were indistinguishable here.
+const GONE = 'ytdlp: YouTube would not release this video: Private video. '
+  + "Sign in if you have been granted access";
+
+test('a YouTube refusal the worker could not clear IS retried automatically', () => {
+  const project = makeProject('ar-refused');
+
+  engine.acceptRemoteUpdate('ar-refused', { status: 'failed', error: REFUSED, progress: 3 });
+
+  assert.equal(project.status, 'queued', 'it is queued again rather than failed');
+  assert.equal(project.importRetries, 1);
+  assert.ok(project.workerJobId && project.workerJobId !== 'ar-refused',
+    'a fresh worker job id, or the worker hands back the failure it already has');
+  assert.ok(project.nextRetryAt > Date.now());
+  assert.match(project.stage, /trying again/i);
+});
+
+test('a video that is GONE is never retried, however many minutes pass', () => {
+  const project = makeProject('ar-gone');
+
+  engine.acceptRemoteUpdate('ar-gone', { status: 'failed', error: GONE, progress: 3 });
+
+  assert.equal(project.status, 'failed', 'a permanent refusal fails now, not in five minutes');
+  assert.equal(Number(project.importRetries || 0), 0, 'and it spends no retry');
+});
