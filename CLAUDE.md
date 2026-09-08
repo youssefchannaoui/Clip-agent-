@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1923 JS + 843 Python**
+- `npm test` and `npm run check` must pass. Currently **1930 JS + 843 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -16229,3 +16229,116 @@ protects survives in a strictly stronger form -- there is no URL to strip
 because the platform's words are not on the row at all -- so it asserts that
 instead, plus that `full` still holds them. Proven red against the restored
 quote.
+
+## The affiliate screen had five boxes and no spine (v3.171.0, 8 Sept 2026)
+
+Youssef, with it on screen: "You used to make the, like, layout look so much
+nicer with everything. Like, these these boxes and weird, like, ugly looking
+... It looks so dull, ugly, AI looking. Like, it's horrible these pages. Like,
+DIN AI, that tab is not nice and as well as affiliates. But DIN AI, we're gonna
+leave it as is, and we need to focus on this affiliate." **DeenAI is untouched
+here by that instruction.**
+
+### MEASURED BEFORE ANYTHING MOVED, and he was describing the numbers
+
+At 1440x950, both states, the shape was identical:
+
+    top-level sections                5
+    byte-identical grey slabs         4   #17171A, 1px #26262A, 14px, 18px 20px
+    every one, left..right            232..1414
+    content vs viewport               1329px in 882
+    void across the hero              ~890px, headline left, figure top-right
+
+So **"Getting paid" -- reference prose nobody reads twice -- carried exactly
+the weight of "Apply to the programme", the one thing on the screen there is
+to DO.** That is not a taste question, it is a hierarchy that does not exist,
+and it is the third time this file has recorded it: the Owner KPI row at
+v3.86.0 ("six identical text blocks divided by hairlines: no boundary, no
+hierarchy, nothing leading") and DeenAI at v3.32.0 and again at v3.153.0
+("SEVEN equal bordered boxes"). **A stack of equal boxes is a language model's
+default output, which is why it reads as "AI looking" to somebody who has never
+seen the code.**
+
+### The fix is the one that worked twice already: a spine, and one lit thing
+
+Three kinds, deliberately different in KIND rather than in size -- that is what
+makes it read as designed rather than as boxes at different scales:
+
+- **`.dcaf-stage`** -- one lit plate. A radial aurora, not the flat 5% wash it
+  replaces: a wash tints a rectangle, a radial gives the plate a light source,
+  and that is most of the difference.
+- **`.dcaf-main`** -- substantial cards, and the ONLY cards on the screen: the
+  statement, or the application.
+- **`.dcaf-side`** -- no box at all. Hairline-divided reference text.
+
+Two columns above 1180px, one below. **Three of the four identical slabs are
+gone outright**, and 5 top-level sections became 2.
+
+### The 890px void became the facts that were buried
+
+The cookie window and the hold were inside step three of a paragraph, and **the
+MINIMUM PAYOUT was stated nowhere on this screen at all** though no balance is
+paid until it clears one. They are facts, so they are set as facts, in a plate
+under the headline figure -- which is also what fills the width the void had.
+The floor is worded exactly as `/affiliates` words it (`A$20`), because two
+surfaces disagreeing about one number is worse than either wording.
+
+### Four steps are a PATH, not four boxes in a row
+
+A rail with lit nodes -- the device the task ladder and the marketing site's
+journey already use. Four bordered cells read as four unrelated things that
+happen to be adjacent; a rail reads as a sequence, which is what "how it works"
+is. **Centred by GEOMETRY**: `--dcaf-line` is the node's height AND the title's
+leading, so they start at the same y and their centres coincide by
+construction. A test fails if a `margin` reappears on that node.
+
+### Two smaller things the rebuild found
+
+- **"What counts" then "What earns commission" was two small-caps grey heads
+  for one thing.** The sub-heads are sentence case, a step brighter, and
+  plainly a level down.
+- **`/affiliates` still told applicants to apply on the Tokens & billing
+  screen** -- where v3.166.0 deliberately deleted the panel. It is the route
+  INTO the one place this product asks somebody to go and earn, and it pointed
+  at a screen with no form on it. Both mentions repointed.
+
+### Measured after, and every number is a set of one
+
+    1440 dark and light, 1180, 1179, 1100, 900, 390
+    top-level sections                 5 -> 2
+    card left edges                    ONE (232)
+    reference block left/right         ONE each (963.8 / 1414)
+    node vs its title's centre         0px, every step
+    icon vs its own line               0px, every item
+    fact row right edge / height       ONE each (1385 / 36.2)
+    statement count cells              ONE height, ONE width (70.8 / 216.6)
+    elements past the viewport         0 at every width
+    page scroll                        none at any width
+    DOM operations, unchanged repaint  0, one screen node
+    text under AA, measured FROM PIXELS 0 dark, 0 light
+    page errors                        0
+
+**Contrast had to be read off the pixels, not walked up the DOM**: the stage's
+ground is a radial over a panel and the facts sit on translucent rows, so there
+is no opaque layer a walk can stop at. Screenshot the rect, take the mean, and
+**hide EVERY ink in the screen first, not only the element under test** -- with
+one hidden, its neighbours' glyphs sit inside the sampled rect and lift the
+mean. That reported **4.07** for a row that measures **4.89** on its real
+ground, which is exactly the false failure this file already warns about.
+
+### Two things the checks caught, both real
+
+- **`npm run check` refused a duplicate id**: the new "while you wait" card for
+  a pending application emitted `dcAffLink`/`dcAffCopy`, which the approved
+  branch already emits. Only one branch ever renders -- and `check-ui.mjs` is
+  right anyway, because the day that stops being true `getElementById` takes
+  the first. One `affLinkRow()` builder, so the ids exist once in the source.
+- **A source-string test failed on a heading.** `affiliate-screen` pinned the
+  literal "What earns commission" / "What does not". The PROPERTY it protects
+  -- both rule lists are there and still read as earns/does-not -- is pinned by
+  their CLASSES now, and the terms assertion gained `t.minimumMinor`. That is
+  the twelfth time in this file a test has named a word rather than a
+  behaviour.
+
+Seven new tests, **all seven probes proven red**, each asserting it actually
+edited the file first.

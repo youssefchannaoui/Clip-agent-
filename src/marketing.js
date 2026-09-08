@@ -977,11 +977,11 @@ export function affiliates({ base, currentUser }) {
         <article>${icon('chart')}<h3>${pct}%, recurring</h3><p>Of every payment they make, not just the first one, for ${months} months from their first invoice.</p></article>
         <article>${icon('calendar')}<h3>${cookie}-day window</h3><p>They do not have to sign up the same day. Your link is remembered for ${cookie} days.</p></article>
         <article>${icon('shield')}<h3>${hold}-day hold</h3><p>Commission is payable once the refund window has closed, so nothing is ever clawed back from you after the fact.</p></article>
-        <article>${icon('link')}<h3>One link</h3><p>The invite link already on your Tokens &amp; billing screen is your affiliate link. There is nothing else to set up.</p></article>
+        <article>${icon('link')}<h3>One link</h3><p>The invite link you already have is your affiliate link. There is nothing else to set up.</p></article>
       </div>
       <article class="legal" id="terms">
         <h2>How it works</h2>
-        <p>Apply from inside your DeenClipped account, on the <strong>Tokens &amp; billing</strong> screen. We read every application by hand and reply either way. Once you are approved, your existing invite link starts earning commission.</p>
+        <p>Apply from inside your DeenClipped account, on the <strong>Affiliate</strong> screen in the sidebar. We read every application by hand and reply either way. Once you are approved, your existing invite link starts earning commission.</p>
         <p>Somebody who opens your link is remembered for <strong>${cookie} days</strong>. If they create an account in that window and later subscribe, you earn <strong>${pct}% of every payment they make to DeenClipped</strong> for the first <strong>${months} months</strong> from their first paid invoice.</p>
         <h2>What earns commission, and what does not</h2>
         <ul>

@@ -6,17 +6,30 @@
  * dcaf- class this file owns, never one of the design export's hashed names,
  * so a design re-import cannot silently delete the screen.
  *
- * It replaces a panel that lived two thirds of the way down Tokens & billing.
- * That screen is opened to check a balance, so the one place this product asks
- * a creator to go and earn was reachable only by scrolling past the plan cards
- * -- and there is deliberately nothing left there now, because two controls
- * for one thing is the fault this codebase has shipped four times.
+ * REBUILT v3.170.0. What it was, measured at 1440x950 before anything moved:
+ * FIVE stacked sections, FOUR of them byte-identical -- #17171A ground, 1px
+ * #26262A border, 14px radius, 18px 20px padding, every one running the full
+ * 232..1414 -- down 1329px of an 882px viewport, with an 890px void across the
+ * hero between the headline and the figure floating in its top-right corner.
+ * So "Getting paid", which is reference prose nobody reads twice, carried the
+ * same weight as the one thing on the screen you can DO. That is the fault
+ * this codebase has now recorded three times (the Owner KPI row at v3.86.0,
+ * DeenAI at v3.32.0 and again at v3.153.0), and the fix is the same one: give
+ * the screen a SPINE, let one thing carry the light, and make the reference a
+ * quiet column rather than more cards.
+ *
+ * The three kinds are deliberately different in KIND, not merely in size:
+ *   .dcaf-stage  a lit plate -- the deal, the action, and the terms as facts
+ *   .dcaf-main   substantial cards -- the statement, or the application
+ *   .dcaf-side   no box at all -- hairline-divided reference text
  *
  * Colours are literal hex so scripts/build-light-theme.mjs re-emits them for
  * daylight; the two golds are written as bare var() with NO fallback, which is
  * the escape hatch v3.127.0 established -- a rule with no hex in it is skipped
  * by the generator and the token flips itself, so the brand colour stays one
- * value in both themes and still clears AA on paper.
+ * value in both themes and still clears AA on paper. A gold WASH is an rgba
+ * triple, which the generator also leaves alone; that is correct here, because
+ * a warm tint reads as warm over either ground.
  */
 
 #dcAffScreen {
@@ -26,159 +39,256 @@
   padding: 22px 26px 40px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
+  /* ONE line height shared by a node, its title and a value, so anything that
+     has to centre against text does it by construction rather than by a margin
+     nudge that drifts the moment a font size moves. */
+  --dcaf-line: 22px;
 }
 /* Every direct child of a scrolling flex column has to say this, or the cards
    below squeeze the header to nothing while it still reads correctly in
    innerText -- the trap the Performance and Owner screens both hit. */
 #dcAffScreen > * { flex: none; }
 
-/* ── the deal, and where this account stands ────────────────────────────── */
-.dcaf-hero {
-  border: 1px solid rgba(217,180,120,.26);
-  border-radius: 16px;
-  padding: 22px 24px;
-  background: rgba(217,180,120,.05);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px 28px;
-  align-items: flex-start;
+/* ── THE STAGE ──────────────────────────────────────────────────────────────
+   The one thing on the screen carrying light. The aurora is a radial rather
+   than the flat 5% wash it replaces: a wash tints a rectangle, a radial gives
+   the plate a light source, and that is most of the difference between this
+   reading as designed and reading as a box. */
+.dcaf-stage {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(217,180,120,.24);
+  border-radius: 18px;
+  background: #121214;
+  padding: 26px 28px;
+  display: grid;
+  gap: 22px 40px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
 }
-.dcaf-hero > div:first-child { flex: 1 1 340px; min-width: 0; }
+.dcaf-stage::before {
+  content: '';
+  position: absolute;
+  left: -12%; right: 34%; top: -160px; height: 340px;
+  background: radial-gradient(closest-side, rgba(217,180,120,.17), rgba(217,180,120,0));
+  pointer-events: none;
+}
+.dcaf-stage > * { position: relative; }
+
 .dcaf-kicker {
+  display: block;
   font: 600 10px/1 Outfit, Inter, sans-serif;
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--dc-gold);
 }
-.dcaf-hero h2 {
-  margin: 10px 0 6px;
-  font: 600 22px/1.25 Outfit, Inter, sans-serif;
-  letter-spacing: -.02em;
+.dcaf-stage h2 {
+  margin: 12px 0 8px;
+  font: 600 26px/1.2 Outfit, Inter, sans-serif;
+  letter-spacing: -.025em;
   color: #F2F2F4;
+  max-width: 20ch;
 }
-.dcaf-hero p { margin: 0; font-size: 13px; line-height: 1.6; color: #BCBCC3; max-width: 62ch; }
-.dcaf-hero p + p { margin-top: 8px; }
-.dcaf-hero a { color: var(--dc-gold); }
+.dcaf-stage p { margin: 0; font-size: 13px; line-height: 1.6; color: #BCBCC3; max-width: 56ch; }
+.dcaf-stage p + p { margin-top: 8px; }
+.dcaf-stage a { color: var(--dc-gold); }
 
-/* The headline figure. Tabular so the digits do not shuffle as a poll
-   refreshes the balance underneath them. */
-.dcaf-figure {
-  flex: 0 0 auto;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.dcaf-figure b {
-  display: block;
-  font: 700 30px/1 Outfit, Inter, sans-serif;
-  letter-spacing: -.02em;
-  color: var(--dc-gold);
-}
-.dcaf-figure span { display: block; margin-top: 6px; font-size: 11px; color: #8B8B93; }
-
-/* ── state chip ─────────────────────────────────────────────────────────── */
+/* The state chip. It carries its OWN line-height and a height under the
+   heading's line, or it inherits 31px of leading from the h2 it sits in and
+   makes that one line taller than everything around it. */
 .dcaf-state {
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 22px; padding: 0 9px; border-radius: 20px;
+  display: inline-flex; align-items: center;
+  height: 22px; padding: 0 10px; border-radius: 20px;
+  vertical-align: 5px;
   font: 700 9.5px/1 Outfit, Inter, sans-serif;
-  letter-spacing: .1em; text-transform: uppercase;
+  letter-spacing: .11em; text-transform: uppercase;
 }
 .dcaf-state.is-on { border: 1px solid rgba(217,180,120,.4); background: rgba(217,180,120,.1); color: var(--dc-gold-lit); }
 .dcaf-state.is-wait { border: 1px solid #34343A; background: #1E1E22; color: #A2A2AA; }
 
-/* ── the link ───────────────────────────────────────────────────────────── */
-.dcaf-link { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+/* ── the plate on the right: the headline figure over the facts ─────────────
+   This is what replaces the 890px void. The terms were previously buried --
+   the cookie window and the hold inside step three of a paragraph, and the
+   MINIMUM PAYOUT stated nowhere on the screen at all, though a balance cannot
+   be paid until it clears one. They are facts, so they are set as facts. */
+.dcaf-plate {
+  min-width: 232px;
+  font-variant-numeric: tabular-nums;
+}
+.dcaf-plate > b {
+  display: block;
+  font: 700 40px/1 Outfit, Inter, sans-serif;
+  letter-spacing: -.03em;
+  color: var(--dc-gold);
+}
+.dcaf-plate > span {
+  display: block; margin-top: 7px;
+  font: 600 10px/1 Outfit, Inter, sans-serif;
+  letter-spacing: .13em; text-transform: uppercase;
+  color: #8B8B93;
+}
+.dcaf-facts { margin: 18px 0 0; padding: 0; list-style: none; }
+.dcaf-facts li {
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 8px 0;
+  border-top: 1px solid #1E1E22;
+  font-size: 12px;
+}
+.dcaf-facts li span { color: #8B8B93; }
+.dcaf-facts li b { margin-left: auto; font-weight: 600; color: #E9E9ED; }
+
+/* ── the link, and the one action ───────────────────────────────────────── */
+.dcaf-link { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
 .dcaf-link input {
   flex: 1 1 260px; min-width: 0;
-  padding: 11px 13px; border-radius: 10px;
-  border: 1px solid #34343A; background: #101013; color: #F2F2F4;
-  font: 500 13px/1.4 ui-monospace, Menlo, monospace;
+  padding: 12px 14px; border-radius: 11px;
+  border: 1px solid #26262A; background: #0E0E11; color: #F2F2F4;
+  font: 500 12.5px/1.4 ui-monospace, Menlo, monospace;
 }
 .dcaf-link button {
-  min-height: 44px; padding: 11px 18px; border-radius: 10px; border: 0; cursor: pointer;
+  min-height: 44px; padding: 11px 20px; border-radius: 11px; border: 0; cursor: pointer;
   background: var(--dc-gold-solid); color: var(--dc-on-gold);
   font: 600 13px/1 Inter, sans-serif;
 }
 
-/* ── cards ──────────────────────────────────────────────────────────────── */
+/* ── THE SPINE ─────────────────────────────────────────────────────────────
+   What you DO on the left, what you can look up on the right. Two columns is
+   the whole reason three of the four identical grey slabs are gone. */
+.dcaf-cols { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1180px) {
+  .dcaf-cols { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 20px 34px; }
+}
+.dcaf-cols.is-single { grid-template-columns: minmax(0, 1fr); }
+.dcaf-main { display: grid; gap: 20px; align-content: start; }
+
+/* ── cards, in the working column only ──────────────────────────────────── */
 .dcaf-card {
   border: 1px solid #26262A;
-  border-radius: 14px;
-  padding: 18px 20px;
+  border-radius: 16px;
+  padding: 20px 22px;
   background: #17171A;
 }
 .dcaf-card > h3 {
-  margin: 0 0 4px;
+  margin: 0 0 5px;
   font: 600 15px/1.3 Outfit, Inter, sans-serif;
   letter-spacing: -.01em;
   color: #F2F2F4;
 }
-.dcaf-card > p { margin: 0 0 14px; font-size: 12.5px; line-height: 1.6; color: #8B8B93; max-width: 66ch; }
+.dcaf-card > p { margin: 0 0 16px; font-size: 12.5px; line-height: 1.6; color: #8B8B93; }
 .dcaf-card > p:last-child { margin-bottom: 0; }
 
-/* ── how it works: numbered steps ───────────────────────────────────────── */
-.dcaf-steps { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
-.dcaf-step { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start; }
-/* Centred by GEOMETRY: the numeral and the step's first line share one height
-   from one token, so they start at the same y and their centres coincide by
-   construction rather than by a margin nudge that drifts the moment a font
-   size moves. */
-.dcaf-step > b {
-  display: grid; place-items: center;
-  width: 26px; height: 22px;
-  border-radius: 7px;
-  border: 1px solid rgba(217,180,120,.34);
-  background: rgba(217,180,120,.08);
-  font: 700 11px/1 Outfit, Inter, sans-serif;
-  color: var(--dc-gold-lit);
-}
-.dcaf-step > div { min-width: 0; }
-.dcaf-step strong { display: block; font: 600 13px/22px Outfit, Inter, sans-serif; color: #E9E9ED; }
-.dcaf-step span { display: block; margin-top: 2px; font-size: 12px; line-height: 1.55; color: #8B8B93; }
-
-/* ── rule lists ─────────────────────────────────────────────────────────── */
-.dcaf-two { display: grid; gap: 18px 26px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-.dcaf-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 9px; }
-.dcaf-list li {
-  display: grid; grid-template-columns: 16px 1fr; gap: 9px; align-items: start;
-  font-size: 12.5px; line-height: 18px; color: #BCBCC3;
-}
-.dcaf-list li i { font-size: 15px; line-height: 18px; }
-.dcaf-yes li i { color: #3E9E6B; }
-.dcaf-no li i { color: #A64738; }
-.dcaf-listhead {
-  margin: 0 0 10px;
+/* ── the reference column: NO box, hairlines instead ─────────────────────── */
+.dcaf-side { display: grid; gap: 0; align-content: start; }
+.dcaf-block { padding: 20px 0; border-top: 1px solid #1E1E22; }
+.dcaf-side > .dcaf-block:first-child { padding-top: 4px; border-top: 0; }
+.dcaf-block > h3 {
+  margin: 0 0 12px;
   font: 700 9.5px/1 Outfit, Inter, sans-serif;
   letter-spacing: .14em; text-transform: uppercase; color: #8B8B93;
 }
+.dcaf-block > p { margin: 0; font-size: 12.5px; line-height: 1.65; color: #BCBCC3; }
+.dcaf-block > p + p { margin-top: 9px; }
+.dcaf-block a { color: var(--dc-gold); }
 
-/* ── the statement ──────────────────────────────────────────────────────── */
-.dcaf-counts { display: flex; gap: 26px; flex-wrap: wrap; margin-bottom: 16px; }
-.dcaf-counts > span { font-variant-numeric: tabular-nums; }
-.dcaf-counts b { display: block; font: 700 20px/1 Outfit, Inter, sans-serif; color: var(--dc-gold); }
-.dcaf-counts em { display: block; margin-top: 5px; font-style: normal; font-size: 11px; color: #8B8B93; }
+/* ── how it works: a path, not four boxes in a row ─────────────────────────
+   The device the task ladder and the marketing site's journey already use: a
+   rail with lit nodes reads as a sequence, where four bordered cells read as
+   four unrelated things that happen to be adjacent. */
+.dcaf-path { margin: 0; padding: 0; list-style: none; }
+.dcaf-path li {
+  position: relative;
+  display: grid; grid-template-columns: var(--dcaf-line) 1fr; gap: 12px;
+  padding-bottom: 16px;
+}
+.dcaf-path li::before {
+  content: ''; position: absolute;
+  left: calc(var(--dcaf-line) / 2 - .5px); top: var(--dcaf-line); bottom: 0;
+  width: 1px; background: #26262A;
+}
+.dcaf-path li:last-child { padding-bottom: 0; }
+.dcaf-path li:last-child::before { display: none; }
+/* Centred by GEOMETRY: the node and the step's first line are both
+   --dcaf-line tall and start at the same y, so their centres coincide by
+   construction. */
+.dcaf-path b {
+  display: grid; place-items: center;
+  width: var(--dcaf-line); height: var(--dcaf-line);
+  border-radius: 50%;
+  border: 1px solid rgba(217,180,120,.34);
+  background: rgba(217,180,120,.09);
+  font: 700 10.5px/1 Outfit, Inter, sans-serif;
+  color: var(--dc-gold-lit);
+}
+.dcaf-path strong { display: block; font: 600 12.5px/var(--dcaf-line) Outfit, Inter, sans-serif; color: #E9E9ED; }
+.dcaf-path span { display: block; margin-top: 3px; font-size: 12px; line-height: 1.55; color: #8B8B93; }
+
+/* ── what counts, and what does not ─────────────────────────────────────── */
+.dcaf-list { margin: 0 0 16px; padding: 0; list-style: none; display: grid; gap: 8px; }
+.dcaf-list:last-child { margin-bottom: 0; }
+.dcaf-list li {
+  display: grid; grid-template-columns: 15px 1fr; gap: 9px; align-items: start;
+  font-size: 12.5px; line-height: 18px; color: #BCBCC3;
+}
+.dcaf-list li i { font-size: 14px; line-height: 18px; }
+.dcaf-yes li i { color: #3E9E6B; }
+.dcaf-no li i { color: #A64738; }
+/* A SUB-head, deliberately not another small-caps grey line: under the
+   block's own head it read as two headings for one thing. Sentence case, a
+   step brighter, and plainly a level down. */
+.dcaf-listhead {
+  margin: 0 0 8px;
+  font: 600 12px/1.3 Outfit, Inter, sans-serif;
+  color: #BCBCC3;
+}
+.dcaf-listhead + .dcaf-list { margin-bottom: 18px; }
+
+/* ── the statement ──────────────────────────────────────────────────────────
+   A divided band, the Owner screen's own device, rather than three numbers
+   floating in a row. Tabular, so the digits do not shuffle as the 30s poll
+   refreshes the balance underneath them. */
+.dcaf-counts {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #1E1E22; border-radius: 12px; overflow: hidden;
+  margin-bottom: 18px;
+}
+.dcaf-counts > span { padding: 13px 15px; border-left: 1px solid #1E1E22; font-variant-numeric: tabular-nums; }
+.dcaf-counts > span:first-child { border-left: 0; }
+.dcaf-counts b { display: block; font: 700 22px/1 Outfit, Inter, sans-serif; letter-spacing: -.02em; color: var(--dc-gold); }
+.dcaf-counts em { display: block; margin-top: 6px; font-style: normal; font-size: 10.5px; letter-spacing: .04em; color: #8B8B93; }
 
 .dcaf-bal { display: grid; gap: 0; }
 .dcaf-bal > div {
   display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
-  padding: 10px 0; border-top: 1px solid #1E1E22;
+  padding: 11px 0; border-top: 1px solid #1E1E22;
   font-variant-numeric: tabular-nums;
 }
-.dcaf-bal b { font: 600 14px/1 Outfit, Inter, sans-serif; color: #E9E9ED; min-width: 104px; }
+.dcaf-bal > div:first-child { border-top: 0; }
+.dcaf-bal b { font: 600 15px/1 Outfit, Inter, sans-serif; color: #E9E9ED; min-width: 96px; }
 .dcaf-bal span { font-size: 12px; color: #8B8B93; }
 .dcaf-bal em { margin-left: auto; font-style: normal; font-size: 11.5px; color: #85858E; }
-.dcaf-empty { padding: 10px 0; font-size: 12.5px; color: #8B8B93; }
+/* A rule ABOVE the head, not merely space: without it "Already paid" reads as
+   a caption hanging off the balance row above rather than as the heading of
+   the group below it. */
+.dcaf-subhead {
+  margin: 20px 0 2px;
+  padding-top: 16px;
+  border-top: 1px solid #1E1E22;
+  font: 700 9.5px/1 Outfit, Inter, sans-serif;
+  letter-spacing: .13em; text-transform: uppercase; color: #85858E;
+}
+.dcaf-empty { padding: 12px 0; font-size: 12.5px; color: #8B8B93; }
 
 /* ── the application form ───────────────────────────────────────────────── */
-.dcaf-form { display: grid; gap: 10px; max-width: 560px; }
+.dcaf-form { display: grid; gap: 10px; }
 .dcaf-form input[type="text"], .dcaf-form select {
-  min-height: 44px; padding: 11px 12px; border-radius: 10px;
-  border: 1px solid #26262A; background: #101013; color: #F2F2F4;
+  min-height: 44px; padding: 11px 12px; border-radius: 11px;
+  border: 1px solid #26262A; background: #0E0E11; color: #F2F2F4;
   font: inherit; font-size: 12.5px;
 }
 .dcaf-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .dcaf-row select { flex: 0 0 150px; }
-.dcaf-row input { flex: 1 1 220px; min-width: 0; }
+.dcaf-row input { flex: 1 1 200px; min-width: 0; }
 .dcaf-agree {
   display: flex; gap: 9px; align-items: flex-start;
   min-height: 44px; padding: 6px 0;
@@ -186,36 +296,37 @@
 }
 .dcaf-agree input { margin-top: 3px; flex: none; }
 .dcaf-form button {
-  justify-self: start; min-height: 44px; padding: 11px 20px;
-  border-radius: 10px; border: 0; cursor: pointer;
+  justify-self: start; min-height: 44px; padding: 11px 22px;
+  border-radius: 11px; border: 0; cursor: pointer;
   background: var(--dc-gold-solid); color: var(--dc-on-gold);
   font: 700 13px/1 Inter, sans-serif;
 }
 .dcaf-form button[disabled] { opacity: .55; cursor: default; }
 .dcaf-hint { margin: 0; font-size: 11.5px; line-height: 1.55; color: #85858E; }
 
-@media (max-width: 820px) {
-  #dcAffScreen { padding: 16px 16px 96px; gap: 14px; }
-  .dcaf-hero { padding: 18px; }
-  .dcaf-figure { text-align: left; }
+/* "What happens next" is three facts about the form directly above it, so it
+   is a strip inside the same card -- NOT a second numbered path. Two numbered
+   paths on one screen is the repetition this rebuild exists to remove. */
+.dcaf-after {
+  display: flex; flex-wrap: wrap; gap: 8px 22px;
+  margin-top: 16px; padding-top: 14px; border-top: 1px solid #1E1E22;
+}
+.dcaf-after span { display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; color: #8B8B93; }
+.dcaf-after span::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--dc-gold); flex: none; transform: translateY(-1px);
 }
 
-/* The apply card: form left, "what happens next" right. The form stays narrow
-   whatever the card's width -- a 1100px text input is not a control -- so the
-   right column is what stops the card reading as half unfinished. */
-.dcaf-applycard { display: grid; gap: 18px 34px; grid-template-columns: minmax(0, 1fr); }
-.dcaf-applycard > h3, .dcaf-applycard > p { grid-column: 1 / -1; }
-@media (min-width: 1080px) {
-  .dcaf-applycard { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); align-items: start; }
+@media (min-width: 900px) {
+  .dcaf-stage { grid-template-columns: minmax(0, 1fr) auto; }
 }
-.dcaf-num { counter-reset: none; }
-.dcaf-num li { grid-template-columns: 22px 1fr; align-items: start; }
-.dcaf-num li i {
-  display: grid; place-items: center;
-  width: 22px; height: 18px; border-radius: 6px;
-  border: 1px solid rgba(217,180,120,.3); background: rgba(217,180,120,.07);
-  font: 700 10px/1 Outfit, Inter, sans-serif; font-style: normal;
-  color: var(--dc-gold-lit);
+@media (max-width: 820px) {
+  #dcAffScreen { padding: 16px 16px 96px; gap: 16px; }
+  .dcaf-stage { padding: 20px 18px; border-radius: 16px; }
+  .dcaf-stage h2 { font-size: 22px; }
+  .dcaf-plate { min-width: 0; }
+  .dcaf-plate > b { font-size: 32px; }
+  .dcaf-card { padding: 18px; border-radius: 14px; }
+  .dcaf-counts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dcaf-counts b { font-size: 19px; }
 }
-.dcaf-num strong { display: block; font-weight: 600; color: #E9E9ED; }
-.dcaf-next .dcaf-list { gap: 12px; }

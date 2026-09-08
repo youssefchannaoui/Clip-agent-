@@ -140,18 +140,25 @@ test('the instructions quote the terms the server sent, never a typed number', (
   // -- the public /affiliates page reads the same config values, and the two
   // saying different things about somebody's commission is the worst copy
   // fault this feature can have.
-  const at = host.indexOf('const affHowHtml=');
+  const at = host.indexOf('const affSideHtml=');
   assert.ok(at > 0, 'the instructions are gone');
   const body = host.slice(at, host.indexOf('const paintAffiliateScreen=', at));
-  for (const field of ['t.percent', 't.months', 't.cookieDays', 't.holdDays']) {
+  // Every term, INCLUDING the minimum payout: it is stated on the plate now,
+  // and before v3.170.0 it was on no screen at all though no balance is paid
+  // until it clears one.
+  for (const field of ['t.percent', 't.months', 't.cookieDays', 't.holdDays', 't.minimumMinor']) {
     assert.ok(body.includes(field), `the instructions do not read ${field} from the terms`);
   }
-  // The four things somebody needs to be told, and the rules every serious
-  // programme forbids.
-  for (const phrase of ['How it works', 'What earns commission', 'What does not', 'Getting paid',
-                        'coupon sites', 'refer myself']) {
+  // The three things somebody needs to be told, and the rules every serious
+  // programme forbids. The two rule lists are pinned by their CLASSES rather
+  // than by their headings -- a heading is a word somebody will reword, and
+  // what has to survive is that both lists are still there and still read as
+  // earns/does-not.
+  for (const phrase of ['How it works', 'Getting paid', 'coupon sites', 'refer myself']) {
     assert.ok(host.includes(phrase), `the instructions no longer say "${phrase}"`);
   }
+  assert.match(body, /dcaf-list dcaf-yes/, 'the list of what earns commission is gone');
+  assert.match(body, /dcaf-list dcaf-no/, 'the list of what does not is gone');
   assert.doesNotMatch(body, /\b25\s*%/, 'the commission is typed into the copy instead of read');
 });
 
@@ -167,4 +174,105 @@ test('the sheet is served, linked, and themed for daylight', () => {
   // colour, and the screen root sets layout alone. Asserting on the root is
   // how this test failed against a correctly generated sheet.
   assert.match(light, /body\.dc-light \.dcaf-/, 'the generated daylight sheet has not been re-run');
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * v3.170.0: the screen has a SPINE, and the reference is not a card.
+ *
+ * Youssef, 8 Sept 2026, looking at it: "these boxes and weird, like, ugly
+ * looking ... It looks so dull, ugly, AI looking. Like, it's horrible these
+ * pages." Measured at 1440x950 before anything moved: FIVE stacked sections,
+ * FOUR of them byte-identical -- #17171A ground, 1px #26262A border, 14px
+ * radius, 18px 20px padding, every one running the full 232..1414 -- so
+ * "Getting paid", which is reference prose nobody reads twice, carried exactly
+ * the weight of the one thing on the screen you can DO.
+ *
+ * Every assertion below fails SILENTLY: re-flatten this into a stack and the
+ * app renders, every other test stays green, and the only symptom is a screen
+ * that reads as generic again.
+ * ------------------------------------------------------------------------ */
+
+const affPaint = (() => {
+  const at = host.indexOf('const paintAffiliateScreen=');
+  return host.slice(at, host.indexOf('window.dcPaintAffiliateScreen=', at));
+})();
+const affSheet = fs.readFileSync(path.join(root, 'src/public/studio-affiliate.css'), 'utf8');
+const affRules = affSheet.replace(/\/\*[\s\S]*?\*\//g, '');
+
+test('one lit stage over two columns, never a stack of equal cards', () => {
+  assert.match(affPaint, /<header class="dcaf-stage">/, 'the stage is gone');
+  assert.match(affPaint, /class="dcaf-cols/, 'the two-column spine is gone');
+  // The working column and the reference column are different KINDS, which is
+  // the whole fix: cards are what you act on, the reference is a column.
+  assert.match(affPaint, /<div class="dcaf-main">/, 'nothing carries the working column');
+  // The aside is built in affSideHtml, above the painter, so it is asserted
+  // against the whole file rather than the painter's own slice.
+  assert.match(host, /<aside class="dcaf-side">/, 'nothing carries the reference column');
+  assert.match(affRules, /@media \(min-width: 1180px\)[\s\S]*?\.dcaf-cols\s*{[^}]*grid-template-columns/,
+    'the columns never go side by side, so it is a stack again');
+});
+
+test('the reference column carries no card', () => {
+  // A .dcaf-card inside the aside would put "Getting paid" back on the same
+  // footing as the application form -- the exact fault this was rebuilt for.
+  const from = host.indexOf('const affSideHtml=');
+  const side = host.slice(from, host.indexOf("</section></aside>'", from));
+  assert.ok(side.length > 200, 'the reference column could not be read');
+  assert.doesNotMatch(side, /dcaf-card/, 'the reference is a card again');
+  assert.match(side, /class="dcaf-block"/, 'the reference blocks are gone');
+  // And the blocks are separated by a hairline rather than boxed.
+  assert.match(affRules, /\.dcaf-block\s*{[^}]*border-top:\s*1px/, 'the hairline between blocks is gone');
+  assert.doesNotMatch(affRules, /\.dcaf-block\s*{[^}]*background:/, 'the reference grew a ground');
+});
+
+test('the four steps are a path with a rail, not four boxes in a row', () => {
+  assert.match(host, /<ol class="dcaf-path">/, 'the path is gone');
+  assert.match(affRules, /\.dcaf-path li::before\s*{[^}]*background:/, 'the rail between the nodes is gone');
+});
+
+test('a node centres on its title by geometry, never by a nudge', () => {
+  // ONE line token is the height of the node AND the leading of the title, so
+  // they start at the same y and their centres coincide by construction. A
+  // margin nudge measures right on the day and drifts the moment a font size
+  // moves -- the lesson --dctk-line already paid for in the task panel.
+  assert.match(affRules, /--dcaf-line:\s*22px/, 'the shared line token is gone');
+  const node = /\.dcaf-path b\s*{([^}]*)}/.exec(affRules);
+  assert.ok(node, 'the node rule is gone');
+  assert.match(node[1], /height:\s*var\(--dcaf-line\)/, 'the node no longer takes the shared line');
+  assert.doesNotMatch(node[1], /margin/, 'the node is nudged instead of centred');
+  const title = /\.dcaf-path strong\s*{([^}]*)}/.exec(affRules);
+  assert.ok(title && /\/var\(--dcaf-line\)/.test(title[1]),
+    'the title no longer takes the shared line, so the two centres can drift');
+});
+
+test('the minimum payout reaches the screen, worded as /affiliates words it', () => {
+  // It was stated NOWHERE on this screen before, though no balance is paid
+  // until it clears one. Two surfaces disagreeing about one number is worse
+  // than either wording, so both read the same config value the same way.
+  assert.match(host, /Minimum payout/, 'the floor is on no screen again');
+  assert.match(host, /t\.minimumMinor/, 'the floor is typed rather than read from the terms');
+  const marketing = fs.readFileSync(path.join(root, 'src/marketing.js'), 'utf8');
+  assert.match(marketing, /affiliateMinimumPayoutMinor \/ 100/, 'the public page stopped quoting the floor');
+});
+
+test('the public page sends people to the screen that exists', () => {
+  // The panel under the plan cards was deleted at v3.166.0, and /affiliates
+  // went on telling applicants to look there -- a route into the one place
+  // this product asks somebody to go and earn.
+  const marketing = fs.readFileSync(path.join(root, 'src/marketing.js'), 'utf8');
+  const page = marketing.slice(marketing.indexOf('export function affiliates('),
+    marketing.indexOf('export function', marketing.indexOf('export function affiliates(') + 10));
+  assert.doesNotMatch(page, /Tokens &amp; billing/, 'it still points at a screen with no application form on it');
+  assert.match(page, /<strong>Affiliate<\/strong> screen/, 'it does not name where to apply');
+});
+
+test('the golds stay bare var(), so one value serves both themes', () => {
+  // The escape hatch v3.127.0 established: build-light-theme re-emits any rule
+  // holding a hex, so a gold written with a fallback is remapped and the brand
+  // colour becomes two different tans. A rule with no hex in it is skipped.
+  const golds = affRules.match(/var\(--dc-gold[a-z-]*[^)]*\)/g) || [];
+  assert.ok(golds.length >= 4, 'the golds are gone');
+  for (const g of golds) {
+    assert.doesNotMatch(g, /#/, `${g} carries a hex fallback, so daylight remaps the brand colour`);
+  }
 });
