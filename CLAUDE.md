@@ -8743,9 +8743,19 @@ NOT buy: the import, which is bounded by the proxy pool and YouTube -- the 56s
 figure in SCALING.md was measured on the OLD two-core box -- and it does
 nothing for a queue of one, where the whole win is in the model sizes.
 
-Two probes proven red. **Not yet confirmed on the box**: the next diagnose
-dispatch after this deploy should show no FORCED lines but `WHISPER_MODEL`,
-the container at ~10G, and three concurrent jobs.
+### Confirmed on the box, 8 Sept 2026
+
+`docker exec worker-deenclipped-worker-1 python3 /app/worker/capacity.py`, after
+the v3.164.0 deploy verified that version in the running container:
+
+    cores 8 · memoryGb 10.0 · reserve 0.5 · device cpu · computeType int8
+    model medium · maxConcurrentJobs 3 · ffmpegThreads 2
+
+and the container's whole capacity environment is one line, `WHISPER_MODEL=medium`
+-- the deliberate exception. Host memory 15G total with 13 available;
+verify-deploy reports `qwen3:4b loaded` and every font, filter and dependency OK.
+From one job, two threads and `small` in a 2G container, on the same hardware,
+three hours earlier.
 
 ## Open items
 
