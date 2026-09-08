@@ -52,6 +52,7 @@
 <!-- Motion and hover on the Owner screen. -->
 <link rel="stylesheet" href="/studio-owner.css">
 <link rel="stylesheet" href="/studio-help.css">
+<link rel="stylesheet" href="/studio-affiliate.css">
 <!-- The dashboard's motion language: screen-change restarts, the rail trace,
      idle brand light, live-work shine, dialog fades, the arrival veil. -->
 <link rel="stylesheet" href="/studio-motion.css">
@@ -9672,105 +9673,206 @@ StudioAdapter.onProbeSource=async url=>{try{
           return f.format(Number(minor||0)/Math.pow(10,digits));
         }catch(e){ return (Number(minor||0)/100).toFixed(2)+' '+code; }
       };
-      const paintAffiliate=async()=>{
+      /* ------------------------------------------------------------------
+         THE AFFILIATE SCREEN.
+
+         It was a panel two thirds of the way down Tokens & billing, which is
+         a screen people open to check a balance -- so the one place this
+         product asks a creator to go and EARN was reachable only by scrolling
+         past six plan cards. Youssef, 8 Sept 2026: "make affilate on the side
+         bar ... add instructons and all that good stuff".
+
+         Host-rendered into <main> on the paintHelp pattern: adding a screen
+         to the design export regenerates every hashed class name in the app,
+         and this needs none of it -- the rail item is an adapter entry and the
+         screen is an id plus a tag name, neither of which the export controls.
+
+         The panel it replaces is GONE rather than kept alongside. Two controls
+         for one thing is the fault this codebase has now shipped four times
+         (two onboarding systems, two watermark positions, two tour buttons,
+         two Grain sliders), and a second application form is the worst shape
+         of it: somebody could apply twice and be told their own application
+         was already in.
+
+         ONE CODE, ONE LINK. referrals.js owns the code, /r/CODE and the
+         cookie; an affiliate is simply a referrer who is paid in cash instead
+         of tokens. So the link drawn here is the SAME link the invite panel
+         draws, read from the same /api/referral -- never a second one. */
+      const affEsc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+      const affMount=()=>{
+        const rail=document.getElementById('dcRail');
+        return rail&&rail.parentElement?rail.parentElement.querySelector('main'):null;
+      };
+      /* The instructions. Every number comes from the terms the SERVER sent,
+         never typed here: the commission, the window, the hold and the floor
+         all live in config.js and the public /affiliates page quotes the same
+         ones, so a rate changed on Render cannot leave this screen promising
+         the old one. */
+      const affHowHtml=(t,methods)=>{
+        const pc=affEsc(t.percent), mo=affEsc(t.months), ck=affEsc(t.cookieDays), hd=affEsc(t.holdDays);
+        const steps=[
+          ['Share your link','Anywhere you already speak to people — a channel description, a group, a newsletter, a video. It is the same link as your invite link.'],
+          ['They open it','We remember your link on their device for '+ck+' days, so they do not have to sign up the same day they clicked.'],
+          ['They subscribe','You earn '+pc+'% of every payment they make for their first '+mo+' months — not just the first one.'],
+          ['We pay you','Each commission is held '+hd+' days while the refund window closes, then it is yours to be paid.'],
+        ];
+        const yes=[
+          'A paid subscription started by someone who opened your link.',
+          'Every renewal they pay inside their first '+mo+' months.',
+          'People you genuinely reached — an audience, a group, a class.',
+        ];
+        const no=[
+          'Your own account, your family, or a business you control.',
+          'Paid search on the DeenClipped name, or anything that looks like our site.',
+          'Coupon, deal and voucher sites.',
+          'A payment that is later refunded or disputed.',
+          'Top-ups and one-off token purchases — subscriptions only.',
+        ];
+        const pay=(methods||[]).map(m=>affEsc(m.label)).join(', ');
+        return '<section class="dcaf-card">'
+          +'<h3>How it works</h3>'
+          +'<p>Four steps, and only the third one needs anything from you.</p>'
+          +'<div class="dcaf-steps">'
+          +steps.map((s,i)=>'<div class="dcaf-step"><b>'+(i+1)+'</b><div><strong>'+affEsc(s[0])+'</strong><span>'+affEsc(s[1])+'</span></div></div>').join('')
+          +'</div></section>'
+          +'<section class="dcaf-card">'
+          +'<h3>What counts, and what does not</h3>'
+          +'<p>The right-hand list is what every serious programme forbids. Breaking it voids the commission rather than the account — but do it repeatedly and we will close it.</p>'
+          +'<div class="dcaf-two">'
+          +'<div><p class="dcaf-listhead">What earns commission</p><ul class="dcaf-list dcaf-yes">'
+          +yes.map(v=>'<li><i class="ph ph-check-circle"></i><span>'+affEsc(v)+'</span></li>').join('')
+          +'</ul></div>'
+          +'<div><p class="dcaf-listhead">What does not</p><ul class="dcaf-list dcaf-no">'
+          +no.map(v=>'<li><i class="ph ph-x-circle"></i><span>'+affEsc(v)+'</span></li>').join('')
+          +'</ul></div>'
+          +'</div></section>'
+          +'<section class="dcaf-card">'
+          +'<h3>Getting paid</h3>'
+          +'<p>Balances are kept in the currency each customer paid in and are never converted — a number we invented an exchange rate for is not a number we could pay. '
+          +'We pay by hand, by '+(pay||'the usual rails')+', once a balance clears the minimum. Ask any time if you would like it sooner.</p>'
+          +'<p class="dcaf-hint">A commission whose payment is refunded or disputed is void. If that happens after you were paid we will tell you rather than quietly taking it back. '
+          +'<a href="/affiliates" target="_blank" rel="noopener">Read the full terms</a>.</p>'
+          +'</section>';
+      };
+      const paintAffiliateScreen=async()=>{
         try{
-          /* THE PHONE DRAWS ITS OWN TOKENS SCREEN, and `body.dcm-own` hides
-             the desktop one -- so a panel mounted only off #dcPlanGrid lands
-             in a hidden tree and measures 0x0. Measured at 390px before this
-             existed: mounted true, width 0, and a phone user could not apply
-             at all. Same fault as the "Posts to" row in v3.119.0, and Youssef
-             works from a phone. */
-          const phone=document.body.classList.contains('dcm-own')
-            && StudioAdapter.ui.screen==='tokens'
-            && document.querySelector('#dcMobile .dcm-body');
-          const grid=document.getElementById('dcPlanGrid');
-          const drop=()=>{ const gone=document.getElementById('dcAffiliate'); if(gone)gone.remove(); };
-          if(!phone&&!grid){ drop(); return; }
+          const main=affMount();
+          if(!main) return;
+          const on=StudioAdapter.ui.screen==='affiliate';
+          const drop=()=>{ const gone=document.getElementById('dcAffScreen'); if(gone)gone.remove(); };
+          if(!on){ drop(); return; }
           const a=await loadAffiliate();
           if(!a||!a.enabled){ drop(); return; }
-          let box=document.getElementById('dcAffiliate');
-          const host=phone||(grid&&grid.parentNode);
-          if(!host){ drop(); return; }
-          /* Re-seated rather than merely present: switching between the two
-             surfaces without a reload would otherwise leave it in the tree it
-             was first built in, which is the tree that is now hidden. */
-          if(box&&box.parentNode!==host){ box.remove(); box=null; }
-          if(!box){
-            box=document.createElement('div'); box.id='dcAffiliate'; box.setAttribute('data-host-owned','');
-            if(phone) host.appendChild(box);
-            else host.insertBefore(box, (document.getElementById('dcInvite')||grid).nextSibling);
-          }
-          const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+          let el=document.getElementById('dcAffScreen');
+          if(!el){ el=document.createElement('section'); el.id='dcAffScreen'; el.setAttribute('data-host-owned',''); main.appendChild(el); }
+          else if(el.parentElement!==main) main.appendChild(el);
           const t=a.terms||{};
-          const head='<div style="font:600 10px Outfit,Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--dc-gold, #D9B478);margin-bottom:8px;">Affiliate programme</div>';
-          let body='';
-          if(a.status==='approved'&&a.statement){
-            const st=a.statement, sums=st.totals||{};
-            const codes=Object.keys(sums);
+          const ref=await loadReferral();
+          const link=(ref&&ref.url)?ref.url:'';
+          const st=(a.status==='approved')?a.statement:null;
+          let hero='', statement='';
+          if(st){
+            const sums=st.totals||{}, codes=Object.keys(sums);
+            /* The headline is what is READY TO PAY, in whichever currency has
+               most of it. Summing across currencies would invent an exchange
+               rate, which is the one thing this programme never does. */
+            let bestCode='', bestDue=-1;
+            codes.forEach(c=>{ const d=Number((sums[c]||{}).due||0); if(d>bestDue){bestDue=d;bestCode=c;} });
+            hero='<div><span class="dcaf-kicker">Affiliate programme</span>'
+              +'<h2>You are in <span class="dcaf-state is-on">Approved</span></h2>'
+              +'<p>'+affEsc(t.percent)+'% of every payment for the first '+affEsc(t.months)+' months. Share this link — it is the same one as your invite link.</p>'
+              +'<div class="dcaf-link">'
+              +'<input id="dcAffLink" readonly value="'+affEsc(link)+'">'
+              +'<button id="dcAffCopy" type="button">Copy link</button></div></div>'
+              +(codes.length?'<div class="dcaf-figure"><b>'+affMoney(bestDue,bestCode||'aud')+'</b><span>ready to pay</span></div>':'');
             const rows=codes.length?codes.map(c=>
-              '<div style="display:flex;align-items:baseline;gap:10px;padding:7px 0;border-top:1px solid var(--dc-line-soft, #1E1E22);">'
-              +'<span style="font:600 13px Outfit,Inter,sans-serif;color:var(--dc-ink-bright, #E9E9ED);min-width:96px;">'+affMoney(sums[c].due,c)+'</span>'
-              +'<span style="font-size:11.5px;color:var(--dc-ink-dim, #8B8B93);">ready to pay</span>'
-              +'<span style="margin-left:auto;font-size:11.5px;color:var(--dc-ink-faint, #85858E);">'
-              +affMoney(sums[c].pending,c)+' held &middot; '+affMoney(sums[c].paid,c)+' paid</span></div>'
-            ).join(''):'<div style="padding:8px 0;font-size:12.5px;color:var(--dc-ink-dim, #8B8B93);">Nothing yet. Commission appears here the first time somebody you sent subscribes.</div>';
-            body='<div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:10px;">'
-              +[['Sent',st.referred],['Made clips',st.activated],['Subscribed',st.subscribed]].map(([k,v])=>
-                '<span><span style="font:700 17px Outfit,Inter,sans-serif;color:var(--dc-gold, #D9B478);">'+Number(v||0)+'</span>'
-                +'<span style="display:block;font-size:11px;color:var(--dc-ink-dim, #8B8B93);">'+k+'</span></span>').join('')
-              +'</div>'+rows
-              +'<p style="margin:10px 0 0;font-size:11.5px;color:var(--dc-ink-faint, #85858E);line-height:1.55;">'
-              +esc(t.percent)+'% of every payment for the first '+esc(t.months)+' months, held '+esc(t.holdDays)
-              +' days while the refund window closes. Balances are kept in the currency each customer paid in and are never converted. '
-              +'Paid by hand once a balance clears '+affMoney(t.minimumMinor,'aud')+' &mdash; ask any time if you would like it sooner.</p>';
+              '<div><b>'+affMoney((sums[c]||{}).due,c)+'</b><span>ready to pay</span>'
+              +'<em>'+affMoney((sums[c]||{}).pending,c)+' held &middot; '+affMoney((sums[c]||{}).paid,c)+' paid</em></div>').join('')
+              :'<p class="dcaf-empty">Nothing yet. Commission appears here the first time somebody you sent subscribes.</p>';
+            const paid=(st.payouts||[]).slice(0,6).map(b=>
+              '<div><b>'+affMoney(b.amountMinor,b.currency)+'</b><span>paid '+affEsc(new Date(b.at||0).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'}))+'</span>'
+              +'<em>'+affEsc(b.method||'')+(b.reference?' &middot; '+affEsc(b.reference):'')+'</em></div>').join('');
+            statement='<section class="dcaf-card">'
+              +'<h3>Your statement</h3>'
+              +'<p>Counted from payments that actually arrived. The people behind these numbers are never named — yours is a balance, not a list of other people’s accounts.</p>'
+              +'<div class="dcaf-counts">'
+              +[['Opened your link',st.referred],['Made clips',st.activated],['Subscribed',st.subscribed]].map(x=>
+                '<span><b>'+Number(x[1]||0)+'</b><em>'+x[0]+'</em></span>').join('')
+              +'</div><div class="dcaf-bal">'+rows+'</div>'
+              +(paid?'<div class="dcaf-bal" style="margin-top:14px">'+paid+'</div>':'')
+              +'</section>';
           } else if(a.status==='pending'){
-            body='<p style="margin:0;font-size:12.5px;color:var(--dc-ink-body, #BCBCC3);line-height:1.6;">Your application is with us. We read every one by hand, so give it a day or two &mdash; we will email you either way.</p>';
+            hero='<div><span class="dcaf-kicker">Affiliate programme</span>'
+              +'<h2>Application received <span class="dcaf-state is-wait">Pending</span></h2>'
+              +'<p>We read every one by hand, so give it a day or two — we will email you either way. Nothing below changes while you wait; it is what you will be earning on.</p></div>';
           } else if(a.status==='suspended'||a.status==='declined'){
-            body='<p style="margin:0;font-size:12.5px;color:var(--dc-ink-body, #BCBCC3);line-height:1.6;">This account is not in the programme. If you think that is wrong, reply to any DeenClipped email and we will look again.</p>';
+            hero='<div><span class="dcaf-kicker">Affiliate programme</span>'
+              +'<h2>This account is not in the programme <span class="dcaf-state is-wait">Closed</span></h2>'
+              +'<p>If you think that is wrong, reply to any DeenClipped email and we will look again.</p></div>';
           } else {
-            const methods=(a.methods||[]).map(m=>'<option value="'+esc(m.id)+'">'+esc(m.label)+'</option>').join('');
-            body='<p style="margin:0 0 10px;font-size:12.5px;color:var(--dc-ink-body, #BCBCC3);line-height:1.6;">'
-              +'Earn <strong style="color:var(--dc-gold, #D9B478);">'+esc(t.percent)+'%</strong> of what everyone you send pays us, for their first '+esc(t.months)+' months. '
-              +'Your invite link is your affiliate link &mdash; there is only one. '
-              +'<a href="/affiliates" target="_blank" rel="noopener" style="color:var(--dc-gold, #D9B478);">Read the terms</a>.</p>'
-              +'<div style="display:grid;gap:8px;">'
-              +'<input id="dcAffAudience" placeholder="Where would you share it? (a channel, a group, a newsletter)" '
-              +'style="min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid var(--dc-line, #26262A);background:var(--dc-bg-deep, #101013);color:var(--dc-ink-bright, #E9E9ED);font:inherit;font-size:12.5px;">'
-              +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
-              +'<select id="dcAffMethod" style="flex:0 0 140px;min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid var(--dc-line, #26262A);background:var(--dc-bg-deep, #101013);color:var(--dc-ink-bright, #E9E9ED);font:inherit;font-size:12.5px;">'+methods+'</select>'
-              +'<input id="dcAffDetail" placeholder="The account we should pay" style="flex:1 1 200px;min-width:0;min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid var(--dc-line, #26262A);background:var(--dc-bg-deep, #101013);color:var(--dc-ink-bright, #E9E9ED);font:inherit;font-size:12.5px;">'
-              +'</div>'
-              +'<label style="display:flex;gap:8px;align-items:flex-start;min-height:44px;padding:6px 0;font-size:11.5px;color:var(--dc-ink-dim, #8B8B93);line-height:1.5;">'
-              +'<input type="checkbox" id="dcAffAgree" style="margin-top:2px;flex:none;">'
+            const methods=(a.methods||[]).map(m=>'<option value="'+affEsc(m.id)+'">'+affEsc(m.label)+'</option>').join('');
+            hero='<div><span class="dcaf-kicker">Affiliate programme</span>'
+              +'<h2>Earn '+affEsc(t.percent)+'% of what everyone you bring pays us</h2>'
+              +'<p>For their first '+affEsc(t.months)+' months, not just their first payment. Your invite link is your affiliate link — there is only one, so there is nothing to set up.</p>'
+              +'<p>Applications are read by a person, so this takes a day or two.</p></div>'
+              +'<div class="dcaf-figure"><b>'+affEsc(t.percent)+'%</b><span>for '+affEsc(t.months)+' months</span></div>';
+            /* The form is its OWN card rather than sitting inside the gold
+               hero: in the hero it made a 415px band of which the right half
+               was empty, and the deal it is agreeing to was pushed off the
+               screen underneath it. Second card, so it is still above the fold
+               at 950px and the instructions follow it. */
+            statement='<section class="dcaf-card dcaf-applycard">'
+              +'<h3>Apply to the programme</h3>'
+              +'<p>Three things, and the payout account is asked for now rather than chased later — it is only ever seen by us.</p>'
+              +'<div class="dcaf-form">'
+              +'<input type="text" id="dcAffAudience" placeholder="Where would you share it? (a channel, a group, a newsletter)">'
+              +'<div class="dcaf-row"><select id="dcAffMethod">'+methods+'</select>'
+              +'<input type="text" id="dcAffDetail" placeholder="The account we should pay"></div>'
+              +'<label class="dcaf-agree"><input type="checkbox" id="dcAffAgree">'
               +'<span>I have read the affiliate terms. I will not bid on the DeenClipped name, list codes on coupon sites, or refer myself.</span></label>'
-              +'<button id="dcAffApply" type="button" style="justify-self:start;min-height:44px;padding:10px 18px;border-radius:10px;border:0;cursor:pointer;'
-              +'background:var(--dc-gold-solid);color:var(--dc-on-gold);font:inherit;font-size:12.5px;font-weight:700;">Apply to the programme</button>'
-              +'</div>';
+              +'<button id="dcAffApply" type="button">Apply to the programme</button>'
+              +'</div>'
+              /* The right half of a wide card is not filler here -- "what
+                 happens after I press this" is the question somebody actually
+                 has at that moment, and it is the one thing the form cannot
+                 answer. A form itself stays narrow: a 1100px text input is not
+                 a control anybody can use. */
+              +'<div class="dcaf-next"><p class="dcaf-listhead">What happens next</p><ol class="dcaf-list dcaf-num">'
+              +[['We read it','A person, not a filter. A day or two.'],
+                ['You are told either way','By email, to the address on this account.'],
+                ['Your link starts earning','The same link you already have. Nothing to swap out.']]
+                .map((x,i)=>'<li><i>'+(i+1)+'</i><span><strong>'+affEsc(x[0])+'</strong>'+affEsc(x[1])+'</span></li>').join('')
+              +'</ol></div>'
+              +'</section>';
           }
-          window.dcSetHtml(box,
-            '<section data-host-owned style="margin-top:14px;padding:16px 18px;border-radius:14px;'
-            +'border:1px solid rgba(217,180,120,.24);background:rgba(217,180,120,.045);">'+head+body+'</section>');
+          window.dcSetHtml(el,'<div class="dcaf-hero">'+hero+'</div>'+statement+affHowHtml(t,a.methods));
+          const copy=document.getElementById('dcAffCopy');
+          if(copy) copy.onclick=()=>{
+            const f=document.getElementById('dcAffLink');
+            if(!f) return;
+            f.select();
+            const done=()=>{ copy.textContent='Copied'; setTimeout(()=>{ copy.textContent='Copy link'; },1400); };
+            if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(f.value).then(done).catch(()=>{});
+            else { try{ document.execCommand('copy'); done(); }catch(e){} }
+          };
           const apply=document.getElementById('dcAffApply');
-          if(apply&&!apply.dataset.wired){
-            apply.dataset.wired='1';
-            apply.onclick=async()=>{
-              apply.disabled=true;
-              const r=await api('/api/affiliate/apply',{method:'POST',body:JSON.stringify({
-                audience:(document.getElementById('dcAffAudience')||{}).value||'',
-                payoutMethod:(document.getElementById('dcAffMethod')||{}).value||'',
-                payoutDetail:(document.getElementById('dcAffDetail')||{}).value||'',
-                agreed:Boolean((document.getElementById('dcAffAgree')||{}).checked),
-              })}).catch(e=>({error:String(e&&e.message||e)}));
-              apply.disabled=false;
-              if(r&&r.error){ toast(r.error,'bad'); return; }
-              toast('Application sent','good');
-              await loadAffiliate(true);
-              paintAffiliate();
-            };
-          }
+          if(apply) apply.onclick=async()=>{
+            apply.disabled=true;
+            const r=await api('/api/affiliate/apply',{method:'POST',body:JSON.stringify({
+              audience:(document.getElementById('dcAffAudience')||{}).value||'',
+              payoutMethod:(document.getElementById('dcAffMethod')||{}).value||'',
+              payoutDetail:(document.getElementById('dcAffDetail')||{}).value||'',
+              agreed:Boolean((document.getElementById('dcAffAgree')||{}).checked),
+            })}).catch(e=>({error:String(e&&e.message||e)}));
+            apply.disabled=false;
+            if(r&&r.error){ toast(r.error,'bad'); return; }
+            toast('Application sent','good');
+            await loadAffiliate(true);
+            paintAffiliateScreen();
+          };
         }catch(e){}
       };
-      window.dcPaintAffiliate=paintAffiliate;
+      window.dcPaintAffiliateScreen=paintAffiliateScreen;
 
       window.dcPaintInvite=paintInvite;
       /* The app re-renders through innerHTML on every state poll, so the panel
@@ -9787,10 +9889,7 @@ StudioAdapter.onProbeSource=async url=>{try{
       const queueInvite=()=>{
         if(invitePending) return;
         invitePending=true;
-        // Both panels ride one queue: they mount off the same grid, and two
-        // observers reacting to one mutation is two chances to disagree about
-        // whether the screen is up.
-        setTimeout(()=>{ invitePending=false; paintInvite(); paintAffiliate(); },0);
+        setTimeout(()=>{ invitePending=false; paintInvite(); },0);
       };
       window.dcQueueInvite=queueInvite;
       try{
@@ -9799,8 +9898,7 @@ StudioAdapter.onProbeSource=async url=>{try{
           const panel=document.getElementById('dcInvite');
           // Repaint when the grid appears without the panel, or clean up when
           // the grid goes away and the panel is orphaned.
-          const aff=document.getElementById('dcAffiliate');
-          if((grid&&!panel)||(!grid&&panel)||(grid&&!aff)||(!grid&&aff)) queueInvite();
+          if((grid&&!panel)||(!grid&&panel)) queueInvite();
           // Same shape for the watermark control on the Templates screen.
           const styleBtn=document.getElementById('dcSaveAsStyle');
           const wm=document.getElementById('dcWatermark');
@@ -12099,6 +12197,11 @@ function paintStudio(){
   paintJobMusic(vals);
   paintTemplatesLayout();
   paintHelp();
+  /* In paintStudio's list like every other host panel, never on an
+     observer -- the lesson v3.53.5 paid three attempts for. It is async
+     (it waits on /api/affiliate and /api/referral) and returns on its own,
+     so nothing here awaits it. */
+  try{window.dcPaintAffiliateScreen&&window.dcPaintAffiliateScreen()}catch(e){}
   paintBrandSeal();
   paintTaskCard();
   paintTasksPanel();

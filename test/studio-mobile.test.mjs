@@ -383,20 +383,22 @@ test('the phone is night by default and paper only behind body.dcm-light', () =>
   assert.equal(mv.m.themeLightCls, '');
 });
 
-test('the affiliate panel mounts on whichever surface is showing', () => {
-  // Measured before this existed: at 390px the panel mounted inside the hidden
-  // desktop tree and came back 0x0, so a phone user could not apply at all --
-  // the same fault the "Posts to" row shipped with in v3.119.0. The painter
-  // has to KNOW about `#dcMobile`, and a source test is the only way to say so
-  // without a browser, which CI does not have.
+test('the affiliate screen is a screen, not a panel on Tokens & billing', () => {
+  // It used to mount under the plan cards, and that painter had to know about
+  // #dcMobile or a phone user could not apply at all. It is its own screen
+  // now, mounted into <main> on the paintHelp pattern -- so the phone FRAMES
+  // it (it is not in StudioMobile's OWNED list) exactly as it frames Help and
+  // Owner, and there is no second surface for the painter to seat itself on.
   const host = fs.readFileSync(path.join(root, 'src/public/index.html'), 'utf8');
-  const at = host.indexOf('const paintAffiliate=');
-  assert.ok(at > 0, 'the affiliate panel painter is gone');
-  const body = host.slice(at, host.indexOf('window.dcPaintAffiliate=', at));
-  assert.match(body, /#dcMobile \.dcm-body/,
-    'the painter must mount into the phone shell, not only into #dcPlanGrid');
-  assert.match(body, /dcm-own/, 'and must know which surface owns the screen');
-  // Re-seated rather than merely present: a resize across the 820px seam would
-  // otherwise leave it in the tree that is now hidden.
-  assert.match(body, /box\.parentNode!==host/, 'the panel is re-seated when the surface changes');
+  assert.ok(!/const paintAffiliate=async/.test(host),
+    'the Tokens & billing affiliate panel is retired -- two controls for one thing is the fault this repo keeps shipping');
+  const at = host.indexOf('const paintAffiliateScreen=');
+  assert.ok(at > 0, 'the affiliate screen painter is gone');
+  const body = host.slice(at, host.indexOf('window.dcPaintAffiliateScreen=', at));
+  assert.match(body, /StudioAdapter\.ui\.screen==='affiliate'/, 'gated on its own screen');
+  assert.match(body, /data-host-owned/, 'the patcher must never strip it');
+  const mobile = fs.readFileSync(path.join(root, 'src/public/studio-mobile.js'), 'utf8');
+  const owned = mobile.slice(mobile.indexOf('var OWNED'), mobile.indexOf('\n', mobile.indexOf('var OWNED')));
+  assert.ok(!owned.includes('affiliate'),
+    'the phone frames the desktop screen; claiming it would mean a second copy to keep in step');
 });

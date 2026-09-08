@@ -86,6 +86,7 @@ const STUDIO_ASSETS = {
   // The in-app help centre, same arrangement again: its dch- hooks are
   // hand-authored, so a design re-import cannot take the screen with it.
   '/studio-help.css': { file: studioAsset('studio-help.css'), type: 'text/css; charset=utf-8' },
+  '/studio-affiliate.css': { file: studioAsset('studio-affiliate.css'), type: 'text/css; charset=utf-8' },
   '/studio-motion.css': { file: studioAsset('studio-motion.css'), type: 'text/css; charset=utf-8' },
   /*
    * The notification dock. Hand-written for the same reason as the sheets
@@ -881,6 +882,16 @@ function appState(user = null) {
      * the way through" dialog came to greet every established account on
      * every new device.
      */
+    /*
+     * Whether the affiliate programme is open on this deployment. The RAIL
+     * reads it, so it has to be here rather than on /api/affiliate: the item
+     * would otherwise flash in a moment after every reload, once that fetch
+     * lands. Same two config values publicView() answers from, so the rail and
+     * the screen cannot disagree about whether there is a programme.
+     */
+    affiliates: {
+      enabled: Boolean(config.affiliatesEnabled) && Number(config.affiliateCommissionPercent) > 0,
+    },
     whatsNew: {
       show: whatsNew.showFor({
         createdAt: Number(user.createdAt || 0),

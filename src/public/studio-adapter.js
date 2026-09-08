@@ -2247,6 +2247,30 @@
   // stay reachable from the account menu.
   var NAV_PRIMARY = { home: 1, library: 1, queue: 1, schedule: 1, templates: 1 };
 
+  /*
+   * A NAV ROW GROWS WITH THE COLUMN IT SITS IN.
+   *
+   * The rail is as tall as the window and its list is not, so at 1440x950 the
+   * items used the top 340px and left a 272px hole above the task card --
+   * measured, and it is what "make it more spacious" was pointing at. A fixed
+   * row height cannot answer that: tight enough to fit on a 768-tall screen is
+   * cramped on a 1080-tall one.
+   *
+   * `clamp(6px, .95vh, 11px)` is the whole mechanism. The floor is what fits
+   * at 1366x768 -- the commonest desktop viewport and the binding case, where
+   * eleven items, three headings and the task card have 629px to live in -- and
+   * the ceiling stops a very tall screen turning a nav row into a banner.
+   *
+   * It is emitted HERE, in the inline style, because that is where the padding
+   * lives: an inline style is the one thing a stylesheet cannot outrank, and
+   * this repo has paid for that lesson four times. Below 821px the rail is a
+   * bottom tab bar and studio-responsive.css overrides it with !important, so
+   * a vh-scaled row never reaches a phone.
+   */
+  var ROW_PAD_Y = 'clamp(6px, .95vh, 11px)';
+  var ROW_PAD_OPEN = ROW_PAD_Y + ' 10px';
+  var ROW_PAD_SHUT = 'clamp(9px, 1.2vh, 14px) 0';
+
   function navItem(key, label, icon, count) {
     var on = UI.screen === key;
     var open = UI.railOpen && (global.innerWidth || 1280) > 820;
@@ -2267,7 +2291,7 @@
       // inline !important is the one thing a stylesheet :hover cannot override.
       enter: null,
       leave: null,
-      style: 'position: relative; display: flex; align-items: center; gap: 9px; padding: ' + (open ? '6px 9px' : '9px 0') + '; ' + (open ? '' : 'justify-content: center; ') +
+      style: 'position: relative; display: flex; align-items: center; gap: 9px; padding: ' + (open ? ROW_PAD_OPEN : ROW_PAD_SHUT) + '; ' + (open ? '' : 'justify-content: center; ') +
         'border-radius: 8px; font-weight: ' + (on ? '500' : '400') + '; cursor: pointer; white-space: nowrap; transition: background .14s ease, color .14s ease; border-left: 2px solid ' +
         (on ? 'var(--dc-gold, #D9B478); background: rgba(217,180,120,.09) !important; color: var(--dc-gold-lit, #F0D6A6) !important;' : 'transparent; color: var(--dc-ink-soft, #A2A2AA);'),
       labelStyle: open ? 'overflow: hidden; text-overflow: ellipsis;' : 'display: none;',
@@ -2301,6 +2325,19 @@
     return role === 'owner' || role === 'admin';
   }
 
+  /*
+   * Is the affiliate programme open on this deployment?
+   *
+   * Read from /api/state rather than from the affiliate screen's own fetch,
+   * because the RAIL has to decide before that fetch could have landed --
+   * otherwise the item flashes in a moment after every reload. It is the same
+   * answer publicView() gives, computed by the same two config values, so the
+   * rail and the screen cannot disagree about whether there is a programme.
+   */
+  function affiliatesOn(DATA) {
+    return Boolean(((DATA || {}).affiliates || {}).enabled);
+  }
+
   function ownerNavItem() {
     // A studio screen, not a navigation away — and SEPARATED from the rest of
     // the rail (Youssef, 28 Aug: "side bar should be separated to rest...
@@ -2311,7 +2348,7 @@
     var on = UI.screen === 'owner';
     var open = UI.railOpen && (global.innerWidth || 1280) > 820;
     item.style = 'position: relative; display: flex; align-items: center; gap: 9px; margin-top: 16px; ' +
-      'padding: ' + (open ? '7px 10px' : '11px 0') + '; ' + (open ? '' : 'justify-content: center; ') +
+      'padding: ' + (open ? 'calc(' + ROW_PAD_Y + ' + 1px) 11px' : 'clamp(11px, 1.4vh, 16px) 0') + '; ' + (open ? '' : 'justify-content: center; ') +
       'border-radius: 10px; font-weight: 600; cursor: pointer; white-space: nowrap; ' +
       'transition: background .14s ease, color .14s ease, border-color .14s ease; border: 1px solid ' +
       (on
@@ -2341,6 +2378,25 @@
       global.StudioAdapter.onLoadHelp();
     };
     return item;
+  }
+
+  /**
+   * The affiliate programme, in the rail.
+   *
+   * It used to be a panel two thirds of the way down Tokens & billing, which
+   * is a screen somebody opens to check a balance -- so the one place this
+   * product asks a creator to go and earn was reachable only by scrolling past
+   * the plan cards. Youssef, 8 Sept 2026: "make affilate on the side bar".
+   *
+   * DRAWN ONLY WHERE THE PROGRAMME IS ACTUALLY OPEN. `AFFILIATES_ENABLED=false`
+   * or a commission of 0% means there is nothing to apply to, and a rail item
+   * that leads to a screen saying "not open yet" is a control that does
+   * nothing (invariant 9). The flag rides /api/state so the rail can decide on
+   * its FIRST paint -- reading it from the screen's own fetch would flash the
+   * item in and out on every reload.
+   */
+  function affiliateNavItem() {
+    return navItem('affiliate', 'Affiliate', 'ph ph-handshake', '');
   }
 
   function deenaiNavItem(DATA) {
@@ -2625,7 +2681,7 @@
     home: 'Home', queue: 'Review queue', library: 'Lecture library', schedule: 'Schedule',
     templates: 'Templates', music: 'Nasheed library', language: 'Arabic & terms',
     performance: 'Performance', editor: 'Clip editor', tokens: 'Tokens & billing',
-    owner: 'Owner', deenai: 'DeenAI', help: 'Help',
+    owner: 'Owner', deenai: 'DeenAI', help: 'Help', affiliate: 'Affiliate',
     // The lecture's own name is drawn 18px bold in the BODY directly under this
     // header (detailTitle), so the header names the kind of screen rather than
     // repeating it. Without an entry here pageTitle fell through to the generic
@@ -2658,6 +2714,7 @@
       case 'music': return plural(ctx.tracks.length, 'nasheed') + ' · shuffled automatically';
       case 'deenai': return 'Growth advice counted from your own clips';
       case 'help': return 'How every part of DeenClipped works';
+      case 'affiliate': return 'Earn cash for every creator you bring';
       case 'tokens': return ctx.planLabel;
       // The body already carries the lecture's name, its source length and how
       // many clips came back, so the subline says how those clips STAND -- the
@@ -5763,8 +5820,9 @@
         navItem('templates', 'Templates', 'ph ph-text-aa', ''),
         navItem('music', 'Nasheed library', 'ph ph-music-notes', ''),
         deenaiNavItem(DATA),
-        helpNavItem(),
-      ].concat(isOperator(DATA) ? [ownerNavItem()] : []),
+      ].concat(affiliatesOn(DATA) ? [affiliateNavItem()] : [])
+        .concat([helpNavItem()])
+        .concat(isOperator(DATA) ? [ownerNavItem()] : []),
 
       workerCardStyle: 'margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: ' + (open ? '11px' : '9px 6px') + '; border: 1px solid var(--dc-line-soft, #1E1E22); border-radius: 10px; background: var(--dc-bg, #121214);',
       workerTextStyle: open ? 'white-space: nowrap;' : 'display: none;',

@@ -32,6 +32,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCES = [
   'src/public/studio-styles.generated.css',
   'src/public/studio-help.css',
+  'src/public/studio-affiliate.css',
   'src/public/studio-owner.css',
   'src/public/studio-responsive.css',
   // The hand-written token and motion sheets carry colour too -- the week

@@ -354,6 +354,16 @@ body.dc-light {
   #dcRailNav > div { gap: 6px; }
   #dcRailNav a { font-size: 13px; }
   #dcRailNav a > i { font-size: 15.5px; }
+  /* AND THE GROUPS SEPARATE FURTHER WHERE THERE IS ROOM TO (v3.166.0, adding
+     Affiliate to the rail: "fix side bar make it fit more, make it more
+     spacsious"). The rows already grow with the column -- that is the clamp in
+     the adapter's own inline padding -- and this is the other half: the gap
+     between Home, Produce and Set up widens on a tall screen and does not on a
+     short one. Gated on HEIGHT, not width, because height is what the rail is
+     short of: at 1366x768 the eleven items, three headings and the task card
+     leave 17px of slack, so widening the gaps there would push the tail under
+     the collapse row. Measured at 1512x870 -- a real MacBook -- the residual
+     gap above the task card goes 97 -> 70px, and at 1366 nothing moves. */
   /* The nav has to fill the column before anything inside it can be pushed to
      the bottom of one. */
   #dcRailNav {
@@ -362,6 +372,17 @@ body.dc-light {
     /* Room for the collapse row, which is absolutely positioned against the
        rail -- without this the Owner item slides underneath it. */
     padding-bottom: 46px;
+    /* A BACKSTOP, never the normal state. The list fits at every desktop
+       height today (17px of slack at the tightest, 1366x768), but a rail item
+       added without re-measuring would otherwise spill over the collapse row
+       and out of the rail with nothing saying so. Scrolling is the honest
+       failure; clipping is not. */
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  #dcRailNav::-webkit-scrollbar { width: 0; height: 0; }
+  @media (min-height: 860px) {
+    #dcRailNav { gap: clamp(16px, 3.2vh, 40px); }
   }
   #dcRailNav > div:last-of-type {
     flex: 1 1 auto;

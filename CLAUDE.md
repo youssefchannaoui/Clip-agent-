@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1883 JS + 804 Python**
+- `npm test` and `npm run check` must pass. Currently **1892 JS + 804 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -8894,6 +8894,139 @@ carry a bank account back to a browser.
 - **A clawback is reported, never deducted.** Taking money back out of a
   balance without telling somebody is how a programme loses its affiliates;
   the terms permit it and the screen is where the decision is made.
+
+## Affiliate is a screen in the rail now (v3.166.0, 8 Sept 2026)
+
+Youssef: "no make affilate on the side bar, fix side bar make it fit more,
+make it more spacsious and add instructons and all that good stuff".
+
+### It was reachable only by scrolling past the plan cards
+
+The affiliate programme shipped one release earlier as a host panel two thirds
+of the way down **Tokens & billing** -- a screen somebody opens to check a
+balance. So the one place this product asks a creator to go and EARN was
+behind six pricing cards, on a screen about spending.
+
+- **The Tokens panel is DELETED, not kept alongside.** Two controls for one
+  thing is the fault this codebase has now shipped four times (two onboarding
+  systems, two watermark positions, two tour buttons, two Grain sliders), and a
+  second application form is the worst shape of it: somebody could apply twice
+  and be told their own application was already in.
+- **Host-rendered into `<main>` on the paintHelp pattern.** A screen in the
+  design export regenerates every hashed class name in the app; this needs none
+  of it -- the rail item is an adapter entry and the screen is an id plus a tag
+  name, neither of which the export controls. `data-host-owned`, written
+  through `dcSetHtml`, and in **paintStudio's list**, never on an observer.
+- **The phone FRAMES it**, like Help and Owner: `affiliate` is deliberately not
+  in `StudioMobile.OWNED`, so there is one copy rather than two to keep in
+  step. Reached from the More sheet, which is built from the rail's own arrays.
+- **ONE CODE, ONE LINK.** `referrals.js` owns the code, `/r/CODE` and the
+  cookie; an affiliate is a referrer paid in cash instead of tokens. The link
+  drawn here is the SAME `/api/referral` link the invite panel draws.
+
+### The rail item is drawn only where the programme is open
+
+`AFFILIATES_ENABLED=false`, or a commission of 0%, means there is nothing to
+apply to -- and an item leading to a screen that says "not open yet" is a
+control that does nothing (invariant 9).
+
+**The flag rides `/api/state`, not the screen own fetch.** The rail decides on
+its FIRST paint; reading it from `/api/affiliate` would flash the item in a
+moment after every reload. It is the same answer `publicView()` gives, from the
+same two config values, so the rail and the screen cannot disagree about
+whether there is a programme.
+
+It joins the tail cluster (DeenAI, **Affiliate**, Help, Owner) rather than the
+working loop, and stays `dc-nav-secondary`: **five is the most a phone tab bar
+can carry**, and a sixth ran clean off a 375px screen the last time it was
+tried.
+
+**`TITLES.affiliate` and a `sublineFor` case were added in the same commit.**
+Without them the header falls through to the generic "Studio" -- the exact
+fault the lecture detail screen shipped with for weeks (v3.125.0), and nothing
+but a test says so.
+
+### The instructions quote the terms the server sent
+
+"add instructons and all that good stuff": how it works in four steps, what
+earns commission and what does not, how getting paid works, and what happens
+after you apply. **Every number is read from `terms`** -- the commission, the
+60-day window, the 30-day hold -- so a rate changed on Render cannot leave this
+screen promising the old one while the public `/affiliates` page quotes the
+new. A test fails on `25%` typed into the copy.
+
+The form is its OWN card rather than sitting inside the gold hero: in the hero
+it made a **415px band of which the right half was empty**, and the deal it is
+agreeing to was pushed off the screen underneath it. Its right column carries
+"what happens next", which is the question somebody actually has at that moment
+and the one thing the form cannot answer -- a form itself stays narrow, because
+a 1100px text input is not a control anybody can use.
+
+### THE RAIL: a nav row grows with the column it sits in
+
+MEASURED BEFORE ANYTHING MOVED, at 1440x950: the ten items used the top 340px
+of a 950px column and left a **272px hole** above the task card. That is what
+"make it more spacious" was pointing at, and a fixed row height cannot answer
+it -- tight enough to fit at 1366x768 is cramped on a 1080-tall screen.
+
+**`clamp(6px, .95vh, 11px)` is the whole mechanism**, emitted from the ADAPTER
+because that is where the row's padding lives: an inline style is the one thing
+a stylesheet cannot outrank, and this repo has paid for that four times. The
+floor is what fits at **1366x768 -- the binding case**, where eleven items,
+three headings and the task card have 629px to live in; the ceiling stops a
+very tall screen turning a nav row into a banner. Below 821px the rail is a
+bottom tab bar and `studio-responsive.css` overrides it with `!important`, so a
+vh-scaled row never reaches a phone.
+
+The other half is the group gaps, and they are gated on **HEIGHT, not width**,
+because height is what the rail is short of: `@media (min-height: 860px)` takes
+the gap between Home, Produce and Set up to `clamp(16px, 3.2vh, 40px)`.
+
+    viewport      row height        gap above the task card
+    1366 x 768    32.8 -> 35.4      unchanged, 17px (this is the binding case)
+    1440 x 950    32.8 -> 38.8      272 -> 132
+    1512 x 870    32.8 -> 37.3       97 -> 74   (a real MacBook)
+    1920 x 1080   32.8 -> 41.3      263 -> 226
+
+with ONE more item in the list than before. **The residual is not fixed and is
+stated rather than dressed up**: the tail is pinned to the foot and the list is
+finite, so a tall screen keeps air above the card. Distributing it needs a
+measured, self-feeding layout pass, which is a trap this file already records;
+the vh scaling is the bounded answer.
+
+**`overflow-y: auto` on the nav is a BACKSTOP, never the normal state.** The
+list fits at every desktop height today, but a rail item added without
+re-measuring would otherwise spill over the collapse row and out of the rail
+with nothing saying so. Scrolling is the honest failure; clipping is not.
+
+### Verified, and two tests repinned
+
+Measured at 1440/1512/1366/1280/1920 in both themes: one left edge (232), one
+right edge, no nav overflow, **0 elements past the viewport, no page scroll, 0
+page errors**, and **0 DOM operations across three unchanged repaints** with one
+screen node. Collapsed: 68px, eleven items, no overflow. Phone at
+320/375/390/430 in both themes: reached from More, framed, **every control 44px
+or taller**, no overflow.
+
+**`ph-handshake` was MEASURED, not assumed** -- `ph-seedling` cost a release by
+being a name that reads fine and draws nothing. Rendered with the real Phosphor
+font served from disk and diffed against the same icon hidden: **106 of 256
+pixels differ**, so the glyph draws.
+
+Ten red probes proven, and two existing tests failed against correct code:
+
+- `rail-nav` pinned the row padding as a px LITERAL, so scaling it turned the
+  test red while the property it protects -- a row smaller than the design
+  draws it -- was untouched. It reads the clamp's floor now.
+- `task-ladder` asserted the tasks-card rule is desktop-only by taking **the
+  last `@media` before it**, and the new nested `min-height` query became that
+  one. It walks every ENCLOSING query now. That is the **twelfth** time a test
+  in this repo has pinned a mechanism rather than a property, and the repaired
+  assertion was re-proven red by moving the rule out of the 821px block.
+
+A third assertion of my own went red against a correctly generated daylight
+sheet: it looked for `#dcAffScreen`, and the generator re-emits only rules that
+name a COLOUR -- the screen root sets layout alone. It asserts a `.dcaf-` rule.
 
 ## Open items
 

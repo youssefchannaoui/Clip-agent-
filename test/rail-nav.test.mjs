@@ -196,11 +196,26 @@ test('the rail gives its rows air, and never by naming a hashed class', () => {
     'a rail rule names a generated class, which a design re-import renumbers');
 });
 
-test('a nav row is smaller than the design draws it, and the rail narrower', () => {
+test('a nav row grows with the column, and the rail stays narrower', () => {
   // Both are inline styles, so they can only be changed where they are written.
-  const row = source.match(/gap: 9px; padding: ' \+ \(open \? '(\d+)px (\d+)px'/);
-  assert.ok(row, 'the nav row no longer sets its own padding inline');
-  assert.ok(Number(row[1]) < 8, `a row's vertical padding must be under the design's 8px, got ${row[1]}px`);
+  //
+  // The row's vertical padding is a clamp against the VIEWPORT HEIGHT, not a
+  // number: the rail is as tall as the window and its list is not, so a fixed
+  // row that fits at 1366x768 -- the tightest desktop, where eleven items,
+  // three headings and the task card have 629px to live in -- is cramped on a
+  // 1080-tall screen and leaves a hole above the task card. Measured at
+  // 1440x950 when Affiliate joined the rail: rows 32.8 -> 38.8px and the hole
+  // 272 -> 132px.
+  //
+  // The FLOOR is what has to fit at 768, so it is pinned under the design's
+  // own 8px; the ceiling only stops a very tall screen turning a nav row into
+  // a banner. A plain px padding here would put the hole straight back.
+  const row = source.match(/var ROW_PAD_Y = 'clamp\((\d+)px, ([\d.]+)vh, (\d+)px\)'/);
+  assert.ok(row, 'the nav row no longer scales its padding with the column');
+  assert.ok(Number(row[1]) < 8, `a row's vertical padding must floor under the design's 8px, got ${row[1]}px`);
+  assert.ok(Number(row[3]) > Number(row[1]), 'the ceiling has to be above the floor or the clamp does nothing');
+  assert.match(source, /padding: ' \+ \(open \? ROW_PAD_OPEN : ROW_PAD_SHUT\)/,
+    'and the row must actually use it');
   const width = source.match(/width: ' \+ \(open \? '(\d+)px' : '68px'\)/);
   assert.ok(width, 'the rail no longer sets its own width inline');
   assert.ok(Number(width[1]) < 228, `the rail must be narrower than 228px, got ${width[1]}px`);

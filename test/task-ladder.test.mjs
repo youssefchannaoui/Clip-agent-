@@ -683,9 +683,29 @@ test('the tasks card rides down with the tail, and its seat is asserted every pa
 
   // Rail-only. The same nav is the phone's bottom TAB BAR, where a vertical
   // auto margin would push a tab out of line.
+  //
+  // Every ENCLOSING query, not the nearest one. The rail block now nests a
+  // `@media (min-height: 860px)` inside it (the group gaps widen where there
+  // is column to spend), so "the last @media before this rule" found the inner
+  // one and this failed against a rule that had not moved -- the twelfth time
+  // a test here has pinned a mechanism rather than the property it protects.
+  const enclosing = (css, index) => {
+    const out = [];
+    const open = [];
+    for (let i = 0; i < index; i += 1) {
+      if (css.startsWith('@media', i)) open.push({ text: css.slice(i, css.indexOf('{', i)), depth: null });
+      else if (css[i] === '{') { const last = open.filter(q => q.depth === null).pop(); if (last) last.depth = 0; else out.push(null); }
+      else if (css[i] === '}') {
+        const live = open.filter(q => q.depth === 0);
+        if (live.length && out.length === 0) live.pop().depth = -1;
+        else out.pop();
+      }
+    }
+    return open.filter(q => q.depth === 0).map(q => q.text);
+  };
   const at = tokens.indexOf('#dcRailNav #dcTaskSlot:not(:empty)');
-  const query = tokens.slice(0, at).lastIndexOf('@media');
-  assert.match(tokens.slice(query, query + 40), /min-width: 821px/);
+  assert.ok(enclosing(tokens, at).some(q => /min-width:\s*821px/.test(q)),
+    'the card rule escaped the desktop-only query and now applies to the phone tab bar');
 
   const host = fs.readFileSync(new URL('../src/public/index.html', import.meta.url), 'utf8');
   const fn = host.slice(host.indexOf('function railFooterSlot()'));
