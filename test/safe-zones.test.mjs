@@ -204,14 +204,19 @@ test('the studio loads the table before the adapter that reads it', () => {
   assert.ok(read('src/server.js').includes("'/safe-zones.js'"), 'and the server serves it');
 });
 
-test('a caption anchored inside the covered band is called out, not moved', () => {
-  // Making the box accurate immediately showed that the SHIPPED DEFAULT was
-  // outside it: Clean Line anchored its caption 464px from the bottom against
-  // TikTok's 484. Saying so is the point -- a correct rectangle with the
-  // caption plainly outside it and no explanation is worse than the wrong
-  // rectangle was. Clean Line moved to 680 the same day, and the studio's
-  // band moved to POSTING_BOTTOM (312) on 6 Sept, so the fixture names a
-  // margin that is inside TODAY'S band rather than a historical one.
+test('drawing the box still saves nothing, and the guide makes no safety claim', () => {
+  /*
+   * This used to assert that a caption inside the covered band was CALLED OUT
+   * in the hint. Youssef retired that on 8 Sept by choosing an even guide box
+   * over the platform-accurate one, with the trade stated to him: the preview's
+   * rectangle no longer corresponds to what any platform covers, so it must not
+   * claim a caption is clear.
+   *
+   * What survives is the half that was never about accuracy -- the box is DRAWN
+   * and never WRITTEN. Nothing about it may rewrite a saved caption position,
+   * because that changes how every clip from that template renders. The
+   * shipped-template law below still uses the REAL union.
+   */
   const state = tpl => ({
     projects: [], clips: [], tracks: [],
     templates: [tpl], selectedTemplate: tpl,
@@ -219,24 +224,14 @@ test('a caption anchored inside the covered band is called out, not moved', () =
     publishingSettings: { enabled: true, tiktok: { enabled: true } },
   });
   const base = { id: 'x', name: 'X', width: 1080, height: 1920 };
-
   const inBand = Math.round(1920 * (1 - SAFE.postingBox(['youtube', 'tiktok'], 1080, 1920).bottom)) - 100;
-  const covered = StudioAdapter.bindings(state(
+
+  const hint = StudioAdapter.bindings(state(
     { ...base, captionPosition: 'bottom', captionMarginV: inBand })).safeHint;
-  assert.match(covered, /sits \d+px into the shade/, 'a caption in the band is called out');
+  assert.doesNotMatch(hint, /sits \d+px into the shade/,
+    'an even guide may not warn in pixels about a band it does not describe');
+  assert.match(hint, /not a platform safe area/i, 'it says so plainly instead');
 
-  const clear = StudioAdapter.bindings(state(
-    { ...base, captionPosition: 'bottom', captionMarginV: 700 })).safeHint;
-  assert.ok(!/sits \d+px/.test(clear), 'a caption inside the box is not nagged');
-
-  // A centred caption is always inside, and must never be warned about.
-  const middle = StudioAdapter.bindings(state(
-    { ...base, captionPosition: 'middle', captionMarginV: 0 })).safeHint;
-  assert.ok(!/sits \d+px/.test(middle));
-
-  // And it is a WARNING, never a correction: nothing about the drawn box may
-  // rewrite a saved caption position, because that changes how every clip from
-  // that template renders.
   const writes = [];
   StudioAdapter.onTemplateField = (...a) => writes.push(a);
   StudioAdapter.bindings(state({ ...base, captionPosition: 'bottom', captionMarginV: inBand }));

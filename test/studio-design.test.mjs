@@ -2086,10 +2086,14 @@ test('the snap lines come from the safe-zone table, not from a literal', () => {
   // shape, so this asserts the DERIVATION rather than a pair of numbers that
   // would then have to be edited whenever a platform moves.
   const adapter = fs.readFileSync(path.join(ROOT, 'src/public/studio-adapter.js'), 'utf8');
-  // postingBox, not safeArea: the studio shades what the interface covers
-  // (POSTING_BOTTOM), while the public checker and the shipped-template law
-  // keep citing the platforms' own published figures.
-  assert.match(adapter, /var SAFE_BOX = \(SAFE\.postingBox \|\| SAFE\.safeArea\)\(SAFE_PLATFORMS, tpl\.width, tpl\.height\)/);
+  // The preview draws the even GUIDE box (Youssef, 8 Sept 2026) while the REAL
+  // union is still computed beside it for the silhouette -- and the public
+  // checker and the shipped-template law still cite the platforms' own
+  // published figures. What this pins is that BOTH come from safe-zones.js
+  // rather than a literal, which is the property the numbers-in-the-design
+  // bug was about.
+  assert.match(adapter, /var SAFE_REAL = \(SAFE\.postingBox \|\| SAFE\.safeArea\)\(SAFE_PLATFORMS, tpl\.width, tpl\.height\)/);
+  assert.match(adapter, /var SAFE_BOX = SAFE\.guideBox/);
   assert.match(adapter, /var SAFE_TOP = SAFE_BOX\.top;/);
   assert.match(adapter, /var SAFE_BOTTOM = SAFE_BOX\.bottom;/);
   // And the adapter must keep NO numbers of its own: a second copy of the
@@ -2113,7 +2117,10 @@ test('the caption cannot be dragged outside the safe box', () => {
   // Expectations are COMPUTED from the same table and the same set the
   // adapter reads, so this test cannot drift from it when a platform moves
   // its interface; what it pins is that the clamp honours the box.
-  const box = globalThis.DCSafeZones.postingBox(globalThis.DCSafeZones.postingSet({}, {}), 1080, 1920);
+  // The preview's box is the even GUIDE now (Youssef, 8 Sept 2026), not the
+  // platform union -- what these tests pin is unchanged: the clamp and the
+  // snaps honour whatever box the preview actually draws.
+  const box = globalThis.DCSafeZones.guideBox(1080, 1920);
   const height = 533;
   const at = f => dragOn({ clientX: 150, clientY: f * height });
   // Dropped below the frame entirely, it stops at the safe edge.
@@ -2134,8 +2141,16 @@ test('the caption cannot be dragged outside the safe box', () => {
      Asserted against the constant rather than a number typed here: the two
      tests then say one thing between them, and a figure written in this file
      could go stale the way the 14% did. */
-  assert.equal(low.captionMarginV, globalThis.DCSafeZones.POSTING_BOTTOM,
-    'a caption dropped low rests on top of the platform\'s own captions');
+  /* IT RESTS ON THE GUIDE'S EDGE NOW, not on the platform's caption bars.
+     Youssef chose an even box on 8 Sept with the trade stated: a caption can be
+     dropped lower than the platforms actually leave clear. POSTING_BOTTOM is
+     still the constant the SILHOUETTE is drawn from, and the shipped-template
+     law in safe-zones.test.mjs still uses the real union -- this clamp simply
+     follows the box the preview draws. */
+  assert.equal(low.captionMarginV, Math.round(1920 * (1 - box.bottom)),
+    'a caption dropped low rests on the guide\'s own edge');
+  assert.ok(low.captionMarginV < globalThis.DCSafeZones.POSTING_BOTTOM,
+    'and that is BELOW the platform chrome -- the accepted cost of an even box');
 });
 
 test('each snap point has a name the preview can show', () => {
@@ -2847,7 +2862,10 @@ test('the caption snaps to the lines the label promises', () => {
   // and is then not offered -- a snap point that drops the caption somewhere
   // the platform covers is worse than no snap point at all.
   // Nothing connected: the TikTok + Shorts floor, the same set the adapter draws.
-  const box = globalThis.DCSafeZones.postingBox(globalThis.DCSafeZones.postingSet({}, {}), 1080, 1920);
+  // The preview's box is the even GUIDE now (Youssef, 8 Sept 2026), not the
+  // platform union -- what these tests pin is unchanged: the clamp and the
+  // snaps honour whatever box the preview actually draws.
+  const box = globalThis.DCSafeZones.guideBox(1080, 1920);
   const height = 533;
   const at = fraction => dragOn({ clientX: 150, clientY: fraction * height });
   // The upper third, snapped from just below it, measured down from the top.
@@ -2876,13 +2894,16 @@ test('the caption snaps to the lines the label promises', () => {
   } else {
     assert.notEqual(third.captionMarginV, Math.round(1920 / 3), 'the lower third is withheld under a wider band');
   }
-  // And the hint names what the shade is for.
+  // And the hint says what the box IS -- a guide -- rather than naming
+  // platforms it no longer matches.
   const label = StudioAdapter.bindings({
     projects: [], clips: [], tracks: [],
     templates: [{ id: 'x', name: 'X', height: 1920 }],
     selectedTemplate: { id: 'x', name: 'X', height: 1920 },
   }).safeHint;
-  assert.match(label, /Shorts and TikTok/);
+  assert.match(label, /framing guide/i);
+  assert.doesNotMatch(label, /Shorts and TikTok/,
+    'an even box cannot claim to clear a named platform');
 });
 
 test('the caption margin is measured from the edge it is anchored to', () => {

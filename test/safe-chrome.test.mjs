@@ -42,39 +42,57 @@ test('the shade is positioned from the same box the edge span is positioned from
   const v = sb.StudioAdapter.bindings(state({ youtube: { connected: true } }, { youtube: { enabled: true } }));
   // YouTube alone connected still draws the TikTok+Shorts pair (the floor);
   // what this test pins is that the shade and the edge span read ONE box.
-  const box = sb.DCSafeZones.postingBox(['youtube', 'tiktok'], 1080, 1920);
+  /* THE BOX IS THE EVEN GUIDE NOW (Youssef, 8 Sept 2026), not the platform
+     union -- he was told it cannot match what the platforms cover and chose it
+     anyway. What this test pins is unchanged and is the part that matters: the
+     shade and the design's edge span read ONE box, whichever box that is. */
+  const box = sb.DCSafeZones.guideBox(1080, 1920);
   for (const k of ['left', 'right', 'top', 'bottom']) assert.ok(Math.abs(v.safeBox[k] - box[k]) < 1e-9, k);
   assert.equal(v.safeBox.degenerate, false);
   assert.deepEqual(Array.from(v.safePlatforms), ['youtube', 'tiktok']);
+  // The silhouette still draws from the REAL union, so the chrome it shows
+  // stays truthful even though the rectangle around it is even.
+  const real = sb.DCSafeZones.postingBox(['youtube', 'tiktok'], 1080, 1920);
+  for (const k of ['left', 'right', 'top', 'bottom']) assert.ok(Math.abs(v.safeReal[k] - real[k]) < 1e-9, `real ${k}`);
   // And the design's own edge span reads the identical numbers.
   assert.match(v.safeBoxStyle, new RegExp(`top: ${(box.top * 100).toFixed(2)}%`));
   assert.match(v.safeBoxStyle, new RegExp(`bottom: ${((1 - box.bottom) * 100).toFixed(2)}%`));
 });
 
-test('with nothing connected the shade is TikTok and Shorts, and says so', () => {
+test('the guide is even on all four sides, and the real union is still computed', () => {
   // Youssef, 6 Sept 2026: "figure out the perfect safe social zone using
   // TikTok and YouTube and use it for ours". The pair is the floor whether or
   // not either is connected while a template is being designed; a connected
   // Meta platform widens it (the sibling test in safe-zones.test.mjs).
   const sb = load();
   const v = sb.StudioAdapter.bindings(state({}, {}));
-  const box = sb.DCSafeZones.postingBox(['youtube', 'tiktok'], 1080, 1920);
-  assert.ok(Math.abs(v.safeBox.bottom - box.bottom) < 1e-9, 'the bottom is the always-on chrome, not Meta\u2019s 670');
-  assert.ok(Math.abs(v.safeBox.top - box.top) < 1e-9, 'the top is Shorts\u2019 150');
+  // Equal in FRAME PIXELS, so the margin looks even rather than being equal in
+  // percentage and reading wider top-to-bottom on a 9:16 frame.
+  const left = v.safeBox.left * 1080, right = (1 - v.safeBox.right) * 1080;
+  const top = v.safeBox.top * 1920, bottom = (1 - v.safeBox.bottom) * 1920;
+  for (const [what, px] of [['left', left], ['right', right], ['top', top], ['bottom', bottom]]) {
+    assert.ok(Math.abs(px - sb.DCSafeZones.GUIDE_INSET) < 0.5, `${what} is the even inset, got ${px}`);
+  }
+  // The pair is still the floor for everything that is still a real check.
   assert.deepEqual(Array.from(v.safePlatforms), ['youtube', 'tiktok']);
-  assert.match(v.safeHint, /Shorts and TikTok/);
-  assert.doesNotMatch(v.safeHint, /every platform/);
 });
 
-test('the hint is one line about the shade, and the snap list is gone from it', () => {
+test('the hint no longer claims a caption inside the box is clear', () => {
+  /*
+   * THE WHOLE POINT OF THE TRADE. The box is an even inset chosen for how it
+   * looks, so it cannot say what any platform covers -- and the old sentence
+   * named them and warned in pixels. Repeating that over a guide would be the
+   * app asserting a safety it has stopped checking, which is the stale-claim
+   * failure this repo keeps paying for.
+   */
   const sb = load();
   const hint = sb.StudioAdapter.bindings(state({ youtube: { connected: true }, tiktok: { connected: true } },
     { youtube: { enabled: true }, tiktok: { enabled: true } })).safeHint;
-  assert.match(hint, /^The shaded parts are where Shorts and TikTok/);
-  assert.match(hint, /Keep text in the clear\./);
-  assert.ok(!/Drag snaps to/.test(hint), 'the snap points announce themselves while dragging');
-  assert.ok(!/inside the box/.test(hint), 'there is no lone box to keep inside any more');
-  assert.ok(hint.length < 140, `one line, not a label: ${hint.length} chars`);
+  assert.match(hint, /framing guide/i, 'it says what it is');
+  assert.match(hint, /not a platform safe area/i, 'and what it is not');
+  assert.doesNotMatch(hint, /Keep text in the clear/, 'that promised a safety it no longer checks');
+  assert.doesNotMatch(hint, /sits \d+px into the shade/, 'and so did the pixel warning');
+  assert.doesNotMatch(hint, /Drag snaps to/, 'the snap points announce themselves while dragging');
 });
 
 test('the covered areas are host-drawn, appended, under the caption, and gone off Templates', () => {
