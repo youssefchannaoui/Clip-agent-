@@ -332,6 +332,19 @@
     if (isNaN(d)) return '';
     return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   }
+  /*
+   * A minute somebody can quote back at support. "12m ago" is right on a row
+   * and useless in a report, because by the time anybody reads it the number
+   * has moved. Local time deliberately: the reporter's clock is the one they
+   * will describe it in.
+   */
+  var MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function stamp(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    return d.getDate() + ' ' + MONTH_SHORT[d.getMonth()] + ' ' + timeOf(iso);
+  }
 
   // A clip is "awaiting a decision" when it is rendered but nobody has approved,
   // scheduled or posted it yet. Matches the queue the existing dashboard shows.
@@ -1262,6 +1275,7 @@
     {
       match: /spam_risk|too_many_(?:posts|pending)|rate.?limit|reached the (?:daily|hourly) limit/i,
       title: 'The platform is rate-limiting this account',
+      short: '{platform} is asking us to slow down',
       cause: 'The destination accepted the app but says this account has posted too much too quickly. It is a temporary cap, not a rejection of the clip.',
       fixes: [
         'Leave it a few hours and press Retry — the window rolls forward.',
@@ -1272,6 +1286,7 @@
     {
       match: /quota|uploadLimitExceeded|exceeded the number of videos/i,
       title: 'The daily upload limit has been reached',
+      short: '{platform}\u2019s daily upload limit was reached',
       cause: 'The platform caps how many videos an account may upload in a day, separately from anything this app controls. The clip is fine and still rendered.',
       fixes: [
         'Retry after the limit resets — for YouTube that is midnight Pacific time.',
@@ -1282,6 +1297,7 @@
     {
       match: /reconnect|no access token|not connected|revoked|refresh token|invalid_grant|unauthor/i,
       title: 'The connection to this account has expired',
+      short: '{platform} needs reconnecting',
       cause: 'The permission this app was given has lapsed or been withdrawn, so the platform no longer recognises it. This happens on its own after a password change, or if access was removed from the account\'s security settings.',
       fixes: [
         'Open Connections and reconnect that account.',
@@ -1292,6 +1308,7 @@
     {
       match: /duplicate|already (?:been )?uploaded|identical video/i,
       title: 'The platform thinks this is a duplicate',
+      short: '{platform} already has this clip',
       cause: 'The destination has seen this exact video before and refused a second copy. Usually it means an earlier attempt actually succeeded.',
       fixes: [
         'Check the channel — the clip is very likely already live.',
@@ -1302,6 +1319,7 @@
     {
       match: /too long|duration|exceeds the maximum|file (?:is )?too large|size limit/i,
       title: 'The clip is outside what this platform accepts',
+      short: 'Too long or too large for {platform}',
       cause: 'The destination rejected the file on its length or its size rather than on its content.',
       fixes: [
         'Shorten the clip in the review queue and re-render it.',
@@ -1312,6 +1330,7 @@
     {
       match: /copyright|content id|claim|community guidelines|policy/i,
       title: 'The platform flagged the content itself',
+      short: '{platform} flagged the content',
       cause: 'This is a moderation or rights decision by the destination, not a technical failure. It will not resolve by retrying.',
       fixes: [
         'Open the platform\'s own studio to read the specific claim.',
@@ -1330,6 +1349,34 @@
       'Copy the message below if you report it.',
     ],
   };
+
+  /*
+   * THE LINE A CUSTOMER READS ON THE ROW.
+   *
+   * Youssef, 8 Sept 2026, looking at his own bell: "when people look at this
+   * and they say, oh, TikTok expired, like, they're gonna be confused ... make
+   * the messages more, like, shorter ... make it more public friendly."
+   *
+   * Measured on his own four failures before this existed, the row read:
+   *
+   *   Publish failed - Surah An-Nisaa 109-110
+   *   The YouTube connection has expired: YouTube returned 400: Token has been
+   *   expired or revoked. Reconnect the channel in Connections.
+   *
+   * and an import read a yt-dlp command line with `--cookies-from-browser` in
+   * it. Both are the RAW message, truncated at 150 characters -- written for
+   * diagnosis and put in the one place a person looks first.
+   *
+   * Every entry in both tables already had a plain `title`; nothing rendered
+   * it on the row. `short` exists only for the six publish entries whose title
+   * says "the platform" -- on a row, which names no destination of its own,
+   * that is a sentence about nobody. `{platform}` is substituted from the
+   * row's own provider, so one entry serves all four.
+   */
+  function explainShort(row, why) {
+    var where = PLATFORM_NAMES[(row && row.provider) || ''] || (row && row.provider) || 'The destination';
+    return String((why && (why.short || why.title)) || '').replace(/\{platform\}/g, where);
+  }
 
   function explainFailure(row) {
     var text = String((row && (row.full || row.meta || row.text)) || '');
@@ -5428,7 +5475,10 @@
         id: activityId('publish', c.id, target.updatedAt || c.postedAt),
         text: 'Publish failed · ' + (c.title || 'Clip'),
         meta: shortError(target.error || target.stage || c.error),
-        full: target.error || c.error || '', code: '',
+        // Everything its own meta is built from. Without `stage` a target that
+        // failed carrying only a stage had NOTHING under "The original
+        // message" while the row was quoting it.
+        full: target.error || target.stage || c.error || '', code: '',
         provider: target.provider || '',
         at: target.updatedAt || c.postedAt, screen: 'schedule',
       });
@@ -5594,10 +5644,25 @@
         }).length;
 
     var failureRows = failures.map(function (f) {
+      /*
+       * THE ROW SAYS THE PLAIN THING; THE RAW MESSAGE IS ONE CLICK AWAY.
+       *
+       * `f.meta` is shortError(raw) -- the platform's own wording, truncated
+       * at 150 characters. That is what put "YouTube returned 400: Token has
+       * been expired or revoked" and a yt-dlp command line in the bell. The
+       * guidance table already knew how to say it plainly and nothing on the
+       * row read it; the detail behind the row still carries the original
+       * verbatim, with its code, under "The original message".
+       */
+      var why = explainFailure(f);
       return {
         id: f.id,
         text: f.text,
-        meta: f.meta + (f.at ? ' · ' + since(f.at) : ''),
+        meta: explainShort(f, why) + (f.at ? ' · ' + since(f.at) : ''),
+        // The classification travels WITH the row. Asking again from the row
+        // would be asking this table about a sentence it wrote itself, and on
+        // a row whose `full` is empty that is the only text left to read.
+        why: why,
         full: f.full, code: f.code, at: f.at, screen: f.screen, provider: f.provider || '',
         tag: 'Failed',
         icon: 'ph-fill ph-warning-circle',
@@ -5646,7 +5711,7 @@
     // NOT named `detail`: that name is already the open project in this scope,
     // and shadowing it silently turned "More clips" into a no-op.
     var activityRow = activityRows.filter(function (row) { return row.id === UI.activityDetail; })[0] || null;
-    var activityWhy = activityRow ? explainFailure(activityRow) : { title: '', cause: '', fixes: [] };
+    var activityWhy = activityRow ? (activityRow.why || explainFailure(activityRow)) : { title: '', cause: '', fixes: [] };
 
     // ── DeenAI ──
     // Whether this account HAS DeenAI comes from the plan features already in
@@ -5969,16 +6034,38 @@
       activityDetailOpen: Boolean(activityRow),
       activityDetailTitle: activityRow ? activityRow.text : '',
       activityDetailWhen: activityRow && activityRow.at ? since(activityRow.at) : '',
-      activityDetailHeading: activityRow ? activityWhy.title : '',
+      /*
+       * THE HEADING NAMES THE PLATFORM, the same line the row carried.
+       * Six of the publish entries are written as "the platform ..." because
+       * one entry serves all four destinations, and a card headed "The
+       * connection to this account has expired" over a subtitle reading
+       * "Publish failed - Surah An-Nisaa 102" never says WHICH account. It
+       * also confirms you opened the thing you clicked; the prose that used to
+       * be the heading is the cause paragraph directly under it.
+       */
+      activityDetailHeading: activityRow ? explainShort(activityRow, activityWhy) : '',
       activityDetailCause: activityRow ? activityWhy.cause : '',
       activityDetailFixes: activityRow ? activityWhy.fixes.map(function (fix, index) {
         return { n: String(index + 1), text: fix };
       }) : [],
       // The untruncated original. Kept visible but secondary: it is what to
       // quote in a support message, not what to read first.
-      activityDetailRaw: activityRow ? (activityRow.full || activityRow.meta || '') : '',
-      activityDetailHasRaw: Boolean(activityRow && (activityRow.full || activityRow.meta)),
-      activityDetailCode: activityRow && activityRow.code ? activityRow.code : '',
+      // `full` and NOTHING else. The row's `meta` is now the plain sentence
+      // this app wrote, so the old `full || meta` fallback would print our own
+      // words under "The original message" and claim they were the platform's.
+      // Nothing original means the block is not drawn.
+      activityDetailRaw: activityRow ? (activityRow.full || '') : '',
+      activityDetailHasRaw: Boolean(activityRow && activityRow.full),
+      /*
+       * WHAT SOMEBODY QUOTES IN A BUG REPORT. The code when the pipeline gave
+       * one, and otherwise the destination and the exact minute -- a publish
+       * failure carries no code at all, so this slot rendered empty on exactly
+       * the rows most likely to be reported.
+       */
+      activityDetailCode: activityRow
+        ? (activityRow.code
+          || [activityRow.provider, activityRow.at ? stamp(activityRow.at) : ''].filter(Boolean).join(' · '))
+        : '',
       activityDetailGoLabel: activityRow ? (SCREEN_LABEL[activityRow.screen] || 'Open') : '',
       activityDetailGo: function (e) {
         stop(e);

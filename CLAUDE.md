@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1912 JS + 837 Python**
+- `npm test` and `npm run check` must pass. Currently **1923 JS + 837 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -16063,3 +16063,131 @@ than the code: `data-news-open` also appears in the click handler, so matching
 the bare string passed with the Help entry point deleted; and the route's own
 `!currentUser` check cannot be seen through a 401 that the app-wide gate
 serves anyway.
+
+## The bell says the plain thing; the raw error is one click away (v3.169.0, 8 Sept 2026)
+
+Youssef sent a screenshot of his own Schedule with the Activity dropdown open:
+"when people look at this and they say, oh, TikTok expired, like, they're gonna
+be confused. So make it more public friendly ... make the messages more, like,
+shorter ... And once they click, they can then see the original message, like,
+the error code exactly ... on the back end."
+
+### What he was reading, measured before anything moved
+
+The row's second line was `shortError(raw)` -- the platform's own wording,
+truncated at 150 characters -- in the one place a person looks first:
+
+    Publish failed · Surah An-Nisaa 109-110
+    The YouTube connection has expired: YouTube returned 400: Token has been
+    expired or revoked. Reconnect the channel in Connections.
+
+    A lecture that would not come down needs attention
+    yt-dlp: ERROR: [youtube] dQw4w9WgXcQ: Sign in to confirm you are not a bot.
+    Use --cookies-from-browser or --cookies for the authentication.
+
+After:
+
+    Publish failed · Surah An-Nisaa 109-110   YouTube needs reconnecting · 10m ago
+    Publish failed · Surah An-Nisaa 107-109   TikTok needs reconnecting · 10m ago
+    A lecture that would not come down …      YouTube blocked our server, not you
+
+**NOTHING NEW WAS WRITTEN TO SAY IT.** Every entry in both guidance tables has
+carried a plain `title` since v3.30.0 and **nothing rendered it on the row** --
+it was used for the detail card's heading alone. The row was the one surface
+still quoting the pipeline.
+
+### `{platform}`, because a row names no destination of its own
+
+Six publish entries are written as "the platform ..." precisely so ONE entry
+serves all four destinations. On a card that is fine -- the subtitle above it
+says which clip -- but a row reading "The connection to this account has
+expired" is a sentence about nobody. Those six gained a `short` carrying a
+`{platform}` token, substituted from the row's own provider, so one entry still
+serves four and the row still names one. A test drives 4 destinations x 8
+messages and fails if a token ever survives into a row or a heading.
+
+**The detail's HEADING takes the same line**, so the card confirms you opened
+the thing you clicked; the prose that used to be the heading is the cause
+paragraph directly under it, unchanged.
+
+### THE CLASSIFICATION TRAVELS WITH THE ROW, and that is the load-bearing part
+
+The row's `meta` is now a sentence this table WROTE. `explainFailure` reads
+`full -> meta -> text`, so a row whose `full` is empty would be classified by a
+sentence a previous classification produced -- the table asked about its own
+output. **Not theoretical**: a duplicate refusal reads plainly as "TikTok
+already has this clip", which matches none of the table's own patterns, so
+asking again answers with the generic fallback instead of the entry actually
+chosen. The row now carries `why`, classified ONCE from the raw failure, and
+the detail reads it rather than asking again.
+
+### The raw survives verbatim, and is never impersonated
+
+- `activityDetailRaw` is **`full` and nothing else**. The old `full || meta`
+  fallback would print this app's own plain sentence under "The original
+  message" and claim it was the platform's.
+- **A publish failure's `full` had been missing `target.stage`** while its own
+  meta was built from it, so a target that failed carrying only a stage quoted
+  it on the row and showed NOTHING behind it. Found by writing the test for the
+  fallback, not by reading.
+- Nothing original at all means the block is not drawn, rather than padded with
+  something that reads like a quote.
+
+### The reference under the buttons was empty on exactly the rows most reported
+
+A publish failure carries **no error code at all** (`code: ''`), so that slot
+rendered blank on every one of them. It falls back to the destination and the
+exact minute -- `8 Sep 12:52`, not "12m ago", because by the time anybody reads
+a report the relative number has moved.
+
+### Copy this for a bug report
+
+Seeing the raw was already possible; COPYING it is what a report needs, and
+selecting text inside a collapsed block in a modal is not something anybody
+manages on a phone. Host-rendered (a button in that card means a design
+re-import and every hashed class name in the app), `data-host-owned`, in
+paintStudio's list, anchored on the summary's own TEXT.
+
+- **THE REPORT IS BUILT FROM THE BINDINGS, NOT SCRAPED OFF THE CARD.** A first
+  cut walked the card's spans for anything containing a separator and took the
+  last -- which was the code, silently dropping WHICH CLIP and WHEN, the two
+  things a report is useless without. Read from `vals` the copy cannot say
+  something the screen does not.
+- It carries the heading, the clip and its age, the reference, the release and
+  the platform's own words. Measured live: 0 DOM operations across three
+  unchanged repaints, one button, label flips to "Copied", 0 page errors.
+- **35px, matching the card's own Open schedule / Dismiss this at every width.**
+  A button that towers over the two beneath it reads as bolted on.
+
+### Measured
+
+1440x950 in both themes and at 390: 0 elements overflowing, no page scroll, 0
+page errors, and the copy button at **5.53:1 dark / 4.85:1 light** read from
+the PIXELS (its ground is a `<details>` inside a card inside a scrim, and a DOM
+ground-walk cannot see through translucency).
+
+**Stated rather than half-fixed:** every button in that card is **35px on a
+phone**, under the 44px floor this file holds for the shell's own screens.
+That is the design export's own overlay and pre-existing -- Open schedule and
+Dismiss this measure the same -- so it is one job, not a side effect of a copy
+change.
+
+### Two probe faults, both already in this file and both paid again
+
+- **A red probe that edits the WRONG occurrence reports green having tested
+  nothing.** `btn.setAttribute('data-host-owned','');` appears TWICE in
+  index.html at the same indentation, and `String.replace` takes the first --
+  a different painter. The probe now includes the preceding line so it is
+  unique. All eleven are red.
+- **A byte offset is not a boundary.** The copy probe clicked a button inside a
+  `<details>` that is COLLAPSED by default and timed out on "element is not
+  visible", which reads exactly like a broken control. Open it first.
+
+### A source-string test asserted the behaviour being removed
+
+`studio-design`'s "error text is stripped of URLs and kept to one line"
+asserted the row still QUOTED the raw with its URLs stripped. The property it
+protects survives in a strictly stronger form -- there is no URL to strip
+because the platform's words are not on the row at all -- so it asserts that
+instead, plus that `full` still holds them. Proven red against the restored
+quote.
