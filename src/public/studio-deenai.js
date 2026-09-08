@@ -177,6 +177,73 @@
   function labelFor(id) { return ACTION_LABELS[id] || 'Open'; }
   function stepFor(id) { return ACTION_STEPS[id] || ''; }
 
+  /*
+   * THE ORB -- DeenAI's presence, and the reason this screen stops looking
+   * like a form.
+   *
+   * Youssef, 8 Sept 2026: "make it look a lot more futuristic, cool ... it
+   * looks so basic AI looking with boxes ... I need something like maybe with,
+   * like, a globe or something like that literally can deal with everything
+   * that they would like to ask."
+   *
+   * DRAWN, NEVER LOADED. It is inline SVG plus CSS: no canvas, no image, no
+   * icon font. The Phosphor CDN is a third party and a missing glyph is an
+   * empty ring (the ph-seedling rule); an asset is a file that can 404 on a
+   * box that has not pulled it (the promo bar). This cannot fail to arrive.
+   *
+   * HOW IT TURNS. A sphere's longitude rings are circles seen edge-on at
+   * varying angles, so animating each ellipse's `rx` from full to zero and
+   * back -- out of phase -- reads as one globe rotating, at the cost of three
+   * animated attributes. There is no per-frame work of ours at all.
+   *
+   * It carries `aria-hidden`: it is the room's lighting, not information, and
+   * everything it signals is also in words ("Thinking...", the step chips).
+   */
+  var ORB_LON = [
+    { r: 54, d: '0s' },
+    { r: 38, d: '-2.6s' },
+    { r: 20, d: '-5.2s' },
+  ];
+  function orb() {
+    var svg = global.document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 128 128');
+    svg.setAttribute('class', 'dcai-orb');
+    svg.setAttribute('aria-hidden', 'true');
+    var mk = function (tag, attrs) {
+      var n = global.document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (var k in attrs) n.setAttribute(k, attrs[k]);
+      return n;
+    };
+    // The glow is a radial gradient rather than a filter: a blur on an element
+    // this size costs a real compositing pass on every frame it animates.
+    var defs = mk('defs', {});
+    var grad = mk('radialGradient', { id: 'dcaiOrbCore' });
+    grad.appendChild(mk('stop', { offset: '0%', 'stop-color': 'var(--dcai-orb-hot)' }));
+    grad.appendChild(mk('stop', { offset: '55%', 'stop-color': 'var(--dcai-orb-mid)' }));
+    grad.appendChild(mk('stop', { offset: '100%', 'stop-color': 'var(--dcai-orb-out)' }));
+    defs.appendChild(grad);
+    svg.appendChild(defs);
+
+    svg.appendChild(mk('circle', { class: 'dcai-orb-halo', cx: 64, cy: 64, r: 60 }));
+    svg.appendChild(mk('circle', { class: 'dcai-orb-core', cx: 64, cy: 64, r: 54, fill: 'url(#dcaiOrbCore)' }));
+    // The outline, and two latitudes that do not move -- a globe whose every
+    // line moves reads as noise rather than as an object.
+    svg.appendChild(mk('circle', { class: 'dcai-orb-edge', cx: 64, cy: 64, r: 54 }));
+    svg.appendChild(mk('ellipse', { class: 'dcai-orb-lat', cx: 64, cy: 64, rx: 54, ry: 20 }));
+    svg.appendChild(mk('ellipse', { class: 'dcai-orb-lat', cx: 64, cy: 64, rx: 54, ry: 40 }));
+    for (var i = 0; i < ORB_LON.length; i++) {
+      var lon = mk('ellipse', { class: 'dcai-orb-lon', cx: 64, cy: 64, rx: ORB_LON[i].r, ry: 54 });
+      lon.style.animationDelay = ORB_LON[i].d;
+      svg.appendChild(lon);
+    }
+    // The sweep is what makes it read as SCANNING rather than as spinning.
+    svg.appendChild(mk('ellipse', { class: 'dcai-orb-scan', cx: 64, cy: 64, rx: 54, ry: 6 }));
+    // The orbit sits OUTSIDE the sphere, which is what stops the whole thing
+    // reading as a ball: a core has something going round it.
+    svg.appendChild(mk('ellipse', { class: 'dcai-orb-orbit', cx: 64, cy: 64, rx: 62, ry: 22 }));
+    return svg;
+  }
+
   function askCard(payload, vals) {
     /*
      * THE CONSOLE, and it is the hero of the screen.
@@ -196,6 +263,15 @@
     var aurora = el('span', 'dcai-aurora');
     aurora.setAttribute('aria-hidden', 'true');
     card.appendChild(aurora);
+    /*
+     * A WRAPPER, so the console is exactly TWO flex items: the controls and
+     * the orb. As a two-column GRID the orb auto-placed into row one --
+     * `grid-row: 1 / -1` spans a single row on an implicit grid -- so it
+     * forced that row to its own 150px and the "ASK DEENAI" line floated in
+     * the middle of it. Measured: rows 150 / 74.8 / 134 and the console 403px
+     * tall against a content height of 236.
+     */
+    var wrap = el('div', 'dcai-cwrap');
     var bar = el('div', 'dcai-cbar');
     var eyebrow = el('p', 'dcai-label is-live');
     eyebrow.appendChild(el('span', 'dcai-dot'));
@@ -203,21 +279,23 @@
     bar.appendChild(eyebrow);
     bar.appendChild(el('span', 'dcai-where',
       'on DeenClipped\u2019s own server \u2014 your numbers, never your transcripts'));
-    card.appendChild(bar);
+    wrap.appendChild(bar);
 
     var modes = el('div', 'dcai-modes');
     (payload.modes || []).forEach(function (mode) {
       var b = el('button', 'dcai-mode', mode.label);
       b.type = 'button';
       b.title = mode.blurb;
+      b.setAttribute('data-mode', mode.id);
       b.setAttribute('aria-pressed', M.mode === mode.id ? 'true' : 'false');
       b.onclick = function () { M.mode = mode.id; M.error = ''; repaint(); };
       modes.appendChild(b);
     });
-    card.appendChild(modes);
+    wrap.appendChild(modes);
 
     var ask = el('div', 'dcai-ask');
     var field = el('textarea', 'dcai-field');
+    field.setAttribute('data-ask', '');
     field.placeholder = placeholderFor(M.mode);
     field.value = M.question;
     field.disabled = M.streaming;
@@ -233,6 +311,7 @@
     var clips = ((vals && vals.__clips) || []);
     if (clips.length) {
       var sel = el('select', 'dcai-attach');
+      sel.setAttribute('data-attach', '');
       var none = el('option', '', 'No clip attached');
       none.value = '';
       sel.appendChild(none);
@@ -262,7 +341,7 @@
       row.appendChild(retry);
     }
     ask.appendChild(row);
-    card.appendChild(ask);
+    wrap.appendChild(ask);
 
     if (M.steps.length) {
       var steps = el('div', 'dcai-steps');
@@ -270,9 +349,11 @@
         var chip = el('span', 'dcai-step' + (M.streaming && i === M.steps.length - 1 ? ' is-live' : ''), s);
         steps.appendChild(chip);
       });
-      card.appendChild(steps);
+      wrap.appendChild(steps);
     }
-    if (M.error) card.appendChild(el('p', 'dcai-err', M.error));
+    if (M.error) wrap.appendChild(el('p', 'dcai-err', M.error));
+    card.appendChild(wrap);
+    card.appendChild(orb());
     return card;
   }
 
@@ -314,6 +395,7 @@
     card.appendChild(head);
 
     var body = el('div', 'dcai-body');
+    body.setAttribute('data-answer', '');
     renderAnswer(body, M.answer);
     if (M.streaming) body.appendChild(el('span', 'dcai-caret'));
     card.appendChild(body);
@@ -361,7 +443,12 @@
   /* The contract's labels are bolded so the shape is readable at a glance.
      Deliberately a RENDER, not a rewrite: the model's own words are shown. */
   var CONTRACT_LABELS = /^(Recommendation|Evidence|Next action|Measure|Confidence|Source):/;
+  // Writes the answer INTO the box, clearing whatever was there. It is called
+  // on every stream delta now rather than once per rebuild, so it has to be
+  // idempotent -- appending to a box it did not empty would print the answer
+  // once per delta, each copy longer than the last.
   function renderAnswer(box, text) {
+    box.textContent = '';
     String(text || '').split('\n').forEach(function (line, i) {
       if (i) box.appendChild(global.document.createElement('br'));
       var m = line.match(CONTRACT_LABELS);
@@ -484,6 +571,7 @@
       var b = el('button', 'dcai-convo', c.title);
       b.type = 'button';
       b.title = c.title;
+      b.setAttribute('data-convo', c.id);
       b.setAttribute('aria-pressed', M.conversationId === c.id ? 'true' : 'false');
       b.onclick = function () { openConversation(c.id); };
       row.appendChild(b);
@@ -732,7 +820,32 @@
       payload && (payload.today || []).map(function (t) { return t.id; }),
       payload && payload.coverage && payload.coverage.note,
       payload && (payload.conversations || []).map(function (c) { return c.id + c.updatedAt; }),
-      M.mode, M.clipId, M.conversationId, M.streaming, M.answer, M.error,
+      /*
+       * SELECTION IS NOT STRUCTURE, AND PUTTING IT HERE REBUILT THE SCREEN ON
+       * EVERY CLICK. Youssef, 8 Sept 2026: "Every button that I click
+       * refreshes the screen, which is horrible."
+       *
+       * Measured: one press of a mode chip and `document.querySelector('.
+       * dcai-field')` came back a DIFFERENT NODE -- so the textarea somebody
+       * was typing into, the answer they were reading and every running
+       * animation were destroyed and remade, seven chips and six goals and
+       * every conversation button alike. `M.answer` was the worse half: it is
+       * appended to on every STREAM DELTA, so the whole screen was rebuilt
+       * dozens of times a second while an answer arrived.
+       *
+       * What stays here is what changes the SHAPE of the screen -- whether
+       * the reply card exists at all, whether the history block is open. What
+       * a person merely SELECTED is applied in place by applyState() below.
+       * That is the same fix as v3.113.0's clip-length chips, and the same
+       * rule the runtime's own patcher follows: a repaint that changes nothing
+       * must touch nothing.
+       */
+      // `M.answer || M.streaming` is exactly what decides whether the reply
+      // card EXISTS (answerCard's own first line), so the first delta of a
+      // stream does not flip it and the bubble is not rebuilt underneath the
+      // words arriving in it. Written as the same expression the card uses,
+      // not as a second rule that could drift from it.
+      M.streaming, Boolean(M.answer || M.streaming), Boolean(M.conversationId), M.error,
       M.steps.join(','), M.importOpen, M.importBusy,
       M.result && [M.result.model, M.result.degraded, (M.result.actions || []).length, (M.result.proposals || []).length],
       M.drafts.filter(function (d) { return d.status === 'draft'; }).map(function (d) { return d.id; }),
@@ -747,7 +860,10 @@
     var payload = data();
     var vals = global.__dcAiVals || {};
     var sig = signature(payload, vals);
-    if (sig === lastSig && root.firstChild) return;
+    // An unchanged SHAPE still needs the selection written on: a mode press
+    // moves nothing structural, so without this the click would do nothing at
+    // all -- a dead control (invariant 9) traded for the rebuild it replaced.
+    if (sig === lastSig && root.firstChild) { applyState(); return; }
     lastSig = sig;
     var next = global.document.createDocumentFragment();
 
@@ -827,6 +943,50 @@
     }
     root.textContent = '';
     root.appendChild(next);
+    applyState();
+  }
+
+  /*
+   * The selection, written onto the screen that is already there.
+   *
+   * Runs after a rebuild AND on its own when only a selection moved, so the
+   * two paths cannot disagree about what "selected" looks like. Everything it
+   * touches is an attribute or a value -- never a node -- so a press costs the
+   * DOM nothing and the field, the answer and the animations all survive.
+   *
+   * It reads M rather than closing over anything: a handler bound at build
+   * time outlives the render that made it, and a closure over the old
+   * selection is what makes the second press undo the first (v3.113.0).
+   */
+  function applyState() {
+    if (!root) return;
+    var i, nodes;
+    nodes = root.querySelectorAll('[data-mode]');
+    for (i = 0; i < nodes.length; i++) {
+      nodes[i].setAttribute('aria-pressed', nodes[i].getAttribute('data-mode') === M.mode ? 'true' : 'false');
+    }
+    nodes = root.querySelectorAll('[data-convo]');
+    for (i = 0; i < nodes.length; i++) {
+      nodes[i].setAttribute('aria-pressed', nodes[i].getAttribute('data-convo') === M.conversationId ? 'true' : 'false');
+    }
+    var field = root.querySelector('[data-ask]');
+    // The placeholder follows the mode; the VALUE does not, because the person
+    // may be part way through typing and the field is the authority on that.
+    if (field && field.placeholder !== placeholderFor(M.mode)) field.placeholder = placeholderFor(M.mode);
+    if (field) field.disabled = M.streaming;
+    var attach = root.querySelector('[data-attach]');
+    if (attach && attach.value !== M.clipId) attach.value = M.clipId;
+    // The streaming answer, written into the bubble that is already on screen.
+    var body = root.querySelector('[data-answer]');
+    if (body) {
+      renderAnswer(body, M.answer);
+      if (M.streaming) body.appendChild(el('span', 'dcai-caret'));
+    }
+    // The orb quickens while it is working. A CLASS, applied in place -- the
+    // console must not be rebuilt to change state, which is the whole of the
+    // fix above, and rebuilding it would restart the rotation from zero.
+    var console_ = root.querySelector('.is-console');
+    if (console_) console_.classList.toggle('is-thinking', Boolean(M.streaming));
   }
 
   /*

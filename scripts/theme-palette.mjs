@@ -50,6 +50,21 @@ export const NAMED = new Map(Object.entries({
   // same reason (--dcm-ok #2E7955, --dcm-bad #A64738).
   '#7fd1a6': '#2D7854', '#5bbd8a': '#26654699'.slice(0, 7), '#ff5566': '#A64738',
   '#ff0033': '#A11226', '#e5484d': '#A64738',
+  // The SALMON red, and it was missing from this list rather than wrong in the
+  // algorithm: `daylight()` deliberately leaves a saturated colour alone (red
+  // still means failed), so an unnamed one is simply not remapped -- and this
+  // is the app's ordinary "something failed" ink, on the export's own failure
+  // rows (.sa3, .sh7) and on seven inline styles. Measured on paper: 2.26:1
+  // against the page and 2.67 on a card, the worst text on any screen that
+  // carries it. It is #A64738 like its two siblings rather than a third red:
+  // 4.97 on the page, 5.87 on a card. Only ever used as `color:` -- checked
+  // across every sheet before darkening it, because darkening a BACKGROUND
+  // that carries dark ink would break it the other way.
+  '#e08770': '#A64738',
+  // Gold used as a small-caps LABEL. It fell through to the algorithm and
+  // landed on #8B6530 -- 4.45:1 against the page, a hair under AA -- while the
+  // brand gold beside it has a named answer that clears it. One gold as ink.
+  '#c9a87a': '#8A6425',
 }));
 
 const expand = (hex) => {

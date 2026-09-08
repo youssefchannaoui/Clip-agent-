@@ -2053,7 +2053,7 @@
     posted: { word: 'posted', colour: 'var(--dc-n-7fd1a6, #7FD1A6)' },
     publishing: { word: 'posting now', colour: 'var(--dc-n-e4c489, #E4C489)' },
     retrying: { word: 'retrying', colour: 'var(--dc-n-e6b770, #E6B770)' },
-    failed: { word: 'failed', colour: '#E08770' },
+    failed: { word: 'failed', colour: 'var(--dc-n-e08770, #E08770)' },
     scheduled: { word: 'waiting', colour: 'var(--dc-ink-dim, #8B8B93)' },
     cancelled: { word: 'cancelled', colour: 'var(--dc-ink-faint, #6E6E76)' },
   };
@@ -2514,7 +2514,7 @@
     var colours = {
       good: 'rgba(127,209,166,.34);background:rgba(127,209,166,.12);color:var(--dc-n-7fd1a6, #7FD1A6);',
       warn: 'rgba(230,183,112,.4);background:rgba(230,183,112,.12);color:var(--dc-n-e6b770, #E6B770);',
-      bad: 'rgba(224,135,112,.4);background:rgba(224,135,112,.12);color:#E08770;',
+      bad: 'rgba(224,135,112,.4);background:rgba(224,135,112,.12);color:var(--dc-n-e08770, #E08770);',
       gold: 'rgba(217,180,120,.42);background:rgba(217,180,120,.12);color:var(--dc-gold-lit, #F0D6A6);',
     };
     return 'display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:600;border:1px solid ' +
@@ -2523,7 +2523,7 @@
 
   /** A KPI tile: value colour carries the judgement, note carries the caveat. */
   function owTile(label, value, note, tone) {
-    var colour = tone === 'pos' ? 'var(--dc-n-7fd1a6, #7FD1A6)' : tone === 'neg' ? '#E08770' : tone === 'unknown' ? 'var(--dc-n-e6b770, #E6B770)' : tone === 'live' ? 'var(--dc-n-7fd1a6, #7FD1A6)' : 'var(--dc-ink, #F2F2F4)';
+    var colour = tone === 'pos' ? 'var(--dc-n-7fd1a6, #7FD1A6)' : tone === 'neg' ? 'var(--dc-n-e08770, #E08770)' : tone === 'unknown' ? 'var(--dc-n-e6b770, #E6B770)' : tone === 'live' ? 'var(--dc-n-7fd1a6, #7FD1A6)' : 'var(--dc-ink, #F2F2F4)';
     return {
       label: label, value: value, note: note || '', tone: tone || '',
       // Tabular figures, or a row of tiles jitters as the numbers refresh.
@@ -4008,7 +4008,12 @@
     }
     function tplColour(field, label, note) {
       var raw = String(tpl[field] || '');
-      var hex = (/#[0-9a-fA-F]{6}/.exec(raw) || ['#FFFFFF'])[0].toUpperCase();
+      // Not a style value: it is the fallback for an <input type="color">'s
+      // `value` and for the readout printed beside it, so a var() there is
+      // invalid -- the input falls back to black and the readout prints the
+      // var() text. The marker has to sit on the SAME LINE as the hex; the
+      // generator matches it per line, so a note above it does nothing.
+      var hex = (/#[0-9a-fA-F]{6}/.exec(raw) || ['#FFFFFF'])[0].toUpperCase(); // theme-literal
       return {
         kind: 'color', isColor: true, field: field, label: label, note: note || '',
         value: hex, readout: hex,
@@ -5539,7 +5544,7 @@
     var AI_TONES = {
       gold: { border: 'rgba(217,180,120,.4)', icon: 'var(--dc-gold-lit, #F0D6A6)', value: 'var(--dc-gold-lit, #F0D6A6)' },
       good: { border: 'rgba(127,209,166,.3)', icon: 'var(--dc-n-7fd1a6, #7FD1A6)', value: 'var(--dc-n-7fd1a6, #7FD1A6)' },
-      warn: { border: 'rgba(224,135,112,.35)', icon: '#E08770', value: 'var(--dc-n-e6b770, #E6B770)' },
+      warn: { border: 'rgba(224,135,112,.35)', icon: 'var(--dc-n-e08770, #E08770)', value: 'var(--dc-n-e6b770, #E6B770)' },
       '': { border: 'var(--dc-line, #26262A)', icon: 'var(--dc-ink-body, #BCBCC3)', value: 'var(--dc-ink, #F2F2F4)' },
     };
     var aiTone = function (tone) { return AI_TONES[tone] || AI_TONES['']; };
@@ -9743,7 +9748,7 @@
       })(),
       planState: planStateWord,
       planStateStyle: 'padding: 2px 9px; border-radius: 20px; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; border: 1px solid ' +
-        (planStateTone === 'bad' ? 'rgba(224,135,112,.4); background: rgba(224,135,112,.12); color: #E08770;'
+        (planStateTone === 'bad' ? 'rgba(224,135,112,.4); background: rgba(224,135,112,.12); color: var(--dc-n-e08770, #E08770);'
           : planStateTone === 'warn' ? 'rgba(230,183,112,.4); background: rgba(230,183,112,.12); color: var(--dc-n-e6b770, #E6B770);'
             : 'rgba(127,209,166,.34); background: rgba(127,209,166,.12); color: var(--dc-n-7fd1a6, #7FD1A6);'),
       // A real fraction. The design shipped this bar as a hoisted class with a

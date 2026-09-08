@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1829 JS + 801 Python**
+- `npm test` and `npm run check` must pass. Currently **1835 JS + 801 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -7901,6 +7901,137 @@ anything large, not after building it. Sixty seconds against half a session.
 And when two sessions are working the same afternoon, expect the version
 collision too -- this shipped as 3.153.0 against their 3.152.0, checked at
 merge time.
+
+
+## The DeenAI screen stopped refreshing, and grew a globe (v3.156.0, 8 Sept 2026)
+
+Youssef: "Every button that I click refreshes the screen, which is horrible" —
+then "make it look a lot more futuristic, cool ... it looks so basic AI looking
+with boxes ... I need something like maybe with, like, a globe or something
+like that literally can deal with everything that they would like to ask."
+
+### He was right, and it was EVERY button
+
+`repaint()` rebuilds the screen from scratch whenever its signature changes,
+and the signature carried what a person had merely SELECTED — the mode, the
+attached clip, the open conversation — **and the ANSWER TEXT**, which is
+appended to on every stream delta.
+
+**Measured before: one press of a mode chip and `.dcai-field` came back a
+DIFFERENT NODE.** So the textarea somebody was typing into was destroyed and
+remade, along with the answer they were reading and every running animation —
+seven mode chips, six goals and every conversation button alike. And an
+arriving answer rebuilt the whole screen dozens of times a second.
+
+**Selection is not structure.** What stays in the signature is what changes the
+SHAPE — whether the reply card exists, whether the history block is open —
+written as `Boolean(M.answer || M.streaming)`, which is `answerCard`'s own
+first line rather than a second rule that could drift from it. Everything else
+is written onto the screen that is already there by `applyState()`:
+`aria-pressed`, the placeholder, the select's value, the answer text.
+
+- **It runs on BOTH paths.** After a rebuild, and on the unchanged path — a
+  mode press moves nothing structural, so without the second call the button
+  would do nothing at all: the rebuild traded for a dead control (invariant 9).
+- **It may only touch attributes and values, never a node**, or it is the
+  rebuild it replaced. A test asserts that.
+- **`renderAnswer` had to start clearing its box.** It is called per delta now
+  rather than once per rebuild, and appending to a box it did not empty prints
+  the answer once per delta, each copy longer than the last.
+
+Measured after: **0 DOM operations per press**, the field the same node with
+its text, caret and focus intact, three idle repaints touching nothing, and the
+orb's rotation still running with the same node identity. This is v3.113.0's
+clip-length chips again, in a new place, with the same fix.
+
+### The globe
+
+`orb()` in studio-deenai.js. **DRAWN, NEVER LOADED** — inline SVG plus CSS: no
+canvas, no image, no icon font. The Phosphor CDN is a third party and a missing
+glyph is an empty ring (the `ph-seedling` rule); an asset is a file that can
+404 on a box that has not pulled it (the promo bar). This cannot fail to
+arrive, and a test forbids it reaching for any of them — a `url()` is allowed
+only as a same-document fragment (`url(#dcaiOrbCore)` is the gradient two lines
+above it).
+
+**How it turns, for almost nothing.** A sphere's longitude rings are circles
+seen edge-on at varying angles, so animating each ellipse's `rx` from full to
+zero and back — three of them, out of phase — reads as one globe rotating at
+the cost of three interpolated numbers and no per-frame work of ours. Two
+static latitudes and the outline keep it an OBJECT: a globe whose every line
+moves reads as noise. A dashed ellipse orbits outside the sphere, which is what
+stops it reading as a ball. A horizon travels down it, which is what makes it
+read as SCANNING rather than as spinning.
+
+**It quickens while a model is running** — rings, scan, halo and aurora all
+speed up and warm. Applied as a CLASS by `applyState`, never by a rebuild:
+rebuilding the console to change state is the fault above, and it would restart
+the rotation from zero.
+
+**It is the only thing on the screen that looks like this.** A screen where
+everything glows has no subject.
+
+### The console is TWO FLEX ITEMS, and a grid could not do it
+
+The first cut made the console a two-column grid with the orb at
+`grid-row: 1 / -1`. **On an implicit grid `-1` resolves to a single row**, so
+the orb auto-placed into row one and forced it to its own 150px — the "ASK
+DEENAI" line floated in the middle of it and the console measured **403px tall
+against a content height of 236**. A wrapper (`.dcai-cwrap`) makes it exactly
+two flex items and the question does not arise.
+
+### The failure red, and the fault that was a MISSING TABLE ENTRY
+
+`#E08770` is the app's "something failed" ink and measured **2.26:1 against the
+paper page, 2.67 on a card** — the worst text on any screen carrying it. The
+diagnosis matters: `daylight()` deliberately leaves a saturated colour alone
+(red still means failed), so an UNNAMED one is simply not remapped. Its two
+siblings `#ff5566` and `#e5484d` are both named `#A64738`. **It was a gap in
+the list, not a flaw in the algorithm.**
+
+It is `#A64738` now — the same red, not a third one — and `#c9a87a` (gold used
+as a small-caps label, 4.45:1, a hair under) takes the brand gold's own named
+answer. **Checked across every sheet before darkening either: both are only
+ever used as `color:`**, never as a background or border, where darkening would
+have broken them the other way. The generated export's own failure rows
+(`.sa3`, `.sh7`) move with them; the diff is exactly eight rules and nothing
+else.
+
+**`build-theme-tokens.mjs` then broke a line, and the opt-out already existed.**
+Re-run so the seven inline `#E08770` styles could flip, it also rewrote
+`(/#[0-9a-f]{6}/.exec(raw) || ['#FFFFFF'])[0]` — the fallback for an
+`<input type="color">`'s value and the readout printed beside it, which is
+program logic, not a style. A `var()` there is invalid: the input falls back to
+black and the readout prints the var() text. The sheet's `theme-literal` marker
+is the sanctioned answer, and **it is matched PER LINE** — a note on the line
+above does nothing, which cost one run to find.
+
+### Probe lessons, and every one is a boundary that is not a boundary
+
+- **A byte offset is not a boundary**, twice in one file. The reduced-motion
+  test first sliced from `lastIndexOf` (finding only the last of two blocks and
+  reporting the aurora unguarded), then split on the marker and joined the
+  tails — which sweeps in every ordinary rule BETWEEN the blocks, so
+  `dcai-orb-lon` matched its own animation declaration rather than its kill.
+  **It passed a probe that had genuinely broken the sheet.** It brace-matches
+  now.
+- **The harness strips `//` comments with a naive regex, and that eats the rest
+  of any line holding `//` inside a STRING** — so the SVG namespace came back
+  as `createElementNS('http:` and an assertion failed against correct code.
+  Read the raw source and strip block comments for anything containing a URL.
+- **`\(([^)]*)\)` stops at the first `)`**, so `orb()` matched as `orb(`.
+- **A blanket ban is not a rule.** "The orb must not contain `url(`" failed on
+  its own same-document gradient reference. Ban the network, not the syntax.
+- **One of my assertions contradicted a decision the sheet's author had already
+  made**: the streaming caret IS frozen under reduced motion, deliberately —
+  unlike a spinner, the answer text is visibly growing beside it, so a still
+  caret still marks the position. Mine was an opinion imposed on somebody
+  else's reasoned call, and it was dropped rather than argued.
+
+Eleven red probes proven; the one that came back green had genuinely broken the
+sheet and found the test defect above. 1835 JS + 801 Python green. Third
+version collision with the other session in one day — this took 3.156.0 against
+their 3.155.0, checked at merge time.
 
 
 ## Open items

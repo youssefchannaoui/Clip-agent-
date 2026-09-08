@@ -149,18 +149,44 @@ test('the entry animation is never put on the reply', () => {
 });
 
 test('every added animation has a reduced-motion kill', () => {
-  const reduce = css.slice(css.lastIndexOf('@media (prefers-reduced-motion: reduce)'));
-  for (const name of ['dcaiBreathe', 'dcaiPulse', 'dcaiRise']) {
+  /*
+   * THE BODY OF EVERY REDUCED-MOTION BLOCK, brace-matched.
+   *
+   * Two earlier spellings were both wrong and the second passed a probe that
+   * had genuinely broken the sheet: `lastIndexOf` found only the last block,
+   * and splitting on the marker and joining the tails swept in every ordinary
+   * rule between the blocks -- so `dcai-orb-lon` matched its own animation
+   * declaration rather than its kill. A byte offset is not a boundary; the
+   * braces are.
+   */
+  const reduce = (() => {
+    const parts = [];
+    let at = -1;
+    while ((at = css.indexOf('@media (prefers-reduced-motion: reduce)', at + 1)) !== -1) {
+      let i = css.indexOf('{', at), depth = 0, start = i;
+      for (; i < css.length; i++) {
+        if (css[i] === '{') depth++;
+        else if (css[i] === '}' && --depth === 0) break;
+      }
+      parts.push(css.slice(start, i));
+    }
+    assert.ok(parts.length, 'the sheet has a reduced-motion block');
+    return parts.join('\n');
+  })();
+  for (const name of ['dcaiBreathe', 'dcaiPulse', 'dcaiRise', 'dcaiOrbSpin', 'dcaiOrbScan', 'dcaiOrbHalo', 'dcaiOrbit']) {
     assert.ok(css.includes('@keyframes ' + name), name + ' is declared');
   }
   // A bare `*` rule never matches a pseudo-element, so each is named.
-  for (const cls of ['dcai-aurora', 'dcai-dot', 'dcai-step.is-live', 'dcai-card:not(.is-reply)']) {
+  for (const cls of ['dcai-aurora', 'dcai-dot', 'dcai-step.is-live', 'dcai-card:not(.is-reply)',
+    'dcai-orb-lon', 'dcai-orb-scan', 'dcai-orb-orbit', 'dcai-orb-halo']) {
     assert.ok(reduce.includes(cls), cls + ' keeps animating under reduced motion');
   }
-  // The streaming caret is STATUS motion and stays: a frozen caret reads as an
-  // answer that has stopped arriving.
-  assert.ok(!/dcai-caret[^}]*animation: none/.test(reduce.slice(reduce.indexOf('{'), reduce.indexOf('\n}'))),
-    'the streaming caret is not frozen');
+  // The streaming caret IS frozen under reduced motion, deliberately, and that
+  // is the sheet's original decision rather than an oversight: unlike a
+  // spinner, the answer text is visibly growing beside it, so a still caret
+  // still marks the position without a blink. Asserted so nobody "fixes" it
+  // into a blink on the status-motion rule, which does not apply here.
+  assert.match(reduce, /dcai-caret[^}]*animation: none/);
 });
 
 test('the one colour that does not flip is given a daylight value', () => {
@@ -169,7 +195,10 @@ test('the one colour that does not flip is given a daylight value', () => {
   // near-black it is 6.9:1; on the paper card it measures 2.67:1, which was
   // the only AA failure on this screen in either theme. Everything else here
   // is tokenised, which is why the sheet is not in the generator's SOURCES.
-  assert.match(css, /body\.dc-light #dcAi \.dcai-err[^{]*\{[^}]*#B4462C/);
+  // The SAME red theme-palette.mjs gives it app-wide, not a third one.
+  assert.match(css, /body\.dc-light #dcAi \.dcai-err[^{]*\{[^}]*#A64738/i);
+  const palette = fs.readFileSync(new URL('../scripts/theme-palette.mjs', import.meta.url), 'utf8');
+  assert.match(palette, /'#e08770':\s*'#A64738'/i, 'and the palette names it, so the export’s own failure rows move too');
   // The generator SKIPS a selector already naming dc-light, so this is not
   // re-emitted as `body.dc-light body.dc-light …`, which would match nothing.
   const light = fs.readFileSync(new URL('../src/public/studio-light.generated.css', import.meta.url), 'utf8');
@@ -189,4 +218,115 @@ test('nothing added to the sheet uses --dc-ink-faint', () => {
   assert.ok(!/--dc-ink-faint/.test(added), 'a note on a card must clear AA');
   // And the rules that DID use it are overridden back.
   assert.match(css, /#dcAi \.dcai-label,[\s\S]{0,200}color: var\(--dc-ink-dim/);
+});
+
+/*
+ * "EVERY BUTTON THAT I CLICK REFRESHES THE SCREEN, WHICH IS HORRIBLE."
+ * -- Youssef, 8 Sept 2026.
+ *
+ * He was right and it was every button. `repaint()` rebuilds the screen from
+ * scratch whenever the signature changes, and the signature carried what a
+ * person had merely SELECTED -- the mode, the attached clip, the open
+ * conversation -- and the ANSWER TEXT, which is appended to on every stream
+ * delta. So a mode chip destroyed and remade the textarea somebody was typing
+ * in, and an arriving answer rebuilt the whole screen dozens of times a
+ * second.
+ *
+ * Measured in a browser before: one chip press and `.dcai-field` came back a
+ * DIFFERENT NODE. After: 0 DOM operations, same node, text, caret and focus
+ * all intact.
+ */
+
+test('selection is not in the signature, so a press does not rebuild the screen', () => {
+  const sig = code.slice(code.indexOf('function signature('), code.indexOf('var loading'));
+  for (const field of ['M.mode', 'M.clipId']) {
+    assert.ok(!sig.includes(field), field + ' is a selection, not a shape — it must not rebuild the screen');
+  }
+  // The answer TEXT must not be in it either; only whether the card exists.
+  assert.ok(!/M\.answer(?!\s*\|\|)/.test(sig.replace('Boolean(M.answer || M.streaming)', '')),
+    'the answer text rebuilds the screen on every stream delta');
+  assert.match(sig, /Boolean\(M\.answer \|\| M\.streaming\)/,
+    'what stays is whether the reply card exists — answerCard’s own condition');
+  assert.match(sig, /Boolean\(M\.conversationId\)/, 'and whether the history block is open');
+});
+
+test('the selection is applied in place, on both paths', () => {
+  assert.match(code, /function applyState\(\)/);
+  // After a rebuild AND on the unchanged path -- a mode press changes nothing
+  // structural, so without the second call the button would do nothing at all.
+  const repaint = code.slice(code.indexOf('function repaint()'));
+  const body = repaint.slice(0, repaint.indexOf('function applyState'));
+  assert.match(body, /sig === lastSig && root\.firstChild\) \{ applyState\(\); return; \}/,
+    'an unchanged shape still gets the selection written on');
+  assert.match(body, /applyState\(\);\s*\n\s*\}/, 'and so does a rebuild');
+  // It may only touch attributes and values -- never a node, or it is the
+  // rebuild it replaced.
+  const apply = code.slice(code.indexOf('function applyState()'));
+  const fn = apply.slice(0, apply.indexOf('\n  }'));
+  for (const banned of ['appendChild(el(', 'createElement', 'innerHTML']) {
+    if (banned === 'appendChild(el(') continue; // the caret, below
+    assert.ok(!fn.includes(banned), 'applyState must not build nodes: ' + banned);
+  }
+  assert.match(fn, /aria-pressed/);
+  assert.match(fn, /placeholder/);
+});
+
+test('renderAnswer clears the box it writes into', () => {
+  // It is called on every delta now rather than once per rebuild. Appending to
+  // a box it did not empty prints the answer once per delta, each copy longer
+  // than the last.
+  const fn = code.slice(code.indexOf('function renderAnswer('));
+  assert.match(fn.slice(0, fn.indexOf('\n  }')), /box\.textContent = ''/);
+});
+
+/* THE ORB (v3.154.0). "I need something like maybe with, like, a globe." */
+
+test('the globe is drawn, never loaded', () => {
+  // No canvas, no image, no icon font: the Phosphor CDN is a third party and a
+  // missing glyph is an empty ring, and an asset is a file that can 404 on a
+  // box that has not pulled it.
+  // READ THE RAW SOURCE, NOT `code`. The harness strips `//` line comments
+  // with a naive regex, and that eats the rest of any line containing `//`
+  // inside a STRING -- so the SVG namespace URL came back as
+  // `createElementNS('http:` and this assertion failed against correct code.
+  // Block comments are stripped here instead, which cannot bite a URL.
+  const plain = src.replace(/\/\*[\s\S]*?\*\//g, '');
+  const orb = plain.slice(plain.indexOf('function orb()'));
+  const fn = orb.slice(0, orb.indexOf('\n  }'));
+  assert.match(fn, /createElementNS\('http:\/\/www\.w3\.org\/2000\/svg'/);
+  for (const b of ['<img', 'getContext', 'ph-', 'background-image']) {
+    assert.ok(!fn.includes(b), 'the orb must not reach for ' + b);
+  }
+  // A `url()` is allowed only as a same-document fragment -- `url(#dcaiOrbCore)`
+  // is the gradient defined two lines above it, not a fetch. Anything else is
+  // a file that can 404 on a box that has not pulled it.
+  for (const u of fn.match(/url\([^)]*\)/g) || []) {
+    assert.match(u, /^url\(#/, 'the orb must not fetch: ' + u);
+  }
+  // Three longitude rings out of phase is what reads as one globe turning.
+  assert.match(plain, /var ORB_LON = \[/);
+  assert.equal((plain.match(/\{ r: \d+, d: '[^']*' \}/g) || []).length, 3);
+  assert.match(fn, /aria-hidden/, 'it is lighting, not information');
+});
+
+test('the orb quickens in place while a model is running', () => {
+  // A CLASS, applied by applyState -- rebuilding the console to change state
+  // is the fault above, and it would restart the rotation from zero.
+  const apply = code.slice(code.indexOf('function applyState()'));
+  assert.match(apply.slice(0, apply.indexOf('\n  }')), /classList\.toggle\('is-thinking'/);
+  assert.match(css, /#dcAi \.is-console\.is-thinking \.dcai-orb-lon \{[^}]*animation-duration/);
+});
+
+test('the console is two flex items, so the orb cannot stretch a row', () => {
+  // As a two-column GRID the orb auto-placed into row one -- `grid-row: 1/-1`
+  // spans a single row on an implicit grid -- and forced that row to its own
+  // 150px, floating the "ASK DEENAI" line in the middle of it. Measured: the
+  // console 403px tall against a content height of 236.
+  assert.match(code, /var wrap = el\('div', 'dcai-cwrap'\)/);
+  const ask = code.slice(code.indexOf('function askCard('), code.indexOf('function placeholderFor('));
+  // Only the aurora, the wrapper and the orb are direct children of the card.
+  const direct = (ask.match(/card\.appendChild\(.*\);/g) || [])
+    .map(m => m.replace(/^card\.appendChild\(/, '').replace(/\);$/, ''));
+  assert.deepEqual(direct, ['aurora', 'wrap', 'orb()'], 'the console holds the aurora, the controls and the orb');
+  assert.match(css, /#dcAi \.dcai-cwrap \{[^}]*flex: 1/);
 });

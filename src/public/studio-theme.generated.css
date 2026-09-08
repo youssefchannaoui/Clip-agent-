@@ -43,7 +43,6 @@
   --dc-n-26262c: #26262C;
   --dc-n-26262e: #26262E;
   --dc-n-2a2024: #2A2024;
-  --dc-n-2a2a2e: #2A2A2E;
   --dc-n-2a2a2f: #2A2A2F;
   --dc-n-2a2a30: #2A2A30;
   --dc-n-2a2a32: #2A2A32;
@@ -92,6 +91,7 @@
   --dc-n-d8ccb4: #D8CCB4;
   --dc-n-d8f8df: #D8F8DF;
   --dc-n-d9b478: #D9B478;
+  --dc-n-e08770: #E08770;
   --dc-n-e0a188: #E0A188;
   --dc-n-e27a7a: #E27A7A;
   --dc-n-e27c7c: #E27C7C;
@@ -168,7 +168,6 @@ body.dc-light{
   --dc-n-26262c: #BEBDBA;
   --dc-n-26262e: #BEBCB9;
   --dc-n-2a2024: #C2C0BE;
-  --dc-n-2a2a2e: #BCBAB7;
   --dc-n-2a2a2f: #BBBAB7;
   --dc-n-2a2a30: #BBB9B7;
   --dc-n-2a2a32: #BAB9B6;
@@ -217,6 +216,7 @@ body.dc-light{
   --dc-n-d8ccb4: #4E4024;
   --dc-n-d8f8df: #0A4718;
   --dc-n-d9b478: #8A6425;
+  --dc-n-e08770: #A64738;
   --dc-n-e0a188: #7E3518;
   --dc-n-e27a7a: #8D1515;
   --dc-n-e27c7c: #8B1515;

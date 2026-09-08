@@ -4294,7 +4294,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           +'font:700 8.5px Outfit,Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis';
         frame.appendChild(edLiveChipEl);
       }
-      const dot=vals.edLive?'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#E08770;margin-right:6px;vertical-align:middle;animation:dcLivePulse 1.4s ease-in-out infinite"></span>':'';
+      const dot=vals.edLive?'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--dc-n-e08770, #E08770);margin-right:6px;vertical-align:middle;animation:dcLivePulse 1.4s ease-in-out infinite"></span>':'';
       if(!document.getElementById('dcLivePulseKf')){const st=document.createElement('style');st.id='dcLivePulseKf';st.textContent='@keyframes dcLivePulse{50%{opacity:.35}}@media (prefers-reduced-motion:reduce){@keyframes dcLivePulse{50%{opacity:1}}}';document.head.appendChild(st)}
       const html=dot+obEsc(text);
       if(edLiveChipEl.dataset.html!==html){edLiveChipEl.dataset.html=html;edLiveChipEl.innerHTML=html}
@@ -8856,7 +8856,7 @@ StudioAdapter.onProbeSource=async url=>{try{
               +'style="width:100%;height:34px;padding:0 10px;border-radius:8px;border:1px solid var(--dc-line, #26262A);'
               +'background:var(--dc-bg, #0E0E11);color:var(--dc-ink, #F2F2F4);font:400 13px/1 inherit"></label>'
             +'<button id="dcowCodeNew" type="button" style="height:34px;padding:0 15px;border:0;border-radius:8px;cursor:pointer;'
-              +'background:#D9B478;color:#171109;font:700 12.5px/1 inherit">New code</button>'
+              +'background:var(--dc-n-d9b478, #D9B478);color:#171109;font:700 12.5px/1 inherit">New code</button>'
             +'</div>'
             +(rows.length
               ? '<div class="sdk"><table class="sh1">'
@@ -9126,7 +9126,7 @@ StudioAdapter.onProbeSource=async url=>{try{
              renders the same strings into its own card, and two copies of this
              copy would eventually tell one tester two different things about
              the same fortnight. What this function owns is the layout. */
-          const on=Boolean(vals.redeemOn), gold='#D9B478';
+          const on=Boolean(vals.redeemOn), gold='var(--dc-n-d9b478, #D9B478)';
           const said=vals.redeemSaid
             ? '<p style="margin:10px 0 0;font-size:12px;line-height:1.5;color:'
               +(vals.redeemSaidBad?'#EF6B7A':'#6FCE9E')+'">'+esc(vals.redeemSaid)+'</p>'
@@ -10602,7 +10602,7 @@ function paintTrimTools(vals){
   const sections=Array.isArray(vals.edCutSections)?vals.edCutSections:[];
   let html=sections.map(c=>`<span title="Removed ${esc(c.label)}" style="position:absolute;top:0;bottom:0;left:${esc(c.leftPct)}%;width:${esc(c.widthPct)}%;background:repeating-linear-gradient(135deg,rgba(224,135,112,.32) 0 5px,rgba(224,135,112,.10) 5px 10px);border-left:1px solid rgba(224,135,112,.8);border-right:1px solid rgba(224,135,112,.8);border-radius:4px"></span>`).join('');
   if(vals.edCutMarkPct!==null&&vals.edCutMarkPct!==undefined){
-    html+=`<span style="position:absolute;top:-4px;bottom:-4px;left:${esc(vals.edCutMarkPct)}%;width:2px;margin-left:-1px;background:#E08770;box-shadow:0 0 0 1px rgba(8,8,10,.6)"></span>`;
+    html+=`<span style="position:absolute;top:-4px;bottom:-4px;left:${esc(vals.edCutMarkPct)}%;width:2px;margin-left:-1px;background:var(--dc-n-e08770, #E08770);box-shadow:0 0 0 1px rgba(8,8,10,.6)"></span>`;
   }
   if(layer.innerHTML!==html) layer.innerHTML=html;
   const editor=lane.closest('[data-dc-editor]');

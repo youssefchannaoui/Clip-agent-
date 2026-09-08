@@ -468,7 +468,175 @@
  * Overridden HERE rather than in the palette, because the palette's rule is
  * app-wide and the same red sits on the generated export's own failure rows
  * (.sa3, .sh7) -- moving it is a decision about every screen, not this one.
- * #B4462C is the same hue at 5.45:1 on the card and 4.62 on the page. */
+ * #A64738 is the value theme-palette.mjs now gives it app-wide (4.97:1 on the
+ * page, 5.87 on a card) -- the SAME red as its two siblings there rather than
+ * a third one, so the failure colour reads as one colour across the product.
+ * This sheet has to say it itself only because it is not in the generator's
+ * SOURCES. */
 body.dc-light #dcAi .dcai-err,
-body.dc-light #dcAi .dcai-pill.is-warn { color: #B4462C; }
-body.dc-light #dcAi .dcai-pill.is-warn { border-color: rgba(180, 70, 44, .45); }
+body.dc-light #dcAi .dcai-pill.is-warn { color: #A64738; }
+body.dc-light #dcAi .dcai-pill.is-warn { border-color: rgba(166, 71, 56, .45); }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * THE ORB, AND THE CONSOLE AS A STAGE (v3.154.0)
+ *
+ * Youssef, 8 Sept 2026: "make it look a lot more futuristic, cool ... it looks
+ * so basic AI looking with boxes ... I need something like maybe with, like, a
+ * globe or something like that literally can deal with everything that they
+ * would like to ask."
+ *
+ * The globe is DRAWN (inline SVG in studio-deenai.js), never loaded: no
+ * canvas, no image, no icon font, nothing that can 404 on a box that has not
+ * pulled it. Its longitude rings animate `rx` from full to zero and back, out
+ * of phase, which is a sphere rotating for the cost of three animated
+ * attributes and no per-frame work of ours.
+ *
+ * IT IS THE ONLY THING ON THE SCREEN THAT LOOKS LIKE THIS. A screen where
+ * everything glows has no subject; the orb is the subject and the rest stays
+ * the dashboard's own quiet near-black and gold.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+/* THE ORB GETS ITS OWN COLUMN, rather than a padding gutter it floats in.
+   Absolutely positioned first, it left the mode chips wrapping around a hole
+   in the middle of the console -- the row broke at seven chips instead of
+   five and the field sat under a ragged edge. As a grid track the controls
+   have a clean rectangle and the orb has its own room, and neither can push
+   the other about as it breathes. */
+#dcAi .dcai-card.is-console {
+  --dcai-orb: 150px;
+  --dcai-orb-hot: rgba(255, 240, 214, .38);
+  --dcai-orb-mid: rgba(217, 180, 120, .13);
+  --dcai-orb-out: rgba(217, 180, 120, 0);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 26px;
+}
+#dcAi .dcai-cwrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  position: relative;
+  z-index: 1;
+}
+#dcAi .dcai-orb {
+  flex: none;
+  align-self: center;
+  width: var(--dcai-orb);
+  height: var(--dcai-orb);
+  overflow: visible;
+  pointer-events: none;
+}
+/* Below this the console is barely wider than the orb, so it stands down and
+   the screen is exactly what it was without it. */
+@media (max-width: 900px) {
+  #dcAi .dcai-orb { display: none; }
+}
+
+#dcAi .dcai-orb-halo {
+  fill: none;
+  stroke: rgba(217, 180, 120, .1);
+  stroke-width: 10;
+  animation: dcaiOrbHalo 6s ease-in-out infinite;
+}
+@keyframes dcaiOrbHalo {
+  0%, 100% { opacity: .5; r: 58; }
+  50% { opacity: 1; r: 62; }
+}
+#dcAi .dcai-orb-core { animation: dcaiOrbHalo 6s ease-in-out infinite; }
+#dcAi .dcai-orb-edge {
+  fill: none;
+  stroke: rgba(217, 180, 120, .5);
+  stroke-width: 1;
+}
+#dcAi .dcai-orb-lat {
+  fill: none;
+  stroke: rgba(217, 180, 120, .2);
+  stroke-width: 1;
+}
+/* The rotation. `rx` is an animatable presentation attribute, so the sweep
+   costs one interpolated number per ring rather than a transform and a
+   repaint of the whole group. */
+#dcAi .dcai-orb-lon {
+  fill: none;
+  stroke: rgba(217, 180, 120, .34);
+  stroke-width: 1;
+  animation: dcaiOrbSpin 7.8s linear infinite;
+}
+@keyframes dcaiOrbSpin {
+  0% { rx: 54; }
+  25% { rx: 6; stroke: rgba(240, 214, 166, .6); }
+  50% { rx: 54; }
+  75% { rx: 6; stroke: rgba(240, 214, 166, .6); }
+  100% { rx: 54; }
+}
+/* A horizon that travels down the globe: it reads as SCANNING rather than as
+   spinning, which is the difference between an ornament and something that is
+   paying attention. */
+#dcAi .dcai-orb-scan {
+  fill: none;
+  stroke: rgba(240, 214, 166, .5);
+  stroke-width: 1;
+  animation: dcaiOrbScan 4.4s ease-in-out infinite;
+}
+@keyframes dcaiOrbScan {
+  0%, 100% { cy: 18; ry: 4; opacity: 0; }
+  20% { opacity: .85; }
+  50% { cy: 64; ry: 54; opacity: .5; }
+  80% { opacity: .85; }
+  99% { cy: 110; ry: 4; opacity: 0; }
+}
+
+/* AN ORBIT. One tilted ellipse travelling round the globe -- the line that
+   makes it read as a core rather than as a ball, and the cheapest possible
+   version of it: a rotate on one element. */
+#dcAi .dcai-orb-orbit {
+  fill: none;
+  stroke: rgba(240, 214, 166, .34);
+  stroke-width: 1;
+  stroke-dasharray: 3 7;
+  transform-origin: 64px 64px;
+  animation: dcaiOrbit 14s linear infinite;
+}
+@keyframes dcaiOrbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* WORKING. Everything quickens and warms -- the orb is the one place on the
+   screen that says a model is running, and it says it before any text does. */
+#dcAi .is-console.is-thinking { --dcai-orb-hot: rgba(255, 240, 214, .6); --dcai-orb-mid: rgba(217, 180, 120, .22); }
+#dcAi .is-console.is-thinking .dcai-orb-lon { animation-duration: 2.4s; }
+#dcAi .is-console.is-thinking .dcai-orb-scan { animation-duration: 1.5s; }
+#dcAi .is-console.is-thinking .dcai-orb-halo { animation-duration: 2s; }
+#dcAi .is-console.is-thinking .dcai-aurora { animation-duration: 3.4s; }
+#dcAi .is-console.is-thinking .dcai-orb-orbit { animation-duration: 4.5s; stroke: rgba(240, 214, 166, .6); }
+
+/* The stage the orb stands on: one hairline of light along the console's top
+   edge, so the card reads as lit from above rather than as a box with a
+   border. */
+#dcAi .dcai-card.is-console::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg,
+    rgba(217, 180, 120, 0),
+    rgba(240, 214, 166, .55) 26%,
+    rgba(240, 214, 166, .55) 62%,
+    rgba(217, 180, 120, 0));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #dcAi .dcai-orb-halo,
+  #dcAi .dcai-orb-core,
+  #dcAi .dcai-orb-lon,
+  #dcAi .dcai-orb-orbit,
+  #dcAi .dcai-orb-scan { animation: none; }
+  /* It still reads as a globe with nothing moving: the rings are drawn at
+     three different widths in the markup, so a frozen orb is a wireframe
+     sphere rather than three circles on top of each other. */
+}
