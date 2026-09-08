@@ -871,8 +871,7 @@
     var titles = el('div', '');
     titles.appendChild(el('h2', 'dcai-title', 'DeenAI'));
     titles.appendChild(el('p', 'dcai-sub',
-      'Your own numbers, read by a growth assistant that can look at your clips. '
-      + 'It never changes anything without you.'));
+      'Your own numbers, read by an assistant that changes nothing without you.'));
     head.appendChild(titles);
     head.appendChild(el('div', 'dcai-spacer'));
     if (payload && payload.provider) {

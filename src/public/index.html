@@ -328,7 +328,9 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
 @media (hover: none) { .dc-unsched { opacity: .85; } }
 @media (prefers-reduced-motion: reduce) { .dc-grip { transition: none; } }
 @media (prefers-reduced-motion: reduce) { .dc-sched-ghost { box-shadow: none; } }
-.slh-empty { display: flex; align-items: center; gap: 11px; padding: 15px 16px; font-size: 11.5px; color: var(--dc-ink-faint, #6E6E76); }
+/* --dc-ink-faint measures 3.7:1 here -- under AA, on the one line telling
+   somebody what to do next. Measured on the composited stack, not chosen. */
+.slh-empty { display: flex; align-items: center; gap: 11px; padding: 15px 16px; font-size: 11.5px; color: var(--dc-ink-dim, #8B8B93); }
 .slh-empty > i { font-size: 16px; color: var(--dc-n-4a4a52, #4A4A52); flex: none; }
 .slh-empty b { display: block; font-size: 12px; font-weight: 600; color: var(--dc-ink-dim, #8B8B93); }
 .slh-empty span { display: block; margin-top: 2px; }
@@ -7290,7 +7292,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         paintRows(liveEls.home,vals.liveAll,()=>`<div class="slb-head"><span class="slb-dot"></span>
           <span class="slb-title">Happening now</span>
           <span class="slb-eta"></span></div>
-          ${any?vals.liveAll.map(r=>liveRowHtml(r,true)).join(''):`<div class="slh-empty"><i class="ph ph-clock"></i><div><b>${esc(vals.liveHeadline)}</b><span>Paste a lecture above and the pipeline lights up here.</span></div></div>`}`,true);
+          ${any?vals.liveAll.map(r=>liveRowHtml(r,true)).join(''):`<div class="slh-empty"><i class="ph ph-clock"></i><div><b>${esc(vals.liveHeadline)}</b><span>Paste a lecture above.</span></div></div>`}`,true);
         const n=liveEls.home.querySelector('.slb-eta'),want=any?`${vals.liveCount} running`:'Idle';
         if(n&&n.textContent!==want)n.textContent=want;
         return;
@@ -11635,7 +11637,7 @@ function paintHelp(){
       ${(cat.articles||[]).map(a=>helpArticle(a,base)).join('')}
       ${contact}`);
   } else {
-    window.dcSetHtml(el,`<div class="dch-head"><h2>Help</h2><p>How to use DeenClipped, one thing at a time. Every screenshot is the real app.</p></div>
+    window.dcSetHtml(el,`<div class="dch-head"><h2>Help</h2><p>How to use DeenClipped, one thing at a time.</p></div>
       <button type="button" class="dcnw-open" data-news-open>
         <i class="ph ph-sparkle"></i>
         <span><b>What&rsquo;s new</b><span>The last few updates to DeenClipped, with pictures.</span></span>

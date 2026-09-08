@@ -2901,7 +2901,7 @@ test('the caption snaps to the lines the label promises', () => {
     templates: [{ id: 'x', name: 'X', height: 1920 }],
     selectedTemplate: { id: 'x', name: 'X', height: 1920 },
   }).safeHint;
-  assert.match(label, /framing guide/i);
+  assert.match(label, /\bguide\b/i);
   assert.doesNotMatch(label, /Shorts and TikTok/,
     'an even box cannot claim to clear a named platform');
 });

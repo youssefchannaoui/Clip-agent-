@@ -8034,6 +8034,143 @@ version collision with the other session in one day — this took 3.156.0 agains
 their 3.155.0, checked at merge time.
 
 
+## Less is more: the dashboard's writing and its spacing (v3.157.0, 8 Sept 2026)
+
+Youssef: "less is more ... a lot of things will explain what it is underneath,
+and I'll have, like, a massive description of what the button does, which is
+pretty obvious what the button does. And the whole reason of a help tab, there
+should be a reason for it ... make it feel more spacious, not too crowded and
+AI looking ... in some areas there's, like, three, four sentences explaining
+what a button does. Mostly on phone." With one explicit exception: "in terms of
+when you submit the link, from there on, that tab is fine" -- **the Start-job
+wizard was not to be touched**, and two design trims that had landed inside it
+were reverted.
+
+### MEASURED, NOT EYEBALLED -- and the harness is the reusable part
+
+Three probes, all in the session scratchpad, each answering a different
+question. Copy is the one kind of change where "it feels wordy" is not a
+finding and "151 words of sub-13.5px prose on one phone screen" is.
+
+- **`prose.mjs`** harvests every visible text node per screen with its size,
+  word count and the vertical space it costs, and calls anything under 13.5px
+  that is not a control's own label a NOTE -- the sub-lines that explain what
+  the thing above them already says.
+- **`density.mjs`** reads the gaps between a screen's top-level blocks, the
+  card padding, and how many screens tall the page is.
+- **`regress.mjs`** sweeps five phone widths in both themes for sub-44px
+  targets, horizontal overflow, page errors and COMPOSITED contrast.
+
+    PHONE 390     note height 2935px -> 2677px      words 981 -> 845
+    DESKTOP 1440  note height 4409px -> 4176px      words 1620 -> 1456
+
+    home     432px/151w -> 340px/102w      schedule  227/85 -> 173/58
+    queue    327/84     -> 307/76          templates 130/61 -> 112/49
+
+**A BASELINE HAS TO BE PROVEN BEFORE A REGRESSION IS BELIEVED.** Two readings
+that looked like damage were not: the overflow count and a 3.7:1 contrast both
+reproduced with every change stashed. And the desktop home appeared to grow by
+75 words until the capture account was checked -- the run had booted an EMPTY
+`state.json`, so it was photographing the first-run panel rather than the
+seeded account. Re-seed and re-measure before writing a number down.
+
+### What was cut, and the one rule behind it
+
+A note earns its place when it says something the control cannot: a
+PREREQUISITE, a COST, or a CONSEQUENCE. It does not earn it by restating the
+button. Twenty-odd lines went, on both surfaces from the same bindings:
+
+- Home's paste note: two sentences about ownership and token cost became
+  "Content you own or may reuse · 1 token per source minute".
+- The queue: "...highest score first. For one lecture at a time, open it in the
+  lecture library." -- the second sentence explained a route the rail already
+  offers. The phone twin is "Highest score first · nothing posts until you
+  approve it".
+- Ten literals in the design export (Home hero body, the empty-studio card, the
+  Library subline and formats line, the Queue subline, DeenAI advises, Framing
+  per clip, Edit the words, Reconnecting, nasheed rotation). **Every re-import
+  was proven byte-stable first** -- generated CSS byte-identical, no hashed
+  class name moved, the template delta being only the trimmed text.
+- **Empty states, plan cards and Help were deliberately left long.** An empty
+  screen has nothing else to say; a pricing card is what somebody reads to
+  decide what to pay for; and Help IS the explanation surface Youssef named.
+  Cutting there would be the brief taken past its own point.
+
+### THE DEENAI SUBLINE WAS A STALE PRIVACY CLAIM, and only reading it found it
+
+It read "nothing leaves this server". That stopped being true when DeenAI V2
+added the hosted model: transcripts still never leave for transcribing,
+scoring or titling, but the account's computed figures and whatever text is
+deliberately attached to a conversation do. It says "Growth advice counted from
+your own clips" now. **A copy pass is the one pass that reads every sentence in
+the product, which is why it finds the sentences that quietly went false.**
+
+### The spacing, and the rhythm it settled on
+
+The phone's gaps were 12/14/16/26 with no system. They are three sizes now, and
+each means something: **chrome 12-16** (a segmented control, its filter chips
+and the hint that belongs to them), **cards 22**, **sections 30**. Card padding
+16 -> 18, body padding 14 -> 18 with 32px above the floating tab bar, and card
+and section heads 10 -> 12 under their titles.
+
+### "Happening now" was printed twice on the phone
+
+The shell drew a `secHead('Happening now')` and then docked the DESKTOP live
+card into the slot beneath it -- and that card draws its own "HAPPENING NOW"
+head with the running/Idle chip beside it. Two headings, same words, 30px
+apart. Found by SCREENSHOT, then confirmed by a sweep that counts every heading
+per screen; that sweep first reported nine screens with duplicates and every
+one was a wrapper counted against its own `<strong>`. **A duplicate-text probe
+must skip a node that has a descendant carrying the same words**, or it reports
+the whole app as broken.
+
+`test/studio-mobile.test.mjs` asserted the literal `'Happening now'` on Home.
+The property it protects -- the live-work slot is on Home -- is asserted by
+`id="dcmLiveSlot"` in the same list, so the literal was dropped and the reason
+written beside it. Proven still able to fail by deleting the slot. That is the
+**eleventh** source-string test in this file to pin a word rather than a
+behaviour.
+
+### Contrast: four inks moved, and the fill direction was checked each time
+
+Every one was measured on the COMPOSITED stack, in the theme it actually
+renders in, and both directions where the colour is also used as a fill:
+
+    --dcm-ink3  night  #6E6E76 -> #85858E     3.70 -> 5.12
+    --dcm-ink3  paper  #978C79 -> #6F6757
+    --dcm-ok    paper  #2E7955 -> #2A6E4D     chip 4.46 -> 5.17, on sunk 4.13 -> 4.79
+                                              and the FILL (near-white on ok) 5.03 -> 5.82
+    --dcm-warn  paper  #A06C13 -> #845809     11px clip note 4.44 -> 6.11, fill 4.30 -> 5.92
+    --dcm-bad   paper  #A64738 -> #9C4234     4.82 -> 5.32
+
+Darkening a status ink IMPROVES the fill cases too, because the ink ON a paper
+fill is near-white -- but that has to be measured rather than assumed: this
+file already records a reading that put the NIGHT ink on the DAYLIGHT gold, a
+pair that never renders. Final sweep, ten screens x five widths x two themes:
+**lowest 5.12 night, 4.88 paper, 0 sub-44px controls, 0 page errors.**
+
+**THE HARNESS WAS SETTING ONLY `dcTheme`, AND THE PHONE KEEPS ITS THEME UNDER
+`dcmTheme`.** So every "light" phone reading taken before that was fixed was
+actually a night one -- a half-applied theme, reporting nonsense. `lib.mjs`
+sets both and the sweep now reads `document.body.className` back and throws on
+a mismatch. Any theme measurement that does not read the class back is a guess.
+
+### Measured and NOT fixed, so it is stated rather than left implied
+
+**The desktop's third grey fails AA in night: `#6E6E76` is 3.54:1 on a card and
+3.81:1 on the page, across 249 text sites in the design export.** It is the
+exact twin of the phone's `--dcm-ink3`, which this pass lifted. It is not fixed
+here because the generated CSS holds 57 raw copies rather than `var()`
+references, so the honest fix is re-running the tokeniser over that sheet and
+re-measuring both themes -- a release of its own, not a side effect of a copy
+pass. Daylight is fine at 5.36.
+
+**`regress.mjs`'s overflow count is a false positive and stays one.** Every
+"overflowing" element is a `.dcm-chip` inside `.dcm-chips`, a deliberate
+horizontal scroller; no page scrolls sideways at any width. Read the flag, not
+the count.
+
+
 ## Open items
 
 ### Google verification: branding VERIFIED and PUBLISHED (4 Sept 2026)

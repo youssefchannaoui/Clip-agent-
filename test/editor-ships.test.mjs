@@ -286,7 +286,12 @@ test('the Export tab states facts the render can back, and no token cost', () =>
   assert.match(worker, /"-r", "30"/, 'the worker really renders at 30');
   assert.equal(b.edAudioSpec, 'AAC 192 kbps');
   assert.match(worker, /"-b:a", "192k"/, 'and encodes the final at 192k');
-  assert.match(b.edExportNote, /never costs tokens/);
+  // The PROPERTY, not the wording: the note must say a re-render is free and
+  // must never put a token price on one. It claimed "costs 1 token" once, and
+  // a test pinning a particular sentence goes red on an honest shortening
+  // while a wrong price would still pass a looser one.
+  assert.match(b.edExportNote, /\bfree\b/i, 'it says a re-render is free');
+  assert.doesNotMatch(b.edExportNote, /costs? (?:1|a|\d+) tokens?/i, 'and puts no price on one');
   assert.doesNotMatch(b.edExportNote, /all clips of the lecture/);
   assert.match(b.nasheedDb, /applies to every clip/, 'the account-wide slider says so');
   const generated = fs.readFileSync(path.join(ROOT, 'src/public/studio-template.generated.js'), 'utf8');

@@ -242,7 +242,7 @@
         ])]),
         h('span', { class: 'dcm-posting-s' }, [tx('connSummary')]),
       ]),
-      h('p', { class: 'dcm-fine' }, 'Only content you own or are authorised to reuse. Long lectures cost more tokens — 1 per source minute. Start asks how much of the lecture to use, how long the clips should be and how the captions look before anything is spent.'),
+      h('p', { class: 'dcm-fine' }, 'Content you own or may reuse \u00b7 1 token per source minute'),
     ];
   }
 
@@ -295,9 +295,12 @@
       // one person two different things about where they are. Everything it
       // checked lives in the strip's copy now.
       h('section', { class: 'dcm-card dcm-create' }, [
-        h('div', { class: 'dcm-card-h' }, [h('strong', {}, 'Create clips'), h('span', { class: 'dcm-muted' }, 'One lecture in, a week of reels out')]),
+        h('div', { class: 'dcm-card-h' }, [h('strong', {}, 'Create clips')]),
       ].concat(createForm(false))),
-      h('section', { class: 'dcm-sec' }, [secHead('Happening now'), h('div', { id: 'dcmLiveSlot', class: 'dcm-live' })]),
+      // No secHead here: the docked desktop card draws its OWN "Happening now"
+      // head with the running/Idle chip beside it, so a label above it was the
+      // same words twice.
+      h('section', { class: 'dcm-sec' }, [h('div', { id: 'dcmLiveSlot', class: 'dcm-live' })]),
       iff('isEmptyStudio', [h('section', { class: 'dcm-card dcm-explain' }, [
         h('strong', {}, 'Your studio is empty'),
         h('p', {}, 'What one lecture gives you: a transcript, scored moments, captioned 9:16 clips with a nasheed underneath — and nothing posts until you approve it.'),
@@ -411,7 +414,7 @@
         h('button', { type: 'button', class: 'dcm-btn dcm-btn-sm', on: { click: 'selDownload' } }, 'Download'),
         h('button', { type: 'button', class: 'dcm-btn dcm-btn-sm dcm-btn-ghost', on: { click: 'selClear' } }, 'Clear'),
       ])]),
-      h('p', { class: 'dcm-hint' }, 'Highest score first. Tap a clip to watch it and decide; nothing leaves this screen without your say-so.'),
+      h('p', { class: 'dcm-hint' }, 'Highest score first \u00b7 nothing posts until you approve it'),
       h('div', { class: 'dcm-grid' }, [each('m.queue', 'it', [clipCard()])]),
       iff('queueEmptyStream', [empty('No clips match this filter.', [
         h('button', { type: 'button', class: 'dcm-btn', on: { click: 'goLibrary' } }, 'Open the lecture library'),
@@ -782,7 +785,7 @@
         h('button', { type: 'button', class: 'dcm-btn dcm-btn-p dcm-btn-big', on: { click: 'saveTpl' } }, 'Save and apply'),
         h('button', { type: 'button', class: 'dcm-btn', on: { click: 'saveAsStyle' } }, 'Save as new style'),
       ]),
-      h('p', { class: 'dcm-fine' }, 'A style applies to every clip cut from now on. Clips already rendered keep the style they were made with.'),
+      h('p', { class: 'dcm-fine' }, 'Applies to clips cut from now on \u2014 rendered clips keep their style.'),
     ];
   }
 

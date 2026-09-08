@@ -207,7 +207,12 @@ test('every screen renders through the real bindings with no dead control', () =
 test('Home carries the create form, the setup list, review, schedule, lectures, the week and activity', () => {
   const sandbox = makeSandbox();
   const r = screenRender(sandbox, 'home');
-  for (const needle of ['Paste a YouTube link', 'Start job', 'Upload MP4', 'Posting to', 'Happening now', 'id="dcmLiveSlot"',
+  // NOT the words "Happening now": that heading is drawn by the DOCKED desktop
+  // card (paintLiveWork's own .slb-title), which this render does not include.
+  // The phone printed it a second time as a section label until v3.156.0, and
+  // the property this line protects -- the live-work slot is on Home -- is
+  // asserted by the slot's own id.
+  for (const needle of ['Paste a YouTube link', 'Start job', 'Upload MP4', 'Posting to', 'id="dcmLiveSlot"',
     'Needs your review', 'Scheduled next', 'Continue working', 'This week', 'clips posted', 'held for review', 'median score', 'worker time', 'Recent activity',
     'data-tour="paste"', 'data-tour="start"', 'data-tour="rail"']) {
     assert.ok(r.html.includes(needle), 'home is missing: ' + needle);

@@ -223,7 +223,7 @@
               }),
               h('button', { type: 'button', class: 'dct-btn', on: { click: 'savePreset' } }, 'Save look'),
             ]),
-            h('p', { class: 'dct-fine' }, 'A saved look is every style setting on this screen, kept on your account. Applying one loads it as an unsaved change, so nothing re-renders until you press Save and apply.'),
+            h('p', { class: 'dct-fine' }, 'Applying a look is an unsaved change \u2014 nothing renders until you save.'),
             iff('tplCustomised', [
               h('button', { type: 'button', class: 'dct-btn dct-wide', on: { click: 'restoreTpl' } }, 'Restore the shipped defaults'),
             ]),

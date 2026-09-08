@@ -38,7 +38,7 @@
        floating tab bar -- not a tinted ground. */
     --dcm-paper: #09090A; --dcm-paper2: #0E0E11; --dcm-card: #121214; --dcm-sunk: #17171A;
     --dcm-edge: #1E1E22; --dcm-edge2: #2A2A2F;
-    --dcm-ink: #F2F2F4; --dcm-ink2: #8B8B93; --dcm-ink3: #6E6E76;
+    --dcm-ink: #F2F2F4; --dcm-ink2: #8B8B93; --dcm-ink3: #85858E;
     --dcm-gold: #D9B478; --dcm-gold2: #F0D6A6;
     --dcm-wash: rgba(217, 180, 120, .12); --dcm-wash2: rgba(217, 180, 120, .22);
     --dcm-ok: #7FD1A6; --dcm-ok-w: rgba(127, 209, 166, .14);
@@ -65,11 +65,11 @@
   body.dcm-light {
     --dcm-paper: #F4EFE4; --dcm-paper2: #EDE6D8; --dcm-card: #FFFDF8; --dcm-sunk: #EBE3D3;
     --dcm-edge: #E0D6C1; --dcm-edge2: #CFC2A6;
-    --dcm-ink: #1D1A15; --dcm-ink2: #6C6455; --dcm-ink3: #978C79;
+    --dcm-ink: #1D1A15; --dcm-ink2: #6C6455; --dcm-ink3: #6F6757;
     --dcm-gold: #8A6425; --dcm-gold2: #7E5B18; --dcm-wash: #F3E7CD; --dcm-wash2: #EBDBB8;
-    --dcm-ok: #2E7955; --dcm-ok-w: #E3EFE7;
-    --dcm-warn: #A06C13; --dcm-warn-w: #F7EBD3; --dcm-warn-t: #6B4808;
-    --dcm-bad: #A64738; --dcm-bad-w: #F7E5E1;
+    --dcm-ok: #2A6E4D; --dcm-ok-w: #E3EFE7;
+    --dcm-warn: #845809; --dcm-warn-w: #F7EBD3; --dcm-warn-t: #6B4808;
+    --dcm-bad: #9C4234; --dcm-bad-w: #F7E5E1;
     --dcm-glass: rgba(255, 253, 248, .94); --dcm-glass-t: #1D1A15;
     --dcm-headbg: rgba(244, 239, 228, .88); --dcm-tabbg: rgba(255, 253, 248, .93);
     --dcm-grad: linear-gradient(165deg, #FFFCF3, #F5E9D0);
@@ -115,7 +115,7 @@
   .dcm-arch svg { position: absolute; inset: 0; display: block; }
 
   .dcm-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
-    padding: 14px 18px calc(28px + var(--dcm-tab)); background: var(--dcm-paper); pointer-events: auto; }
+    padding: 18px 18px calc(32px + var(--dcm-tab)); background: var(--dcm-paper); pointer-events: auto; }
   /* On a screen this shell does not own the body is only the spacer that
      holds the tab bar at the foot: see-through, and taps fall through to the
      desktop screen underneath. */
@@ -182,7 +182,7 @@
   .dcm-tag { padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 
   /* ── sections & cards ──────────────────────────────────────────────── */
-  .dcm-sec { margin: 26px 0 0; }
+  .dcm-sec { margin: 30px 0 0; }
   /* The DeenClipped library reads as a SECTION OF ITS OWN, not more of the
      list above it (Youssef, 8 Sept 2026: "seperate make it look cool"). A
      translucent gold edge and wash rather than tokens: there is no
@@ -196,13 +196,13 @@
     background: linear-gradient(180deg, rgba(217,180,120,.07), transparent 60%);
   }
   .dcm-lib .dcm-track { background: transparent; }
-  .dcm-sec-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 10px; }
+  .dcm-sec-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; }
   .dcm-sec-h h2 { position: relative; display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
     font: 600 11px var(--dcm-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--dcm-ink3); }
   .dcm-sec-h h2::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, var(--dcm-edge), transparent); }
-  .dcm-card { margin: 16px 0 0; padding: 16px; border-radius: 18px; background: var(--dcm-card); box-shadow: var(--dcm-sh2); }
+  .dcm-card { margin: 22px 0 0; padding: 18px; border-radius: 18px; background: var(--dcm-card); box-shadow: var(--dcm-sh2); }
   .dcm-card-warn { border: 1px solid var(--dcm-edge); background: var(--dcm-warn-w); box-shadow: var(--dcm-sh1); }
-  .dcm-card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+  .dcm-card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
   .dcm-card-h strong { font: 600 17px var(--dcm-display); letter-spacing: -.015em; }
   .dcm-list { display: flex; flex-direction: column; gap: 10px; }
   .dcm-empty { padding: 22px 16px; border: 1px dashed var(--dcm-edge2); border-radius: 18px; text-align: center; color: var(--dcm-ink2); font-size: 13px; line-height: 1.55; }

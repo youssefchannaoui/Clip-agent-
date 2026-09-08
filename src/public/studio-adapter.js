@@ -1481,9 +1481,7 @@
      that over a guide would be the app asserting a safety it has stopped
      checking. It says what it is instead. */
   function safeHintText() {
-    return 'A framing guide — an even margin inside the frame. It is not a '
-      + 'platform safe area: each app covers a different part of the screen, '
-      + 'so check a posted clip before trusting the edges.';
+    return 'A guide, not a platform safe area \u2014 check a posted clip before trusting the edges.';
   }
 
   // Grab, then grabbing. Without it the overlay gives no sign it can be moved.
@@ -2619,14 +2617,14 @@
       case 'library':
         return empty ? 'No lectures yet — paste a link on Home to make your first clips'
           : plural(ctx.projects.length, 'lecture') + ' · ' + plural(ctx.clips.length, 'clip') + ' generated';
-      case 'templates': return 'Set once — every clip renders with it, still editable per clip';
+      case 'templates': return 'The look every clip is rendered with';
       // plural(), because an account that switches three of its four windows
       // off reads "Up to 1 posts a day" -- and the whole point of the panel is
       // that one is now a number a customer can choose.
-      case 'schedule': return 'Up to ' + plural(ctx.postSlots || 0, 'post') + ' a day · every clip is checked before it goes out';
+      case 'schedule': return 'Up to ' + plural(ctx.postSlots || 0, 'post') + ' a day';
       case 'music': return plural(ctx.tracks.length, 'nasheed') + ' · shuffled automatically';
-      case 'deenai': return 'Growth advice from your own numbers — nothing leaves this server';
-      case 'help': return 'How every part of DeenClipped works, with screenshots of the real app';
+      case 'deenai': return 'Growth advice counted from your own clips';
+      case 'help': return 'How every part of DeenClipped works';
       case 'tokens': return ctx.planLabel;
       // The body already carries the lecture's name, its source length and how
       // many clips came back, so the subline says how those clips STAND -- the
@@ -5881,11 +5879,9 @@
       aiGateCta: aiOn ? ('Upgrade to ' + aiPlanName) : ('Unlock with ' + aiPlanName),
       // Shown under the locked banner. Free accounts only -- `aiLocked` is
       // !aiOn -- so it never has to speak to a paid account.
-      aiDemoNote: 'These numbers are sample output. On ' + aiPlanName + ', DeenAI reads your own '
-        + 'clips, scores and posting record, answers your questions, and writes titles '
-        + 'and descriptions for any clip.',
+      aiDemoNote: 'Sample output. On ' + aiPlanName + ' these are your own clips, and DeenAI answers back.',
       aiGateNote: aiOn
-        ? 'Your insights are real, and DeenAI writes titles and descriptions on any clip from its preview.'
+        ? 'DeenAI also writes titles and descriptions from a clip\u0027s preview.'
         : aiPlanName + ' turns the figures above into your own numbers and lets you ask.',
       aiSub: aiAskOn
         ? 'Reads your own clips, scores and posting record — and answers back.'
@@ -5895,7 +5891,7 @@
       aiCount: aiData ? plural(aiAllCards.length, 'insight').toUpperCase() : '',
       aiNote: aiData ? (aiOn ? 'from your own records' : 'sample output') : '',
       aiFootnote: aiOn
-        ? 'Every figure above is counted from your own clips — DeenAI never invents a number.'
+        ? 'Every figure is counted from your own clips.'
         : 'On a paid plan these are your own numbers, counted from your own clips.',
       aiUpgrade: function (e) { stop(e); setUI({ screen: 'tokens', tokensAnimAt: Date.now() }); },
 
@@ -5993,7 +5989,7 @@
           + ' tokens for the run. When it ends your account goes back to the free plan, so pick a plan before then to keep going without a gap.'
         : redeemGrant.ended
           ? 'Thank you for testing DeenClipped. Choose a plan below to pick up exactly where you left off \u2014 your clips and schedule are all still here.'
-          : 'If we sent you a tester or launch code, put it in here to unlock it on this account.',
+          : 'Enter a tester or launch code to unlock it on this account.',
       redeemCode: UI.redeemCode,
       redeemSetCode: function (e) { UI.redeemCode = e.target.value; refresh(); },
       redeemGo: function (e) { stop(e); global.StudioAdapter.onRedeemCode(); },
@@ -7272,7 +7268,7 @@
       edFrameRate: '30 fps',
       edAudioSpec: 'AAC 192 kbps',
       edVerifyLabel: 'FFprobe on export',
-      edExportNote: 'Re-rendering is free \u2014 it never costs tokens. Save clip renders this clip only; the Templates screen restyles every clip still waiting.',
+      edExportNote: 'Re-rendering is free. Save clip renders this clip only.',
       edIsDraft: Boolean(edClip && edClip.renderQuality === 'draft' && !edSourceFallback),
       // Clip-local time. The rendered clip IS the clip: it starts at zero and
       // its timeline equals the clip's, so there is no offset arithmetic on
@@ -8091,8 +8087,8 @@
         // captions, Clip Style, render -- and does not move with the plan.
         var slots = daySlots;
         return todayCount >= slots
-          ? 'Today is full — ' + slots + ' of ' + slots + '. Nothing posts unless its four checks pass.'
-          : todayCount + ' of ' + slots + ' scheduled today. Nothing posts unless its four checks pass.';
+          ? 'Today is full \u2014 ' + slots + ' of ' + slots + '.'
+          : todayCount + ' of ' + slots + ' scheduled today.';
       })(),
 
       // ── Editor readouts ──
@@ -9263,7 +9259,7 @@
           more: function (e) { stop(e); global.StudioAdapter.onMoreClips(c.projectId, 4); },
         };
       }),
-      perfFootNote: 'Everything here comes from your own account. Platform view counts are not shown because no connected platform sends them to DeenClipped \u2014 an invented number is worse than an absent one.',
+      perfFootNote: 'Counted from your own account. No platform sends view counts back, so none are shown.',
 
       // (owner derivations are hoisted just below; see the owner block)
       // ── Owner ─────────────────────────────────────────────────────────

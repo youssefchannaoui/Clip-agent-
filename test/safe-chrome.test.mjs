@@ -88,7 +88,7 @@ test('the hint no longer claims a caption inside the box is clear', () => {
   const sb = load();
   const hint = sb.StudioAdapter.bindings(state({ youtube: { connected: true }, tiktok: { connected: true } },
     { youtube: { enabled: true }, tiktok: { enabled: true } })).safeHint;
-  assert.match(hint, /framing guide/i, 'it says what it is');
+  assert.match(hint, /\bguide\b/i, 'it says what it is');
   assert.match(hint, /not a platform safe area/i, 'and what it is not');
   assert.doesNotMatch(hint, /Keep text in the clear/, 'that promised a safety it no longer checks');
   assert.doesNotMatch(hint, /sits \d+px into the shade/, 'and so did the pixel warning');
