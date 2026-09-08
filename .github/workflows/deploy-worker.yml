@@ -86,6 +86,17 @@ on:
       # mid-job -- and the box is asked what happened to its recent jobs:
       # counts, timings and a replay of the candidate pipeline over the cached
       # transcript at the job's own settings. Never any transcript text.
+      # Ask the box to fetch ONE url with the real downloader. Dispatch-only and
+      # deploy-free, like diagnose: a question must never restart a worker
+      # mid-job. It takes a few seconds of video, not the lecture.
+      probe_url:
+        description: 'Only fetch (no deploy) -- a YouTube URL, or "last-failed" for the newest failed import'
+        required: false
+        default: ''
+      probe_url_window:
+        description: 'Seconds of the video to actually fetch (proves the media leg, not just extraction)'
+        required: false
+        default: '8'
       diagnose:
         description: Only diagnose (no deploy) -- ask the box about its recent jobs
         type: boolean
@@ -242,7 +253,7 @@ jobs:
         # measurement: a question must not become a rebuild, because a rebuild
         # sends whatever is running back to its start. On a push `inputs` is
         # empty, so this runs exactly as before.
-        if: inputs.diagnose != true && inputs.quran_sync != true
+        if: inputs.diagnose != true && inputs.quran_sync != true && inputs.probe_url == ''
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
@@ -282,7 +293,7 @@ jobs:
         # prove -- and the box legitimately holds whatever it last built,
         # which is behind any commit that touched only src/. The diagnostics
         # step prints the running version instead.
-        if: inputs.diagnose != true && inputs.quran_sync != true
+        if: inputs.diagnose != true && inputs.quran_sync != true && inputs.probe_url == ''
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
@@ -409,6 +420,48 @@ jobs:
       # payload, the status and the cached transcript on the box can. This
       # replays the candidate pipeline over that transcript inside the
       # container and prints counts -- never a word of the transcript.
+      # DISPATCH ONLY, and it deploys nothing. Where diagnose asks "why did this
+      # run produce no clips", this asks "can you get this video RIGHT NOW" --
+      # the one question a transient refusal makes unanswerable from a log,
+      # because the answer changes between one minute and the next. It runs the
+      # PRODUCTION downloader, so what it proves is what a customer would get.
+      - name: Ask the box to fetch one URL with the real downloader
+        if: inputs.probe_url != ''
+        env:
+          HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
+          USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
+          RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
+          PROBE_URL: ${{ inputs.probe_url }}
+          PROBE_WINDOW: ${{ inputs.probe_url_window }}
+        run: |
+          set -euo pipefail
+          export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
+          # THE URL IS A DISPATCH INPUT, so it never touches a shell command.
+          # It becomes a JSON literal inside the script and the script travels
+          # as one base64 blob -- base64 has no shell metacharacter, so an
+          # input cannot become a command on the box. Same rule as every other
+          # probe here, and it matters most on this one: this is the only input
+          # that is a URL somebody pasted.
+          node -e '
+            const fs = require("fs");
+            const src = fs.readFileSync(".github/scripts/import-probe.py", "utf8");
+            if (!src.includes("PARAMS = {}")) throw new Error("the import probe lost its PARAMS seam");
+            const window = Number.parseFloat(process.env.PROBE_WINDOW || "8");
+            const params = {
+              url: String(process.env.PROBE_URL || ""),
+              window: Number.isFinite(window) && window > 0 ? Math.min(120, window) : 8,
+            };
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/import-probe.py",
+              src.replace("PARAMS = {}", "PARAMS = " + JSON.stringify(params)));
+          '
+          BLOB=$(base64 -w0 < "$RUNNER_TEMP/import-probe.py")
+          "$RUNNER_TEMP/rssh" "PROBE_B64=$BLOB bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f /tmp/dc-import-probe.py' EXIT
+          printf '%s' "$PROBE_B64" | base64 -d > /tmp/dc-import-probe.py
+          docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-import-probe.py
+          REMOTE
+
       - name: Ask the box what happened to its recent jobs
         if: inputs.diagnose == true
         env:

@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1946 JS + 857 Python**
+- `npm test` and `npm run check` must pass. Currently **1954 JS + 857 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9636,11 +9636,39 @@ anonymous, and `server.js` already has the operator page for it. That is
 Youssef's to paste; the box uses it the moment it exists and now reports
 whether it does.
 
-**And the honest limit on all of this**: nothing here has been through a real
-YouTube refusal. The retry, the branch and the message are driven against a
-fake yt-dlp; the freshness is proven by the build. The next import that meets a
-403 is what confirms it -- and if it now imports on its own, that is the whole
-change working.
+### THE BOX CAN BE ASKED WHETHER IT CAN FETCH A VIDEO RIGHT NOW
+
+`deploy-worker.yml` dispatched with `probe_url` -- a YouTube link, or the
+literal **`last-failed`** for the newest failed import on the box. Deploy-free
+like `diagnose`, because a question must never restart a worker mid-job.
+
+A transient refusal is the one thing a log cannot answer: the log records what
+happened at 02:14 and the question is what happens at 02:31. Until this, asking
+meant a customer submitting a whole job.
+
+- **It runs `YtDlpImportProvider.import_video`, the PRODUCTION downloader**,
+  with the box's own pool, cookies, PO-token server and the new rounds. A probe
+  that built its own yt-dlp options would answer for a downloader nobody uses;
+  a test forbids it touching `YoutubeDL` directly.
+- **`last-failed` reads the URL off the box's own job records**, because the
+  person who has the link is usually the person asleep, and a probe you can
+  only run with information you do not have is a probe nobody runs.
+- **Seconds of video, not the lecture.** The 403 lands on the MEDIA fetch, so
+  extraction alone would report success on the exact failure being chased --
+  but a full download is ~1.5GB off a 250GB monthly plan for a question. An
+  8-second window exercises both legs for a few megabytes, capped at 120s on
+  the runner, and the file is deleted either way.
+- **A REFUSAL IS AN ANSWER AND DOES NOT FAIL THE RUN.** Otherwise "this video
+  is genuinely blocked" and "the box could not be reached" look identical,
+  which is the whole thing it exists to tell apart.
+- The URL is the only dispatch input here that is a link somebody pasted, so it
+  takes the same base64 carriage as every other probe: a JSON literal in the
+  script, never a shell command.
+
+**And the honest limit**: the retry, the branch and the message are driven
+against a fake yt-dlp, and the freshness is proven by the build. What settles
+it is a real 403 -- the probe above is how to ask for one deliberately rather
+than waiting for a customer to find it.
 
 ## Open items
 
