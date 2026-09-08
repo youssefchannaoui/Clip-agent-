@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1855 JS + 801 Python**
+- `npm test` and `npm run check` must pass. Currently **1855 JS + 803 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -8569,7 +8569,7 @@ Found on the way and NOT fixed, so it is written down where the constants live
 Night is untouched: `--dc-gold` and `--dc-gold-lit` are still #D9B478 and
 #F0D6A6, and every night value in the generated token sheet is byte-identical.
 
-## The rail's rows are smaller and its list is not (v3.162.0, 8 Sept 2026)
+## The rail's rows are smaller and its list is not (v3.163.0, 8 Sept 2026)
 
 Youssef: "the left hand side with the old tabs starting to get pretty clunk up.
 There's quite a lot of pages now. So we need to make it, like, maybe smaller or
@@ -8644,6 +8644,84 @@ it -- and was re-proven red by making the open rail narrower than the collapsed
 one. `rail-nav.test.mjs` pins the new relationship the same way: rows smaller
 than the design draws them, gaps larger than the design leaves, and no hashed
 class named. All five probes proven red.
+## The bigger box was doing exactly what the small one did (v3.162.0, 8 Sept 2026)
+
+Youssef: "we have now chnaged from cpx22 to cpx44 make sure all is good and
+tell me was it a good idea." **The box is healthy and the upgrade was buying
+NOTHING**, which is the answer measured rather than assumed -- a diagnose
+dispatch, before any code moved:
+
+    host           8 cores, 15.2G RAM
+    this container 8 cores, 2.0G (reserve 0.5G)
+    model              small  <- FORCED by WHISPER_MODEL
+    device             cpu    <- FORCED by WHISPER_DEVICE
+    computeType        int8   <- FORCED by WHISPER_COMPUTE_TYPE
+    maxConcurrentJobs  1      <- FORCED by WORKER_MAX_CONCURRENT_JOBS
+    ffmpegThreads      2      <- FORCED by FFMPEG_THREADS
+    ollama model       qwen3:1.7b
+    unforced it would pick: whisper=base, jobs=1
+
+**Every single capacity setting read FORCED**, by five lines in
+`docker-compose.yml` written for a 2-core 3.7G machine. capacity.py exists so
+that buying hardware makes the product faster with nobody editing anything, and
+an explicit environment variable always wins over it -- so the resize changed
+the invoice and not one number the worker actually used.
+
+**AND DELETING THE FIVE FORCES ALONE WOULD HAVE MADE IT WORSE.** capacity.py
+reads the **cgroup**, not the host, and the container ceiling was still `2G` --
+so unforced it would have chosen `base` and one job on a 15.2G machine, which
+is a downgrade from the `small` the forces were pinning. Both halves had to
+move, and the diagnose block's last line is what said so.
+
+- Four forces are gone and follow the machine again. `WHISPER_MODEL: medium`
+  stays, deliberately: capacity.py's threshold for it is 12G against this
+  container's 10G, and `small` is what CLAUDE.md names, repeatedly, as the
+  ceiling on Arabic transcription -- and therefore on the Quran sync, the
+  scoring and the ayah matching.
+- Ceilings 10G + 3.5G + 0.5G = **14G against a 15.2G host**. That sum is the
+  rule the 42 OOM kills bought: a limit above what the machine has is not a
+  limit, it is a wish, and the kernel does the capping instead.
+- `OLLAMA_MODEL: qwen3:4b`. 1.7b's titling is at its ceiling in this file's own
+  record and 4b is named as the lever; its 2.4-3.0G measured RSS is exactly
+  what did not fit under the old 2G cap.
+
+### A JOB'S MEMORY FOLLOWS THE MODEL, and until now nothing knew that
+
+`_GB_PER_JOB` was a flat 1.5, because `small` was the only model this box had
+ever run -- the measurement and the constant were the same number. Left that
+way, a 10G container with `medium` forced would have chosen **four** jobs at
+roughly 2.5G each: not a busier queue, the container's own OOM killer taking
+one mid-render.
+
+`_GB_PER_JOB_BY_MODEL` costs `medium` a slot (4 -> 3) and `large` two more.
+**Only the larger models move it** -- `base` and `small` keep the measured 1.5,
+so no machine running one changes its concurrency because this table exists,
+and a model the heuristic CHOSE fits by construction. Only a forced one can
+cost a slot, which is the coupling that was missing: the force now feeds the
+concurrency instead of being ignored by it.
+
+### SCALING.md was the trap, not just the documentation of one
+
+It said "nothing downstream is hardcoded" and "upgrading is two numbers".
+**Both were false for as long as those five lines existed**, and anybody
+following it would have resized the server and stopped. It now opens with what
+was actually true, and its import section -- which still described SocialKit as
+"the primary provider" nine months after it was removed on 26 Aug 2026 -- says
+what runs: yt-dlp behind 20 Webshare residential proxies, sectioned downloads,
+and the fact that a bigger box buys **nothing at all on the way in**.
+
+### Was it a good idea?
+
+**Yes, and it was worth nothing until this landed.** What it buys, plainly:
+`small` -> `medium` Whisper (the accuracy every downstream decision reads), one
+job -> three, `qwen3:1.7b` -> `qwen3:4b` for titling and scoring. What it does
+NOT buy: the import, which is bounded by the proxy pool and YouTube -- the 56s
+figure in SCALING.md was measured on the OLD two-core box -- and it does
+nothing for a queue of one, where the whole win is in the model sizes.
+
+Two probes proven red. **Not yet confirmed on the box**: the next diagnose
+dispatch after this deploy should show no FORCED lines but `WHISPER_MODEL`,
+the container at ~10G, and three concurrent jobs.
 
 ## Open items
 

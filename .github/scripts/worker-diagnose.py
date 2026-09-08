@@ -289,12 +289,76 @@ def probe_audio(cw, settings: dict) -> None:
             pass
 
 
+def machine() -> None:
+    """WHAT THIS BOX ACTUALLY IS, measured rather than taken on trust.
+
+    A server plan is a claim ("we moved to a bigger one") and this is the only
+    place it can be checked. It matters more than it sounds: worker/capacity.py
+    picks the Whisper model, the concurrency and the ffmpeg threads FROM the
+    machine -- but an explicit environment variable always wins, and
+    docker-compose.yml sets three of them. So a box can double in size and
+    change nothing at all, and the only way to tell is to print what the
+    machine has BESIDE what the worker decided.
+
+    Counts and sizes only; nothing here is customer data.
+    """
+    out("== the machine ==")
+    try:
+        import capacity  # noqa: PLC0415
+        plan = capacity.plan()
+    except Exception as exc:  # noqa: BLE001
+        out(f"  capacity.plan() failed: {type(exc).__name__}: {redact(str(exc))[:160]}")
+        plan = {}
+
+    # os.cpu_count() is the HOST's cores even inside a container; the cgroup
+    # quota is what this process may actually use, and reading the wrong one is
+    # how you size a worker for cores it does not have.
+    host_cores = os.cpu_count() or 0
+    try:
+        usable = capacity.cpu_cores()
+        ram, reserved = capacity.memory_budget()
+    except Exception:  # noqa: BLE001
+        usable, ram, reserved = 0, 0.0, 0.0
+    try:
+        host_ram = (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")) / (1024 ** 3)
+    except (ValueError, OSError, AttributeError):
+        host_ram = 0.0
+
+    out(f"  host           {host_cores} cores, {host_ram:.1f}G RAM")
+    out(f"  this container {usable} cores, {ram:.1f}G (reserve {reserved}G)")
+    for key in ("model", "device", "computeType", "maxConcurrentJobs", "ffmpegThreads"):
+        forced = {
+            "model": "WHISPER_MODEL", "device": "WHISPER_DEVICE",
+            "computeType": "WHISPER_COMPUTE_TYPE",
+            "maxConcurrentJobs": "WORKER_MAX_CONCURRENT_JOBS",
+            "ffmpegThreads": "FFMPEG_THREADS",
+        }[key]
+        override = str(os.getenv(forced, "") or "").strip()
+        # THE POINT OF THIS BLOCK. "forced" means the environment overruled the
+        # machine -- so growing the box changed nothing for that setting.
+        note = f"  <- FORCED by {forced}" if override else ""
+        out(f"  {key:<18} {plan.get(key, '?')}{note}")
+    out(f"  ollama model       {os.getenv('OLLAMA_MODEL', '(unset)')}")
+    # What the machine WOULD choose if nothing were forcing it, so the cost of
+    # each override is visible rather than inferred.
+    try:
+        would = capacity.whisper_model_for(bool(plan.get("gpus")), ram)
+        by_cpu = usable // 2
+        by_ram = int((ram - reserved) // 1.5)
+        out(f"  unforced it would pick: whisper={would}, jobs={max(1, min(by_cpu, by_ram))}")
+    except Exception:  # noqa: BLE001
+        pass
+    out()
+
+
 def main() -> int:
     out(f"python {sys.version.split()[0]}  data={DATA} ({'present' if DATA.is_dir() else 'MISSING'})  code={CODE}")
     version_file = CODE.parent / "package.json"
     version = read_json(version_file) if version_file.is_file() else None
     out(f"worker version: {version.get('version') if isinstance(version, dict) else 'unknown'}")
     sys.path.insert(0, str(CODE))
+    out()
+    machine()
     try:
         import clip_worker as cw  # noqa: PLC0415
     except Exception as exc:  # noqa: BLE001
