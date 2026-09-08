@@ -300,6 +300,10 @@ function sharedSettings(user, options = {}) {
   return {
     ...clipSettings(user), ...musicSettings(user),
     musicEnabled: options.musicEnabled !== false,
+    // Hardware settings, and the WORKER'S OWN environment wins over them: the
+    // box knows what it is running on and this process does not. They are here
+    // for the self-hosted engine, which spawns clip_worker directly with no
+    // such environment, and for a worker too old to set one.
     model: config.aiModel, device: config.aiDevice, computeType: config.aiComputeType,
     task: config.aiTask, language: jobLanguage(options), maxSourceMinutes: config.maxSourceMinutes,
     // Steers which moments are chosen, never how they are rendered. Empty for
@@ -310,6 +314,87 @@ function sharedSettings(user, options = {}) {
 }
 
 function remoteProcessing() { return config.processingMode === 'remote'; }
+
+/*
+ * How many lectures may be in flight at once.
+ *
+ * The BOX is authoritative for its own hardware. `config.maxConcurrentJobs`
+ * defaults to 1 and MAX_CONCURRENT_JOBS is set nowhere, so the queue sent one
+ * lecture at a time while the worker ran three -- two of its three slots were
+ * unreachable from here, and nothing anywhere said so. The worker reports its
+ * own figure in /readiness's `capabilities.maxConcurrentJobs`; that key name is
+ * fixed and both sides depend on it.
+ *
+ * Self-hosted keeps the app's own setting, and that is not a fallback but the
+ * honest answer: there the transcriber runs INSIDE this process, so this
+ * process's own limit is the only bound that means anything.
+ */
+let workerSlots = null;          // last figure the box reported, or null
+let workerSlotsAt = 0;           // when it reported it
+let workerSlotsPending = null;   // in-flight refresh, so a burst asks once
+// The box's slot count only moves when the box is rebuilt, so this is about
+// noticing a resize within minutes rather than about staying in step.
+const WORKER_SLOTS_TTL_MS = 5 * 60_000;
+
+/*
+ * Take the figure out of a readiness (or health) payload somebody has ALREADY
+ * fetched, rather than fetching it a second time. Exported for exactly that:
+ * the owner screen and the boot check both hold this payload in their hands.
+ * A payload from an older worker carries no such key and is ignored, which
+ * leaves the app on its own setting -- the behaviour before this existed.
+ */
+export function noteWorkerCapabilities(payload) {
+  const value = Number(payload?.capabilities?.maxConcurrentJobs);
+  if (!Number.isFinite(value) || value < 1) return workerSlots;
+  const slots = Math.floor(value);
+  const changed = slots !== workerSlots;
+  workerSlots = slots;
+  workerSlotsAt = Date.now();
+  // Only on a change: at most once per box deploy, so this cannot become noise
+  // -- and a silent capacity change is how the last one went unnoticed for a
+  // fortnight.
+  if (changed) log(`The worker reports ${slots} render slot${slots === 1 ? '' : 's'}.`, 'info');
+  return workerSlots;
+}
+
+/*
+ * Ask the box, in the BACKGROUND. Never awaited by the pump: stalling the
+ * queue on an unanswered request would be worse than the under-use this
+ * fixes, and starting one job now and learning the real figure a moment later
+ * is correct. A refresh that LEARNS a bigger number kicks the pump again,
+ * because the pump that fell back to 1 has already gone home.
+ */
+function refreshWorkerSlots() {
+  if (!remoteProcessing() || !workerClient.configured()) return;
+  if (workerSlotsPending) return;
+  if (workerSlots !== null && Date.now() - workerSlotsAt < WORKER_SLOTS_TTL_MS) return;
+  const before = workerSlots;
+  workerSlotsPending = workerClient.readiness()
+    .then(payload => { if (noteWorkerCapabilities(payload) > (before || 0)) pump().catch(() => {}); })
+    // An unreachable worker is not this function's alarm to raise -- the job
+    // paths already report it, and a second alert for one fault is the
+    // duplication this repo keeps paying for. The last known figure stands.
+    .catch(() => {})
+    .finally(() => { workerSlotsPending = null; });
+}
+
+// Exported so the rule can be TESTED by calling it: a test that greps for the
+// worker's key proves nothing about which number actually wins.
+export function concurrencyLimit() {
+  if (!remoteProcessing()) return config.maxConcurrentJobs;
+  refreshWorkerSlots();
+  // Not known yet (first pump, or an older worker): the app's own setting is
+  // the only figure in hand.
+  if (workerSlots === null) return config.maxConcurrentJobs;
+  // An explicit MAX_CONCURRENT_JOBS may only ever CAP the box, never raise it.
+  // Someone who sets 1 is asking for one whatever the box reports; someone who
+  // sets 8 against a three-slot box still gets three, because the box is the
+  // thing that has the cores. Unset means the app has no opinion and the box's
+  // number stands alone -- which is the whole fix.
+  return config.maxConcurrentJobsExplicit
+    ? Math.min(config.maxConcurrentJobs, workerSlots)
+    : workerSlots;
+}
 
 function signedMusicUrl(track, userId) {
   const expires = Date.now() + config.workerJobTimeoutMs;
@@ -2164,7 +2249,7 @@ export async function pump() {
         runRerender(item).catch(error => { item.status = 'failed'; item.error = error.message; save(); });
       }
     }
-    while (running.size < config.maxConcurrentJobs) {
+    while (running.size < concurrencyLimit()) {
       const candidates = [
         ...state.projects.filter(item => item.engine === 'remote' && item.status === 'queued' && Number(item.nextRetryAt || 0) <= Date.now()).map(item => ({ type: 'remote', item, at: item.submittedAt })),
         ...state.projects.filter(item => item.engine === 'self-hosted' && item.status === 'queued').map(item => ({ type: 'project', item, at: item.submittedAt })),

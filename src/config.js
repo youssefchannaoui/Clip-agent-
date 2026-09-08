@@ -17,6 +17,17 @@ const number = (value, fallback) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
+// Was the variable actually SET, or is the default underneath it doing the
+// talking? `number()` cannot answer that -- it folds an unset variable and a
+// typed one into the same figure -- and for MAX_CONCURRENT_JOBS the two mean
+// opposite things (see maxConcurrentJobsExplicit below). Empty counts as
+// unset: a blank field in Render's variable list is an operator who never
+// answered, and Number('') is 0, which would otherwise read as a deliberate
+// instruction to run as few jobs as possible.
+const numberWasSet = value => {
+  const raw = String(value ?? '').trim();
+  return raw !== '' && Number.isFinite(Number(raw));
+};
 const boolean = (value, fallback) => {
   if (value === undefined || value === '') return fallback;
   return /^(1|true|yes|on)$/i.test(String(value));
@@ -244,12 +255,34 @@ export const config = {
   workerScript: path.join(root, 'worker', 'clip_worker.py'),
   ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
   ffprobePath: process.env.FFPROBE_PATH || 'ffprobe',
+  // The SELF-HOSTED fallback only, and that is a change from what this used to
+  // be. The worker box puts its own CAPACITY choice into clip_worker's
+  // environment and clip_worker now prefers that over the job payload, so on
+  // the remote path this value is ignored -- the box picked 'medium' for
+  // itself and was being overruled by this line in every job for a fortnight.
+  // 'small' stays because it is the honest default for a self-hosted
+  // deployment on hardware nobody has measured.
   aiModel: process.env.CLIP_AI_MODEL || 'small',
   aiDevice: process.env.CLIP_AI_DEVICE || 'auto',
   aiComputeType: process.env.CLIP_AI_COMPUTE_TYPE || 'int8',
   aiTask: process.env.CLIP_AI_TASK || 'transcribe',
   aiLanguage: process.env.CLIP_AI_LANGUAGE || '',
+  // How many lectures the APP will have in flight. On the remote path this is
+  // no longer the whole answer: the worker reports its own slot count in
+  // /readiness's capabilities, and local-engine's concurrencyLimit() reads it
+  // -- because the box is what actually has the cores, and a number typed here
+  // once cannot know that the box was resized. Two of the box's three slots
+  // were unreachable from this queue until it did.
   maxConcurrentJobs: Math.max(1, Math.round(number(process.env.MAX_CONCURRENT_JOBS, 1))),
+  // Whether the figure above was TYPED or is just the default. An explicit
+  // MAX_CONCURRENT_JOBS still wins and may only ever CAP the box's number,
+  // never raise it: an operator who sets 1 is asking for one whatever the box
+  // reports, and one who sets 8 against a 3-slot box gets 3, because the box
+  // is authoritative for its own hardware. Unset means the app has no opinion
+  // and the box's number stands alone. The default is baked into the line
+  // above, so that distinction cannot be recovered from maxConcurrentJobs
+  // afterwards and has to travel beside it.
+  maxConcurrentJobsExplicit: numberWasSet(process.env.MAX_CONCURRENT_JOBS),
   maxSourceMinutes: Math.max(5, number(process.env.MAX_SOURCE_MINUTES, 180)),
   maxVideoUploadBytes: Math.max(50, number(process.env.MAX_VIDEO_UPLOAD_MB, 2048)) * 1024 * 1024,
   keepSourceFiles: boolean(process.env.KEEP_SOURCE_FILES, true),
@@ -288,11 +321,17 @@ export const config = {
   musicVolumePercent: Math.max(1, Math.min(50, Math.round(number(process.env.MUSIC_VOLUME_PERCENT, 13)))),
 
   ollamaUrl: (process.env.OLLAMA_URL || '').replace(/\/+$/, ''),
-  // Sized to the worker box, which has 3.7G of RAM. qwen3:4b measured
-  // 2.4-3.0G resident there and was OOM-killed 42 times, taking the whole
-  // machine with it because the kills were global, not per-container. This
-  // value is sent to the worker in the job settings and wins over the worker's
-  // own default, so raising the box means raising it here too.
+  // The SELF-HOSTED fallback only. This comment used to end "this value is
+  // sent to the worker in the job settings and wins over the worker's own
+  // default, so raising the box means raising it here too" -- that stopped
+  // being true when clip_worker learned to prefer OLLAMA_MODEL from its own
+  // environment, and a stale claim of exactly that kind is what hid the
+  // whisper-model bug for a fortnight. The box sets its own model now; raising
+  // the box means raising it ON the box.
+  // The value itself is unchanged, and is the honest default for a self-hosted
+  // deployment on unknown hardware: qwen3:4b measures 2.4-3.0G resident and
+  // was OOM-killed 42 times on the 3.7G box, taking the whole machine with it
+  // because the kills were global rather than per-container.
   ollamaModel: process.env.OLLAMA_MODEL || 'qwen3:1.7b',
 
   /*

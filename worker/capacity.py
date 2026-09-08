@@ -198,11 +198,28 @@ def plan() -> dict[str, Any]:
         if has_gpu:
             concurrency = max(1, min(concurrency, 2))
 
+    # The share of the machine ONE job owns. Both thread budgets below are this
+    # number, because two jobs must not each believe they own the box.
+    share = max(1, cores // concurrency)
+
     env_threads = _env("FFMPEG_THREADS")
-    # Split the cores between the jobs that will be running, so two jobs cannot
-    # each believe they own the machine. Four threads on two cores was ffmpeg
-    # contending with itself and with Whisper.
-    threads = max(1, int(env_threads)) if env_threads else max(1, cores // concurrency)
+    # Four threads on two cores was ffmpeg contending with itself and with
+    # Whisper.
+    threads = max(1, int(env_threads)) if env_threads else share
+
+    env_cpu_threads = _env("WHISPER_CPU_THREADS")
+    # THE SAME SHARE, and deliberately not a smaller slice. Whisper and ffmpeg
+    # never run at the same instant WITHIN one job -- a job transcribes, then it
+    # renders -- so the honest budget for each is what one job owns, not half of
+    # it. Told nothing, ctranslate2 sizes its pool from every core it can see,
+    # which was free while the box ran one job at a time and is threefold
+    # oversubscription now that CAPACITY allows three.
+    #
+    # THE TRADE, MADE ON PURPOSE: a lecture running ALONE now gets cores//jobs
+    # instead of the whole machine, so a single import is slower than it was.
+    # Several together stop contending, which is what a bigger box was bought
+    # for. Do NOT "fix" this back to `cores` -- that is the fight, not the fix.
+    cpu_threads = max(1, int(env_cpu_threads)) if env_cpu_threads else share
 
     return {
         "cores": cores,
@@ -214,6 +231,7 @@ def plan() -> dict[str, Any]:
         "model": model,
         "maxConcurrentJobs": concurrency,
         "ffmpegThreads": threads,
+        "cpuThreads": cpu_threads,
     }
 
 

@@ -149,6 +149,41 @@ RENDER_PROGRESS_SECONDS = 2.0
 DEFAULT_WHISPER_TASK = "transcribe"
 DEFAULT_WHISPER_MODEL = "small"
 
+
+def whisper_settings(settings: dict[str, Any]) -> tuple[str, str, str]:
+    """(model, device, compute_type) -- THE BOX WINS, THEN THE JOB PAYLOAD.
+
+    The environment is what the machine knows about itself. service.py computes
+    CAPACITY from the container's own cgroup and puts WHISPER_MODEL /
+    WHISPER_DEVICE / WHISPER_COMPUTE_TYPE into this child's environment; the
+    payload is what the WEB APP guessed, and the web app has never seen the
+    box. This file used to read `settings["model"]` first and never read the
+    environment at all, so the CPX41's `medium` was ignored and every job on
+    the box ran `small` -- verified against production job records.
+
+    The payload is still the fallback, and DEFAULT_WHISPER_MODEL is still the
+    last word, because the SELF-HOSTED engine spawns clip_worker directly with
+    no such environment: unset, this resolves exactly as it did before.
+
+    ONE FUNCTION, TWO CALLERS, AND THAT IS THE POINT. The transcript cache key
+    is built from the same answer (see transcript_cache_path, whose own comment
+    records what happened last time these two disagreed). If the transcriber
+    resolves `medium` while the key still says `small`, a medium transcript is
+    filed under small and served to a later small job.
+    """
+    def pick(env_name: str, payload_key: str, fallback: str) -> str:
+        value = str(os.getenv(env_name) or "").strip()
+        if value:
+            return value
+        return str(settings.get(payload_key) or fallback)
+
+    return (
+        pick("WHISPER_MODEL", "model", DEFAULT_WHISPER_MODEL),
+        pick("WHISPER_DEVICE", "device", "auto"),
+        pick("WHISPER_COMPUTE_TYPE", "computeType", "int8"),
+    )
+
+
 # Clients to try when YouTube refuses the media URL. None is yt-dlp's own
 # default and usually works; the rest are the ones that historically keep
 # working when it does not. Mirrors YOUTUBE_CLIENTS in import_providers.py.
@@ -555,6 +590,23 @@ SECOND_LISTEN_PASSES: tuple[tuple[str, dict[str, Any]], ...] = (
 )
 
 
+def relaxed_guards(options: dict[str, Any]) -> frozenset[str]:
+    """Which of the two silencers are switched off in these options.
+
+    `vad_filter` absent or falsy means Silero is not filtering (that is also
+    faster-whisper's own default). `no_speech_threshold` set to None means the
+    gate is off; ABSENT means the library's default gate, which is on -- so a
+    plain `.get()` comparison cannot tell "off" from "not mentioned", and that
+    distinction is the whole of the second-listen rule below.
+    """
+    off: set[str] = set()
+    if not options.get("vad_filter"):
+        off.add("vad_filter")
+    if "no_speech_threshold" in options and options["no_speech_threshold"] is None:
+        off.add("no_speech_threshold")
+    return frozenset(off)
+
+
 def transcript_reach(segments: list[dict[str, Any]], duration_sec: float) -> float:
     """How far into the audio the transcript reaches, as a share of it."""
     if not segments or duration_sec <= 0:
@@ -583,16 +635,34 @@ def second_listen(
         return first, None
     best, best_reach, winner = first, transcript_reach(first, duration_sec), None
     first_reach = best_reach
+    base_off = relaxed_guards(options)
+    listened_again = False
     for label, changes in SECOND_LISTEN_PASSES:
         retry = dict(options)
         retry.update(changes)
         if not retry.get("vad_filter"):
             retry.pop("vad_parameters", None)
+        # A QUR'AN JOB ALREADY STARTS WITH THE VAD OFF (v3.132.0, measured on
+        # the box), and that is what made both of these reachable. Each pass
+        # was applied blind to the base options, so on a recitation the first
+        # pass changed NOTHING -- a whole wasted transcription of the file --
+        # and the second then ran with the voice filter AND the no-speech gate
+        # off together, which is the one combination SECOND_LISTEN_PASSES
+        # exists to avoid: it hallucinates captions onto silence, worse than
+        # the fault being fixed. Both are decided against the base rather than
+        # against the template, so nothing here has to know what kind of job
+        # this is.
+        retry_off = relaxed_guards(retry)
+        if retry_off == base_off:
+            continue  # this pass is already the base state; it can only waste one
+        if len(retry_off) > 1:
+            continue  # never both silencers off at once
         try:
             candidate = run_pass(retry)
         except TypeError:
             # An older faster-whisper without the option. Not a failed job.
             continue
+        listened_again = True
         reach = transcript_reach(candidate, duration_sec)
         if reach > best_reach + 0.05:
             best, best_reach, winner = candidate, reach, label
@@ -603,9 +673,17 @@ def second_listen(
              warning=(f"The first listen stopped at {first_reach * 100:.0f}% of the audio; "
                       f"a second pass with {winner} reached {best_reach * 100:.0f}%."))
     else:
+        # Two different silences, and the customer is owed the right one. With
+        # every pass skipped above -- a recitation, which already runs with the
+        # voice filter off -- nothing listened again, and saying it "did not
+        # reach further" would describe a pass that never ran. Same code, so
+        # the app's guidance for it is unchanged.
+        tail = ("and listening again did not reach further."
+                if listened_again else
+                "and there was no safer way to listen again: this recording already runs "
+                "with voice detection off.")
         emit("warning", code="transcription_stopped_early",
-             warning=(f"The speech recogniser stopped at {first_reach * 100:.0f}% of the audio "
-                      "and listening again did not reach further."))
+             warning=f"The speech recogniser stopped at {first_reach * 100:.0f}% of the audio {tail}")
     return best, winner
 
 
@@ -670,15 +748,23 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
         raise RuntimeError("faster-whisper is not installed. Run pip install -r worker/requirements.txt.") from exc
 
     settings = job["settings"]
-    device = settings.get("device") or "auto"
-    compute_type = settings.get("computeType") or "int8"
-    model_name = settings.get("model") or DEFAULT_WHISPER_MODEL
+    model_name, device, compute_type = whisper_settings(settings)
     progress(
         "Loading transcription model", 13,
         model=model_name, device=device, computeType=compute_type,
         sourceDurationSec=round(duration_sec, 2), etaSec=None,
     )
-    model = WhisperModel(model_name, device=device, compute_type=compute_type)
+    # CAP THE TRANSCRIBER'S CORES. Constructed without cpu_threads, ctranslate2
+    # takes every core it can see -- free while the box ran one job at a time,
+    # and threefold oversubscription against ffmpeg's own capped threads now
+    # that CAPACITY allows three. service.py owns the number (it is the one
+    # that knows how many jobs it will run at once); unset -- the self-hosted
+    # engine -- the library decides exactly as it did before.
+    threads = str(os.getenv("WHISPER_CPU_THREADS") or "").strip()
+    model_kwargs: dict[str, Any] = {}
+    if threads.isdigit() and int(threads) > 0:
+        model_kwargs["cpu_threads"] = int(threads)
+    model = WhisperModel(model_name, device=device, compute_type=compute_type, **model_kwargs)
     kwargs: dict[str, Any] = {
         # Greedy decoding. beam_size=5 cost roughly a third more wall time on
         # the 2-vCPU worker for a marginal gain on clear lecture speech; the
@@ -2559,12 +2645,16 @@ def refine_with_ollama(candidates: list[Candidate], settings: dict[str, Any], le
     base_url = str(
         settings.get("ollamaUrl") or os.getenv("OLLAMA_URL") or "http://ollama:11434"
     ).rstrip("/")
-    # Reads the environment like ollamaUrl on the line above does. It did not,
-    # so OLLAMA_MODEL in docker-compose.yml was silently ignored and the box
-    # kept loading whatever the web service asked for -- which is how a 2.5G
-    # model went on being loaded on a 3.7G machine after someone had already
-    # "changed" it in compose.
-    model = str(settings.get("ollamaModel") or os.getenv("OLLAMA_MODEL") or "qwen3:1.7b")
+    # THE ENVIRONMENT WINS, THEN THE PAYLOAD, THEN THE LITERAL -- and that
+    # order is the fix, not the fact that both are read. It read the payload
+    # first, so OLLAMA_MODEL in docker-compose.yml was outranked by whatever
+    # the web service asked for: the box's qwen3:4b never reached clip titling
+    # after the CPX41 rescale, exactly as a 2.5G model went on being loaded on
+    # a 3.7G machine before it. The BOX knows its own RAM; the app does not,
+    # and a model too big for the container is an OOM kill mid-job rather than
+    # a slow answer. The payload stays as the fallback for the self-hosted
+    # engine, which sets no environment.
+    model = str(os.getenv("OLLAMA_MODEL") or "").strip() or str(settings.get("ollamaModel") or "qwen3:1.7b")
     if not candidates:
         return candidates
     if not base_url:
@@ -6453,9 +6543,13 @@ def transcript_cache_path(job: dict[str, Any], start: float, end: float) -> Path
     settings = job.get("settings", {})
     key = "_".join([
         source_key,
-        # The same defaults the transcriber uses. When these two disagreed, a
-        # cache entry was filed under a task the run had not performed.
-        str(settings.get("model") or DEFAULT_WHISPER_MODEL),
+        # The same ANSWER the transcriber uses, from the same function -- not
+        # the same default read twice. When these two disagreed, a cache entry
+        # was filed under a task the run had not performed; with the box now
+        # overriding the model from its environment, reading the payload here
+        # would file a `medium` transcript under `small` and serve it to a
+        # later `small` job.
+        whisper_settings(settings)[0],
         str(settings.get("task") or DEFAULT_WHISPER_TASK),
         str(settings.get("language") or "auto"),
         f"{start:.2f}", f"{end:.2f}",

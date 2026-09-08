@@ -508,7 +508,21 @@ class YtDlpImportProvider(ManagedImportProvider):
                 raise yt_dlp.utils.DownloadError("The imported video exceeds the configured download limit.")
 
         ydl_opts = {
-            "format": "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b",
+            # CAPPED AT 1080p, because that is the frame this product renders:
+            # every template is 1080x1920 and every clip is downscaled to it. An
+            # uncapped selector fetches the best mp4 YouTube offers, so a 4K
+            # lecture was downloaded in full to make a 1080p clip -- several
+            # times the bytes off a 250GB monthly proxy plan, several times the
+            # disk, and several times the work in every ffmpeg pass after it.
+            #
+            # The bare "/b" is kept LAST deliberately: a video published only
+            # above 1080p with no lower rendition would otherwise fail to
+            # download at all. Saving bandwidth must never cost an import --
+            # the same rule the section-download fallback follows.
+            "format": (
+                "bv*[ext=mp4][height<=1080]+ba[ext=m4a]/"
+                "b[ext=mp4][height<=1080]/b[height<=1080]/b"
+            ),
             "merge_output_format": "mp4",
             "outtmpl": outtmpl + ".%(ext)s",
             "quiet": True,

@@ -170,5 +170,126 @@ class SecondListenTests(unittest.TestCase):
                       "a short recording is a range problem, not a recogniser one")
 
 
+class SecondListenGuardTests(unittest.TestCase):
+    """Which passes are worth running, decided against the BASE options.
+
+    Each pass used to be applied blind. A Qur'an job already starts with the
+    voice filter off (v3.132.0, measured on the box), so on a recitation the
+    "voice detection off" pass changed NOTHING -- a whole wasted transcription
+    of the file, minutes on a single-slot box -- and the "no-speech gate off"
+    pass then ran with the filter AND the gate off together, which is the one
+    combination SECOND_LISTEN_PASSES exists to avoid: with neither silencer in
+    the way the model hallucinates captions onto silence, which is worse than
+    the fault being fixed.
+
+    Driven against the real second_listen with a fake run_pass that records the
+    options it was handed, because the fault is entirely in the ARGUMENTS -- a
+    wasted pass and a dangerous pass both return perfectly ordinary segments.
+    """
+
+    STOPS_EARLY = [{"start": 0.0, "end": 16.4, "text": "x"}, {"start": 17.2, "end": 28.4, "text": "y"}]
+    DURATION = 568.0
+
+    # What a lecture and a recitation actually arrive with, from
+    # _transcribe_with_faster_whisper's own kwargs.
+    LECTURE = {"beam_size": 1, "vad_filter": True, "vad_parameters": {"min_silence_duration_ms": 450},
+               "word_timestamps": True, "condition_on_previous_text": False, "task": "transcribe"}
+    RECITATION = {"beam_size": 1, "vad_filter": False, "word_timestamps": True,
+                  "condition_on_previous_text": False, "task": "transcribe"}
+
+    def listen(self, options, answer=None):
+        """Run the real second_listen; return (segments, label, options seen, events)."""
+        seen: list[dict] = []
+
+        def run_pass(passed):
+            seen.append(dict(passed))
+            return (answer or self.STOPS_EARLY)
+
+        out = io.StringIO()
+        with redirect_stdout(out):
+            best, winner = cw.second_listen(run_pass, self.STOPS_EARLY, self.DURATION, dict(options))
+        events = [json.loads(line) for line in out.getvalue().splitlines() if line.startswith("{")]
+        return best, winner, seen, events
+
+    def guards_off(self, options):
+        return cw.relaxed_guards(options)
+
+    # -- the absent/None distinction the whole rule rests on --
+
+    def test_an_absent_no_speech_threshold_is_the_librarys_gate_and_it_is_ON(self):
+        # A plain .get() comparison cannot tell "off" from "not mentioned", and
+        # reading absent as off would make every base look like the gate was
+        # already relaxed -- skipping the one pass that recovers a gated file.
+        self.assertNotIn("no_speech_threshold", self.guards_off({"vad_filter": True}))
+        self.assertIn("no_speech_threshold", self.guards_off({"vad_filter": True, "no_speech_threshold": None}))
+        self.assertNotIn("no_speech_threshold", self.guards_off({"vad_filter": True, "no_speech_threshold": 0.6}))
+
+    def test_an_absent_vad_filter_is_faster_whispers_own_default_which_is_off(self):
+        self.assertIn("vad_filter", self.guards_off({}))
+        self.assertIn("vad_filter", self.guards_off({"vad_filter": False}))
+        self.assertNotIn("vad_filter", self.guards_off({"vad_filter": True}))
+
+    # -- a recitation --
+
+    def test_a_recitation_runs_no_pass_that_can_only_waste_a_transcription(self):
+        best, winner, seen, _ = self.listen(self.RECITATION)
+        self.assertEqual(seen, [], "the voice filter is already off; that pass changes nothing")
+        self.assertIsNone(winner)
+        self.assertIs(best, self.STOPS_EARLY, "the first pass stands")
+
+    def test_a_recitation_never_relaxes_the_gate_on_top_of_the_filter(self):
+        _, _, seen, _ = self.listen(self.RECITATION)
+        for options in seen:
+            self.assertLessEqual(len(self.guards_off(options)), 1,
+                                 "neither silencer left in the way hallucinates captions onto silence")
+
+    def test_a_recitation_that_stays_short_says_which_silence_it_was(self):
+        # "listening again did not reach further" would describe a pass that
+        # never ran. Same warning CODE, so the app's guidance is unchanged.
+        _, _, _, events = self.listen(self.RECITATION)
+        warnings = [event for event in events if event.get("type") == "warning"]
+        self.assertEqual([w["code"] for w in warnings], ["transcription_stopped_early"])
+        self.assertIn("no safer way to listen again", warnings[0]["warning"])
+        self.assertNotIn("did not reach further", warnings[0]["warning"])
+
+    # -- an ordinary lecture is untouched --
+
+    def test_a_lecture_still_gets_both_passes_one_guard_at_a_time(self):
+        _, _, seen, _ = self.listen(self.LECTURE)
+        self.assertEqual(len(seen), 2)
+        self.assertIs(seen[0].get("vad_filter"), False)
+        self.assertNotIn("vad_parameters", seen[0], "the VAD's own tuning goes with it")
+        self.assertIsNotNone(seen[0].get("no_speech_threshold", 0.6), "the gate still refuses real silence")
+        self.assertIsNone(seen[1].get("no_speech_threshold", 0.6))
+        self.assertIs(seen[1].get("vad_filter"), True, "the filter still removes it")
+        for options in seen:
+            self.assertEqual(len(self.guards_off(options)), 1)
+
+    def test_a_lecture_that_stayed_short_says_it_listened_again(self):
+        _, _, _, events = self.listen(self.LECTURE)
+        warnings = [event for event in events if event.get("type") == "warning"]
+        self.assertEqual([w["code"] for w in warnings], ["transcription_stopped_early"])
+        self.assertIn("did not reach further", warnings[0]["warning"])
+
+    def test_a_pass_that_reaches_further_still_wins_and_is_named(self):
+        full = [{"start": i * 12.0, "end": i * 12.0 + 9.0, "text": "x"} for i in range(46)]
+        best, winner, seen, events = self.listen(self.LECTURE, answer=full)
+        self.assertEqual(best, full)
+        self.assertEqual(winner, "voice detection off")
+        self.assertEqual(len(seen), 1, "the first retry reached the end; the second is not paid for")
+        self.assertEqual([e["code"] for e in events if e.get("type") == "warning"],
+                         ["transcription_second_pass"])
+
+    # -- the rule is about the base, not about the template --
+
+    def test_a_base_with_the_gate_already_off_skips_the_gate_pass_too(self):
+        # Symmetry, so nothing here has to know what kind of job this is: the
+        # no-op pass and the both-off pass are both refused whichever guard the
+        # base happens to have relaxed.
+        base = {**self.LECTURE, "no_speech_threshold": None}
+        _, _, seen, _ = self.listen(base)
+        self.assertEqual(seen, [])
+
+
 if __name__ == "__main__":
     unittest.main()

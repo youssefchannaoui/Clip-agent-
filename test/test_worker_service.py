@@ -739,6 +739,42 @@ class WorkerPersistenceTests(unittest.TestCase):
             caps = self.service.worker_capabilities()
         self.assertIsInstance(caps, dict)
 
+    def test_health_says_how_many_lectures_this_box_will_run_at_once(self):
+        # The app sizes what it sends off capabilities.maxConcurrentJobs. It
+        # could only assume ONE before this, so a box with three slots was fed
+        # one lecture at a time and nothing anywhere said so. The key name is
+        # fixed; both sides depend on it.
+        caps = self.service.worker_capabilities()
+        self.assertIn("maxConcurrentJobs", caps)
+        self.assertIsInstance(caps["maxConcurrentJobs"], int)
+        self.assertGreaterEqual(caps["maxConcurrentJobs"], 1)
+
+    def test_the_reported_slot_count_is_the_one_the_threads_were_built_from(self):
+        # Not CAPACITY["maxConcurrentJobs"] read a second time: the report and
+        # the machine must not be able to disagree, and MAX_CONCURRENT is what
+        # the consumer threads were actually built from.
+        self.assertEqual(self.service.worker_capabilities()["maxConcurrentJobs"],
+                         self.service.MAX_CONCURRENT)
+        store = self.service.JobStore()
+        processor = self.service.Processor(store)
+        main_lane = [t for t in processor.threads if t.name.startswith("job-") and t.name != "job-quick"]
+        self.assertEqual(len(main_lane), self.service.MAX_CONCURRENT,
+                         "one main-lane consumer thread per reported slot")
+        # The quick lane is deliberately NOT counted: preview renders have
+        # their own dedicated thread here and bypass the app's concurrency cap
+        # in pump() for the same reason. Reporting it would let the app send
+        # one more lecture than this box will actually run.
+        self.assertEqual(len(processor.threads), self.service.MAX_CONCURRENT + 1)
+
+    def test_a_worker_that_cannot_read_its_own_capabilities_still_reports_its_slots(self):
+        # This branch is usually "mid-rebuild", not "this box is broken", and
+        # an app that silently drops to one lecture at a time every time an
+        # import blips is slow for a reason nobody can see.
+        with mock.patch.object(self.service, "_service_source", side_effect=OSError("boom")):
+            caps = self.service.worker_capabilities()
+        self.assertIn("error", caps)
+        self.assertEqual(caps["maxConcurrentJobs"], self.service.MAX_CONCURRENT)
+
     def test_a_provider_that_ignores_progress_still_works(self):
         # Most providers pass a plain `lambda: bool`. The two-argument form must
         # fall back rather than raise.

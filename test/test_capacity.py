@@ -17,7 +17,7 @@ import capacity as cap
 
 ENV_KEYS = (
     "WHISPER_DEVICE", "WHISPER_COMPUTE_TYPE", "WHISPER_MODEL",
-    "WORKER_MAX_CONCURRENT_JOBS", "FFMPEG_THREADS",
+    "WORKER_MAX_CONCURRENT_JOBS", "FFMPEG_THREADS", "WHISPER_CPU_THREADS",
 )
 
 
@@ -73,6 +73,52 @@ class CapacityTests(unittest.TestCase):
         self.assertEqual(plan["maxConcurrentJobs"], 4)
         self.assertEqual(plan["ffmpegThreads"], 2, "8 cores across 4 jobs")
 
+    def test_the_transcriber_gets_the_same_share_as_ffmpeg(self):
+        """Both thread budgets are ONE job's share of the machine.
+
+        Told nothing, ctranslate2 sizes its pool from every core it can see --
+        free while the box ran one job at a time, and threefold
+        oversubscription against ffmpeg's own capped threads now that CAPACITY
+        allows three. Deliberately the same share rather than half of it:
+        Whisper and ffmpeg never run at the same instant WITHIN one job, so the
+        honest budget for each is what one job owns.
+        """
+        plan = self.plan(cores=8, ram=12.0)
+        self.assertEqual(plan["maxConcurrentJobs"], 4)
+        self.assertEqual(plan["cpuThreads"], 2, "8 cores across 4 jobs")
+        self.assertEqual(plan["cpuThreads"], plan["ffmpegThreads"])
+
+    def test_the_transcribers_share_follows_the_cores_and_the_concurrency(self):
+        # A lecture running ALONE now gets cores//jobs rather than the whole
+        # machine, and that is the trade this was made for. Several together
+        # stop contending, which is what a bigger box was bought for.
+        self.assertEqual(self.plan(cores=8, ram=32.0)["cpuThreads"], 2, "8 cores, 4 jobs")
+        self.assertEqual(self.plan(cores=16, ram=32.0)["cpuThreads"], 2, "16 cores, 8 jobs")
+        self.assertEqual(self.plan(cores=2, ram=2.0)["cpuThreads"], 2, "2 cores, 1 job")
+
+    def test_the_transcribers_share_is_never_zero(self):
+        """More jobs than cores must not cap the transcriber at nothing."""
+        os.environ["WORKER_MAX_CONCURRENT_JOBS"] = "7"
+        plan = self.plan(cores=2, ram=16.0)
+        self.assertEqual(plan["maxConcurrentJobs"], 7)
+        self.assertGreaterEqual(plan["cpuThreads"], 1)
+
+    def test_the_two_thread_budgets_are_overridden_separately(self):
+        """One env var must never drag the other with it.
+
+        FFMPEG_THREADS is about the renderer and WHISPER_CPU_THREADS about the
+        transcriber; an operator tuning one has said nothing about the other.
+        """
+        os.environ["FFMPEG_THREADS"] = "3"
+        plan = self.plan(cores=8, ram=12.0)
+        self.assertEqual(plan["ffmpegThreads"], 3)
+        self.assertEqual(plan["cpuThreads"], 2, "still 8 cores across 4 jobs")
+
+        os.environ["WHISPER_CPU_THREADS"] = "6"
+        plan = self.plan(cores=8, ram=12.0)
+        self.assertEqual(plan["cpuThreads"], 6)
+        self.assertEqual(plan["ffmpegThreads"], 3)
+
     def test_a_gpu_does_not_invite_unlimited_parallelism(self):
         """One GPU's memory serialises the work whatever the CPU says."""
         self.assertLessEqual(self.plan(cores=32, ram=64.0, gpus=1)["maxConcurrentJobs"], 2)
@@ -94,6 +140,7 @@ class CapacityTests(unittest.TestCase):
         self.assertEqual(big["model"], "medium")
         self.assertEqual(big["maxConcurrentJobs"], 3)
         self.assertEqual(big["ffmpegThreads"], 2, "8 cores across 3 jobs")
+        self.assertEqual(big["cpuThreads"], 2, "and the transcriber gets the same share")
 
     def test_the_small_models_are_costed_exactly_as_they_were(self):
         """Only medium and larger move the number.
@@ -110,7 +157,7 @@ class CapacityTests(unittest.TestCase):
         os.environ.update({
             "WHISPER_DEVICE": "cuda", "WHISPER_COMPUTE_TYPE": "int8_float16",
             "WHISPER_MODEL": "tiny", "WORKER_MAX_CONCURRENT_JOBS": "7",
-            "FFMPEG_THREADS": "3",
+            "FFMPEG_THREADS": "3", "WHISPER_CPU_THREADS": "5",
         })
         plan = self.plan(cores=2, ram=2.0)
         self.assertEqual(plan["device"], "cuda")
@@ -118,6 +165,7 @@ class CapacityTests(unittest.TestCase):
         self.assertEqual(plan["model"], "tiny")
         self.assertEqual(plan["maxConcurrentJobs"], 7)
         self.assertEqual(plan["ffmpegThreads"], 3)
+        self.assertEqual(plan["cpuThreads"], 5)
 
     # ── the current box keeps behaving as it does today ──
 
@@ -128,6 +176,9 @@ class CapacityTests(unittest.TestCase):
         self.assertEqual(plan["ffmpegThreads"], 2)
         self.assertEqual(plan["device"], "cpu")
         self.assertEqual(plan["computeType"], "int8")
+        # New key, same answer: one job owns both cores either way, so adding
+        # a transcriber budget changed nothing this machine already did.
+        self.assertEqual(plan["cpuThreads"], 2)
 
 
 class MemoryBudgetTests(unittest.TestCase):
@@ -185,6 +236,11 @@ class ImageDefaultsTests(unittest.TestCase):
 
     FORBIDDEN = (
         "WHISPER_DEVICE", "WHISPER_COMPUTE_TYPE", "WHISPER_MODEL",
+        # The transcriber's thread budget joined this family the moment it
+        # became a capacity decision. Baked into the image it would be
+        # indistinguishable from an operator's override, and every container
+        # ever built would carry a number chosen for a machine nobody measured.
+        "WHISPER_CPU_THREADS",
         "FFMPEG_THREADS", "WORKER_MAX_CONCURRENT_JOBS",
     )
 

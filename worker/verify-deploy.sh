@@ -10,10 +10,17 @@
 set -u
 CONTAINER="${CONTAINER:-worker-deenclipped-worker-1}"
 fails=0
+warns=0
 
 say()  { printf '%-46s %s\n' "$1" "$2"; }
 ok()   { say "$1" "OK"; }
 bad()  { say "$1" "FAIL — $2"; fails=$((fails + 1)); }
+# A finding that must be READ but must not refuse the deploy. A job that
+# disagrees with this box is usually the reason someone is deploying; failing
+# the run over it would block the very fix. See the newest-job section.
+# Counted, so the summary can point at it rather than printing a legend for a
+# line that is not there -- a note nobody needed is how a real one gets skimmed.
+warn() { say "$1" "!! $2"; warns=$((warns + 1)); }
 
 echo "Container: $CONTAINER"
 echo
@@ -181,6 +188,13 @@ esac
 # printed a confident "clip AI: qwen3:4b loaded OK" while telling us nothing
 # about the model that titles the clips. It would not have caught the real one
 # missing, which is the entire point of the check.
+#
+# AND IT SAID MORE THAN IT CHECKED. The line used to read "the model the worker
+# is configured to use", which reads as a promise that a job will run on it --
+# and this check cannot see a job at all. It reads two things and now claims
+# exactly those two: OLLAMA_MODEL inside the container, and whether Ollama has
+# that model pulled. What a JOB asks for is a separate question, asked below,
+# because those two have been different in production while this said OK.
 model=$(docker exec "$CONTAINER" printenv OLLAMA_MODEL 2>/dev/null | tr -d '\r')
 if [ -z "$model" ]; then
   bad "clip AI: model not configured" "OLLAMA_MODEL is unset in $CONTAINER, so refine_with_ollama falls back to its built-in default. Set it in worker/docker-compose.yml."
@@ -188,7 +202,7 @@ else
   ai=$(docker exec "$CONTAINER" sh -c 'curl -s -m 5 http://ollama:11434/api/tags' 2>/dev/null)
   if printf '%s' "$ai" | grep -q '"models"'; then
     if printf '%s' "$ai" | grep -q "\"$model\""; then
-      ok "clip AI: $model loaded (the model the worker is configured to use)"
+      ok "clip AI: $model pulled (OLLAMA_MODEL in $CONTAINER)"
     else
       bad "clip AI: model missing" "Ollama is up but $model -- the model this worker is configured to use -- is not pulled. Run: docker compose -f worker/docker-compose.yml exec ollama ollama pull $model"
     fi
@@ -196,6 +210,91 @@ else
     bad "clip AI: unreachable" "no Ollama on http://ollama:11434 — clips will be scored and titled without the AI"
   fi
 fi
+
+echo
+
+# ── what a JOB actually asked for ─────────────────────────────────────────────
+# EVERY CHECK ABOVE READS THIS CONTAINER'S OWN CONFIGURATION, so they all agreed
+# with each other through a fortnight of green ticks while every job ran a
+# Whisper model none of them named: clip_worker took settings["model"] out of
+# the job payload and never looked at WHISPER_MODEL, so a box configured for
+# `medium` transcribed on `small` and this script said OK each time. A monitor
+# that reads one side of a disagreement is worse than no monitor.
+#
+# So read the newest job's own payload out of the running container and print
+# what it asked for BESIDE what capacity decided. The box is authoritative --
+# service.py puts capacity's device, compute type and model into clip_worker's
+# environment -- so a difference here means the run did not use what this box is
+# configured for.
+#
+# REPORTED, NEVER FAILED. A fresh box has no jobs at all, and a job recorded
+# before the fix disagreeing is the reason to deploy rather than a reason to
+# refuse. It is one python heredoc against files already on disk: no HTTP, no
+# shared secret, and nothing the new image has to contain.
+asked=$(docker exec -i "$CONTAINER" python3 - <<'PY' 2>/dev/null
+import glob, json, os, sys
+sys.path.insert(0, "/app/worker")
+root = os.environ.get("WORKER_DATA_DIR", "/var/lib/deenclipped")
+paths = glob.glob(os.path.join(root, "jobs", "*", "payload.json"))
+if not paths:
+    print("NONE")
+    raise SystemExit
+newest = max(paths, key=os.path.getmtime)
+try:
+    with open(newest, encoding="utf-8") as handle:
+        settings = (json.load(handle) or {}).get("settings") or {}
+except (OSError, ValueError):
+    settings = {}
+try:
+    import capacity
+    # plan() already folds every environment override in, so this IS what the
+    # container decided rather than a second heuristic beside it.
+    plan = capacity.plan()
+except Exception:
+    plan = {}
+# Ollama's model is not part of that plan; the container's own environment is
+# the only thing it has to decide with.
+plan["ollamaModel"] = os.environ.get("OLLAMA_MODEL", "")
+job = os.path.basename(os.path.dirname(newest))
+rows = 0
+for key, label in (("model", "whisper model"), ("device", "whisper device"),
+                   ("computeType", "whisper compute type"), ("ollamaModel", "clip AI model")):
+    want = str(settings.get(key) or "").strip()
+    box = str(plan.get(key) or "").strip()
+    # A payload that names nothing is the self-hosted engine or an older
+    # record, not a disagreement. Silence there, rather than a false alarm.
+    if not want:
+        continue
+    rows += 1
+    verdict = "MATCH" if want == box else "DIFFER"
+    print("\t".join((verdict, label, want, box or "(this container decided nothing)", job)))
+# Say so explicitly: printing nothing here would reach the shell as an empty
+# answer and be reported as "could not be read", which is a different fault and
+# would send someone looking at the mount rather than at the payload.
+if not rows:
+    print("SILENT\t" + job)
+PY
+)
+if [ -z "$asked" ]; then
+  echo "newest job: could not be read out of $CONTAINER (is WORKER_DATA_DIR mounted, and does it have python3?)"
+elif [ "${asked%%$'\t'*}" = "SILENT" ]; then
+  echo "newest job (${asked#*$'\t'}): names no model settings — nothing to disagree about"
+elif [ "$asked" = "NONE" ]; then
+  echo "newest job: none on this box yet — nothing has asked this worker for a model"
+else
+  while IFS=$'\t' read -r verdict label want box job; do
+    [ -z "$verdict" ] && continue
+    if [ "$verdict" = "MATCH" ]; then
+      ok "newest job ($job): $label $want"
+    else
+      warn "newest job ($job): $label" "asked $want — this container decided $box"
+    fi
+  done <<EOF
+$asked
+EOF
+fi
+
+echo
 
 # ── what the running build reports about itself ───────────────────────────────
 # The same report /health now serves, so this and the app agree on the answer to
@@ -228,5 +327,13 @@ else
   echo "If the code checks failed, the image was cached:"
   echo "  docker compose -f worker/docker-compose.yml build --no-cache"
   echo "  docker compose -f worker/docker-compose.yml up -d"
+fi
+# Printed after either verdict, and only when there is one to explain: a green
+# tick beside a job that ran on a model this box did not choose is exactly the
+# disagreement a deploy log has hidden before.
+if [ "$warns" -gt 0 ]; then
+  echo
+  echo "$warns '!!' line(s) above: the newest job asked for something this box did not"
+  echo "decide. That is a finding, not a failure -- the box is authoritative, so read it."
 fi
 exit "$fails"

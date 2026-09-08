@@ -9,6 +9,7 @@ from ever running, because it only fires when the first pass was `transcribe`.
 Both places that read the default said `translate`. The web app happens to send
 `transcribe` on every job, so it never fired. These stop it waiting.
 """
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -19,6 +20,25 @@ import clip_worker as cw
 
 
 class WhisperDefaultTests(unittest.TestCase):
+    # THIS FILE TESTS THE PAYLOAD PATH, so it must own its own environment.
+    # Since the box's settings win over the job (whisper_settings), a developer
+    # with WHISPER_MODEL exported -- or a runner that ever gains it -- resolves
+    # BOTH models in the cache-key test to the same env value, the two paths
+    # come out equal, and the branch goes red for a change that is correct.
+    # Green here and red there is the worst shape a test can have on this repo:
+    # a phone session cannot reproduce it on the machine that wrote it.
+    ENV_KEYS = ("WHISPER_MODEL", "WHISPER_DEVICE", "WHISPER_COMPUTE_TYPE")
+
+    def setUp(self):
+        self._saved = {k: os.environ.pop(k, None) for k in self.ENV_KEYS}
+
+    def tearDown(self):
+        for key, value in self._saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
     def test_the_first_pass_defaults_to_transcribe(self):
         self.assertEqual(cw.DEFAULT_WHISPER_TASK, "transcribe")
 

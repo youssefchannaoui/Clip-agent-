@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1900 JS + 804 Python**
+- `npm test` and `npm run check` must pass. Currently **1912 JS + 837 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9140,6 +9140,155 @@ about a customer's month moved.
   condition changed the capped list is still one id long, and with the index
   changed the condition is still false. A probe that changes no behaviour
   proves nothing. Eleven probes red in the end.
+
+## The box was retuned and every job still asked for the old models (v3.168.0, 8 Sept 2026)
+
+Youssef, after being told the resize had landed: "check every single spec ... every
+single little angle of this AI worker." The audit's first finding is that the answer
+I had given him two hours earlier was **wrong**, and the correction is the entry.
+
+**v3.164.0 made capacity.py authoritative on the box and I reported medium and
+qwen3:4b as live. They were live in the CONTAINER and reached no job.** Read off the
+box's own job records, the four most recent:
+
+    rerender_mtsfvtmy | whisper: small | ollama: qwen3:1.7b
+    rerender_mtsaimu5 | whisper: small | ollama: qwen3:1.7b
+    rerender_mts55lfp | whisper: small | ollama: qwen3:1.7b
+    rerender_mtrzsw20 | whisper: small | ollama: qwen3:1.7b
+
+**THE APP IS A FOURTH PLACE THESE SETTINGS ARE SET**, after the compose file,
+`worker/.env` and the Docker image -- and it was the one that won.
+
+  * `clip_worker.py` read `settings.get("model") or "small"` and **never read
+    `WHISPER_MODEL` at all**. `service.py` puts `WHISPER_MODEL=medium` into the
+    child's environment on every job and the child ignored it.
+  * `settings.get("ollamaModel") or os.getenv("OLLAMA_MODEL")` -- payload first, so
+    the box's qwen3:4b reached DeenAI's chat and never reached clip titling.
+  * `config.js` sends `CLIP_AI_MODEL || 'small'` and `OLLAMA_MODEL || 'qwen3:1.7b'`
+    with every job, and **its own comment said this would happen**: "This value is
+    sent to the worker in the job settings and wins over the worker's own default,
+    so raising the box means raising it here too." Nobody raised it.
+
+So the honest position for the fortnight after the resize is not "everything except
+the import improved". It is **nothing improved**. The hardware was bought, the
+container was retuned, three sessions wrote about it, and every clip was still cut by
+`small` and titled by a 1.7B model.
+
+### The box wins now, through ONE resolver
+
+`whisper_settings(settings)` resolves model, device and compute type as
+**environment -> payload -> literal**, and the same for the Ollama model. The
+environment is what `service.py` fills from `CAPACITY`, so capacity.py is finally
+what it was written to be. The payload stays as the fallback, because the
+self-hosted engine spawns clip_worker directly and sets no such environment --
+removing it would have broken every local deployment to fix the remote one.
+
+**IT MUST BE ONE FUNCTION, AND THE CACHE KEY IS WHY.** The transcript cache key is
+built from the model, and its own comment already records the cost of getting this
+wrong: "a cache entry was filed under a task the run had not performed". Two
+independent reads would file a `medium` transcript under `small` and serve it back
+to a later job -- a subtler, longer-lived version of the bug being fixed. Both sites
+call the resolver; a test drives both and compares the paths.
+
+An empty or whitespace variable does not count as set, so a blank does not shadow
+the payload.
+
+### The app asks the box how many lectures it can take
+
+`config.maxConcurrentJobs` was `MAX_CONCURRENT_JOBS` or **1**, set nowhere in the
+repo -- so the app dispatched one lecture at a time and two of the box's three slots
+were unreachable. **A fifth place guessing at hardware is not the fix.**
+`/readiness` and `/health` now report `capabilities.maxConcurrentJobs` from the
+worker's own `CAPACITY`, and the pump reads it in remote mode.
+
+  * It never blocks on a network call: an unknown figure falls back to the config
+    value, and starting one lecture while the real number arrives a moment later is
+    correct where stalling the queue is not.
+  * **An explicit `MAX_CONCURRENT_JOBS` CAPS rather than raises.** An operator who
+    sets 1 is asking for 1 whatever the box reports; and an unset variable had to be
+    told apart from an explicit 1, which the old baked-in default could not do.
+  * Self-hosted keeps its own figure, because there the transcriber runs inside the
+    app's process and the app's setting is the only honest bound.
+
+### Whisper had no thread limit, which only mattered once concurrency was real
+
+`WhisperModel(...)` took every core it could see while ffmpeg's threads were capped.
+With one job that was free; with three it is threefold oversubscription.
+`capacity.py` gains `cpuThreads` from the SAME `cores // concurrency` share that
+already feeds `ffmpegThreads` -- one expression, not two copies -- overridable like
+every other value, exported to the child as `WHISPER_CPU_THREADS`, and applied only
+when it parses as a positive integer so an unset variable leaves the library
+deciding exactly as before.
+
+**The trade is stated in the file so nobody "fixes" it back**: a lecture running
+ALONE now gets `cores/jobs` instead of the machine and is slower on its own. That is
+bought deliberately, for three lectures that no longer fight.
+
+### The Qur'an second listen was running with both silencers off
+
+`SECOND_LISTEN_PASSES` relaxes one guard at a time -- correct for a lecture. A
+Qur'an job **starts with the VAD already off** (v3.132.0, measured: Silero handed
+the model 26 seconds of the first 120). So on that path pass one changed nothing at
+all, a whole wasted transcription, and pass two then ran with the VAD off AND the
+no-speech gate off together -- which the module's own comment says "hallucinates
+captions onto silence, which is worse than the fault being fixed".
+
+A pass whose relaxed set equals the base's is skipped, and no pass may leave more
+than one guard relaxed. Proven against the SHIPPED function loaded beside the new
+one, per this file's own rule that a comparison needs the old code:
+
+    QUR'AN  before: 2 passes -- {vad off, gate on} then {vad off, gate OFF}
+    QUR'AN  after : 0 passes
+    LECTURE before and after: identical
+
+**`.get()` cannot answer this**, and that is the trap: for `no_speech_threshold`,
+ABSENT (library default, gate on) and `None` (gate off) are different states.
+
+### The download fetched 4K to make a 1080p clip
+
+The production selector was `bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b` -- no resolution
+cap, on a 250GB-a-month proxy plan, for a product where every template renders
+1080x1920 and every clip is scaled to it. Capped at 1080p, **with the bare fallback
+kept last deliberately**: a lecture published only above 1080p would otherwise fail
+to download outright, and saving bandwidth must never cost an import.
+
+**A cap behind an uncapped preference caps nothing** -- yt-dlp takes the first match,
+so an uncapped clause in front wins on every ordinary video. The test asserts every
+preference before the last is capped, and that half-fix was proven red.
+
+### The monitors were reading the wrong side of the disagreement
+
+This is why it survived a fortnight of green deploys. `verify-deploy.sh` printed
+"clip AI: qwen3:4b loaded (the model the worker is configured to use)" and the
+diagnose probe printed the container's capacity -- both true, both about the side of
+the disagreement that was not being used. **A monitor that reads the wrong side
+reports success while the thing it watches is broken**, which is worse than no
+monitor. Both now report the model a JOB asked for, and say so loudly when it
+differs from the container's.
+
+### Traps paid for
+
+- **A test that reads the real environment is a test that is green here and red
+  there.** `test_whisper_defaults.py` asserts the PAYLOAD path, so with
+  `WHISPER_MODEL` exported both of its two models resolve to the env's value, the
+  two cache paths come out equal, and the branch goes red for a correct change.
+  Reproduced, then given the `setUp`/`tearDown` that `test_capacity.py` already
+  uses. Nothing sets it in `ci.yml` or on this machine today; the point is that a
+  developer with it exported gets a red branch on somebody else's commit.
+- **A file abort is not an assertion failure and does not read like one.** One run
+  reported "1896 tests, 1 fail"; two later runs reported 1912 passing. A sixteen-test
+  gap is a FILE that died, its tests never counted -- the shape this file records as
+  the worst kind of red. Not from the new files: both use `listen(0)`, which is the
+  better pattern. Left as a known pre-existing intermittent rather than claimed
+  fixed.
+
+### What is NOT proven
+
+**No lecture has been imported since this landed.** Every claim here is about which
+settings a job now asks for, driven by test and read off the box's own records --
+not about what `medium` and `qwen3:4b` produce. The next real import is the
+measurement, and `project.timings` has existed for a fortnight without once being
+read.
 
 ## Open items
 

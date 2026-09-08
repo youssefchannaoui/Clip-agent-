@@ -899,10 +899,22 @@ def worker_capabilities() -> dict[str, Any]:
     try:
         import clip_worker
         return {**clip_worker.capabilities(), "downloadProgress": "bytesDone" in _service_source(),
-                "version": worker_version()}
+                "version": worker_version(),
+                # How many lectures this box will genuinely run at once. The app
+                # sizes what it sends off capabilities.maxConcurrentJobs; before
+                # this it could only assume one, so a box with four slots was
+                # fed one lecture at a time and nothing anywhere said so.
+                # MAX_CONCURRENT rather than CAPACITY[...] because that is the
+                # number the consumer threads were actually built from -- the
+                # report and the machine cannot disagree.
+                "maxConcurrentJobs": MAX_CONCURRENT}
     except Exception as exc:  # pragma: no cover - diagnostic path
-        # Even a broken worker says which build is broken.
-        return {"error": clean_error(exc), "version": worker_version()}
+        # Even a broken worker says which build is broken -- and how many slots
+        # it has. This branch is usually "mid-rebuild", not "this box is
+        # broken", and an app that silently drops to one lecture at a time
+        # every time an import blips is slow for a reason nobody can see.
+        return {"error": clean_error(exc), "version": worker_version(),
+                "maxConcurrentJobs": MAX_CONCURRENT}
 
 
 def _service_source() -> str:
@@ -1546,6 +1558,12 @@ class Processor:
             "WHISPER_COMPUTE_TYPE": CAPACITY["computeType"],
             "WHISPER_MODEL": CAPACITY["model"],
             "FFMPEG_THREADS": str(CAPACITY["ffmpegThreads"]),
+            # The transcriber's share of the machine. Told nothing, ctranslate2
+            # sizes its pool from every core it can see, so concurrent lectures
+            # each ask for a whole machine. The number comes from capacity.py
+            # and is never typed here -- one machine, one answer to how it is
+            # divided up, and it moves when the box does.
+            "WHISPER_CPU_THREADS": str(CAPACITY["cpuThreads"]),
         }
         # ITS OWN SESSION, so the ffmpeg and Whisper it starts are one process
         # group with it and stop_child() can reach all of them. See stop_child.

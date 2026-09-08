@@ -14,12 +14,22 @@ question never restarts a worker mid-job. It imports the container's own
 clip_worker and replays the candidate pipeline over the cached transcript at
 the job's real settings, so the numbers below are the numbers the run saw.
 
+WHAT A JOB ASKED FOR, BESIDE WHAT THE BOX DECIDED. Every other readout in this
+script reports the CONTAINER's own configuration, so they all agreed with each
+other while every job ran a Whisper model none of them named: clip_worker read
+settings["model"] out of the job payload and never looked at WHISPER_MODEL, so
+a box configured for `medium` transcribed on `small` through a fortnight of
+green deploy logs. A monitor that reads one side of a disagreement reports
+success while the thing it watches is broken -- so each job below prints what
+its own payload requested BESIDE what capacity.plan() decided, and says so
+loudly where the two differ.
+
 WHAT NEVER LEAVES THE BOX. Not one word of any transcript: only counts,
-timings and lengths are printed. Job errors are already scrubbed by the
-worker's clean_error and are redacted again here for anything shaped like a
-credential. `PARAMS` is substituted on the runner as a JSON literal rather
-than interpolated into a shell command, so a dispatch input can never become
-a command on the box.
+timings, lengths and setting names are printed. Job errors are already scrubbed
+by the worker's clean_error and are redacted again here for anything shaped
+like a credential. `PARAMS` is substituted on the runner as a JSON literal
+rather than interpolated into a shell command, so a dispatch input can never
+become a command on the box.
 """
 
 from __future__ import annotations
@@ -51,6 +61,17 @@ CODE = Path(os.getenv("DC_WORKER_CODE", "/app/worker")).resolve()
 SETTING_KEYS = (
     "clipMinSeconds", "clipMaxSeconds", "clipLengthBands", "clipsPerVideo",
     "language", "task", "translateCaptions", "model", "device", "computeType",
+    "ollamaModel",
+)
+# The settings a job REQUESTS that the box also DECIDES for itself -- the only
+# ones where the two can disagree, and where a disagreement means the run did
+# not use what this container is configured for. See the module docstring.
+#   (key in the job payload's settings, key in capacity.plan(), what to call it)
+JOB_VS_BOX = (
+    ("model", "model", "whisper model"),
+    ("device", "device", "whisper device"),
+    ("computeType", "computeType", "whisper compute type"),
+    ("ollamaModel", "ollamaModel", "clip AI model"),
 )
 TEMPLATE_KEYS = ("id", "name", "captionMode")
 # Userinfo in a URL, and anything that names itself a credential.
@@ -93,7 +114,40 @@ def recent_jobs() -> list[tuple[float, Path, dict]]:
     return rows[:JOBS]
 
 
-def describe_job(mtime: float, folder: Path, status: dict) -> dict:
+def compare_to_box(job_id: str, settings: dict, decided: dict) -> int:
+    """What this job ASKED FOR beside what this container DECIDED.
+
+    Returns how many of the four disagree. Loud on purpose, and as a workflow
+    annotation as well as a line: this mismatch is the finding, and it has
+    already hidden behind a green log for a fortnight once.
+    """
+    mismatched = 0
+    agree, absent, unknown = [], [], []
+    for payload_key, box_key, label in JOB_VS_BOX:
+        asked = str(settings.get(payload_key) or "").strip()
+        box = str(decided.get(box_key) or "").strip()
+        if not asked:
+            # The self-hosted engine spawns clip_worker with no such payload,
+            # and an older payload predates the key. Silence is not a mismatch.
+            absent.append(payload_key)
+        elif not box:
+            unknown.append(payload_key)
+        elif asked == box:
+            agree.append(f"{payload_key}={asked}")
+        else:
+            mismatched += 1
+            out(f"::warning::job {job_id}: asked for {label} {asked!r}, this container decided {box!r}")
+            out(f"  !! MISMATCH  {label}: this job asked for {asked!r}, this container decided {box!r}")
+    if agree:
+        out("  agrees with the box on: " + ", ".join(agree))
+    if absent:
+        out("  not named by this payload: " + ", ".join(absent))
+    if unknown:
+        out("  this container decided nothing for: " + ", ".join(unknown))
+    return mismatched
+
+
+def describe_job(mtime: float, folder: Path, status: dict, decided: dict) -> dict:
     payload = read_json(folder / "payload.json")
     payload = payload if isinstance(payload, dict) else {}
     settings = payload.get("settings") if isinstance(payload.get("settings"), dict) else {}
@@ -107,7 +161,8 @@ def describe_job(mtime: float, folder: Path, status: dict) -> dict:
     out(f"  mode={payload.get('mode') or 'clips'} window={payload.get('sourceStartSec')}..{payload.get('sourceEndSec')}")
     out("  settings: " + json.dumps({k: settings.get(k) for k in SETTING_KEYS if k in settings}, ensure_ascii=False))
     out("  template: " + json.dumps({k: template.get(k) for k in TEMPLATE_KEYS if k in template}, ensure_ascii=False))
-    return {"settings": settings, "template": template, "status": status}
+    mismatched = compare_to_box(folder.name, settings, decided)
+    return {"settings": settings, "template": template, "status": status, "mismatches": mismatched}
 
 
 def recent_transcripts() -> list[Path]:
@@ -289,7 +344,7 @@ def probe_audio(cw, settings: dict) -> None:
             pass
 
 
-def machine() -> None:
+def machine() -> dict[str, str]:
     """WHAT THIS BOX ACTUALLY IS, measured rather than taken on trust.
 
     A server plan is a claim ("we moved to a bigger one") and this is the only
@@ -299,6 +354,11 @@ def machine() -> None:
     docker-compose.yml sets three of them. So a box can double in size and
     change nothing at all, and the only way to tell is to print what the
     machine has BESIDE what the worker decided.
+
+    Returns what this container DECIDED, so the job block below can compare a
+    payload against it rather than working the answer out a second time -- two
+    derivations of "what model is this box on" is how the two halves of a
+    monitor come to disagree in the first place.
 
     Counts and sizes only; nothing here is customer data.
     """
@@ -338,7 +398,8 @@ def machine() -> None:
         # machine -- so growing the box changed nothing for that setting.
         note = f"  <- FORCED by {forced}" if override else ""
         out(f"  {key:<18} {plan.get(key, '?')}{note}")
-    out(f"  ollama model       {os.getenv('OLLAMA_MODEL', '(unset)')}")
+    ollama = str(os.getenv("OLLAMA_MODEL", "") or "").strip()
+    out(f"  ollama model       {ollama or '(unset)'}")
     # What the machine WOULD choose if nothing were forcing it, so the cost of
     # each override is visible rather than inferred.
     try:
@@ -349,6 +410,13 @@ def machine() -> None:
     except Exception:  # noqa: BLE001
         pass
     out()
+    # capacity.plan() already folds each environment override in, so this IS
+    # what the container decided rather than a heuristic beside it. Ollama's
+    # model is not part of that plan -- it is read straight from the container's
+    # own environment, which is the only thing it has to decide with.
+    decided = {key: str(plan.get(key) or "") for key in ("model", "device", "computeType")}
+    decided["ollamaModel"] = ollama
+    return decided
 
 
 def main() -> int:
@@ -358,7 +426,7 @@ def main() -> int:
     out(f"worker version: {version.get('version') if isinstance(version, dict) else 'unknown'}")
     sys.path.insert(0, str(CODE))
     out()
-    machine()
+    decided = machine()
     try:
         import clip_worker as cw  # noqa: PLC0415
     except Exception as exc:  # noqa: BLE001
@@ -370,7 +438,21 @@ def main() -> int:
     jobs = recent_jobs()
     if not jobs:
         out("  none under " + str(DATA / "jobs"))
-    described = [describe_job(*row) for row in jobs]
+    described = [describe_job(*row, decided=decided) for row in jobs]
+
+    # THE HEADLINE. A per-job mismatch is easy to scroll past in a long log, and
+    # the whole reason this readout exists is that the drift was invisible.
+    disagreeing = sum(1 for item in described if item["mismatches"])
+    if described and disagreeing:
+        out()
+        out(f"::warning::{disagreeing} of the {len(described)} newest jobs disagree with this box about what to run")
+        out(f"  !! {disagreeing} of the {len(described)} newest jobs disagree with this box about what to run.")
+        out("     The box is authoritative: worker/service.py puts capacity's device, compute type and")
+        out("     model into clip_worker's environment. A build that reads the payload FIRST runs the")
+        out("     job's value instead, and nothing anywhere says so -- which is this drift exactly.")
+    elif described:
+        out()
+        out(f"  every one of the {len(described)} newest jobs asked for what this container decided.")
 
     # The newest job's own settings, then the defaults the worker would use
     # with none -- so a run that never sent a range is still replayed.
