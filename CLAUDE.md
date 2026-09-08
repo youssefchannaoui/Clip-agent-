@@ -12761,11 +12761,22 @@ and never to be STOPPED. Every fault below is a stop going wrong.
   writes a READY marker once its handler is in, with heartbeats two seconds
   apart so the loop cannot reach its own cancel check first. A grandchild
   that is not provably ignoring the signal proves nothing about the kill.
-- **What is NOT proven here**: a real restart on the box mid-render. The next
-  worker deploy that lands while a job runs is the confirmation -- the job's
-  status should read `interrupted`, then `resumed: 1` with "Resuming from the
-  saved clip plan" in its stage, and the clip count should come back whole.
-  Until then the claim is the tests', not the box's.
+- **THE DRAIN IS CONFIRMED FROM PRODUCTION, 9 Sept 2026.** The v3.173.0 deploy
+  landed while a customer's import was in flight and the run log reads:
+
+        drain: 1 job(s) in flight, 1m left   (x4, ~12 minutes)
+        drain: no job in flight
+        Deployed and verified: the running worker is v3.173.0.
+
+  So a `worker/**` push no longer restarts a job mid-render -- it waits, and
+  only then rebuilds. That is the half that cost a customer their progress
+  twice on 5 Sept, and it is the box's own answer rather than a test's.
+- **What is STILL not proven**: the RESUME. Nothing has yet been interrupted
+  mid-render on the box, because the drain now makes that the rare case rather
+  than the normal one. The confirmation is a job that outlasts
+  `DEPLOY_DRAIN_MINUTES` -- its status should read `interrupted`, then
+  `resumed: 1` with "Resuming from the saved clip plan" in its stage, and the
+  clip count should come back whole. Until then that half is the tests'.
 
 ## Tester access codes: fourteen days of Pro, and a real cut-off (v3.142.0, 7 Sept 2026)
 
