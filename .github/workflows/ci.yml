@@ -44,6 +44,22 @@ jobs:
           set -o pipefail
           npm test 2>&1 | tee test.log
 
+      # A RED RUN WHOSE FAILURE NOBODY CAN READ IS A RED RUN NOBODY CAN ACT ON.
+      # The suite prints ~10,000 TAP lines and a failure is inline, wherever it
+      # happened -- so a session reading this run through an API that hands back
+      # the last few thousand lines sees the counts and not the cause. That is
+      # not hypothetical: it cost most of an hour on run 674. This pulls the
+      # failures to the END, where every reader looks first.
+      - name: Say what failed
+        if: failure()
+        run: |
+          echo "::group::Failing tests"
+          grep -n -A 22 '^not ok' test.log || echo '(no "not ok" line -- the suite died before reporting)'
+          echo "::endgroup::"
+          echo "::group::Counts"
+          grep -E '^# (tests|pass|fail|skipped)' test.log || true
+          echo "::endgroup::"
+
       # CLAUDE.md is the only thing that reaches a session started on a phone,
       # and its test counts are a tripwire. A count kept accurate by remembering
       # to keep it accurate drifts; this fails when the file and the suite
