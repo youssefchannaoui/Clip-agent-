@@ -168,5 +168,42 @@ class MemoryBudgetTests(unittest.TestCase):
         self.assertIsNone(cap._cgroup_memory_limit_gb(("/nonexistent/cgroup/limit",)))
 
 
+class ImageDefaultsTests(unittest.TestCase):
+    """The image must not carry the settings capacity.py is meant to decide.
+
+    An ENV line in the Dockerfile is indistinguishable from an operator's
+    override -- capacity.py's rule is that an explicit value always wins -- so
+    five of them baked into the image meant the module could never decide
+    anything, on any deployment, whatever the compose file said. It is exactly
+    the shape that is invisible when it goes wrong: the worker runs, the suite
+    is green, and a bigger machine changes nothing at all.
+
+    WHISPER_MODEL is forced in docker-compose.yml, deliberately and with its
+    reason beside it. That is where a force belongs: visible, and editable
+    without rebuilding an image.
+    """
+
+    FORBIDDEN = (
+        "WHISPER_DEVICE", "WHISPER_COMPUTE_TYPE", "WHISPER_MODEL",
+        "FFMPEG_THREADS", "WORKER_MAX_CONCURRENT_JOBS",
+    )
+
+    def dockerfile(self):
+        path = Path(__file__).resolve().parent.parent / "worker" / "Dockerfile"
+        # Comments explain what was removed and name every one of these, so a
+        # naive search matches the explanation rather than a setting. Strip
+        # them; do not reword the note to appease the test.
+        lines = [ln for ln in path.read_text().splitlines()
+                 if not ln.lstrip().startswith("#")]
+        return "\n".join(lines)
+
+    def test_the_image_bakes_in_no_capacity_setting(self):
+        body = self.dockerfile()
+        for name in self.FORBIDDEN:
+            self.assertNotIn(f"{name}=", body,
+                             f"{name} is baked into the image; capacity.py can then never decide it")
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -7,12 +7,21 @@ ENV PYTHONUNBUFFERED=1 \
     WORKER_TEMP_DIR=/var/lib/deenclipped/tmp \
     HF_HOME=/var/lib/deenclipped/models \
     FFMPEG_PATH=ffmpeg \
-    FFPROBE_PATH=ffprobe \
-    WHISPER_DEVICE=cpu \
-    WHISPER_COMPUTE_TYPE=int8 \
-    WHISPER_MODEL=small \
-    FFMPEG_THREADS=4 \
-    WORKER_MAX_CONCURRENT_JOBS=1
+    FFPROBE_PATH=ffprobe
+
+# NOT BAKED IN, and this was the root of the whole rescale being wasted:
+# WHISPER_DEVICE, WHISPER_COMPUTE_TYPE, WHISPER_MODEL, FFMPEG_THREADS and
+# WORKER_MAX_CONCURRENT_JOBS were ENV lines here, so every container ever built
+# carried them -- and capacity.py's contract is that an explicit environment
+# variable always wins. An image ENV is indistinguishable from an operator's
+# override, so the module that exists to size the worker to its machine could
+# never decide anything, on any deployment, however the compose file or .env
+# were edited. Removing the compose forces at v3.162.0 changed nothing at all
+# for exactly this reason: the diagnose still read FORCED, by these.
+#
+# A default belongs where it can be seen and overridden -- capacity.py picks
+# every one of these from the machine, and worker/docker-compose.yml forces the
+# one (WHISPER_MODEL) that is a deliberate exception, with its reason beside it.
 
 # Caption fonts. Every family the Templates picker offers has to be installed
 # here, or choosing it silently renders in whatever fontconfig substitutes --

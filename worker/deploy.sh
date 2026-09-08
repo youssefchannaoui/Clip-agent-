@@ -20,6 +20,21 @@ else
 fi
 echo "public url now: $(grep '^OBJECT_STORAGE_PUBLIC_URL=' worker/.env)"
 
+# THE CAPACITY FORCES IN .env WERE WRITTEN FOR A 2-CORE 3.7G BOX and survived
+# the CPX41 resize -- compose stopped setting them at v3.162.0 and .env went on
+# doing it, so the worker still read one job, two ffmpeg threads and `small` on
+# a machine with four times the hardware (CLAUDE.md, v3.162.0).
+#
+# Retired ONCE and marked, never on every deploy: capacity.py's contract is
+# that an explicit value always wins, and a deploy that quietly deletes an
+# operator's override would break exactly the escape hatch this repo relies on.
+# A force set deliberately after this line is left alone for ever.
+if ! grep -q '^# capacity-forces-retired' worker/.env; then
+  sed -i -E 's/^(WORKER_MAX_CONCURRENT_JOBS|FFMPEG_THREADS|WHISPER_DEVICE|WHISPER_COMPUTE_TYPE|WHISPER_MODEL)=/# retired, capacity.py sizes this now: \1=/' worker/.env
+  printf '\n# capacity-forces-retired -- read SCALING.md before adding one back.\n' >> worker/.env
+  echo "retired the stale capacity forces in worker/.env"
+fi
+
 # Let the slot empty first. Recreating the container takes whatever it was
 # doing with it; the worker resumes an interrupted job, but not waiting costs
 # the customer a re-import and a re-render they never asked for. See

@@ -8685,6 +8685,30 @@ move, and the diagnose block's last line is what said so.
   record and 4b is named as the lever; its 2.4-3.0G measured RSS is exactly
   what did not fit under the old 2G cap.
 
+### THEY WERE SET IN THREE PLACES, AND THE ONE THAT MATTERED WAS THE IMAGE
+
+Removing them from `docker-compose.yml` changed **nothing at all**, and the
+next diagnose said so -- container 10G, `qwen3:4b`, and every capacity line
+still reading FORCED. Two more copies:
+
+  * `worker/.env` on the box, which `env_file:` loads (compose's `environment:`
+    outranks it, which is why WHISPER_MODEL read `medium` while the rest read
+    the old values). Retired ONCE by `deploy.sh` and marked, never on every
+    deploy -- a deploy that quietly deletes an operator's override would break
+    the escape hatch capacity.py's whole contract rests on.
+  * **five `ENV` lines in `worker/Dockerfile`** -- and this is the root. An
+    image ENV is indistinguishable from an operator's override, so
+    `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`, `WHISPER_MODEL`, `FFMPEG_THREADS`
+    and `WORKER_MAX_CONCURRENT_JOBS` were set in **every container this product
+    has ever built**. capacity.py has therefore never decided a single thing on
+    any deployment, since the day it was written.
+
+**A DEFAULT BAKED INTO AN IMAGE IS NOT A DEFAULT, IT IS A FORCE**, and it is
+the invisible kind: the worker runs, the suite is green, the compose file reads
+correctly, and a bigger machine changes nothing. `test_capacity.py` fails if any
+of the five returns to the Dockerfile, with comments stripped first -- the note
+explaining the removal names all five.
+
 ### A JOB'S MEMORY FOLLOWS THE MODEL, and until now nothing knew that
 
 `_GB_PER_JOB` was a flat 1.5, because `small` was the only model this box had

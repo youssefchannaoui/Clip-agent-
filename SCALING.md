@@ -12,7 +12,16 @@ numbers". **Both were false**, and it cost a whole server upgrade.
 
 `docker-compose.yml` set `WORKER_MAX_CONCURRENT_JOBS`, `FFMPEG_THREADS`,
 `WHISPER_MODEL`, `WHISPER_DEVICE` and `WHISPER_COMPUTE_TYPE` explicitly, and an
-explicit value ALWAYS wins over the heuristic. Those five were written for a
+explicit value ALWAYS wins over the heuristic.
+
+**And they were set in THREE places, which is why removing one changed
+nothing.** The compose file, `worker/.env` on the box, and -- the one that
+mattered -- five `ENV` lines in `worker/Dockerfile`, so every container ever
+built carried them whatever the other two said. An image ENV is
+indistinguishable from an operator's override, so capacity.py could never
+decide anything on any deployment. All three are cleared now; `deploy.sh`
+retires the `.env` copy once, on any box still provisioned from the old
+template. Those five were written for a
 2-core, 3.7G box and they survived the move to 8 cores and 15.2G. Measured on
 the box on 8 Sept 2026, every one read **FORCED**: one job at a time, two
 ffmpeg threads, `small`, on a machine with four times the hardware.
