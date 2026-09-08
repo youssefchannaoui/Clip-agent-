@@ -58,23 +58,46 @@ def last_failed_url() -> str:
     person asleep, and a probe you can only run with information you do not
     have is a probe nobody runs.
     """
+    import json
     data = Path(os.getenv("WORKER_DATA_DIR", "/var/lib/deenclipped"))
     best: tuple[float, str] = (0.0, "")
-    for status_path in (data / "jobs").glob("*/status.json"):
+    seen = failed = with_url = 0
+    for status_path in sorted((data / "jobs").glob("*/status.json"),
+                              key=lambda item: -item.stat().st_mtime):
+        seen += 1
         try:
-            import json
             status = json.loads(status_path.read_text(encoding="utf-8"))
-            if str(status.get("status") or "") != "failed":
-                continue
             payload = json.loads((status_path.parent / "payload.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        url = str(payload.get("url") or "")
-        if not url.startswith("http"):
-            continue
-        stamp = status_path.stat().st_mtime
-        if stamp > best[0]:
-            best = (stamp, url)
+        # A YouTube link ANYWHERE in the payload. service.py rewrites job["url"]
+        # to a local path once the download lands, so the key that holds the
+        # original differs by how far the job got -- and the failed job, which
+        # is the one being looked for, never got that far. Searching the whole
+        # record is what stops this depending on which stage it died in.
+        url = ""
+        for key in ("url", "sourceUrl", "youtubeUrl"):
+            value = str(payload.get(key) or "")
+            if "youtu" in value and value.startswith("http"):
+                url = value
+                break
+        if not url:
+            for value in re.findall(r"https?://[^\s\"']+", json.dumps(payload)):
+                if "youtu" in value:
+                    url = value
+                    break
+        state = str(status.get("status") or "")
+        if state == "failed":
+            failed += 1
+        if url:
+            with_url += 1
+        # A FAILED job first, because that is the one worth retrying -- but any
+        # job with a link is better than nothing: "can this box fetch YouTube
+        # at all" is still the question underneath.
+        weight = status_path.stat().st_mtime + (10 ** 9 if state == "failed" else 0)
+        if url and weight > best[0]:
+            best = (weight, url)
+    out(f"  records        {seen} job(s) on the box, {failed} failed, {with_url} with a link")
     return best[1]
 
 
@@ -83,7 +106,8 @@ def main() -> int:
     if url == "last-failed":
         url = last_failed_url()
         if not url:
-            out("no failed import on this box to retry")
+            out("  no job on this box carries a YouTube link to retry")
+            out("  (records age out; dispatch probe_url with the link itself)")
             return 0
         out(f"(retrying the newest failed import, {time.strftime('%H:%M', time.localtime())})")
     if not url:
