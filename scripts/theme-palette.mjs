@@ -33,7 +33,13 @@ export const NAMED = new Map(Object.entries({
   // LINES. Strong enough to draw the box, quiet enough not to become a grid.
   '#1e1e22': '#E2E2E6', '#26262a': '#D4D4DA', '#34343a': '#BCBCC4', '#37373d': '#B7B7C0',
   // INK, near-black rather than brown.
-  '#6e6e76': '#6A6A72', '#8b8b93': '#62626B', '#a2a2aa': '#55555E', '#75717b': '#6A6A72',
+  // #85858E IS THE NIGHT LABEL GREY, and it is named rather than derived so
+  // that lifting it over AA at night (v3.159.0, from #6E6E76/#75717B, which
+  // measured 3.43-4.17 across every night ground) moves NOTHING in daylight:
+  // the algorithm would have sent it to a warmer #6A6865, and both greys it
+  // replaces already answered #6A6A72 here. Daylight is byte-identical.
+  '#85858e': '#67676F',
+  '#6e6e76': '#67676F', '#8b8b93': '#62626B', '#a2a2aa': '#55555E', '#75717b': '#67676F',
   '#5e5e66': '#6A6A73', '#bcbcc3': '#33333A', '#e9e9ed': '#1D1D22', '#f2f2f4': '#141418',
   '#f8f8f9': '#141418',
   // Gold darkens rather than disappears: the brand colour at a luminance that

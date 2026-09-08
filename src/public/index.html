@@ -343,7 +343,7 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
   width: 34px; height: 19px; flex: none; padding: 0; border: 1px solid var(--dc-line, #26262A);
   border-radius: 999px; background: var(--dc-bg-raised, #17171A); cursor: pointer; position: relative;
 }
-#studioJobMusic button i { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--dc-ink-faint, #6E6E76); transition: left .16s ease, background .16s ease; }
+#studioJobMusic button i { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--dc-ink-faint, #85858E); transition: left .16s ease, background .16s ease; }
 #studioJobMusic button[aria-checked="true"] { border-color: rgba(217,180,120,.5); background: rgba(217,180,120,.16); }
 #studioJobMusic button[aria-checked="true"] i { left: 17px; background: var(--dc-gold-lit, #F0D6A6); }
 
@@ -356,7 +356,7 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
 /* Highlighted-word controls, matching the Captions panel they sit in. */
 #studioHighlight { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
 #studioHighlight.hide { display: none; }
-#studioHighlight .hl-label { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--dc-ink-faint, #6E6E76); }
+#studioHighlight .hl-label { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--dc-ink-faint, #85858E); }
 #studioHighlight .hl-row { display: flex; align-items: center; gap: 8px; }
 #studioHighlight .hl-row > span:first-child { flex: 1; font-size: 12px; color: var(--dc-ink-soft, #A2A2AA); }
 /* THE SLIDER ROWS ARE A COLUMN, so they are given column widths.
@@ -397,7 +397,7 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
 #studioHighlight .hl-hex { font-size: 11px; color: var(--dc-ink-dim, #8B8B93); font-variant-numeric: tabular-nums; }
 #studioHighlight input[type="range"] { flex: 1; accent-color: var(--dc-gold, #D9B478); }
 #studioHighlight .hl-switch { width: 34px; height: 19px; flex: none; padding: 0; border: 1px solid var(--dc-line, #26262A); border-radius: 999px; background: var(--dc-bg-raised, #17171A); cursor: pointer; position: relative; }
-#studioHighlight .hl-switch i { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--dc-ink-faint, #6E6E76); transition: left .16s ease, background .16s ease; }
+#studioHighlight .hl-switch i { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--dc-ink-faint, #85858E); transition: left .16s ease, background .16s ease; }
 #studioHighlight .hl-switch[aria-checked="true"] { border-color: rgba(217,180,120,.5); background: rgba(217,180,120,.16); }
 #studioHighlight .hl-switch[aria-checked="true"] i { left: 17px; background: var(--dc-gold-lit, #F0D6A6); }
 #studioHighlight .hl-sample { padding: 9px 11px; border: 1px solid var(--dc-line-soft, #1E1E22); border-radius: 9px; background: var(--dc-bg-deepest, #0E0E11); font-size: 13px; color: var(--dc-ink-body, #BCBCC3); }
@@ -453,7 +453,7 @@ body.dc-dragging, body.dc-dragging * { cursor: grabbing !important; }
 .slc-row i { flex: none; }
 .slc-row .what { flex: 1; min-width: 0; }
 .slc-row .what b { display: block; font-size: 11.5px; font-weight: 500; color: var(--dc-ink-body, #BCBCC3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.slc-row .state { flex: none; font-size: 10.5px; color: var(--dc-ink-faint, #6E6E76); }
+.slc-row .state { flex: none; font-size: 10.5px; color: var(--dc-ink-faint, #85858E); }
 .slc-row .pct { flex: none; min-width: 34px; text-align: right; font-size: 11px; color: var(--dc-gold-lit, #F0D6A6); font-variant-numeric: tabular-nums; }
 /* An empty percentage still holds its column, so the states below it stay in
    line instead of sliding right as clips finish. */
@@ -635,7 +635,7 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
    wrapped two-per-line, which reads as a tag cloud rather than a list of
    accounts. Each channel gets its own full-width row. */
 .studio-conn-accounts { grid-area: accounts; display: flex; flex-direction: column; align-items: stretch; width: 100%; min-width: 0; }
-.studio-conn-accounts-h { display: block; padding-bottom: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--dc-ink-faint, #6E6E76); }
+.studio-conn-accounts-h { display: block; padding-bottom: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--dc-ink-faint, #85858E); }
 
 /* ── The connected channels ─────────────────────────────────────────────
    One row per channel, with its own face and its own disconnect. The list
@@ -656,9 +656,9 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
 .studio-conn-face-i { font-size: 11px; font-weight: 700; color: var(--dc-ink-dim, #8B8B93); }
 .studio-conn-acct-who { min-width: 0; }
 .studio-conn-acct-who b { display: block; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.studio-conn-acct-who span { display: block; margin-top: 1px; font-size: 10.5px; color: var(--dc-ink-faint, #6E6E76); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-conn-acct-who span { display: block; margin-top: 1px; font-size: 10.5px; color: var(--dc-ink-faint, #85858E); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .studio-conn-account input { accent-color: var(--dc-gold, #D9B478); width: 15px; height: 15px; cursor: pointer; }
-.studio-conn-drop { width: 22px; height: 22px; flex: none; border: 0; border-radius: 6px; background: none; color: var(--dc-ink-faint, #6E6E76); font-size: 15px; line-height: 1; cursor: pointer; }
+.studio-conn-drop { width: 22px; height: 22px; flex: none; border: 0; border-radius: 6px; background: none; color: var(--dc-ink-faint, #85858E); font-size: 15px; line-height: 1; cursor: pointer; }
 .studio-conn-drop:hover { background: rgba(227,146,140,.12); color: var(--dc-n-e3928c, #E3928C); }
 
 /* ── The posting-options sheet ──────────────────────────────────────────
@@ -702,7 +702,7 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
 .studio-conn-actions button.primary { color: var(--dc-gold-lit, #F0D6A6); }
 .studio-conn-actions button.danger:hover { color: var(--dc-n-e3928c, #E3928C); }
 .studio-conn-actions button[disabled] { opacity: .4; cursor: not-allowed; }
-.studio-conn-foot { margin: 0; font-size: 11px; color: var(--dc-ink-faint, #6E6E76); line-height: 1.5; }
+.studio-conn-foot { margin: 0; font-size: 11px; color: var(--dc-ink-faint, #85858E); line-height: 1.5; }
 /* Publishing is public and there is nothing to set, so the dialog says so once
    -- including the one thing the app cannot deliver on its own. */
 .studio-conn-public { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border: 1px solid rgba(127,209,166,.22); border-radius: 11px; background: rgba(127,209,166,.05); font-size: 11.5px; line-height: 1.5; color: var(--dc-n-a9cbb8, #A9CBB8); }
@@ -806,7 +806,7 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
 .studio-bug-t { width: 100%; padding: 11px 12px; border: 1px solid var(--dc-n-2c2c32, #2C2C32); border-radius: 10px; background: var(--dc-n-0e0e11, #0E0E11);
   font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--dc-n-f2f2f4, #F2F2F4); resize: vertical; outline: none; }
 .studio-bug-t:focus { border-color: rgba(217,180,120,.5); }
-.studio-bug-k { margin-top: 4px; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--dc-n-6e6e76, #6E6E76); }
+.studio-bug-k { margin-top: 4px; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--dc-ink-faint, #85858E); }
 .studio-bug-facts { display: flex; flex-direction: column; gap: 4px; padding: 11px 12px; border: 1px solid var(--dc-n-1e1e22, #1E1E22); border-radius: 10px; background: var(--dc-n-0e0e11, #0E0E11); }
 .studio-bug-facts span { display: flex; gap: 10px; font-size: 11.5px; line-height: 1.45; }
 .studio-bug-facts b { flex: none; width: 68px; color: var(--dc-n-8b8b93, #8B8B93); font-weight: 600; }
@@ -858,7 +858,7 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
    is a separate flag that defaults to false. Without this switch the modal said
    "Connected — not switched on" and offered no way to change it. */
 .studio-conn-switch { flex: none; width: 34px; height: 19px; padding: 0; border: 1px solid var(--dc-line, #26262A); border-radius: 999px; background: var(--dc-bg-raised, #17171A); cursor: pointer; position: relative; transition: background .16s ease, border-color .16s ease; }
-.studio-conn-switch i { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--dc-ink-faint, #6E6E76); transition: left .16s ease, background .16s ease; }
+.studio-conn-switch i { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--dc-ink-faint, #85858E); transition: left .16s ease, background .16s ease; }
 .studio-conn-switch[aria-checked="true"] { border-color: rgba(127,209,166,.5); background: rgba(127,209,166,.16); }
 .studio-conn-switch[aria-checked="true"] i { left: 17px; background: var(--dc-n-7fd1a6, #7FD1A6); }
 .studio-conn-switch[disabled] { opacity: .4; cursor: not-allowed; }
@@ -1342,7 +1342,7 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
    gold is what a published DeenClipped video wears, and spending it on
    something nobody has watched yet would say the opposite of the truth. */
 .bgt-wait{border-color:var(--dc-n-4a4a52, #4A4A52);color:var(--dc-ink-soft, #A2A2AA)}
-.bgt-by{display:block;margin-top:2px;font:400 9.5px Outfit,Inter,sans-serif;color:var(--dc-ink-faint, #6E6E76);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bgt-by{display:block;margin-top:2px;font:400 9.5px Outfit,Inter,sans-serif;color:var(--dc-ink-faint, #85858E);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bgt-votes{display:flex;justify-content:center;gap:4px;margin-top:4px}
 /* 24px tall rather than the text's own height: these are tap targets on a
    phone, where the whole card is 124px wide. */
@@ -3841,10 +3841,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         +'<div style="font:600 14px Outfit,Inter,sans-serif">'+(failed?'Live preview unavailable':'Preparing your live preview')+'</div>'
         +'<div data-line style="font:400 11.5px Outfit,Inter,sans-serif;color:var(--dc-ink-dim, #8B8B93);max-width:250px;line-height:1.4">'+obEsc(line)+'</div>'
         +(failed?'':'<span style="width:150px;height:3px;border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden"><span data-fill style="display:block;height:100%;width:'+pct+'%;background:var(--dc-gold, #D9B478);transition:width .4s"></span></span>')
-        +'<div style="font:400 10.5px Outfit,Inter,sans-serif;color:var(--dc-ink-faint, #6E6E76);max-width:250px;line-height:1.4">Captions, framing and the look are then drawn live as you change them. Save clip renders the exact video.</div>'
+        +'<div style="font:400 10.5px Outfit,Inter,sans-serif;color:var(--dc-ink-faint, #85858E);max-width:250px;line-height:1.4">Captions, framing and the look are then drawn live as you change them. Save clip renders the exact video.</div>'
         +((failed||slow)?'<div style="display:flex;gap:8px;margin-top:4px">'
             +'<button data-retry style="padding:7px 12px;border-radius:8px;border:1px solid rgba(217,180,120,.45);background:rgba(217,180,120,.12);color:var(--dc-gold-lit, #F0D6A6);font:600 11.5px Outfit,Inter,sans-serif;cursor:pointer">'+(failed?'Try again':'Keep waiting')+'</button>'
-            +'<button data-render style="padding:7px 12px;border-radius:8px;border:1px solid var(--dc-line, #26262A);background:transparent;color:var(--dc-ink, #E9E9ED);font:600 11.5px Outfit,Inter,sans-serif;cursor:pointer">Show the last render</button></div>':'');
+            +'<button data-render style="padding:7px 12px;border-radius:8px;border:1px solid var(--dc-line, #26262A);background:transparent;color:var(--dc-ink, #F2F2F4);font:600 11.5px Outfit,Inter,sans-serif;cursor:pointer">Show the last render</button></div>':'');
       if(!document.getElementById('dcSpinKeyframes')){const st=document.createElement('style');st.id='dcSpinKeyframes';st.textContent='@keyframes dcSpin{to{transform:rotate(360deg)}}';document.head.appendChild(st)}
       if(edLoadingEl.dataset.html!==html){
         edLoadingEl.dataset.html=html;edLoadingEl.innerHTML=html;
@@ -6197,7 +6197,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
               +'color:var(--dc-ink, #F2F2F4);font:400 13.5px/1.5 Outfit,Inter,sans-serif;outline:none;'
               +'transition:border-color .16s ease, box-shadow .16s ease"></textarea>'
             +'<span id="jobBriefCount" style="position:absolute;right:11px;bottom:9px;font:500 10.5px Outfit,Inter,sans-serif;'
-              +'color:var(--dc-ink-faint, #6E6E76);pointer-events:none;font-variant-numeric:tabular-nums"></span>'
+              +'color:var(--dc-ink-faint, #85858E);pointer-events:none;font-variant-numeric:tabular-nums"></span>'
           +'</label>'
           /* The examples FILL the box. A chip that only suggests wording is a
              control that does nothing, and this row is also the fastest way to
@@ -6250,7 +6250,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       /* Silent until it starts to matter. A counter on an empty optional box
          reads as a requirement. */
       count.textContent=len>max-120?len+' / '+max:'';
-      count.style.color=len>max-25?'var(--dc-n-ff5566, #FF5566)':'var(--dc-ink-faint, #6E6E76)';
+      count.style.color=len>max-25?'var(--dc-n-ff5566, #FF5566)':'var(--dc-ink-faint, #85858E)';
       const note=jobBriefEl.querySelector('#jobBriefNote');
       note.textContent=text
         ? 'Moments that mention this are ranked first. If the lecture never covers it, you still get its strongest moments and we say so.'
@@ -6308,10 +6308,10 @@ function studioWanted(){return window.STUDIO_SHELL===true}
              in Urdu. Defaults follow the kind (lecture=English, Quran=Arabic)
              and one click overrides it. */
           +'<div id="jobLangRow" style="display:flex;align-items:center;gap:7px;margin-top:12px;flex-wrap:wrap">'
-            +'<span style="font-size:11px;color:var(--dc-ink-faint, #6E6E76);margin-right:2px">Spoken language</span>'
+            +'<span style="font-size:11px;color:var(--dc-ink-faint, #85858E);margin-right:2px">Spoken language</span>'
             +[['en','English'],['ar','Arabic'],['ur','Urdu'],['auto','Auto-detect']].map(([v,l])=>
               `<button type="button" data-lang="${v}" style="padding:5px 11px;border:1px solid var(--dc-line, #26262A);border-radius:999px;background:var(--dc-bg, #121214);color:var(--dc-ink-body, #BCBCC3);font:600 11.5px Outfit,Inter,sans-serif;cursor:pointer">${l}</button>`).join('')
-            +'<span id="jobLangNote" style="flex:1 1 100%;font-size:11px;line-height:1.5;color:var(--dc-ink-faint, #6E6E76)"></span>'
+            +'<span id="jobLangNote" style="flex:1 1 100%;font-size:11px;line-height:1.5;color:var(--dc-ink-faint, #85858E)"></span>'
           +'</div>';
         for(const b of jobTypeEl.querySelectorAll('button[data-kind]')){
           b.onclick=e=>{e.preventDefault();StudioAdapter.bindings(DATA).pickJobType(b.dataset.kind)};
@@ -6600,7 +6600,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
               +'</button>';
           }).join('')
           +'</div>'
-          +'<div class="lb-note" style="font-size:12.5px;color:var(--dc-ink-faint, #6E6E76);margin-top:14px"></div>'
+          +'<div class="lb-note" style="font-size:12.5px;color:var(--dc-ink-faint, #85858E);margin-top:14px"></div>'
           /* A length one of this account's OWN live destinations cannot take.
              Gold rather than red: choosing 60-90s is a real choice, not a
              mistake -- the clips still go everywhere else. Empty for anyone
@@ -6765,14 +6765,14 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       jobDestEl.style.cssText='display:block;margin:14px 0 0';
       if(!usable.length){
         jobDestEl.innerHTML='<div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;'
-          +'color:var(--dc-n-7e7a82, #7E7A82);margin:0 0 8px">Posting to</div>'
-          +'<div style="font-size:12px;line-height:1.6;color:var(--dc-ink-faint, #6E6E76)">'
+          +'color:var(--dc-ink-faint, #85858E);margin:0 0 8px">Posting to</div>'
+          +'<div style="font-size:12px;line-height:1.6;color:var(--dc-ink-faint, #85858E)">'
           +'Nowhere yet \u2014 connect a channel in Connections and these clips will have somewhere to go. '
           +'They still get made, reviewed and scheduled.</div>';
         return;
       }
       jobDestEl.innerHTML='<div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;'
-        +'color:var(--dc-n-7e7a82, #7E7A82);margin:0 0 9px">Posting to</div>'
+        +'color:var(--dc-ink-faint, #85858E);margin:0 0 9px">Posting to</div>'
         +'<div class="jd-row">'
         +usable.map(m=>{
           const on=chosen.includes(m[0]);
@@ -6783,7 +6783,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             +`<span class="jd-k">${on?'\u2713':''}</span></button>`;
         }).join('')
         +'</div>'
-        +'<div style="margin-top:9px;font-size:11.5px;line-height:1.55;color:var(--dc-ink-faint, #6E6E76)">'
+        +'<div style="margin-top:9px;font-size:11.5px;line-height:1.55;color:var(--dc-ink-faint, #85858E)">'
         +(chosen.length
           ? 'Just this lecture. Your Connections settings stay as they are.'
           : 'These clips will be made and reviewed, and posted nowhere.')
@@ -6852,7 +6852,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         if(mode==='own'){
           /* Without this the step was three controls over an empty panel. It
              is also the only place that says the scenery library exists. */
-          html+='<div style="margin-top:15px;font-size:12.5px;line-height:1.6;color:var(--dc-ink-faint, #6E6E76);max-width:66ch">'
+          html+='<div style="margin-top:15px;font-size:12.5px;line-height:1.6;color:var(--dc-ink-faint, #85858E);max-width:66ch">'
             +'Framing follows the speaker. Pick one of the other two to put scenery behind the voice instead, '
             +'from your library or DeenClipped\u2019s.</div>';
         }
@@ -6920,7 +6920,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
               +(canReview
                 ? 'every account sees it, straight away.'
                 : 'offer it to every account. We watch it first.')
-              +'<span style="display:block;margin-top:3px;color:var(--dc-ink-faint, #6E6E76)">'
+              +'<span style="display:block;margin-top:3px;color:var(--dc-ink-faint, #85858E)">'
               +'Scenery, or a speaker covered appropriately. No women, no music video, nothing immodest '
               +'and nothing that would be wrong to play under a reminder.</span></span></label>';
           }
@@ -7505,7 +7505,7 @@ function renderStudio(){
       const live=rows.filter(r=>/^Active$/.test(r.note)&&!r.needsReconnect).length;
       connEls.summary.textContent=`${live} of ${rows.length} ready to publish`;
       connEls.list.innerHTML=rows.map((r,i)=>{
-        const colour=(r.heroDotStyle.match(/background: (#[0-9A-Fa-f]{6})/)||[])[1]||'var(--dc-ink-faint, #6E6E76)';
+        const colour=(r.heroDotStyle.match(/background: (#[0-9A-Fa-f]{6})/)||[])[1]||'var(--dc-ink-faint, #85858E)';
         const off=/Not configured/.test(r.note);
         const linked=!off&&!/Connect to publish/.test(r.note);
         /* The pill beside the name says what state this is in, so the line
@@ -8077,7 +8077,7 @@ window.paintEmailNotifRow=function(data){
     +'</span>'
     +'<button type="button" aria-label="'+(on?'Turn email notifications off':'Turn email notifications on')+'" style="position:relative;width:34px;height:19px;flex:none;border-radius:20px;cursor:pointer;border:1px solid '
     +(on?'rgba(127,209,166,.5);background:rgba(127,209,166,.16);':'var(--dc-line, #26262A);background:var(--dc-bg-raised, #17171A);')+'">'
-    +'<i style="position:absolute;top:2px;left:'+(on?'17px':'2px')+';width:13px;height:13px;border-radius:50%;background:'+(on?'var(--dc-n-7fd1a6, #7FD1A6)':'var(--dc-ink-faint, #6E6E76)')+'"></i></button>');
+    +'<i style="position:absolute;top:2px;left:'+(on?'17px':'2px')+';width:13px;height:13px;border-radius:50%;background:'+(on?'var(--dc-n-7fd1a6, #7FD1A6)':'var(--dc-ink-faint, #85858E)')+'"></i></button>');
   row.querySelector('button').onclick=e=>{e.preventDefault();e.stopPropagation();StudioAdapter.onToggleEmailNotifs()};
   if(row.previousElementSibling!==deskRow)deskRow.insertAdjacentElement('afterend',row);
 };
@@ -8452,7 +8452,7 @@ StudioAdapter.onProbeSource=async url=>{try{
               :`<button type="button" class="studio-acct-switch" data-acct="desktop"
               aria-label="${deskOn?'Turn desktop notifications off':'Turn desktop notifications on'}"
               style="border:1px solid ${deskOn?'rgba(127,209,166,.5);background:rgba(127,209,166,.16)':'var(--dc-n-26262a, #26262A);background:var(--dc-n-17171a, #17171A)'}">
-              <i style="left:${deskOn?'17px':'2px'};background:${deskOn?'var(--dc-n-7fd1a6, #7FD1A6)':'var(--dc-n-6e6e76, #6E6E76)'}"></i></button>`}
+              <i style="left:${deskOn?'17px':'2px'};background:${deskOn?'var(--dc-n-7fd1a6, #7FD1A6)':'var(--dc-ink-faint, #85858E)'}"></i></button>`}
           </div>
           <div class="studio-acct-row">
             <i class="ph ph-envelope-simple"></i>
@@ -8461,7 +8461,7 @@ StudioAdapter.onProbeSource=async url=>{try{
             <button type="button" class="studio-acct-switch" data-acct="emails"
               aria-label="${emailOn?'Turn email notifications off':'Turn email notifications on'}"
               style="border:1px solid ${emailOn?'rgba(127,209,166,.5);background:rgba(127,209,166,.16)':'var(--dc-line, #26262A);background:var(--dc-bg-raised, #17171A)'}">
-              <i style="left:${emailOn?'17px':'2px'};background:${emailOn?'var(--dc-n-7fd1a6, #7FD1A6)':'var(--dc-ink-faint, #6E6E76)'}"></i></button>
+              <i style="left:${emailOn?'17px':'2px'};background:${emailOn?'var(--dc-n-7fd1a6, #7FD1A6)':'var(--dc-ink-faint, #85858E)'}"></i></button>
           </div>
         </div>
 
@@ -8474,7 +8474,7 @@ StudioAdapter.onProbeSource=async url=>{try{
             <button type="button" class="studio-acct-switch" data-acct="theme"
               aria-label="${lightOn?'Switch to night':'Switch to daylight'}"
               style="border:1px solid ${lightOn?'rgba(217,180,120,.5);background:rgba(217,180,120,.16)':'var(--dc-line, #26262A);background:var(--dc-bg-raised, #17171A)'}">
-              <i style="left:${lightOn?'17px':'2px'};background:${lightOn?'var(--dc-gold, #D9B478)':'var(--dc-ink-faint, #6E6E76)'}"></i></button>
+              <i style="left:${lightOn?'17px':'2px'};background:${lightOn?'var(--dc-gold, #D9B478)':'var(--dc-ink-faint, #85858E)'}"></i></button>
           </div>
         </div>
 
@@ -8701,7 +8701,7 @@ StudioAdapter.onProbeSource=async url=>{try{
                 +'<td class="sgm">'+esc(cash(r))+'</td>'
                 +'<td class="sgm">'+esc(mix(r))+'</td></tr>').join('')
             +'</table></div>'
-            +'<p style="margin:10px 2px 0;font-size:11px;color:var(--dc-ink-muted, #75717b);line-height:1.5">'
+            +'<p style="margin:10px 2px 0;font-size:11px;color:var(--dc-ink-muted, #85858E);line-height:1.5">'
             +'Initial revenue is each customer\u2019s first payment, counted once \u2014 renewals are in Money in, not here. '
             +'Rankings, impressions and search queries are NOT shown: they come from Google Search Console, '
             +'which this app has no connection to, and a zero here would be a lie rather than a measurement.</p>'
@@ -8775,7 +8775,7 @@ StudioAdapter.onProbeSource=async url=>{try{
                   +(r.ok?'OK':'Failing')+'</span></td>'
                 +'<td class="sgl">'+esc(r.detail||'\u2014')+'</td></tr>').join('')
             +'</table></div>'
-            +'<p style="margin:10px 2px 0;font-size:11px;color:var(--dc-ink-muted, #75717b);line-height:1.5">'
+            +'<p style="margin:10px 2px 0;font-size:11px;color:var(--dc-ink-muted, #85858E);line-height:1.5">'
             +'Four faults that fail SILENTLY \u2014 a routed asset missing from disk, an inline script the '
             +'CSP does not cover (the app renders its shell and never boots, with no error anywhere), clips '
             +'left on the rate-limited r2.dev endpoint, and the box running older code than worker/RELEASE. '
@@ -8844,10 +8844,10 @@ StudioAdapter.onProbeSource=async url=>{try{
              beside a code plainly in use read as broken; this names the noun. */
           const live=rows.filter(r=>!r.disabled&&r.used<r.cap).length;
           const num=(id,val,label,min,max)=>'<label style="display:flex;flex-direction:column;gap:4px;flex:0 0 82px">'
-            +'<span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dc-ink-faint, #6A6A72)">'+esc(label)+'</span>'
+            +'<span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dc-ink-faint, #85858E)">'+esc(label)+'</span>'
             +'<input id="'+id+'" type="number" min="'+min+'" max="'+max+'" value="'+esc(val)+'" '
             +'style="width:100%;height:34px;padding:0 9px;border-radius:8px;border:1px solid var(--dc-line, #26262A);'
-            +'background:var(--dc-bg, #0E0E11);color:var(--dc-ink, #F2F2F4);font:600 13px/1 inherit"></label>';
+            +'background:var(--dc-bg, #121214);color:var(--dc-ink, #F2F2F4);font:600 13px/1 inherit"></label>';
           box.className='dcow-s';
           box.style.cssText='flex-shrink:0;margin-bottom:18px';
           window.dcSetHtml(box,'<div class="'+esc(cls)+'">'
@@ -8861,15 +8861,15 @@ StudioAdapter.onProbeSource=async url=>{try{
                people can retype off a story or a DM ("DEENTEST") rather than
                six random characters. Left blank it generates one. */
             +'<label style="display:flex;flex-direction:column;gap:4px;flex:0 0 132px">'
-              +'<span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dc-ink-faint, #6A6A72)">Code (optional)</span>'
+              +'<span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dc-ink-faint, #85858E)">Code (optional)</span>'
               +'<input id="dcowCodeText" type="text" placeholder="auto" maxlength="40" '
               +'style="width:100%;height:34px;padding:0 9px;border-radius:8px;border:1px solid var(--dc-line, #26262A);'
-              +'background:var(--dc-bg, #0E0E11);color:var(--dc-ink, #F2F2F4);font:600 12.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase"></label>'
+              +'background:var(--dc-bg, #121214);color:var(--dc-ink, #F2F2F4);font:600 12.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase"></label>'
             +'<label style="display:flex;flex-direction:column;gap:4px;flex:1 1 150px;min-width:0">'
-              +'<span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dc-ink-faint, #6A6A72)">Who it is for</span>'
+              +'<span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dc-ink-faint, #85858E)">Who it is for</span>'
               +'<input id="dcowCodeNote" type="text" placeholder="e.g. @brother_ahmad on Instagram" maxlength="120" '
               +'style="width:100%;height:34px;padding:0 10px;border-radius:8px;border:1px solid var(--dc-line, #26262A);'
-              +'background:var(--dc-bg, #0E0E11);color:var(--dc-ink, #F2F2F4);font:400 13px/1 inherit"></label>'
+              +'background:var(--dc-bg, #121214);color:var(--dc-ink, #F2F2F4);font:400 13px/1 inherit"></label>'
             +'<button id="dcowCodeNew" type="button" style="height:34px;padding:0 15px;border:0;border-radius:8px;cursor:pointer;'
               +'background:var(--dc-n-d9b478, #D9B478);color:#171109;font:700 12.5px/1 inherit">New code</button>'
             +'</div>'
@@ -8889,7 +8889,7 @@ StudioAdapter.onProbeSource=async url=>{try{
                         +(r.disabled?'Enable':'Disable')+'</button>'
                     +'</td></tr>').join('')
                 +'</table></div>'
-              : '<p style="margin:0;font-size:12.5px;color:var(--dc-ink-dim, #9A9AA3)">No codes yet. Set the terms above and press New code — then paste it into the DM.</p>')
+              : '<p style="margin:0;font-size:12.5px;color:var(--dc-ink-dim, #8B8B93)">No codes yet. Set the terms above and press New code — then paste it into the DM.</p>')
             +'</div>');
           /* Rewired on every paint rather than guarded by a flag: dcSetHtml
              rebuilds these nodes whenever the markup changes, and a wired flag
@@ -8963,7 +8963,7 @@ StudioAdapter.onProbeSource=async url=>{try{
                 +'<td class="sgm">'+esc((n[k]&&n[k].sent)||0)+'</td>'
                 +'<td class="sgm">'+esc((n[k]&&n[k].moved)||0)+'</td></tr>').join('')
               +'</table></div>'
-              +'<p style="margin:10px 2px 0;font-size:11px;color:var(--dc-ink-muted, #75717b);line-height:1.5">'
+              +'<p style="margin:10px 2px 0;font-size:11px;color:var(--dc-ink-muted, #85858E);line-height:1.5">'
               +'One email per account per step, never two in a row, off with the bell. "Moved on" counts anyone who passed the step afterwards for any reason.</p></div>';
           };
           const rank=(rows,label)=>{
@@ -9062,7 +9062,7 @@ StudioAdapter.onProbeSource=async url=>{try{
             +'<td class="sgm">'+esc(g.referrals&&g.referrals.activated||0)+'</td>'
             +'<td class="sgm">'+esc(g.referrals&&g.referrals.paid||0)+'</td></tr>'
             +'</table></div>'
-            +'<p style="margin:10px 2px 0;font-size:11px;color:var(--dc-ink-muted, #75717b);line-height:1.5">'
+            +'<p style="margin:10px 2px 0;font-size:11px;color:var(--dc-ink-muted, #85858E);line-height:1.5">'
             +'An account is not a referral. A referral counts once the invited person has processed a video '
             +'and approved a clip. '+esc((g.unavailable||[])[0]||'')+'</p></div>'
             +nudgeTable(g.nudges));
@@ -9155,14 +9155,14 @@ StudioAdapter.onProbeSource=async url=>{try{
             +(vals.redeemDays?'<span style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:'
               +gold+'">'+esc(vals.redeemDays)+'</span>':'')
             +'</div>'
-            +'<p style="margin:7px 0 0;font-size:12.5px;line-height:1.55;color:var(--dc-ink-dim, #9A9AA3)">'+esc(vals.redeemNote)+'</p>'
+            +'<p style="margin:7px 0 0;font-size:12.5px;line-height:1.55;color:var(--dc-ink-dim, #8B8B93)">'+esc(vals.redeemNote)+'</p>'
             /* The field stays even while a grant runs: a tester whose fortnight
                is nearly up may well be sent a second code, and hiding the one
                control that would take it is worse than showing it. */
             +'<form id="dcRedeemForm" style="display:flex;gap:9px;margin-top:13px;flex-wrap:wrap">'
             +'<input id="dcRedeemCode" name="code" autocomplete="off" spellcheck="false" placeholder="DEEN-XXXXXX" '
             +'aria-label="Your code" value="'+esc(vals.redeemCode||'')+'" style="flex:1 1 190px;min-width:0;height:42px;padding:0 13px;'
-            +'border-radius:10px;border:1px solid var(--dc-line, #26262A);background:var(--dc-bg, #0E0E11);'
+            +'border-radius:10px;border:1px solid var(--dc-line, #26262A);background:var(--dc-bg, #121214);'
             +'color:var(--dc-ink, #F2F2F4);font:600 14px/1 ui-monospace,SFMono-Regular,Menlo,monospace;'
             +'letter-spacing:.08em;text-transform:uppercase">'
             +'<button id="dcRedeemGo" type="submit"'+(vals.redeemBusy?' disabled':'')+' style="height:42px;padding:0 18px;border:0;'
@@ -9242,9 +9242,9 @@ StudioAdapter.onProbeSource=async url=>{try{
             +'<div style="display:flex;gap:26px;flex-wrap:wrap">'
             +['Invited|'+(r.invited||0),'Activated|'+(r.activated||0),'Subscribed|'+(r.paid||0)]
               .map(x=>{const [l,v]=x.split('|');return '<div><div style="font:600 22px/1 Outfit,sans-serif;color:var(--dc-gold, #D9B478)">'+esc(v)+'</div>'
-                +'<div style="margin-top:3px;font-size:11.5px;color:var(--dc-ink-muted, #75717b)">'+esc(l)+'</div></div>'}).join('')
+                +'<div style="margin-top:3px;font-size:11.5px;color:var(--dc-ink-muted, #85858E)">'+esc(l)+'</div></div>'}).join('')
             +'</div>'
-            +'<p style="margin:14px 0 0;font-size:11.5px;color:var(--dc-ink-muted, #75717b);line-height:1.5">'
+            +'<p style="margin:14px 0 0;font-size:11.5px;color:var(--dc-ink-muted, #85858E);line-height:1.5">'
             +'Activated means they processed a lecture and kept a clip — not that they made an account.</p>');
           const btn=document.getElementById('dcInviteCopy');
           if(btn&&!btn.dataset.wired){
@@ -9385,13 +9385,13 @@ StudioAdapter.onProbeSource=async url=>{try{
           /* Same shape as the Style and Brand groups above it: a grey
              letter-spaced section label, then rows whose value sits right. */
           window.dcSetHtml(box,'<div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;'
-            +'text-transform:uppercase;color:var(--dc-n-7e7a82, #7E7A82);margin:0 0 10px">Watermark</div>'
+            +'text-transform:uppercase;color:var(--dc-ink-faint, #85858E);margin:0 0 10px">Watermark</div>'
             +'<label style="display:flex;align-items:center;justify-content:space-between;gap:12px;'
             +'min-height:34px;padding:0 2px;cursor:'+(paid?'pointer':'not-allowed')+'">'
-            +'<span style="font-size:13px;color:'+(paid?'var(--dc-n-c9c4bd, #C9C4BD)':'var(--dc-ink-muted, #75717b)')+'">Show watermark</span>'
+            +'<span style="font-size:13px;color:'+(paid?'var(--dc-n-c9c4bd, #C9C4BD)':'var(--dc-ink-muted, #85858E)')+'">Show watermark</span>'
             +'<input type="checkbox" id="dcWmOn"'+(on?' checked':'')+(paid?'':' disabled')
             +' style="width:17px;height:17px;flex:none;accent-color:var(--dc-gold, #D9B478)"></label>'
-            +'<div style="margin-top:2px;padding:0 2px;font-size:11.5px;line-height:1.5;color:var(--dc-ink-muted, #75717b)">'
+            +'<div style="margin-top:2px;padding:0 2px;font-size:11.5px;line-height:1.5;color:var(--dc-ink-muted, #85858E)">'
             +(on?('Every clip carries <b style="color:var(--dc-n-a5a0a8, #A5A0A8)">'+esc(wmText)+'</b>. Position is in Brand below.')
                 :'Clips export clean.')
             +(paid?'':' Removing it is on Pro and Studio.')+'</div>'
@@ -9401,13 +9401,13 @@ StudioAdapter.onProbeSource=async url=>{try{
                NOT a paywall -- it is off by default and switching it on is the
                customer's choice, so no plan gate. */
             +'<div style="font:600 10.5px/1 Inter,sans-serif;letter-spacing:.16em;'
-            +'text-transform:uppercase;color:var(--dc-n-7e7a82, #7E7A82);margin:16px 0 10px">Promo bar</div>'
+            +'text-transform:uppercase;color:var(--dc-ink-faint, #85858E);margin:16px 0 10px">Promo bar</div>'
             +'<label style="display:flex;align-items:center;justify-content:space-between;gap:12px;'
             +'min-height:34px;padding:0 2px;cursor:pointer">'
             +'<span style="font-size:13px;color:var(--dc-n-c9c4bd, #C9C4BD)">Show promo bar</span>'
             +'<input type="checkbox" id="dcPbOn"'+(barOn?' checked':'')
             +' style="width:17px;height:17px;flex:none;accent-color:var(--dc-gold, #D9B478)"></label>'
-            +'<div style="margin-top:2px;padding:0 2px;font-size:11.5px;line-height:1.5;color:var(--dc-ink-muted, #75717b)">'
+            +'<div style="margin-top:2px;padding:0 2px;font-size:11.5px;line-height:1.5;color:var(--dc-ink-muted, #85858E)">'
             +(barOn?('It slides in after the first '+barStart+' seconds, stays for '+barSecs
                      +' second'+(barSecs===1?'':'s')+', then slides away. Every clip, every template.')
                    :'The DeenClipped bar is not shown.')
@@ -9420,7 +9420,7 @@ StudioAdapter.onProbeSource=async url=>{try{
               +'Nothing is drawn over scripture \u2014 neither of these appears on a recitation clip, '
               +'whichever way they are set. They apply to every other template.</div>'):'')
             +(barOn?('<div style="margin-top:10px;padding:0 2px">'
-              +'<div style="font-size:11px;color:var(--dc-ink-faint, #6E6E76);margin-bottom:6px">How long it stays</div>'
+              +'<div style="font-size:11px;color:var(--dc-ink-faint, #85858E);margin-bottom:6px">How long it stays</div>'
               +'<div id="dcPbSecs" style="display:flex;gap:6px;flex-wrap:wrap">'
               +[2,3,4,5,6,8].map(function(n){
                   var sel=barSecs===n;
@@ -9992,7 +9992,7 @@ function paintClipDestinations(vals, data){
          single wrapping row broke after the label on some cards and after the
          first channel on others -- four cards side by side, four different
          shapes. Two lines every time is the consistent one. */
-      row.style.cssText='display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:0 11px 9px;font-size:10.5px;line-height:1.4;color:var(--dc-ink-faint,#6E6E76)';
+      row.style.cssText='display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:0 11px 9px;font-size:10.5px;line-height:1.4;color:var(--dc-ink-faint,#85858E)';
       /* Last thing in the card body, under the score reasons: it is context for
          the decision, not the headline. On the deck, `mount` is the info
          column rather than the 9:16 stage the video fills. */
@@ -10010,7 +10010,7 @@ function paintClipDestinations(vals, data){
       return '<span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">'
         +'<i class="'+mark+'" style="font-size:13px"></i>'+name+'</span>';
     });
-    row.innerHTML='<span style="letter-spacing:.06em;text-transform:uppercase;font-size:9px;color:var(--dc-ink-faint,#6E6E76)">Posts to</span>'
+    row.innerHTML='<span style="letter-spacing:.06em;text-transform:uppercase;font-size:9px;color:var(--dc-ink-faint,#85858E)">Posts to</span>'
       +'<span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+parts.join('')+'</span>';
   });
 }
@@ -10705,7 +10705,7 @@ function paintNasheedLibrary(vals){
      '<div style="display:flex;align-items:center;gap:10px">'
     +  arch
     +  '<span style="display:flex;flex-direction:column;gap:1px;min-width:0;flex:1">'
-    +    '<strong style="font:600 14px Outfit, Inter, sans-serif;letter-spacing:-.01em;color:var(--dc-ink, #E9E9ED)">DeenClipped library</strong>'
+    +    '<strong style="font:600 14px Outfit, Inter, sans-serif;letter-spacing:-.01em;color:var(--dc-ink, #F2F2F4)">DeenClipped library</strong>'
     +    '<span style="font-size:11.5px;color:var(--dc-ink-dim, #8B8B93)">Nasheed beds that ship with the studio &middot; already in rotation</span>'
     +  '</span>'
     +  '<span style="flex:none;padding:3px 10px;border-radius:20px;font:600 10.5px Outfit, Inter, sans-serif;letter-spacing:.08em;'
@@ -10724,8 +10724,8 @@ function paintNasheedLibrary(vals){
          than a grid cell ("Ila Rabbi - AbdulAziz Al-Rashed" truncates at three
          columns), and a row that cannot say which nasheed it is has lost the
          only thing it was for -- the same fix the calendar chip took. */
-      +    '<strong title="'+esc(r.name)+'" style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dc-ink, #E9E9ED)">'+esc(r.name)+'</strong>'
-      +    '<span style="font-size:10.5px;color:var(--dc-ink-faint, #6E6E76)">'+esc(r.dur)+'</span>'
+      +    '<strong title="'+esc(r.name)+'" style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dc-ink, #F2F2F4)">'+esc(r.name)+'</strong>'
+      +    '<span style="font-size:10.5px;color:var(--dc-ink-faint, #85858E)">'+esc(r.dur)+'</span>'
       +  '</span>'
       +  '<i class="ph-fill ph-check-circle" title="In rotation" aria-label="In rotation" '
       +    'style="flex:none;font-size:13px;color:var(--dc-gold, #D9B478)"></i>'
@@ -10815,13 +10815,13 @@ function paintEditorLook(vals){
     if(c.isSelect){
       const opts=(c.opts||[]).map(o=>`<option value="${esc2(o.value)}"${o.on?' selected':''}>${esc2(o.label)}</option>`).join('');
       return `<div style="display:flex;flex-direction:column;gap:5px">${lab(c.label,'')}`
-        +`<select data-edlook="${i}" aria-label="${esc2(c.label)}" style="width:100%;padding:6px 8px;border:1px solid var(--dc-line, #26262A);border-radius:7px;background:var(--dc-bg-raised, #17171A);color:var(--dc-ink, #E9E9ED);font-family:inherit;font-size:11.5px;cursor:pointer">${opts}</select>`
-        +(c.note?`<span style="font-size:10.5px;color:var(--dc-ink-faint, #6E6E76)">${esc2(c.note)}</span>`:'')
+        +`<select data-edlook="${i}" aria-label="${esc2(c.label)}" style="width:100%;padding:6px 8px;border:1px solid var(--dc-line, #26262A);border-radius:7px;background:var(--dc-bg-raised, #17171A);color:var(--dc-ink, #F2F2F4);font-family:inherit;font-size:11.5px;cursor:pointer">${opts}</select>`
+        +(c.note?`<span style="font-size:10.5px;color:var(--dc-ink-faint, #85858E)">${esc2(c.note)}</span>`:'')
         +`</div>`;
     }
     return `<div style="display:flex;flex-direction:column;gap:5px">${lab(c.label,c.readout)}`
       +`<input type="range" data-edlook="${i}" aria-label="${esc2(c.label)}" min="${esc2(c.min)}" max="${esc2(c.max)}" step="${esc2(c.step)}" value="${esc2(c.value)}" style="width:100%;accent-color:var(--dc-gold, #D9B478);cursor:pointer">`
-      +(c.note?`<span style="font-size:10.5px;color:var(--dc-ink-faint, #6E6E76)">${esc2(c.note)}</span>`:'')
+      +(c.note?`<span style="font-size:10.5px;color:var(--dc-ink-faint, #85858E)">${esc2(c.note)}</span>`:'')
       +`</div>`;
   }).join('');
   /* A `range` is dragged, so its VALUE is written back in place rather than
@@ -10929,7 +10929,7 @@ function paintFirstRun(vals){
       +'<span style="display:grid;place-items:center;width:19px;height:19px;flex:none;border-radius:50%;'
       +'border:1px solid rgba(217,180,120,.45);color:var(--dc-n-f0d6a6, #F0D6A6);font-size:10px;font-weight:700">'+n+'</span>'
       +'<b style="font-size:12.5px;font-weight:600;color:var(--dc-n-e9e9ed, #E9E9ED)">'+t+'</b></span>'
-    +'<span style="font-size:11.5px;line-height:1.5;color:var(--dc-n-6e6e76, #6E6E76)">'+note+'</span></span>';
+    +'<span style="font-size:11.5px;line-height:1.5;color:var(--dc-ink-faint, #85858E)">'+note+'</span></span>';
   window.dcSetHtml(steps,beat('1','You pick the minutes','Paste a link, drag the range. Only that stretch is fetched.')
     +beat('2','We do the work','Transcribed, scored, rendered with your Clip Style and a nasheed. About 20 minutes.')
     +beat('3','You keep the good ones','They land in your review queue. Nothing posts until you approve it.'));
@@ -10939,7 +10939,7 @@ function paintFirstRun(vals){
   /* What it costs, beside the thing that spends it. */
   let cost=document.getElementById('dcFirstRunCost');
   if(!cost){cost=document.createElement('p');cost.id='dcFirstRunCost';cost.setAttribute('data-host-owned','')}
-  cost.setAttribute('style','flex:none;margin:9px 0 0;font-size:11.5px;line-height:1.55;color:var(--dc-n-6e6e76, #6E6E76)');
+  cost.setAttribute('style','flex:none;margin:9px 0 0;font-size:11.5px;line-height:1.55;color:var(--dc-ink-faint, #85858E)');
   window.dcSetHtml(cost,'A lecture costs about one token a minute of the stretch you pick, so a five-minute run is '
     +'roughly five tokens'+(ob.tokensLeft!=null?' of your '+obEsc(String(ob.tokensLeft)):'')+'. '
     +'You can watch it run on this screen, and we will tell you when it is done.');
@@ -11045,8 +11045,8 @@ function paintOnboarding(vals){
      * there is light gold on cream, which is why the number simply was not
      * there in daylight.
      */
-    const ink=done?'#0E0E11':now?'var(--dc-n-f0d6a6, #F0D6A6)':'var(--dc-n-6e6e76, #6E6E76)'; // theme-literal
-    const label=done?'var(--dc-n-8b8b93, #8B8B93)':now?'var(--dc-n-f2f2f4, #F2F2F4)':'var(--dc-n-6e6e76, #6E6E76)';
+    const ink=done?'#0E0E11':now?'var(--dc-n-f0d6a6, #F0D6A6)':'var(--dc-ink-faint, #85858E)'; // theme-literal
+    const label=done?'var(--dc-n-8b8b93, #8B8B93)':now?'var(--dc-n-f2f2f4, #F2F2F4)':'var(--dc-ink-faint, #85858E)';
     return '<button type="button" data-ob-step="'+i+'" style="display:flex;align-items:center;gap:9px;min-width:0;'
       +'border:0;background:none;padding:0;font:inherit;cursor:pointer">'
       +'<span style="flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;'
@@ -11140,7 +11140,7 @@ function paintFirstClip(vals){
       +'border:1px solid var(--dc-n-d9b478, #D9B478);background:var(--dc-n-d9b478, #D9B478);color:var(--dc-n-0e0e11, #0E0E11);font-size:13px;font-weight:600">'
       +'Review '+(n===1?'it':'them')+'</button>'
     +'<button type="button" id="dcFirstClipLater" style="padding:4px 8px;border:0;background:none;cursor:pointer;'
-      +'color:var(--dc-n-6e6e76, #6E6E76);font-size:12px">Not now</button>'
+      +'color:var(--dc-ink-faint, #85858E);font-size:12px">Not now</button>'
     +'</div>';
   document.body.appendChild(wrap);
   /* Spent the moment it is SHOWN, not when it is answered: a reload with the

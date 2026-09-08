@@ -405,7 +405,7 @@
   }
   function switchKnob(on) {
     return 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' +
-      (on ? 'var(--dc-gold-lit, #F0D6A6)' : 'var(--dc-ink-faint, #6E6E76)') + '; transition: left .16s ease, background .16s ease;';
+      (on ? 'var(--dc-gold-lit, #F0D6A6)' : 'var(--dc-ink-faint, #85858E)') + '; transition: left .16s ease, background .16s ease;';
   }
 
   // Every word-sized choice in the job wizard wears this: the word itself,
@@ -439,7 +439,7 @@
   }
   function sliderKnob(on) {
     return 'position: absolute; top: 50%; translate: 0 -50%; width: 14px; height: 14px; border-radius: 50%; background: ' +
-      (on ? 'var(--dc-gold, #D9B478)' : 'var(--dc-ink-faint, #6E6E76)') + '; box-shadow: 0 2px 6px rgba(0,0,0,.5);';
+      (on ? 'var(--dc-gold, #D9B478)' : 'var(--dc-ink-faint, #85858E)') + '; box-shadow: 0 2px 6px rgba(0,0,0,.5);';
   }
 
   // Clip-length presets, expressed in the clipMin/clipMaxSeconds the account
@@ -507,7 +507,7 @@
           + (tone === 'warn' ? 'var(--dc-n-ff5566, #FF5566)' : tone === 'gold' ? 'var(--dc-gold-lit, #F0D6A6)' : 'var(--dc-ink, #F2F2F4)') + ';',
         rowStyle: 'display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border-radius: 7px; margin: 0 -8px; padding: 5px 8px; text-decoration: none; color: inherit;'
           + (step ? ' cursor: pointer;' : ' cursor: default;'),
-        editStyle: 'font-size: 11px; color: var(--dc-ink-faint, #6E6E76); display: ' + (step ? 'inline' : 'none') + ';',
+        editStyle: 'font-size: 11px; color: var(--dc-ink-faint, #85858E); display: ' + (step ? 'inline' : 'none') + ';',
         go: step
           ? function (e) { stop(e); setUI({ jobStep: step }); }
           : function (e) { stop(e); },
@@ -2053,7 +2053,7 @@
     retrying: { word: 'retrying', colour: 'var(--dc-n-e6b770, #E6B770)' },
     failed: { word: 'failed', colour: 'var(--dc-n-e08770, #E08770)' },
     scheduled: { word: 'waiting', colour: 'var(--dc-ink-dim, #8B8B93)' },
-    cancelled: { word: 'cancelled', colour: 'var(--dc-ink-faint, #6E6E76)' },
+    cancelled: { word: 'cancelled', colour: 'var(--dc-ink-faint, #85858E)' },
   };
   function destinations(clip) {
     return (clip.targets || []).map(function (t) {
@@ -2947,7 +2947,7 @@
           return reasons.slice(0, 3).join(' · ');
         })(),
         scoreWhyStyle: (Array.isArray(c.scoreReasons) && c.scoreReasons.filter(Boolean).length)
-          ? 'font-size: 10.5px; line-height: 1.45; color: var(--dc-ink-faint, #6E6E76); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'
+          ? 'font-size: 10.5px; line-height: 1.45; color: var(--dc-ink-faint, #85858E); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'
           : 'display: none;',
         flagged: gate && Boolean(c.reviewRequired),
         thumbStyle: 'position: relative; aspect-ratio: 9 / 16; overflow: hidden; background: ' + thumb(c.thumbUrl) + ';',
@@ -3276,7 +3276,7 @@
                   ? 'rgba(230,183,112,.42); background: rgba(230,183,112,.1); color: var(--dc-n-e6b770, #E6B770);'
                   : ready && !c.postedAt && publishingOn && activeCount
                     ? 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: var(--dc-gold-lit, #F0D6A6);'
-                    : 'var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-faint, #6E6E76);'),
+                    : 'var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-faint, #85858E);'),
               postNow: function (e) {
                 stop(e);
                 if (retryTarget) { global.StudioAdapter.onPostNow(c.id); return; }
@@ -3482,7 +3482,7 @@
                   // no `title` or `aria-label` anywhere from the span up to
                   // #studio, so the identity was unrecoverable.
                   tip: timeOf(c.scheduledAt) + ' \u2014 ' + String(c.title || 'Clip'),
-                  timeStyle: 'flex: none; font-size: 10.5px; line-height: 1.35; color: var(--dc-ink-faint, #6E6E76); font-variant-numeric: tabular-nums;',
+                  timeStyle: 'flex: none; font-size: 10.5px; line-height: 1.35; color: var(--dc-ink-faint, #85858E); font-variant-numeric: tabular-nums;',
                   rowStyle: 'display: flex; align-items: center; gap: 5px; min-width: 0;',
                   thumbStyle: 'width: 12px; height: 21px; flex: none; border-radius: 3px; border: 1px solid var(--dc-line, #26262A);'
                     + ' background: ' + thumb(c.thumbUrl) + ';',
@@ -5484,7 +5484,7 @@
             refresh();
           },
           dismissStyle: 'flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-left: auto;'
-            + ' border: 0; border-radius: 6px; background: transparent; color: var(--dc-ink-faint, #6E6E76); font-family: inherit;'
+            + ' border: 0; border-radius: 6px; background: transparent; color: var(--dc-ink-faint, #85858E); font-family: inherit;'
             + ' font-size: 12px; cursor: pointer; transition: background .14s ease, color .14s ease;',
         });
       });
@@ -5548,7 +5548,7 @@
     var aiTone = function (tone) { return AI_TONES[tone] || AI_TONES['']; };
     var aiDemoChip = function (on) {
       return on
-        ? 'flex: none; margin-left: 8px; padding: 1px 7px; border-radius: 20px; border: 1px solid var(--dc-n-2c2c32, #2C2C32); background: var(--dc-bg-raised, #17171A); font-size: 8.5px; font-weight: 700; letter-spacing: .12em; color: var(--dc-ink-faint, #6E6E76);'
+        ? 'flex: none; margin-left: 8px; padding: 1px 7px; border-radius: 20px; border: 1px solid var(--dc-n-2c2c32, #2C2C32); background: var(--dc-bg-raised, #17171A); font-size: 8.5px; font-weight: 700; letter-spacing: .12em; color: var(--dc-ink-faint, #85858E);'
         : 'display: none;';
     };
     // Three openers worth typing, and they FILL the box rather than only
@@ -5628,7 +5628,7 @@
         cta: isCurrent ? 'Your plan' : tier === 'basic' ? 'Where you start' : unconfigured ? 'Opening soon' : 'Choose ' + (plan.name || '').split(' ')[0],
         btnStyle: 'margin-top: auto; padding: 11px 12px; border-radius: 9px; font-family: inherit; font-size: 12.5px; font-weight: 600; border: 1px solid '
           + (isCurrent || tier === 'basic' || unconfigured
-            ? 'var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-faint, #6E6E76); cursor: default;'
+            ? 'var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-faint, #85858E); cursor: default;'
             : 'rgba(217,180,120,.45); background: rgba(217,180,120,.13); color: var(--dc-gold-lit, #F0D6A6); cursor: pointer;'),
         // THE NOTE KEEPS ITS LINE IN EVERY CARD, whether or not it has anything
         // to say. `display: none` took its height out of ONE card, and since
@@ -5640,7 +5640,7 @@
         // `visibility: hidden` reserves the line instead; the non-breaking
         // space is what gives an empty note a line box to reserve.
         foot: unconfigured ? 'Not open for checkout yet.' : '\u00a0',
-        footStyle: 'font-size: 10.5px; line-height: 1.6; color: var(--dc-ink-faint, #6E6E76);'
+        footStyle: 'font-size: 10.5px; line-height: 1.6; color: var(--dc-ink-faint, #85858E);'
           + (unconfigured ? '' : ' visibility: hidden;'),
         cardStyle: 'position: relative; display: flex; flex-direction: column; gap: 14px; padding: 26px 24px 24px; border-radius: 16px; border: 1px solid '
           + (isCurrent ? 'rgba(127,209,166,.4)' : tier === 'studio' ? 'rgba(217,180,120,.4)' : 'var(--dc-line-soft, #1E1E22)')
@@ -5693,7 +5693,7 @@
         // meant to block the app underneath.)
         + 'z-index: 5; align-items: center; '
         + (open ? 'gap: 10px; padding: 9px 10px; ' : 'justify-content: center; padding: 9px 0; ')
-        + 'border: 0; border-radius: 8px; background: transparent; color: var(--dc-ink-faint, #6E6E76); '
+        + 'border: 0; border-radius: 8px; background: transparent; color: var(--dc-ink-faint, #85858E); '
         + 'font-family: inherit; font-size: 11.5px; font-weight: 500; text-align: left; '
         + 'cursor: pointer; transition: background .14s ease, color .14s ease;',
       railToggleLabel: open ? 'Collapse' : '',
@@ -5735,7 +5735,7 @@
 
       workerCardStyle: 'margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: ' + (open ? '11px' : '9px 6px') + '; border: 1px solid var(--dc-line-soft, #1E1E22); border-radius: 10px; background: var(--dc-bg, #121214);',
       workerTextStyle: open ? 'white-space: nowrap;' : 'display: none;',
-      workerMetaStyle: open ? 'margin-left: auto; color: var(--dc-ink-faint, #6E6E76); white-space: nowrap;' : 'display: none;',
+      workerMetaStyle: open ? 'margin-left: auto; color: var(--dc-ink-faint, #85858E); white-space: nowrap;' : 'display: none;',
 
       // ── shell: header ──
       pageTitle: TITLES[UI.screen] || 'Studio',
@@ -5784,7 +5784,7 @@
       })(),
       desktopNotifsKnobStyle: (function () {
         var on = desktopNotifsState() === 'on';
-        return 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? 'var(--dc-n-7fd1a6, #7FD1A6)' : 'var(--dc-n-6e6e76, #6E6E76)') + ';';
+        return 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? 'var(--dc-n-7fd1a6, #7FD1A6)' : 'var(--dc-ink-faint, #85858E)') + ';';
       })(),
       // The phone's Activity sheet reads these two; the desktop template reads
       // the inline styles above. All four come from ONE state function, so no
@@ -6274,7 +6274,7 @@
           meta: running ? (active.stage || 'running') : done ? 'done' : 'queued',
           icon: done ? 'ph-fill ph-check-circle' : running ? 'ph ph-circle-notch' : 'ph ph-circle-dashed',
           iconStyle: 'font-size: 14px; color: ' + (done ? 'var(--dc-n-7fd1a6, #7FD1A6)' : running ? 'var(--dc-gold-lit, #F0D6A6)' : 'var(--dc-n-4a4a52, #4A4A52)') + (running ? '; animation: dcSpin 1.1s linear infinite' : ''),
-          labelStyle: 'color: ' + (done || running ? 'var(--dc-ink-bright, #E9E9ED)' : 'var(--dc-ink-faint, #6E6E76)'),
+          labelStyle: 'color: ' + (done || running ? 'var(--dc-ink-bright, #E9E9ED)' : 'var(--dc-ink-faint, #85858E)'),
         };
       }),
 
@@ -6479,7 +6479,7 @@
                            : 'var(--dc-n-2c2c33, #2C2C33); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-dim, #8B8B93);'),
             num: item.done ? '\u2713' : String(i + 1),
             titleStyle: 'font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 500; color: '
-              + (item.done ? 'var(--dc-ink-faint, #6E6E76)' : 'var(--dc-ink, #F2F2F4)') + ';' + (item.done ? ' text-decoration: line-through;' : ''),
+              + (item.done ? 'var(--dc-ink-faint, #85858E)' : 'var(--dc-ink, #F2F2F4)') + ';' + (item.done ? ' text-decoration: line-through;' : ''),
             rowStyle: 'display: flex; align-items: flex-start; gap: 11px; padding: 9px 10px; border-radius: 9px;'
               + ' border: 0; background: none; width: 100%; text-align: left; font-family: inherit; cursor: pointer;'
               + ' transition: background .14s ease;',
@@ -7604,7 +7604,7 @@
       jobNextStyle: 'display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; border-radius: 10px; font-family: inherit; font-size: 13.5px; font-weight: 600; transition: background .16s ease, box-shadow .16s ease; cursor: '
         + (jobStepBlocker(DATA, job) ? 'not-allowed' : 'pointer') + '; border: 1px solid '
         + (jobStepBlocker(DATA, job)
-          ? 'var(--dc-n-2a2a30, #2A2A30); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-faint, #6E6E76);'
+          ? 'var(--dc-n-2a2a30, #2A2A30); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-faint, #85858E);'
           : 'rgba(217,180,120,.55); background: linear-gradient(180deg, rgba(217,180,120,.2), rgba(217,180,120,.1)); color: var(--dc-n-f5e3c0, #F5E3C0); box-shadow: 0 6px 18px rgba(217,180,120,.12);'),
       jobNext: function (e) {
         stop(e);
@@ -8467,7 +8467,7 @@
           : conn.connected ? 'rgba(217,180,120,.4); background: rgba(10,10,12,.85); color: var(--dc-on-scrim-f0d6a6, var(--dc-n-f0d6a6, #F0D6A6));'
           : 'var(--dc-n-33333a, #33333A); background: rgba(10,10,12,.85); color: var(--dc-on-scrim-a2a2aa, var(--dc-n-a2a2aa, #A2A2AA));'),
       connDotStyle: 'width: 8px; height: 8px; border-radius: 50%; background: ' +
-        (!conn ? 'var(--dc-ink-faint, #6E6E76)' : !conn.configured ? 'var(--dc-n-e3928c, #E3928C)' : conn.enabled ? 'var(--dc-n-7fd1a6, #7FD1A6)' : conn.connected ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-ink-faint, #6E6E76)') + ';',
+        (!conn ? 'var(--dc-ink-faint, #85858E)' : !conn.configured ? 'var(--dc-n-e3928c, #E3928C)' : conn.enabled ? 'var(--dc-n-7fd1a6, #7FD1A6)' : conn.connected ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-ink-faint, #85858E)') + ';',
       // A failed test sets lastTestAt as well as lastTestError, so reporting the
       // timestamp first hides the error behind "Checked 2m ago" -- which is what
       // the existing dashboard does. The error wins here.
@@ -8599,7 +8599,7 @@
           icon: r.icon, label: r.label, note: r.note, on: on,
           trackStyle: 'position: relative; margin-left: auto; width: 34px; height: 19px; flex: none; border-radius: 20px; cursor: pointer; transition: background .16s ease, border-color .16s ease; border: 1px solid ' +
             (on ? 'rgba(217,180,120,.5); background: rgba(217,180,120,.22);' : 'var(--dc-n-33333a, #33333A); background: var(--dc-bg-raised, #17171A);'),
-          knobStyle: 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? 'var(--dc-gold-lit, #F0D6A6)' : 'var(--dc-ink-faint, #6E6E76)') + '; transition: left .16s ease, background .16s ease;',
+          knobStyle: 'position: absolute; top: 2px; left: ' + (on ? '17px' : '2px') + '; width: 13px; height: 13px; border-radius: 50%; background: ' + (on ? 'var(--dc-gold-lit, #F0D6A6)' : 'var(--dc-ink-faint, #85858E)') + '; transition: left .16s ease, background .16s ease;',
           // Each row flips ITS OWN key. It wrote voiceEnhance for both, so
           // "Captions behind speaker" switched the voice enhancement instead.
           toggle: function (e) { stop(e); saveStyle(defObj(r.key, !on)); },
@@ -9311,7 +9311,7 @@
         return {
           label: d + 'd',
           style: 'background: none; border: none; padding: 0; font-family: inherit; font-size: 12px; cursor: pointer; transition: color .14s ease; ' +
-            (on ? 'font-weight: 700; color: var(--dc-gold-lit, #F0D6A6);' : 'font-weight: 400; color: var(--dc-ink-faint, #6E6E76);'),
+            (on ? 'font-weight: 700; color: var(--dc-gold-lit, #F0D6A6);' : 'font-weight: 400; color: var(--dc-ink-faint, #85858E);'),
           select: function (e) { stop(e); setUI({ ownerDays: d, ownerAnimAt: Date.now() }); global.StudioAdapter.onLoadOwner(d); },
         };
       }),
@@ -9613,7 +9613,7 @@
         return {
           label: grain === 'hour' ? 'By hour' : 'By day',
           style: 'background: none; border: 0; padding: 0; font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; color: '
-            + (on ? 'var(--dc-gold-lit, #F0D6A6);' : 'var(--dc-ink-faint, #6E6E76);'),
+            + (on ? 'var(--dc-gold-lit, #F0D6A6);' : 'var(--dc-ink-faint, #85858E);'),
           select: function (e) { stop(e); setUI({ anaGrain: grain, ownerAnimAt: Date.now() }); },
         };
       }),
@@ -9846,7 +9846,7 @@
           cta: unavailable ? 'Not available' : 'Buy tokens',
           btnStyle: 'margin-top: auto; padding: 10px 12px; border-radius: 8px; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: ' +
             (unavailable ? 'default' : 'pointer') + '; border: 1px solid ' +
-            (unavailable ? 'var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-faint, #6E6E76);' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: var(--dc-gold-lit, #F0D6A6);'),
+            (unavailable ? 'var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-ink-faint, #85858E);' : 'rgba(217,180,120,.42); background: rgba(217,180,120,.11); color: var(--dc-gold-lit, #F0D6A6);'),
           buy: function (e) {
             stop(e);
             if (unavailable) { toast(pk.name + ' is not configured for checkout yet.'); return; }
@@ -9916,7 +9916,7 @@
 
       connections: providers.map(function (p) {
         var dot = 'position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--dc-n-0c0c0e, #0C0C0E); background: ' +
-          (!p.configured ? 'var(--dc-n-e3928c, #E3928C)' : p.enabled ? 'var(--dc-n-7fd1a6, #7FD1A6)' : p.connected ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-ink-faint, #6E6E76)') + ';';
+          (!p.configured ? 'var(--dc-n-e3928c, #E3928C)' : p.enabled ? 'var(--dc-n-7fd1a6, #7FD1A6)' : p.connected ? 'var(--dc-n-e6b770, #E6B770)' : 'var(--dc-ink-faint, #85858E)') + ';';
         return {
           name: PLATFORM_NAMES[p.key],
           needsReconnect: Boolean(p.needsReconnect),

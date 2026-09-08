@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1837 JS + 801 Python**
+- `npm test` and `npm run check` must pass. Currently **1840 JS + 801 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -8238,6 +8238,156 @@ Driven at 1440 with three YouTube and two TikTok connections seeded: the dialog
 lists five rows, all marked live, headed "Every clip goes to all 3"; and
 `/api/state` returns a clip with `willPostTo` naming **y1, y2, y3, t1, t2** with
 no configuration touched.
+
+
+## The label grey could not be read at night, and never had been (v3.159.0, 8 Sept 2026)
+
+Youssef quoted my own deferral back at me, verbatim and with nothing else:
+
+> Desktop's third grey #6E6E76 is 3.54:1 in night across 249 sites -- mine,
+> needs its own release (the tokeniser re-run), not a side effect of a copy pass.
+
+**He was right and the deferral was wrong, for the third time in this file's
+record** (the nasheed banner and the clip-AI probe were the other two). It was
+not a tokeniser re-run, the re-import risk it leaned on does not exist, and
+measuring that took five minutes.
+
+### THE RE-IMPORT RENUMBERS NOTHING WHEN ONLY A VALUE MOVES
+
+The whole deferral rested on "a design re-import regenerates every hashed class
+name in the app", which this file has said since August and which is TRUE when
+the export gains or loses a hoisted style (v3.131.0 renumbered 891 lines for
+exactly that). It is not true of a colour change. Proven rather than argued,
+and the probe is two commands:
+
+    cp the three generated files aside
+    npm run design:import with NO change   -> all three byte-identical
+    replace the hex in design/*.dc.html    -> re-import
+    diff <(sed 's/OLD/NEW/g' before) after -> EMPTY, both files
+
+So the 256 sites in the design source and the 57 rules they hoist into are a
+`sed` and a regenerate. **Before deferring on re-import risk, run the
+substituted diff** -- it answers in one command whether a change is a value or
+a structure.
+
+### What was wrong, measured on rendered pixels
+
+`--dc-ink-faint` is "labels that must not compete" and it carried ~250 label
+sites across the export plus eleven hand-written rules. At `#6E6E76` it reads
+**3.94 on the page, 3.70 on a panel, 3.54 on a card and 3.43 on `--dc-bg-alt`**
+-- under AA on every night ground there is. `--dc-ink-muted` (`#75717B`, nine
+11.5-13px prose sites) was 3.64-4.17, the same defect one shade along. Both are
+`#85858E` now (4.74-5.44), which is also the phone's own `--dcm-ink3`, so the
+two surfaces answer with one grey.
+
+**Faint and muted holding one value is the AA floor doing its job**, not a
+mistake: they were seven points apart and both under. Daylight has treated them
+as one shade since v3.127.3 for the same reason.
+
+### DAYLIGHT DID NOT MOVE, AND THAT IS A NAMED ENTRY RATHER THAN LUCK
+
+`theme-palette.mjs` derives daylight from the night hex, so a new night value
+lands wherever the algorithm sends it -- `#85858E` would have gone to a warmer
+`#6A6865`. Naming `'#85858e': '#6A6A72'` (the answer both old greys already
+gave) kept the generated light sheet **byte-identical**, so the release is
+provably night-only. That is the route for any future night-side move.
+
+### The sweep found a second grey, and then a real daylight failure
+
+`ink.mjs` in the session scratchpad walks every leaf text node on ten desktop
+screens, composites the ground and applies the right AA floor for the size.
+After the fix it reported **10 nodes left, all one colour**: `#7E7A82` at
+**4.45 against 4.5** -- the Templates group headings, "Posting to", and the
+editor's Watermark/Promo bar labels, minted as a numeric token from a raw
+inline hex. Same defect, same one-line fix (they are labels, so they take the
+label token).
+
+**And its daylight twin was worse than the night one it replaced.**
+`#7E7A82` mapped to `#74726F`, which measures **4.06 against the paper page** --
+a failure sitting outside `light-theme.test.mjs`'s reach, because that guard
+compares the hand-written TOKEN BLOCK against the generator and a numeric token
+minted from an inline hex is in neither.
+
+### THE PAGE IS NOT THE STRICTEST GROUND, and that cost nine more nodes
+
+v3.127.3 set the whole daylight floor against `#ECECEE` and landed the label
+greys on 4.54. But **`--dc-bg-deep` is `#E7E7EA`** -- scroll troughs, the
+schedule's own rows, the Tokens funnel -- where the identical ink reads
+**4.34**. Nine nodes were under on the screens this release swept, in a theme
+that had been declared clean. `#67676F` clears 4.5 on the WELL (4.54) and
+therefore on everything, and stays plainly lighter than `--dc-ink-dim`.
+
+Measure against every ground token, not the one you happen to picture.
+
+### A var() FALLBACK IS A COLOUR TOO, and seven had drifted
+
+`var(--dc-ink-faint, #6A6A72)` -- a DAYLIGHT hex, in a page that opens at night.
+Three of those were live in index.html beside thirty siblings saying `#6E6E76`,
+for the same token, in the same file. The sweep for them found seven in three
+files: `--dc-ink` falling back to `--dc-ink-bright`'s value, `--dc-bg` to the
+page, `--dc-bg-alt` to a panel, `--dc-ink-dim` to a hex declared nowhere, and
+DeenAI's `--dc-ink-faint` to `--dc-ink-dim`'s value.
+
+None of them rendered wrong -- the token always wins when the sheet loads --
+which is exactly why they rot. **The fallback is what the page falls back TO,
+and every one of these named a neighbour's colour.** Where the intent was
+ambiguous the FALLBACK was corrected rather than the token renamed: the token
+is what ships, so matching the hex to it preserves what a reader sees.
+
+### `test/ink-aa.test.mjs` is the law that was missing
+
+Three assertions, all proven red:
+
+1. **Every neutral ink clears AA on every ground, in both themes.** 7 inks x 7
+   grounds x 2 themes, read out of the token block. This is what had never
+   existed, and it is why a grey sat at 3.43 for the life of the product.
+2. **The gold as ink is under AA on the paper well, AND NOWHERE ELSE.** Pinned
+   as an exact list rather than excluded, so the gap cannot grow silently --
+   a gold that gets worse, or a second ink joining it, turns this red.
+3. **A var() fallback names its own token's night value**, across eight
+   hand-written files.
+
+It is a source test on purpose: CI has no browser, and this is precisely the
+shape that is invisible when it breaks -- the app renders, the suite stays
+green, the labels just cannot be read.
+
+### The gold is REPORTED, not moved, and the numbers are here
+
+`--dc-gold` as ink measures **4.53 on the paper page and 4.33 on the well**, so
+two nodes on Tokens ("Best value" on a 16% gold badge, "Invite a creator" on a
+4% gold wash) sit at 4.33 and 4.44. `#856022` clears it at 4.61. That is a
+change to the BRAND colour on every paper screen and its third move, so it is
+Youssef's call rather than a side effect of a grey fix. Deleting the two entries
+from assertion 2 above is the whole of it.
+
+### Measured, before and after
+
+    desktop 1440, ten screens, 697 leaf text nodes composited
+
+    night   before: hundreds of sites at 3.43-3.94, then 10 at 4.45
+            after:  0 under AA
+    paper   before: 9 under AA (4.33-4.45)
+            after:  2, both the gold, both reported above
+
+    phone 320-430, both themes: unchanged -- 0 sub-44 controls, 0 page
+    errors, lowest contrast 5.12 night / 4.88 paper, exactly v3.157.0's numbers
+
+Captured before-and-after at 1440 in night from a **git worktree at the previous
+commit served on a second port** -- never `git checkout` a file carrying
+uncommitted work, which this file already records as having destroyed a change
+mid-probe.
+
+### Traps paid again
+
+- **The CSP inline-script hash is computed at server start**, so every
+  index.html edit needs the preview server restarted or the app renders its
+  shell and never boots. Eighth recorded occurrence.
+- **`pkill -f` kills the calling shell**; kill by scanning `/proc/*/environ`.
+- **The other session had already minted this release's number.** Checked with
+  `git log --oneline origin/deenclipped-v2-2` BEFORE committing, fast-forwarded
+  and popped rather than committing at 3.158.0 and owing a merge bump -- and
+  then verified every one of their index.html hunks survived the pop by
+  grepping for each added line, because a clean stash pop is not proof.
 
 
 ## Open items

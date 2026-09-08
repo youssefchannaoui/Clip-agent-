@@ -217,7 +217,7 @@
    is quieter than the rows it introduces. */
 #dcOwnerScreen table { font-variant-numeric: tabular-nums; }
 #dcOwnerScreen tbody td { padding-top: 9px !important; padding-bottom: 9px !important; }
-#dcOwnerScreen thead th { color: #6E6E76 !important; letter-spacing: .14em !important; }
+#dcOwnerScreen thead th { color: #85858E !important; letter-spacing: .14em !important; }
 
 /* A number beside a label, anywhere: never let a proportional font shuffle the
    digits as a poll refreshes them. */

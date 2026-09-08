@@ -54,7 +54,7 @@
 #dcAi .dcai-card.is-gold { border-color: rgba(217,180,120,.32); }
 #dcAi .dcai-label {
   margin: 0 0 12px; font-size: 9.5px; font-weight: 700; letter-spacing: .14em;
-  text-transform: uppercase; color: var(--dc-ink-faint, #8B8B93);
+  text-transform: uppercase; color: var(--dc-ink-faint, #85858E);
 }
 
 /* ── the goal row ─────────────────────────────────────────────────────── */
@@ -63,7 +63,7 @@
   display: flex; flex-direction: column; gap: 3px; text-align: left;
   padding: 11px 13px; border-radius: 10px; cursor: pointer;
   border: 1px solid var(--dc-line, #26262A);
-  background: var(--dc-bg, #09090A);
+  background: var(--dc-bg, #121214);
   color: var(--dc-ink, #F2F2F4);
   font: inherit;
   transition: border-color .16s ease, background .16s ease;
@@ -79,12 +79,12 @@
   display: flex; flex-direction: column; gap: 7px;
   padding: 15px 16px; border-radius: 11px;
   border: 1px solid var(--dc-line, #26262A);
-  background: var(--dc-bg, #09090A);
+  background: var(--dc-bg, #121214);
 }
 #dcAi .dcai-do:first-child { border-color: rgba(217,180,120,.34); }
 #dcAi .dcai-do h4 { margin: 0; font-size: 13px; font-weight: 620; color: var(--dc-ink, #F2F2F4); line-height: 18px; }
 #dcAi .dcai-do p { margin: 0; font-size: 11.5px; line-height: 17px; color: var(--dc-ink-body, #BCBCC3); }
-#dcAi .dcai-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 10px; color: var(--dc-ink-faint, #8B8B93); }
+#dcAi .dcai-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 10px; color: var(--dc-ink-faint, #85858E); }
 #dcAi .dcai-meta b { font-weight: 600; color: var(--dc-ink-dim, #8B8B93); }
 
 /* ── modes ────────────────────────────────────────────────────────────── */
@@ -105,7 +105,7 @@
   width: 100%; box-sizing: border-box; resize: vertical; min-height: 78px;
   padding: 12px 14px; border-radius: 10px;
   border: 1px solid var(--dc-line, #26262A);
-  background: var(--dc-bg, #09090A);
+  background: var(--dc-bg, #121214);
   color: var(--dc-ink, #F2F2F4);
   font: inherit; font-size: 13px; line-height: 20px;
 }
@@ -114,7 +114,7 @@
 #dcAi .dcai-attach {
   flex: 1 1 220px; min-width: 0; height: 34px; padding: 0 10px; border-radius: 8px;
   border: 1px solid var(--dc-line, #26262A);
-  background: var(--dc-bg, #09090A); color: var(--dc-ink-body, #BCBCC3);
+  background: var(--dc-bg, #121214); color: var(--dc-ink-body, #BCBCC3);
   font: inherit; font-size: 11.5px;
 }
 #dcAi .dcai-btn {
@@ -147,7 +147,7 @@
 #dcAi .dcai-step {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 9px; border-radius: 20px; font-size: 10.5px;
-  border: 1px solid var(--dc-line, #26262A); color: var(--dc-ink-faint, #8B8B93);
+  border: 1px solid var(--dc-line, #26262A); color: var(--dc-ink-faint, #85858E);
 }
 #dcAi .dcai-step.is-live { border-color: rgba(217,180,120,.45); color: var(--dc-gold, #D9B478); }
 #dcAi .dcai-caret {
@@ -162,7 +162,7 @@
   display: flex; flex-direction: column; gap: 9px;
 }
 #dcAi .dcai-diff { display: grid; gap: 6px; font-size: 11.5px; line-height: 17px; }
-#dcAi .dcai-was { color: var(--dc-ink-faint, #8B8B93); text-decoration: line-through; }
+#dcAi .dcai-was { color: var(--dc-ink-faint, #85858E); text-decoration: line-through; }
 #dcAi .dcai-now { color: var(--dc-ink, #F2F2F4); }
 
 #dcAi .dcai-convos { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -179,13 +179,13 @@
 #dcAi .dcai-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 #dcAi .dcai-input {
   width: 100%; box-sizing: border-box; height: 32px; padding: 0 9px; border-radius: 7px;
-  border: 1px solid var(--dc-line, #26262A); background: var(--dc-bg, #09090A);
+  border: 1px solid var(--dc-line, #26262A); background: var(--dc-bg, #121214);
   color: var(--dc-ink, #F2F2F4); font: inherit; font-size: 11.5px;
 }
 #dcAi .dcai-input:focus { outline: none; border-color: rgba(217,180,120,.55); }
-#dcAi label.dcai-lab { display: flex; flex-direction: column; gap: 4px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dc-ink-faint, #8B8B93); }
+#dcAi label.dcai-lab { display: flex; flex-direction: column; gap: 4px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dc-ink-faint, #85858E); }
 
-#dcAi .dcai-note { font-size: 11px; line-height: 17px; color: var(--dc-ink-faint, #8B8B93); margin: 0; }
+#dcAi .dcai-note { font-size: 11px; line-height: 17px; color: var(--dc-ink-faint, #85858E); margin: 0; }
 #dcAi .dcai-err { font-size: 12px; line-height: 18px; color: #E08770; margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -389,7 +389,7 @@
 /* Only the FIRST ACTION is highlighted, never the first insight: the server
    ranks the actions and the top one is the one to take, where the insights are
    a set of equally true facts. `:first-child` matched both. */
-#dcAi .dcai-insights .dcai-do:first-child { border-color: var(--dc-line, #26262A); background: var(--dc-bg, #09090A); }
+#dcAi .dcai-insights .dcai-do:first-child { border-color: var(--dc-line, #26262A); background: var(--dc-bg, #121214); }
 #dcAi .dcai-do { transition: border-color .16s ease, transform .16s ease; }
 #dcAi .dcai-do:hover { border-color: rgba(217, 180, 120, .3); transform: translateY(-1px); }
 #dcAi .dcai-do h4 { font-size: 13.5px; line-height: 19px; }

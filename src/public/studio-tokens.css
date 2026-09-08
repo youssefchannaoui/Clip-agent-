@@ -30,7 +30,7 @@
   --dc-line-soft:  #1E1E22;   /* hairlines and empty tracks */
   --dc-line:       #26262A;   /* ordinary borders */
   --dc-line-hover: #34343A;   /* a border under the pointer */
-  --dc-ink-faint:  #6E6E76;   /* labels that must not compete */
+  --dc-ink-faint:  #85858E;   /* labels that must not compete */
   --dc-ink-dim:    #8B8B93;   /* secondary text */
   --dc-ink-body:   #BCBCC3;   /* body text */
   --dc-ink-bright: #E9E9ED;   /* emphasised text */
@@ -39,7 +39,7 @@
   --dc-page-2:     #0B0B0D;   /* the darkest wells */
   --dc-bg-alt:     #1A1A1E;   /* a panel a shade off the others */
   --dc-ink-soft:   #A2A2AA;   /* the most common secondary ink */
-  --dc-ink-muted:  #75717B;   /* a label that has stepped back further */
+  --dc-ink-muted:  #85858E;   /* one shade with faint: see the note above */
   /* Gold. On black it is light and glowing; on paper the SAME gold is a pale
      smear you cannot read. The phone's paper theme worked the PRINCIPLE out
      first -- the brand colour survives, its luminance does not -- and the
@@ -120,11 +120,13 @@ body.dc-light {
      how --dc-ink-faint sat at #86868F for a release after the palette had
      moved on to #6A6A72.
 
-     --dc-ink-faint and --dc-ink-muted now hold the SAME value, and that is the
-     AA floor doing its job rather than a mistake: their night twins (#6E6E76
-     and #75717B) are a hair apart and both landed under 4.5:1 on this page, so
-     both were lifted to the floor. Two labels a shade apart on black read as
-     one shade on paper; that is the honest trade for legibility. */
+     --dc-ink-faint and --dc-ink-muted hold the SAME value in BOTH themes now,
+     and that is the AA floor doing its job rather than a mistake. On paper it
+     was their old night twins (#6E6E76 and #75717B) that were a hair apart and
+     both under 4.5:1 here, so both were lifted to the floor; at night those two
+     measured 3.43-4.17 across every ground and were lifted to #85858E for the
+     same reason (v3.159.0). Two labels a shade apart read as one shade in
+     either theme; that is the honest trade for legibility. */
   --dc-bg-deepest: #ECECEE;
   --dc-bg-deep:    #E7E7EA;
   --dc-bg:         #FFFFFF;
@@ -132,7 +134,7 @@ body.dc-light {
   --dc-line-soft:  #E2E2E6;
   --dc-line:       #D4D4DA;
   --dc-line-hover: #BCBCC4;
-  --dc-ink-faint:  #6A6A72;
+  --dc-ink-faint:  #67676F;
   --dc-ink-dim:    #62626B;
   --dc-ink-body:   #33333A;
   --dc-ink-bright: #1D1D22;
@@ -141,7 +143,7 @@ body.dc-light {
   --dc-page-2:     #E7E7EA;
   --dc-bg-alt:     #F7F7F9;
   --dc-ink-soft:   #55555E;
-  --dc-ink-muted:  #6A6A72;
+  --dc-ink-muted:  #67676F;
   --dc-gold:       #8A6425;
   --dc-gold-lit:   #7E5B18;
   --dc-well:       rgba(20, 20, 24, .05);
@@ -592,7 +594,7 @@ body.dc-light {
   color: #8B8B93;
 }
 #dcLibStats .dc-libx-h:not(:first-child) { margin-top: 7px; }
-#dcLibStats .dc-libx-note { font-size: 11.5px; line-height: 1.5; color: #6E6E76; }
+#dcLibStats .dc-libx-note { font-size: 11.5px; line-height: 1.5; color: #85858E; }
 
 /* A lecture worth clipping, and the one that is not. */
 /* "Save as new style" resolved onto the SELECTED template, wrote no name, and
@@ -668,7 +670,7 @@ body.dc-light {
   font-size: 12px; font-weight: 600; color: #F2F2F4;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-#dcLibStats .dc-libx-again > span > span { font-size: 10.5px; color: #6E6E76; }
+#dcLibStats .dc-libx-again > span > span { font-size: 10.5px; color: #85858E; }
 
 
 /* ── Studio's week does not squeeze, it scrolls ─────────────────────────────
@@ -892,7 +894,7 @@ body.dc-light #studioLiveBar {
   display: block; margin-top: 2px; font-size: 10px; color: #8B8B93;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.dctk-go { flex: 0 0 auto; color: #6E6E76; font-size: 13px; }
+.dctk-go { flex: 0 0 auto; color: #85858E; font-size: 13px; }
 
 /* Tokens waiting to be counted. Only ever drawn when there is something to
    count -- a "0" here would be a badge that means nothing. */
@@ -957,12 +959,12 @@ body.dc-light #studioLiveBar {
 #dcTasks .dctk-tab:hover { color: #BCBCC3; }
 #dcTasks .dctk-tab.is-on { color: #F2F2F4; }
 #dcTasks .dctk-tab.is-on::after { background: #D9B478; }
-#dcTasks .dctk-tab.is-locked { color: #6E6E76; }
+#dcTasks .dctk-tab.is-locked { color: #85858E; }
 #dcTasks .dctk-tab-t {
   font-size: 11.5px; font-weight: 700; line-height: 16px;
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-#dcTasks .dctk-tab-n { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; line-height: 12px; color: #6E6E76; }
+#dcTasks .dctk-tab-n { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; line-height: 12px; color: #85858E; }
 #dcTasks .dctk-tab.is-on .dctk-tab-n { color: #D9B478; }
 /* Tokens waiting inside a tab you are not looking at. */
 #dcTasks .dctk-tab-dot {
@@ -1028,7 +1030,7 @@ body.dc-light #studioLiveBar {
 #dcTasks .dctk-tick {
   width: var(--dctk-line); height: var(--dctk-line); border-radius: 50%;
   display: grid; place-items: center; box-sizing: border-box;
-  border: 1px solid #26262A; color: #6E6E76; font-size: 13px; font-weight: 800;
+  border: 1px solid #26262A; color: #85858E; font-size: 13px; font-weight: 800;
   line-height: 1;
 }
 #dcTasks .dctk-row.is-done .dctk-tick {
@@ -1126,7 +1128,7 @@ body.dc-light #studioLiveBar {
 }
 #dcBlocker[data-tone="note"] button:first-of-type:hover {
   border-color: var(--dc-line-hover, #34343A) !important;
-  color: var(--dc-ink, #E9E9ED) !important;
+  color: var(--dc-ink, #F2F2F4) !important;
 }
 /* ── Scroll anchoring fights a renderer that repaints on every state poll ──
  *
@@ -1234,7 +1236,7 @@ body.dc-light #studioLiveBar {
 .dcct-chip {
   padding: 7px 9px;
   border: 1px solid var(--dc-line, #26262A); border-radius: 999px;
-  background: var(--dc-bg-alt, #121214); color: var(--dc-ink, #E9E9ED);
+  background: var(--dc-bg-alt, #1A1A1E); color: var(--dc-ink, #F2F2F4);
   font: 600 11px/16px Outfit, Inter, system-ui, sans-serif; cursor: pointer;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: color .14s ease, border-color .14s ease, background .14s ease;
@@ -1283,8 +1285,8 @@ body.dc-light #studioLiveBar {
   width: 100%; box-sizing: border-box;
   padding: 9px 10px;
   border: 1px solid var(--dc-line, #26262A); border-radius: 9px;
-  background: var(--dc-bg-alt, #121214);
-  color: var(--dc-ink, #E9E9ED);
+  background: var(--dc-bg-alt, #1A1A1E);
+  color: var(--dc-ink, #F2F2F4);
   font: 500 12.5px/1.5 Outfit, Inter, system-ui, sans-serif;
   transition: border-color .14s ease;
 }
@@ -1330,11 +1332,11 @@ body.dc-light #studioLiveBar {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   padding: 9px 12px;
   border: 1px solid var(--dc-line, #26262A); border-radius: 9px;
-  background: transparent; color: var(--dc-ink, #E9E9ED);
+  background: transparent; color: var(--dc-ink, #F2F2F4);
   font: 600 12px/16px Outfit, Inter, system-ui, sans-serif; cursor: pointer;
   transition: border-color .14s ease, background .14s ease;
 }
-.dcct-btn:hover:not(:disabled) { border-color: var(--dc-line-hover, #34343A); background: var(--dc-bg-alt, #121214); }
+.dcct-btn:hover:not(:disabled) { border-color: var(--dc-line-hover, #34343A); background: var(--dc-bg-alt, #1A1A1E); }
 .dcct-btn:disabled { opacity: .55; cursor: default; }
 /* SOLID, not an outline. It was a washed-out gold border among five other
  * bordered controls, so the one button that does the thing this panel exists

@@ -31,12 +31,12 @@
   border: 1px solid rgba(255,255,255,.1); border-radius: 10px;
   padding: 9px 12px; background: rgba(255,255,255,.03); max-width: 420px;
 }
-.dch-find i { color: #6E6E76; }
+.dch-find i { color: #85858E; }
 .dch-find input {
   flex: 1; border: 0; background: transparent; color: #E9E9EE;
   font: inherit; font-size: 13px; outline: none;
 }
-.dch-find input::placeholder { color: #6E6E76; }
+.dch-find input::placeholder { color: #85858E; }
 
 /* ── category grid ──────────────────────────────────────────────────────── */
 .dch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
@@ -51,7 +51,7 @@
 .dch-cat i { font-size: 20px; color: #D9B478; }
 .dch-cat b { font-size: 14px; color: #F5F5F7; font-weight: 600; }
 .dch-cat span { font-size: 12px; color: #8A8A93; line-height: 1.45; }
-.dch-cat em { font-style: normal; font-size: 11px; color: #6E6E76; letter-spacing: .04em; text-transform: uppercase; }
+.dch-cat em { font-style: normal; font-size: 11px; color: #85858E; letter-spacing: .04em; text-transform: uppercase; }
 
 /* ── article list and body ──────────────────────────────────────────────── */
 .dch-back {
@@ -90,7 +90,7 @@
   transition: border-color .16s ease;
 }
 .dch-shot button:hover img, .dch-shot button:focus-visible img { border-color: rgba(217,180,120,.55); }
-.dch-shot figcaption { margin-top: 6px; font-size: 11px; color: #6E6E76; }
+.dch-shot figcaption { margin-top: 6px; font-size: 11px; color: #85858E; }
 
 /* ── the enlarged screenshot ────────────────────────────────────────────── */
 /* At 320px in the column the text inside a capture is unreadable, and the text

@@ -43,7 +43,7 @@ html, body { margin: 0; background: #09090A; }
 .s8{display: flex; flex-direction: column; gap: 2px}
 .s9{font-size: 16px; flex: none}
 .sa{display: none}
-.sb{padding: 0 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76; white-space: nowrap}
+.sb{padding: 0 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #85858E; white-space: nowrap}
 .sc{display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; overflow: visible}
 .sd{position: relative; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 11px 22px; border-bottom: 1px solid #1E1E22; background: linear-gradient(180deg, #0E0E11, #0A0A0C)}
 .se{flex: 1 1 auto; min-width: 160px; display: flex; flex-direction: column; gap: 1px; overflow: hidden}
@@ -74,14 +74,14 @@ html, body { margin: 0; background: #09090A; }
 .s13{font-size: 13px; color: #C9A87A}
 .s14{display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0}
 .s15{font-size: 11.5px; color: #E9E9ED}
-.s16{font-size: 10px; color: #6E6E76}
+.s16{font-size: 10px; color: #85858E}
 .s17:hover{background: #17171A !important}
 .s18{display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1}
 .s19{font-size: 12px; color: #E9E9ED; line-height: 1.4; text-wrap: pretty}
-.s1a{font-size: 10.5px; color: #6E6E76}
+.s1a{font-size: 10.5px; color: #85858E}
 .s1b:hover{background: #23232A !important;color: #E9E9ED !important}
 .s1c{font-size: 11px}
-.s1d{padding: 9px; text-align: center; font-size: 11px; color: #6E6E76; border-top: 1px solid #1E1E22}
+.s1d{padding: 9px; text-align: center; font-size: 11px; color: #85858E; border-top: 1px solid #1E1E22}
 .s1e{padding: 10px; text-align: center; font-size: 11.5px; border-top: 1px solid #1E1E22}
 .s1f{display: flex; align-items: center; gap: 8px; flex: none; padding: 4px 9px 4px 4px; border: 1px solid #26262A; border-radius: 20px; background: #121214; color: #E9E9ED; font-family: inherit; font-size: 12.5px; cursor: pointer; transition: border-color .14s ease}
 .s1g{display: grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; border: 1px solid rgba(217,180,120,.4); background: rgba(217,180,120,.13); color: #F0D6A6; font-size: 10.5px; font-weight: 700; letter-spacing: .02em}
@@ -121,21 +121,21 @@ html, body { margin: 0; background: #09090A; }
 .s2e{margin: 14px 0 0; max-width: 15ch; font-family: Outfit, Inter, sans-serif; font-size: clamp(38px, 4.4vw, 58px); font-weight: 600; line-height: 1.02; letter-spacing: -.045em; text-wrap: balance}
 .s2f{margin: 14px 0 0; max-width: 46ch; color: #BCBCC3; font-size: 14.5px; line-height: 1.6; text-wrap: pretty}
 .s2g{display: flex; flex-wrap: wrap; gap: 9px; margin-top: 24px; width: 100%; max-width: 520px}
-.s2h{flex: 1 1 220px; min-width: 190px; display: flex; align-items: center; gap: 9px; padding: 10px 13px; border: 1px solid #26262A; border-radius: 9px; background: #121214; color: #6E6E76; transition: border-color .14s ease}
+.s2h{flex: 1 1 220px; min-width: 190px; display: flex; align-items: center; gap: 9px; padding: 10px 13px; border: 1px solid #26262A; border-radius: 9px; background: #121214; color: #85858E; transition: border-color .14s ease}
 .s2i{width: 100%; min-width: 0; border: 0; background: transparent; color: #F2F2F4; font-family: inherit; font-size: 13px; outline: none}
 .s2j{display: flex; align-items: center; gap: 8px; padding: 10px 16px; border: 1px solid rgba(217,180,120,.45); border-radius: 9px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .14s ease, border-color .14s ease}
 .s2k:hover{background: rgba(217,180,120,.12); border-color: rgba(217,180,120,.72)}
 .s2l:active{background: rgba(217,180,120,.2)}
 .s2m{display: grid; place-items: center; width: 42px; border: 1px solid #26262A; border-radius: 9px; background: #121214; color: #BCBCC3; cursor: pointer; transition: border-color .14s ease, color .14s ease}
 .s2n{display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: auto; padding-top: 44px}
-.s2o{font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76}
+.s2o{font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #85858E}
 .s2p{display: flex; gap: 9px}
 .s2q{position: relative; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #26262A; border-radius: 10px; background: #121214; color: #E9E9ED; transition: border-color .14s ease, transform .14s ease}
 .s2r:hover{border-color: rgba(217,180,120,.5); transform: translateY(-2px)}
 .s2s{font-size: 17px}
 .s2t{font-size: 11.5px; color: #8B8B93}
 .s2u{flex: 0 1 340px; position: relative; min-width: 300px; min-height: 430px}
-.s2v{position: absolute; top: -6px; right: 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76}
+.s2v{position: absolute; top: -6px; right: 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #85858E}
 .s2w{position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.28), transparent 44%, rgba(9,9,10,.86))}
 .s2x{position: absolute; top: 6px; left: 6px; display: flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 20px; border: 1px solid rgba(217,180,120,.4); background: rgba(10,10,12,.8); color: #F0D6A6; font-size: 9px; font-weight: 700}
 .s2y{font-size: 9px}
@@ -145,12 +145,12 @@ html, body { margin: 0; background: #09090A; }
 .s32{display: flex; align-items: baseline; gap: 10px; padding: 0 6px 6px}
 .s33{font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: -.02em}
 .s34{display: flex; flex-direction: column; gap: 2px; min-width: 0}
-.s35{font-size: 11.5px; line-height: 1.45; color: #6E6E76}
+.s35{font-size: 11.5px; line-height: 1.45; color: #85858E}
 .s36{display: flex; flex-wrap: wrap; gap: 18px; padding: 22px 40px 40px; align-items: flex-start}
 .s37{flex: 1 1 520px; display: flex; flex-direction: column; gap: 12px; min-width: 0}
 .s38{display: flex; align-items: baseline; gap: 10px}
 .s39{margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 16px; font-weight: 600; letter-spacing: -.02em}
-.s3a{font-size: 12px; color: #6E6E76}
+.s3a{font-size: 12px; color: #85858E}
 .s3b{margin-left: auto; font-size: 12px}
 .s3c{display: flex; flex-direction: column; gap: 13px; padding: 18px; border: 1px solid #1E1E22; border-radius: 12px; background: radial-gradient(circle at 88% -30%, rgba(217,180,120,.08), transparent 58%), #0E0E11}
 .s3d{display: flex; align-items: center; gap: 9px; flex-wrap: wrap}
@@ -169,7 +169,7 @@ html, body { margin: 0; background: #09090A; }
 .s3q{display: grid; place-items: center; aspect-ratio: 9 / 16; border-radius: 9px; border: 1px dashed #2C2C32; background: #121214}
 .s3r{display: flex; flex-direction: column; align-items: center; gap: 3px}
 .s3s{font-family: Outfit, Inter, sans-serif; font-size: 16px; font-weight: 600; color: #8B8B93}
-.s3t{font-size: 9px; color: #6E6E76}
+.s3t{font-size: 9px; color: #85858E}
 .s3u{display: flex; flex-wrap: wrap; align-items: center; gap: 8px}
 .s3v{display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 10px}
 .s3w{display: flex; flex-direction: column; border: 1px solid #1E1E22; border-radius: 11px; overflow: hidden; background: #121214; cursor: pointer; transition: border-color .14s ease, transform .14s ease}
@@ -191,7 +191,7 @@ html, body { margin: 0; background: #09090A; }
 .s4c{margin-left: auto; display: grid; place-items: center; width: 28px; height: 28px; flex: none; border: 1px solid rgba(217,180,120,.4); border-radius: 7px; background: transparent; color: #F0D6A6; cursor: pointer; transition: background .14s ease}
 .s4d{font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
 .s4e{font-size: 10.5px; color: #8B8B93}
-.s4f{margin-left: auto; font-size: 15px; color: #6E6E76}
+.s4f{margin-left: auto; font-size: 15px; color: #85858E}
 .s4g{display: grid; grid-template-columns: 1fr 1fr; gap: 10px}
 .s4h{font-family: Outfit, Inter, sans-serif; font-size: 21px; font-weight: 600; letter-spacing: -.03em}
 .s4i{font-family: Outfit, Inter, sans-serif; font-size: 21px; font-weight: 600; letter-spacing: -.03em; color: #F0D6A6}
@@ -215,10 +215,10 @@ html, body { margin: 0; background: #09090A; }
 .s50{display: flex; flex-direction: column; gap: 7px}
 .s51{position: relative; width: 100%; height: 3px; border-radius: 20px; background: #1D1D21; overflow: hidden}
 .s52{display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8B8B93}
-.s53{margin-left: auto; color: #6E6E76}
+.s53{margin-left: auto; color: #85858E}
 .s54{display: flex; flex-direction: column; gap: 5px}
 .s55{font-size: 14px; line-height: 1.45; font-weight: 600; color: #F2F2F4; text-wrap: pretty; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden}
-.s56{font-size: 10.5px; color: #6E6E76; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%}
+.s56{font-size: 10.5px; color: #85858E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%}
 .s57{font-size: 11px; flex: none; margin-top: 2px; color: #C9A87A}
 .s58{display: flex; align-items: flex-start; gap: 14px; padding: 2px 0}
 .s59{display: flex; flex-direction: column; align-items: center; gap: 5px}
@@ -234,9 +234,9 @@ html, body { margin: 0; background: #09090A; }
 .s5j{margin-left: auto; display: flex; flex-direction: column; gap: 7px; align-items: flex-end; padding-top: 4px}
 .s5k{display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 0; background: transparent; color: #8B8B93; font-family: inherit; font-size: 11px; cursor: pointer}
 .s5l{display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid #1E1E22}
-.s5m{font-size: 9.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76}
+.s5m{font-size: 9.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #85858E}
 .s5n{display: flex; gap: 6px; align-items: flex-end; flex-wrap: wrap}
-.s5o{display: flex; align-items: center; gap: 9px; font-size: 10px; color: #6E6E76; flex-wrap: wrap}
+.s5o{display: flex; align-items: center; gap: 9px; font-size: 10px; color: #85858E; flex-wrap: wrap}
 .s5p{display: inline-flex; align-items: center; gap: 4px}
 .s5q{padding: 1px 5px; border: 1px solid #2C2C32; border-bottom-width: 2px; border-radius: 5px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 9.5px}
 .s5r{display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid #2C2C32; border-radius: 20px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 10px; font-weight: 600; cursor: pointer; transition: color .14s ease, border-color .14s ease}
@@ -248,7 +248,7 @@ html, body { margin: 0; background: #09090A; }
 .s5x{display: inline-flex; align-items: center; gap: 7px; margin-top: 4px; padding: 8px 14px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease}
 .s5y:hover{background: rgba(217,180,120,.12)}
 .s5z{display: flex; flex-direction: column; gap: 18px; padding: 34px 30px; border: 1px solid #1E1E22; border-radius: 14px; background: radial-gradient(circle at 82% -30%, rgba(217,180,120,.09), transparent 55%), #0E0E11}
-.s60{font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #6E6E76}
+.s60{font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #85858E}
 .s61{font-family: Outfit, Inter, sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -.03em}
 .s62{max-width: 54ch; font-size: 12.5px; color: #8B8B93; line-height: 1.6}
 .s63{display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px}
@@ -256,7 +256,7 @@ html, body { margin: 0; background: #09090A; }
 .s65{display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; border: 1px solid rgba(217,180,120,.35); background: rgba(217,180,120,.09); color: #F0D6A6; font-size: 11px; font-weight: 700}
 .s66{font-size: 11.5px; color: #8B8B93; line-height: 1.5}
 .s67{display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid #1E1E22}
-.s68{display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #6E6E76}
+.s68{display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #85858E}
 .s69{padding: 1px 7px; border-radius: 20px; border: 1px solid #2C2C32; background: #17171A; letter-spacing: .06em; color: #8B8B93}
 .s6a{display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px}
 .s6b{position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.35), transparent 40%, rgba(9,9,10,.85))}
@@ -266,7 +266,7 @@ html, body { margin: 0; background: #09090A; }
 .s6f{position: absolute; top: 7px; left: 7px; display: flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 20px; border: 1px solid rgba(240,214,166,.3); background: rgba(10,10,12,.8); color: #E7DCC8; font-size: 9px; font-weight: 600}
 .s6g{display: flex; flex-direction: column; align-items: center; gap: 4px}
 .s6h{font-family: Outfit, Inter, sans-serif; font-size: 17px; font-weight: 600; color: #8B8B93}
-.s6i{font-size: 9.5px; color: #6E6E76}
+.s6i{font-size: 9.5px; color: #85858E}
 .s6j{display: flex; flex-wrap: wrap; align-items: center; gap: 9px}
 .s6k{display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; color: #F0D6A6; font-size: 12.5px; font-weight: 600; transition: background .14s ease}
 .s6l{display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid rgba(217,180,120,.4); border-radius: 11px; background: rgba(217,180,120,.08)}
@@ -318,7 +318,7 @@ html, body { margin: 0; background: #09090A; }
 .s7v{display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8B8B93}
 .s7w{flex: 0 0 300px; max-width: 300px; min-width: 0; display: flex; flex-direction: column; gap: 14px}
 .s7x{display: flex; flex-direction: column; gap: 11px; padding: 15px; border: 1px solid rgba(217,180,120,.2); border-radius: 12px; background: radial-gradient(circle at 90% -20%, rgba(217,180,120,.13), transparent 55%), #121214}
-.s7y{display: flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #6E6E76; transition: border-color .14s ease}
+.s7y{display: flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #85858E; transition: border-color .14s ease}
 .s7z{width: 100%; min-width: 0; border: 0; background: transparent; color: #F2F2F4; font-family: inherit; font-size: 12px; outline: none}
 .s80{display: flex; gap: 8px}
 .s81{flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 8px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .14s ease}
@@ -328,15 +328,15 @@ html, body { margin: 0; background: #09090A; }
 .s85{position: relative}
 .s86{font-size: 12px; font-weight: 500; color: #F2F2F4}
 .s87{position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: 168px; padding: 5px; border: 1px solid #26262A; border-radius: 10px; background: #121214; box-shadow: 0 18px 44px rgba(0,0,0,.6); animation: dcPop .14s cubic-bezier(.2,.8,.2,1)}
-.s88{display: block; padding: 5px 10px 6px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6E6E76}
-.s89{font-size: 11px; color: #6E6E76; line-height: 1.5}
+.s88{display: block; padding: 5px 10px 6px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #85858E}
+.s89{font-size: 11px; color: #85858E; line-height: 1.5}
 .s8a{display: flex; flex-direction: column; gap: 10px; padding: 15px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214}
 .s8b{margin-left: auto; font-size: 11.5px; color: #8B8B93}
 .s8c{position: relative; height: 5px; border-radius: 20px; background: #1D1D21; overflow: hidden}
 .s8d{position: absolute; inset: 0 auto 0 0; width: 59%; border-radius: 20px; background: linear-gradient(90deg, #D9B478, #F0D6A6)}
 .s8e{display: flex; flex-direction: column; gap: 6px; margin-top: 2px}
 .s8f{display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #BCBCC3}
-.s8g{font-size: 13px; color: #6E6E76}
+.s8g{font-size: 13px; color: #85858E}
 .s8h{margin-left: auto; font-weight: 500; color: #E9E9ED}
 .s8i{display: flex; flex-direction: column; gap: 9px; padding: 15px; border: 1px solid #1E1E22; border-radius: 12px; background: #121214}
 .s8j{display: flex; gap: 8px; font-size: 11.5px; color: #BCBCC3; line-height: 1.5}
@@ -363,7 +363,7 @@ html, body { margin: 0; background: #09090A; }
 .s94{display: flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .14s ease}
 .s95{display: flex; flex-wrap: wrap; align-items: flex-start; gap: 22px; padding: 22px 40px 44px}
 .s96{flex: 0 1 340px; min-width: 300px; display: flex; flex-direction: column; gap: 18px; padding: 16px; border: 1px solid #1E1E22; border-radius: 13px; background: #121214}
-.s97{font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76}
+.s97{font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #85858E}
 .s98{display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-radius: 8px; color: #E9E9ED; font-size: 12.5px; transition: background .14s ease}
 .s99{font-size: 16px; color: #8B8B93}
 .s9a{margin-left: auto; max-width: 44%; font-size: 11.5px; color: #8B8B93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
@@ -401,7 +401,7 @@ html, body { margin: 0; background: #09090A; }
 .sa6{display: grid; place-items: center; width: 29px; height: 28px; border: 1px solid #26262A; border-radius: 7px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .14s ease, border-color .14s ease}
 .sa7{flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px}
 .sa8{display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px}
-.sa9{padding: 0 8px 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #6E6E76}
+.sa9{padding: 0 8px 2px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #85858E}
 .saa{flex: 1 1 0; min-height: 62px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px}
 .sab:hover{border-color: #3A3A42 !important}
 .sac{display: flex; align-items: center; gap: 5px}
@@ -411,10 +411,10 @@ html, body { margin: 0; background: #09090A; }
 .sag{font-family: Outfit, Inter, sans-serif; font-size: 12.5px; font-weight: 600}
 .sah{font-size: 10.5px; opacity: .8}
 .sai{flex: 1 1 0; min-height: 62px; display: flex; align-items: stretch; gap: 7px}
-.saj{flex: 0 0 47px; display: flex; align-items: center; font-family: Outfit, Inter, sans-serif; font-size: 11.5px; font-weight: 500; color: #6E6E76; font-variant-numeric: tabular-nums}
+.saj{flex: 0 0 47px; display: flex; align-items: center; font-family: Outfit, Inter, sans-serif; font-size: 11.5px; font-weight: 500; color: #85858E; font-variant-numeric: tabular-nums}
 .sak{display: block; text-align: center; font-size: 14px; color: #33333C}
 .sal{display: flex; flex-direction: column; gap: 10px}
-.sam{padding: 22px 0 6px; font-size: 12.5px; color: #6E6E76}
+.sam{padding: 22px 0 6px; font-size: 12.5px; color: #85858E}
 .san{display: flex; align-items: center; justify-content: center; gap: 8px; padding: 13px; border: 1px dashed #2C2C32; border-radius: 11px; background: transparent; color: #8B8B93; font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: border-color .14s ease, color .14s ease}
 .sao:hover{border-color: rgba(217,180,120,.4); color: #F0D6A6}
 .sap{flex: 0 0 300px; max-width: 300px; min-width: 0; display: flex; flex-direction: column; gap: 10px}
@@ -424,13 +424,13 @@ html, body { margin: 0; background: #09090A; }
 .sat{display: flex; align-items: baseline; gap: 7px}
 .sau{font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 600; color: #F0D6A6}
 .sav{font-size: 11.5px; color: #E9E9ED; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
-.saw{font-size: 11px; color: #6E6E76}
+.saw{font-size: 11px; color: #85858E}
 .sax{font-size: 11.5px; color: #BCBCC3}
 .say{display: flex; align-items: center; gap: 9px}
 .saz{font-size: 12px; color: #E9E9ED; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
 .sb0{margin-left: auto; flex: none; padding: 5px 10px; border: 1px solid #26262A; border-radius: 8px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 11.5px; cursor: pointer; transition: color .14s ease, border-color .14s ease}
 .sb1:hover{color: #F0D6A6; border-color: rgba(217,180,120,.45)}
-.sb2{font-size: 11.5px; color: #6E6E76; line-height: 1.55}
+.sb2{font-size: 11.5px; color: #85858E; line-height: 1.55}
 .sb3{display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; line-height: 1.5; color: #E0A188}
 .sb4{font-size: 14px; margin-top: 1px}
 .sb5{display: flex; align-items: center; gap: 9px; padding: 0; border: 0; background: none; font-family: inherit; font-size: 12px; color: #BCBCC3; cursor: pointer; text-align: left}
@@ -449,7 +449,7 @@ html, body { margin: 0; background: #09090A; }
 .sbi{display: flex; align-items: baseline; gap: 8px}
 .sbj{font-family: Outfit, Inter, sans-serif; font-size: 32px; font-weight: 600; letter-spacing: -.04em; line-height: 1}
 .sbk{width: 100%; accent-color: #D9B478; cursor: pointer}
-.sbl{display: flex; justify-content: space-between; font-size: 10px; color: #6E6E76}
+.sbl{display: flex; justify-content: space-between; font-size: 10px; color: #85858E}
 .sbm{display: flex; align-items: center; gap: 9px; padding-top: 10px; border-top: 1px solid #1E1E22}
 .sbn{display: flex; flex-direction: column; gap: 1px}
 .sbo{font-size: 12px; color: #BCBCC3}
@@ -457,7 +457,7 @@ html, body { margin: 0; background: #09090A; }
 .sbq{display: flex; flex-wrap: wrap; align-items: center; gap: 11px; padding: 11px 22px; border-bottom: 1px solid #1E1E22; background: #0C0C0E}
 .sbr{width: 1px; height: 18px; background: #26262A}
 .sbs{display: flex; flex-direction: column; gap: 1px; min-width: 0; max-width: 260px}
-.sbt{font-size: 10.5px; color: #6E6E76; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
+.sbt{font-size: 10.5px; color: #85858E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
 .sbu{display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: #8B8B93}
 .sbv{display: flex; align-items: center; gap: 7px; padding: 8px 13px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #BCBCC3; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer}
 .sbw{flex: 1; min-height: 0; display: flex; flex-wrap: wrap; align-items: stretch; overflow: auto}
@@ -467,16 +467,16 @@ html, body { margin: 0; background: #09090A; }
 .sc0{position: absolute; inset: 0 auto 0 0; width: 34%; border-radius: 20px; background: #F0D6A6}
 .sc1{flex: 0 0 316px; max-width: 316px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px; border-left: 1px solid #1E1E22; background: #0E0E11}
 .sc2{display: flex; flex-direction: column; gap: 13px}
-.sc3{display: flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76}
+.sc3{display: flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #85858E}
 .sc4{margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 10.5px; color: #8B8B93}
 .sc5{width: 100%; padding: 10px; border: 1px solid #26262A; border-radius: 9px; background: #121214; color: #F2F2F4; font-family: inherit; font-size: 12.5px; line-height: 1.5; resize: vertical; outline: none}
 .sc6{color: #C9A87A; text-decoration: none; font-weight: 600}
-.sc7{font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #6E6E76}
+.sc7{font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: #85858E}
 .sc8{display: flex; flex-wrap: wrap; gap: 6px}
 .sc9{display: flex; align-items: center; font-size: 11.5px; color: #BCBCC3}
 .sca{margin-left: auto; font-weight: 500; color: #F0D6A6}
 .scb{display: flex; align-items: center; gap: 9px; cursor: pointer}
-.scc{font-size: 10.5px; color: #6E6E76; line-height: 1.45}
+.scc{font-size: 10.5px; color: #85858E; line-height: 1.45}
 .scd{display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid #1E1E22}
 .sce{display: flex; align-items: center; gap: 7px; font-size: 12px}
 .scf{display: flex; flex-direction: column; gap: 11px}
@@ -485,7 +485,7 @@ html, body { margin: 0; background: #09090A; }
 .sci{display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 3px; padding: 10px 12px; border: 1px solid #2A2A31; border-radius: 9px; background: #17171B; color: #E9E9ED; font-size: 12px; font-weight: 600; cursor: pointer}
 .scj{flex: none; display: flex; flex-direction: column; gap: 7px; padding: 12px 22px 16px; border-top: 1px solid #1E1E22; background: #0C0C0E}
 .sck{display: flex; align-items: center; gap: 10px}
-.scl{margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 11px; color: #6E6E76}
+.scl{margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 11px; color: #85858E}
 .scm{position: relative; display: flex; flex-direction: column; gap: 5px; cursor: crosshair}
 .scn{display: flex; justify-content: space-between; padding: 0 2px; font-size: 9px; color: #4A4A52}
 .sco{position: relative; height: 30px; border-radius: 7px; background: #121214; border: 1px solid #1E1E22}
@@ -506,11 +506,11 @@ html, body { margin: 0; background: #09090A; }
 .sd3{flex: none; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap}
 .sd4{display: flex; gap: 16px; margin-left: auto}
 .sd5{flex: none; display: flex; align-items: stretch; overflow-x: auto}
-.sd6{font-size: 11px; color: #6E6E76; line-height: 1.45}
+.sd6{font-size: 11px; color: #85858E; line-height: 1.45}
 .sd7{flex: none; height: 1px; background: rgba(242,242,244,.07)}
 .sd8{flex: none; display: flex; flex-direction: column; gap: 13px}
 .sd9{display: flex; align-items: flex-start; gap: 26px; flex-wrap: wrap}
-.sda{align-self: center; color: #6E6E76; font-size: 17px}
+.sda{align-self: center; color: #85858E; font-size: 17px}
 .sdb{display: flex; flex-direction: column; gap: 4px}
 .sdc{font-size: 11.5px; color: #A2A2AA}
 .sdd{flex: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 40px}
@@ -521,8 +521,8 @@ html, body { margin: 0; background: #09090A; }
 .sdi{width: 70px; flex: none; text-align: right; font-size: 11.5px; color: #F2F2F4; font-variant-numeric: tabular-nums}
 .sdj{overflow-x: auto}
 .sdk{width: 100%; border-collapse: collapse; min-width: 420px}
-.sdl{text-align: left; padding: 0 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6E6E76; border-bottom: 1px solid rgba(242,242,244,.07)}
-.sdm{text-align: right; padding: 0 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6E6E76; border-bottom: 1px solid rgba(242,242,244,.07)}
+.sdl{text-align: left; padding: 0 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #85858E; border-bottom: 1px solid rgba(242,242,244,.07)}
+.sdm{text-align: right; padding: 0 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #85858E; border-bottom: 1px solid rgba(242,242,244,.07)}
 .sdn{padding: 10px 2px; font-size: 12.5px; color: #E9E9ED; border-bottom: 1px solid rgba(242,242,244,.045)}
 .sdo{background: none; border: 0; padding: 0; font-family: inherit; font-size: 12.5px; color: inherit; text-align: left; cursor: pointer}
 .sdp{padding: 10px 2px; text-align: right; font-size: 12.5px; color: #BCBCC3; font-variant-numeric: tabular-nums; border-bottom: 1px solid rgba(242,242,244,.045)}
@@ -537,13 +537,13 @@ html, body { margin: 0; background: #09090A; }
 .sdy{flex: 1; min-height: 0; overflow: auto; padding: 20px 40px 44px; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1)}
 .sdz{display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px}
 .se0{flex: 1 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 11px}
-.se1{flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #6E6E76}
+.se1{flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid #26262A; border-radius: 8px; background: #121214; color: #85858E}
 .se2{align-self: center; font-size: 14px; color: #4A4A52}
 .se3{display: flex; align-items: center; gap: 6px; padding: 8px 13px; border: 1px solid rgba(217,180,120,.45); border-radius: 8px; background: transparent; color: #F0D6A6; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer}
 .se4{flex: 1 1 40%; min-width: 0; font-size: 12px; color: #8B8B93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
 .se5{font-size: 13px; color: #4A4A52; flex: none}
 .se6{flex: 1 1 40%; min-width: 0; font-size: 13px; color: #F0D6A6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis}
-.se7{flex: none; font-size: 10.5px; color: #6E6E76}
+.se7{flex: none; font-size: 10.5px; color: #85858E}
 .se8{flex: 0 0 320px; max-width: 320px; min-width: 0; display: flex; flex-direction: column; gap: 14px}
 .se9{display: flex; flex-direction: column; gap: 11px; padding: 15px; border: 1px solid rgba(230,183,112,.24); border-radius: 12px; background: #121214}
 .sea{display: flex; align-items: center; gap: 8px; font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600}
@@ -570,18 +570,18 @@ html, body { margin: 0; background: #09090A; }
 .sev{flex: none; display: flex; flex-direction: column; gap: 13px; padding: 20px 22px; border: 1px solid rgba(217,180,120,.32); border-radius: 16px; background: linear-gradient(180deg, rgba(217,180,120,.06), rgba(217,180,120,.015)), #101013; box-shadow: 0 24px 60px rgba(0,0,0,.35)}
 .sew{display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap}
 .sex{font-size: 10px; font-weight: 700; letter-spacing: .16em; color: #C9A87A}
-.sey{margin-left: auto; font-size: 10.5px; color: #6E6E76}
+.sey{margin-left: auto; font-size: 10.5px; color: #85858E}
 .sez{display: flex; align-items: flex-start; gap: 10px; padding: 6px 8px 6px 6px; border: 1px solid #26262A; border-radius: 12px; background: #0E0E11}
 .sf0{flex: 1; min-width: 0; padding: 11px 12px; border: 0; background: transparent; color: #F2F2F4; font-family: inherit; font-size: 14.5px; line-height: 1.5; resize: vertical; outline: none}
 .sf1{display: flex; align-items: center; gap: 8px; flex-wrap: wrap}
 .sf2{padding: 6px 12px; border: 1px solid #26262A; border-radius: 20px; background: transparent; color: #A2A2AA; font-family: inherit; font-size: 11.5px; cursor: pointer; transition: color .14s ease, border-color .14s ease}
-.sf3{display: flex; align-items: center; gap: 9px; padding: 14px; border: 1px dashed #26262A; border-radius: 12px; background: #0E0E11; color: #6E6E76; font-size: 13px}
+.sf3{display: flex; align-items: center; gap: 9px; padding: 14px; border: 1px dashed #26262A; border-radius: 12px; background: #0E0E11; color: #85858E; font-size: 13px}
 .sf4{display: flex; align-items: center; gap: 12px; flex-wrap: wrap}
 .sf5{font-size: 11.5px; color: #8B8B93; line-height: 1.5; flex: 1 1 260px}
 .sf6{flex: none; display: flex; gap: 13px; padding: 16px 20px; border: 1px solid rgba(217,180,120,.18); border-radius: 14px; background: #101013}
 .sf7{flex: none; width: 15px; height: 15px; margin-top: 3px; border-radius: 50%; border: 2px solid rgba(217,180,120,.25); border-top-color: #F0D6A6}
 .sf8{display: flex; flex-direction: column; gap: 9px; min-width: 0; flex: 1}
-.sf9{font-size: 9.5px; font-weight: 700; letter-spacing: .14em; color: #6E6E76}
+.sf9{font-size: 9.5px; font-weight: 700; letter-spacing: .14em; color: #85858E}
 .sfa{height: 9px; width: 92%; border-radius: 6px; background: #1A1A1F}
 .sfb{height: 9px; width: 78%; border-radius: 6px; background: #1A1A1F}
 .sfc{height: 9px; width: 58%; border-radius: 6px; background: #1A1A1F}
@@ -603,7 +603,7 @@ html, body { margin: 0; background: #09090A; }
 .sfs{display: flex; flex-direction: column; gap: 4px; min-width: 0}
 .sft{font-size: 12px; color: #8B8B93; line-height: 1.6; text-wrap: pretty}
 .sfu{flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 20px; border: 1px dashed #26262A; border-radius: 12px; background: #0E0E11}
-.sfv{font-size: 24px; color: #6E6E76}
+.sfv{font-size: 24px; color: #85858E}
 .sfw{font-family: Outfit, Inter, sans-serif; font-size: 14px; font-weight: 500}
 .sfx{font-size: 12px; color: #8B8B93; text-align: center; max-width: 50ch}
 .sfy{flex: none; display: flex; align-items: center; gap: 12px}
@@ -624,18 +624,18 @@ html, body { margin: 0; background: #09090A; }
 .sgd{display: flex; align-items: flex-end; gap: 12px; height: 148px; overflow-x: auto; padding-bottom: 2px}
 .sge{display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; min-width: 42px; height: 100%; justify-content: flex-end}
 .sgf{display: flex; align-items: flex-end; gap: 3px; height: 122px}
-.sgg{text-align: left; padding: 8px 2px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6E6E76; border-bottom: 1px solid rgba(242,242,244,.07)}
-.sgh{text-align: left; padding: 8px 2px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6E6E76; border-bottom: 1px solid rgba(242,242,244,.07); text-align: right}
+.sgg{text-align: left; padding: 8px 2px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #85858E; border-bottom: 1px solid rgba(242,242,244,.07)}
+.sgh{text-align: left; padding: 8px 2px; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #85858E; border-bottom: 1px solid rgba(242,242,244,.07); text-align: right}
 .sgi{padding: 10px 2px; font-size: 12.5px; color: #BCBCC3; border-bottom: 1px solid rgba(242,242,244,.045); max-width: 320px}
 .sgj{color: #F2F2F4}
 .sgk{padding: 10px 2px; font-size: 12.5px; color: #BCBCC3; border-bottom: 1px solid rgba(242,242,244,.045)}
 .sgl{padding: 10px 2px; font-size: 12.5px; color: #BCBCC3; border-bottom: 1px solid rgba(242,242,244,.045); text-align: right; font-variant-numeric: tabular-nums; color: #F2F2F4}
 .sgm{position: relative; display: inline-flex; align-items: center; gap: 4px; cursor: pointer}
-.sgn{appearance: none; padding: 0 13px 0 0; border: 0; background: transparent; font-family: inherit; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #6E6E76; cursor: pointer}
+.sgn{appearance: none; padding: 0 13px 0 0; border: 0; background: transparent; font-family: inherit; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #85858E; cursor: pointer}
 .sgo{position: absolute; right: 0; font-size: 9px; color: #4E4E56; pointer-events: none}
 .sgp{display: flex; align-items: flex-end; gap: 4px; height: 118px}
 .sgq{display: flex; align-items: center; gap: 20px; overflow-x: auto}
-.sgr{color: #6E6E76; font-size: 17px}
+.sgr{color: #85858E; font-size: 17px}
 .sgs{font-size: 11px; color: #8B8B93; white-space: nowrap}
 .sgt{font-size: 10.5px; color: #F0D6A6; white-space: nowrap}
 .sgu{display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 40px}
@@ -656,7 +656,7 @@ html, body { margin: 0; background: #09090A; }
 .sh9{background: none; border: none; padding: 0; font-family: inherit; font-size: 13px; font-weight: 700; color: #F0D6A6; cursor: pointer}
 .sha{background: none; border: none; padding: 0; font-family: inherit; font-size: 12.5px; color: #A2A2AA; cursor: pointer}
 .shb{margin-left: auto; background: none; border: none; padding: 0; font-family: inherit; font-size: 12.5px; font-weight: 700; color: #F0D6A6; cursor: pointer}
-.shc{font-size: 11px; color: #6E6E76; max-width: 300px}
+.shc{font-size: 11px; color: #85858E; max-width: 300px}
 .shd{width: 100%; min-width: 0; padding: 8px 2px; border: none; border-bottom: 1px solid #26262A; border-radius: 0; background: transparent; color: #F2F2F4; font-family: inherit; font-size: 12.5px; max-width: 200px; margin-left: auto}
 .she{display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px}
 .shf{flex: 1; min-height: 0; overflow: auto; padding: 26px 40px 44px; animation: dcScreen .24s cubic-bezier(.2,.8,.2,1)}
@@ -675,15 +675,15 @@ html, body { margin: 0; background: #09090A; }
 .shs:hover{border-color: #34343A !important;color: #F2F2F4 !important}
 .sht{flex: 1 1 300px; max-width: 380px; display: flex; flex-direction: column; gap: 10px; padding: 18px; border: 1px solid #1E1E22; border-radius: 14px; background: #121214}
 .shu{display: flex; align-items: center; gap: 9px; padding: 7px 0; border-top: 1px solid #1E1E22; font-size: 12px}
-.shv{font-size: 14px; color: #6E6E76}
+.shv{font-size: 14px; color: #85858E}
 .shw{color: #BCBCC3}
 .shx{margin-left: auto; font-size: 12px; font-weight: 600; color: #F0D6A6}
-.shy{font-size: 11px; color: #6E6E76; line-height: 1.5; margin-top: 2px}
+.shy{font-size: 11px; color: #85858E; line-height: 1.5; margin-top: 2px}
 .shz{display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 34px 0 6px}
 .si0{margin: 0; font-family: Outfit, Inter, sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -.03em}
 .si1{position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid #26262A; border-radius: 22px; background: #121214}
-.si2{font-size: 11.5px; color: #6E6E76}
-.si3{margin-left: auto; font-size: 12px; color: #6E6E76}
+.si2{font-size: 11.5px; color: #85858E}
+.si3{margin-left: auto; font-size: 12px; color: #85858E}
 .si4{display: grid; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); gap: 22px; align-items: stretch}
 .si5{font-family: Outfit, Inter, sans-serif; font-size: 17px; font-weight: 600; letter-spacing: -.02em; color: #F2F2F4}
 .si6{font-size: 11.5px; color: #8B8B93; line-height: 1.5; min-height: 34px}
@@ -699,7 +699,7 @@ html, body { margin: 0; background: #09090A; }
 .sig{display: flex; align-items: baseline; gap: 7px; margin-top: 12px}
 .sih{font-family: Outfit, Inter, sans-serif; font-size: 30px; font-weight: 600; letter-spacing: -.04em; line-height: 1}
 .sii{margin-top: 9px; font-size: 13.5px; color: #F2F2F4}
-.sij{margin-top: 3px; font-size: 11px; color: #6E6E76}
+.sij{margin-top: 3px; font-size: 11px; color: #85858E}
 .sik{margin-top: 11px; font-size: 11.5px; color: #BCBCC3; line-height: 1.5}
 .sil{position: fixed; inset: 0; z-index: 94; display: grid; place-items: start center; padding: 6vh 24px 24px; background: radial-gradient(120% 90% at 50% 0%, rgba(38,29,18,.5), rgba(6,6,8,.86) 62%), rgba(6,6,8,.6); backdrop-filter: blur(9px)}
 .sim{width: 100%; max-width: 1060px; max-height: 92vh; overflow: auto; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 26px; padding: 26px 28px 24px; border: 1px solid #2C2C33; border-radius: 20px; background: radial-gradient(120% 80% at 82% -12%, rgba(217,180,120,.13), transparent 58%), linear-gradient(168deg, #18181D 0%, #121216 46%, #0D0D10 100%); box-shadow: 0 48px 120px rgba(0,0,0,.76), inset 0 1px 0 rgba(248,248,249,.05); animation: dcPop .18s cubic-bezier(.2,.8,.2,1)}
@@ -712,7 +712,7 @@ html, body { margin: 0; background: #09090A; }
 .sit{display: grid; place-items: center; width: 30px; height: 30px; flex: none; border: 1px solid #2A2A31; border-radius: 9px; background: #17171A; color: #8B8B93; cursor: pointer; transition: color .15s ease, border-color .15s ease}
 .siu{display: block; height: 1px; background: linear-gradient(90deg, #2A2A31, rgba(42,42,49,0))}
 .siv{position: relative; flex: 1 1 auto; height: 2px; border-radius: 2px; background: #232329; overflow: hidden}
-.siw{flex: none; font-size: 11px; color: #6E6E76; font-variant-numeric: tabular-nums}
+.siw{flex: none; font-size: 11px; color: #85858E; font-variant-numeric: tabular-nums}
 .six{display: flex; flex-direction: column; gap: 6px; animation: dcStep .3s cubic-bezier(.2,.75,.3,1) both}
 .siy{font-family: Outfit, Inter, sans-serif; font-size: 27px; font-weight: 600; line-height: 1.15; letter-spacing: -.025em; color: #F6F6F8}
 .siz{font-size: 13px; line-height: 1.55; color: #8B8B93; max-width: 62ch}
@@ -732,7 +732,7 @@ html, body { margin: 0; background: #09090A; }
 .sjd{display: flex; align-items: center; gap: 16px; min-width: 0}
 .sje{flex: 1 1 auto; max-width: 300px; accent-color: #D9B478; background: transparent; cursor: pointer}
 .sjf{flex: none; min-width: 42px; font-family: Outfit, Inter, sans-serif; font-size: 15px; font-weight: 600; color: #F6F6F8; font-variant-numeric: tabular-nums}
-.sjg{margin-top: 16px; font-size: 12px; line-height: 1.55; color: #6E6E76}
+.sjg{margin-top: 16px; font-size: 12px; line-height: 1.55; color: #85858E}
 .sjh{display: flex; flex-direction: column; gap: 2px; animation: dcStep .3s cubic-bezier(.2,.75,.3,1) both; animation-delay: .04s}
 .sji{display: flex; align-items: flex-start; gap: 13px; padding: 11px 0}
 .sjj{display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 8px; border: 1px solid #26262A; background: #17171A; color: #8B8B93}
@@ -799,7 +799,7 @@ html, body { margin: 0; background: #09090A; }
 .sl8{animation: dcDraw 1.1s cubic-bezier(.4,0,.2,1) forwards}
 .sl9{opacity: 0; animation: dcPop .4s cubic-bezier(.2,.8,.2,1) .75s forwards}
 .sla{font-family: Outfit, Inter, sans-serif; font-size: 21px; font-weight: 700; letter-spacing: -.02em; color: #F2F2F4}
-.slb{font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: #6E6E76}
+.slb{font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: #85858E}
 .slc{position: relative; width: 132px; height: 2px; border-radius: 20px; background: #1D1D21; overflow: hidden}
 .sld{position: absolute; inset: 0 auto 0 0; border-radius: 20px; background: linear-gradient(90deg, #D9B478, #F0D6A6); animation: dcTrack 1.35s cubic-bezier(.4,0,.2,1) forwards}
 .sle{position: fixed; left: 50%; bottom: 18px; translate: -50% 0; z-index: 88; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; max-width: calc(100vw - 48px); padding: 10px 16px; border: 1px solid rgba(217,180,120,.26); border-radius: 22px; background: rgba(16,16,19,.96); box-shadow: 0 22px 54px rgba(0,0,0,.62); animation: dcToast .22s cubic-bezier(.2,.8,.2,1)}
