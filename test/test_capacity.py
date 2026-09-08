@@ -260,6 +260,53 @@ class ImageDefaultsTests(unittest.TestCase):
                              f"{name} is baked into the image; capacity.py can then never decide it")
 
 
+class LiveShareTests(unittest.TestCase):
+    """A job running alone must get the machine, not a full box's share.
+
+    The static plan answers "what does one job own when every slot is busy",
+    which is right for reporting and wrong for a lone import -- the case that
+    happens most on this product today, where one person imports one lecture.
+    """
+
+    def setUp(self):
+        self._saved = {k: os.environ.pop(k, None) for k in ENV_KEYS}
+        importlib.reload(cap)
+        cap.cpu_cores = lambda: 8
+
+    def tearDown(self):
+        for key, value in self._saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_one_job_gets_the_machine(self):
+        self.assertEqual(cap.threads_for(1)["cpuThreads"], 8)
+
+    def test_the_share_divides_as_jobs_arrive(self):
+        self.assertEqual(cap.threads_for(2)["cpuThreads"], 4)
+        self.assertEqual(cap.threads_for(3)["cpuThreads"], 2)
+
+    def test_a_full_box_gets_exactly_what_the_plan_says(self):
+        """The busy case must not move, or this is a retune wearing a fix's
+        clothes: three jobs on this box got two threads each before and must
+        still get two."""
+        full = cap.plan()["maxConcurrentJobs"]
+        self.assertEqual(cap.threads_for(full)["cpuThreads"], cap.plan()["cpuThreads"])
+        self.assertEqual(cap.threads_for(full)["ffmpegThreads"], cap.plan()["ffmpegThreads"])
+
+    def test_an_operator_override_is_never_reinterpreted(self):
+        os.environ["WHISPER_CPU_THREADS"] = "5"
+        os.environ["FFMPEG_THREADS"] = "1"
+        importlib.reload(cap)
+        cap.cpu_cores = lambda: 8
+        for active in (1, 3, 9):
+            self.assertEqual(cap.threads_for(active)["cpuThreads"], 5)
+            self.assertEqual(cap.threads_for(active)["ffmpegThreads"], 1)
+
+    def test_more_jobs_than_cores_still_leaves_a_thread_each(self):
+        self.assertEqual(cap.threads_for(99)["cpuThreads"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

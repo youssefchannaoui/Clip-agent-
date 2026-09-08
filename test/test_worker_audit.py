@@ -4,6 +4,7 @@ Youssef asked for every area of the worker to be a ten. These are the code
 changes that moved the scores, each proven here against the failure it fixes.
 """
 import importlib
+import io
 import json
 import os
 import shutil
@@ -354,6 +355,62 @@ class ServiceGuardTests(unittest.TestCase):
                 processor.run_clip_worker("hung", job_file, Path(self.root) / "result.json")
         self.assertIn("time budget", str(caught.exception))
         self.assertNotIn("hung", processor.running, "the slot is released")
+
+    def test_a_lone_lecture_is_given_the_whole_machine(self):
+        """The share is decided at SPAWN from live load, not from the plan.
+
+        capacity.plan() answers for a FULL box -- what one job owns when every
+        slot is busy. Handed to a job running ALONE that leaves most of the
+        machine idle while the customer waits, which is the case that happens
+        most on this product: one person, one lecture.
+
+        Driven through the real run_clip_worker with the child stubbed, because
+        the fault would live in what the CHILD is told, not in what the
+        function computes.
+        """
+        captured = {}
+
+        class FakeChild:
+            def __init__(self, *a, **kw):
+                captured.update(kw.get("env") or {})
+                self.stdout, self.returncode, self.pid = io.StringIO(""), 0, 1
+            def wait(self, timeout=None): return 0
+            def poll(self): return 0
+
+        store = self.service.JobStore()
+        store.create({"id": "solo", "settings": {}})
+        processor = self.service.Processor(store)
+        job_file = Path(self.root) / "job.json"
+        job_file.write_text("{}")
+        result = Path(self.root) / "result.json"
+        result.write_text("{}")
+
+        with mock.patch.object(self.service.capacity, "cpu_cores", return_value=8), \
+             mock.patch.object(self.service.subprocess, "Popen", FakeChild):
+            try:
+                processor.run_clip_worker("solo", job_file, result)
+            except Exception:
+                # The stub is not a real worker; the env is what is under test
+                # and it is captured before anything downstream can fail.
+                pass
+
+        self.assertEqual(captured.get("WHISPER_CPU_THREADS"), "8",
+                         "a lecture running alone must get the whole machine")
+        self.assertEqual(captured.get("FFMPEG_THREADS"), "8")
+
+        # ...and with two already in flight it must divide rather than promise
+        # each of them a box that does not exist.
+        captured.clear()
+        processor.running["other-a"] = object()
+        processor.running["other-b"] = object()
+        with mock.patch.object(self.service.capacity, "cpu_cores", return_value=8), \
+             mock.patch.object(self.service.subprocess, "Popen", FakeChild):
+            try:
+                processor.run_clip_worker("third", job_file, result)
+            except Exception:
+                pass
+        self.assertEqual(captured.get("WHISPER_CPU_THREADS"), "2",
+                         "three lectures share the box rather than each taking it")
 
     def test_the_budget_scales_with_the_selected_stretch(self):
         store = self.service.JobStore()

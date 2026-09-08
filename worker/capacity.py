@@ -173,6 +173,40 @@ def whisper_model_for(has_gpu: bool, ram_gb: float) -> str:
     return "base"
 
 
+def threads_for(active_jobs: int) -> dict[str, int]:
+    """The share of the machine ONE job gets while `active_jobs` are running.
+
+    `plan()` answers for a FULL box -- what a job owns when every slot is busy --
+    and that is the right number to report and to size a machine against. It is
+    the wrong number to hand a job that is running ALONE: a lone lecture on an
+    eight-core box was being given the same two threads it gets when three are
+    fighting, so six cores sat idle while the customer waited.
+
+    So the budget is decided per spawn, from the jobs actually in flight. One
+    lecture gets the machine; three divide it, and at a full box this returns
+    exactly what plan() does, so nothing changes for a busy worker.
+
+    AN EXPLICIT OVERRIDE STILL WINS, unchanged -- an operator's number is not a
+    heuristic's to reinterpret, which is this module's oldest contract.
+
+    WHAT THIS CANNOT DO, stated so nobody reads more into it: ctranslate2 fixes
+    its thread pool when the model is constructed, so a job that starts alone
+    KEEPS the whole machine when a second arrives. The two then oversubscribe
+    until the first finishes. That is deliberate and it is safe: oversubscribed
+    CPU degrades gracefully into context switching, where the alternative --
+    leaving cores idle on every solo import -- is a guaranteed loss on the case
+    that happens most. Memory is not divided here and is not at risk from it.
+    """
+    forced_ffmpeg = _env("FFMPEG_THREADS")
+    forced_cpu = _env("WHISPER_CPU_THREADS")
+    active = max(1, int(active_jobs))
+    share = max(1, cpu_cores() // active)
+    return {
+        "ffmpegThreads": max(1, int(forced_ffmpeg)) if forced_ffmpeg else share,
+        "cpuThreads": max(1, int(forced_cpu)) if forced_cpu else share,
+    }
+
+
 def plan() -> dict[str, Any]:
     """The whole hardware decision, in one place, with every source recorded."""
     cores = cpu_cores()
@@ -198,14 +232,12 @@ def plan() -> dict[str, Any]:
         if has_gpu:
             concurrency = max(1, min(concurrency, 2))
 
-    # The share of the machine ONE job owns. Both thread budgets below are this
-    # number, because two jobs must not each believe they own the box.
-    share = max(1, cores // concurrency)
-
-    env_threads = _env("FFMPEG_THREADS")
-    # Four threads on two cores was ffmpeg contending with itself and with
-    # Whisper.
-    threads = max(1, int(env_threads)) if env_threads else share
+    # THE FULL-BOX SHARE, derived from the same function that hands a running
+    # job its budget -- one expression, so what this module REPORTS and what a
+    # job is actually given cannot drift apart. Four threads on two cores was
+    # ffmpeg contending with itself and with Whisper.
+    full = threads_for(concurrency)
+    threads = full["ffmpegThreads"]
 
     env_cpu_threads = _env("WHISPER_CPU_THREADS")
     # THE SAME SHARE, and deliberately not a smaller slice. Whisper and ffmpeg
@@ -215,11 +247,11 @@ def plan() -> dict[str, Any]:
     # which was free while the box ran one job at a time and is threefold
     # oversubscription now that CAPACITY allows three.
     #
-    # THE TRADE, MADE ON PURPOSE: a lecture running ALONE now gets cores//jobs
-    # instead of the whole machine, so a single import is slower than it was.
-    # Several together stop contending, which is what a bigger box was bought
-    # for. Do NOT "fix" this back to `cores` -- that is the fight, not the fix.
-    cpu_threads = max(1, int(env_cpu_threads)) if env_cpu_threads else share
+    # THIS IS THE FULL-BOX NUMBER AND NOT WHAT A LONE JOB GETS. threads_for()
+    # is asked again at every spawn with the jobs actually in flight, so one
+    # lecture on an idle box takes the whole machine and three divide it. Report
+    # this figure; never hand it to a job without asking how busy the box is.
+    cpu_threads = full["cpuThreads"]
 
     return {
         "cores": cores,

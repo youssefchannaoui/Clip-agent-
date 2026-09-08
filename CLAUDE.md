@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1912 JS + 837 Python**
+- `npm test` and `npm run check` must pass. Currently **1912 JS + 843 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9223,6 +9223,44 @@ deciding exactly as before.
 **The trade is stated in the file so nobody "fixes" it back**: a lecture running
 ALONE now gets `cores/jobs` instead of the machine and is slower on its own. That is
 bought deliberately, for three lectures that no longer fight.
+
+### A lone lecture was given a busy box's share (v3.169.0)
+
+Youssef, immediately after: "if it's one person, it shouldn't slow it down ...
+if it's three people, it should be still very fast."
+
+He was right, and the gap was mine from one release earlier. `capacity.plan()`
+answers for a FULL box -- what one job owns when every slot is busy -- and
+`run_clip_worker` handed that figure to every job. So **a lecture running ALONE
+on an eight-core machine was given the two threads it gets when three are
+fighting, and six cores sat idle while the customer waited.**
+
+`threads_for(active_jobs)` is asked at every spawn with the jobs actually in
+flight (`len(self.running) + 1` -- this one is not in the dict yet). Measured on
+the box's shape: **one job 8 threads, two 4, three 2** -- and three is exactly
+what a full box gave before, so a busy worker is unchanged.
+
+- **`plan()` now DERIVES its own figures from that same function.** The first
+  cut had two expressions -- `cores // concurrency` in the plan and
+  `(cores - 1) // active` in the allocator -- which disagreed by the core I had
+  reserved, and a test caught them 2 against 1. Two expressions answering one
+  question is the whole fault this release exists to fix, reintroduced in the
+  fix for it. The reserve went; one function answers both.
+- **WHAT IT CANNOT DO, so nobody reads more into it:** ctranslate2 fixes its
+  thread pool when the model is constructed, so a job that starts alone KEEPS
+  the machine when a second arrives, and the two oversubscribe until the first
+  finishes. Deliberate: oversubscribed CPU degrades into context switching,
+  where idle cores on every solo import are a guaranteed loss on the commonest
+  case. No memory is divided here, so nothing can be OOM-killed by it.
+- **Three lectures still cannot each be as fast as one alone.** Eight cores
+  divided three ways is eight cores divided three ways; what the change buys is
+  that nothing is wasted at either end.
+
+**A test appended after `unittest.main()` is never collected**, and mine were:
+six tests written, "Ran 22" reported, and the red probe came back GREEN because
+the class was defined below the entry point and never registered. Moved above
+it, count 22 -> 28, probe red on three assertions. Check the count moved by what
+you added before believing a probe.
 
 ### The Qur'an second listen was running with both silencers off
 
