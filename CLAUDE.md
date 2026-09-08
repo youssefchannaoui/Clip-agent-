@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1812 JS + 801 Python**
+- `npm test` and `npm run check` must pass. Currently **1818 JS + 801 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -7773,6 +7773,131 @@ therefore Youssef's** -- the table says what each step buys.
   an on/off detector reports one page however many there are. And a
   frame-to-frame difference never exceeds ~18 levels for the same reason, so a
   per-pixel threshold of 40 reports 0.000% and looks like a broken video.
+
+## DeenAI had a spine put in it (v3.153.0, 8 Sept 2026)
+
+Youssef: "Deen Ai page looks so ugly layout is so bad needs to be 100x better
+there no ai look to it".
+
+**READ THE COLLISION NOTE AT THE FOOT OF THIS SECTION BEFORE ANYTHING ELSE.**
+
+### What was wrong, measured before anything moved
+
+On a seeded account at 1440x900, the V2 screen was **SEVEN equal bordered boxes
+stacked down 1632px of a 785px viewport**, every one on the same `#17171A`:
+
+    head -> "no model" notice -> goals -> what to do next -> ASK -> platform
+    results -> counted insights
+
+So the ask -- the one thing on this screen no other screen can do -- was the
+FOURTH band and below the fold, the goal picker (a setting, chosen once) was
+above it, and nothing on the screen moved or said a model was involved. That is
+the same fault the Owner KPI row had before v3.86.0 ("no boundary, no
+hierarchy, nothing leading") and the same fault this very screen had at
+v3.32.0 ("six equal boxes in a grid"). It keeps coming back.
+
+**Everything the screen DOES was right.** V2's tools, goals, drafts, streaming
+and analytics import are untouched here; not one section was removed and not
+one control moved out of the card it belongs to. What was missing was a spine
+and a voice.
+
+### Console left, context right
+
+`repaint()` builds `.dcai-grid` with `.dcai-main` and `.dcai-side`.
+
+- **MAIN is the working loop, in the order somebody uses it**: ask -> the reply
+  -> the drafts it produced -> what to do next -> what the numbers say.
+- **SIDE is what is TRUE OF THE ACCOUNT** rather than what you do with it: the
+  goal, imported platform results, earlier conversations. A rail is where you
+  look things up; a column is where you work.
+- The console is the ONLY card carrying light -- a gold aurora on a 9s breathe,
+  a live dot, a ringed field. The reply is a bubble with a gold rail and an
+  avatar rather than another box in the stack.
+
+Measured after: **1632px -> 1185px**, one left edge (268) and one right edge
+per column at 900 / 1024 / 1180 / 1366 / 1440 / 1920, zero overflow and zero
+page scroll at every one, **0 DOM operations on an unchanged repaint** (their
+signature cache), and the phone still draws its own screen untouched.
+
+Two ragged things fixed by geometry rather than by a nudge: the three actions
+are `minmax(236px,1fr)` because the 260px floor needed 780px in a 774px column
+and left the third alone on a row beside a gap; and their trailing buttons take
+`margin-top: auto`, because the grid already stretches the cards to one height
+(233px) while the content is top-aligned, so the two buttons sat **17px apart**
+and 33px vs 16px above their own card's foot. After: one y, one gap.
+
+### THE REPLY IS A GRID, AND FLEX-WRAP COULD NOT DO IT
+
+The first cut made the reply a wrapping flex row and the streaming answer
+rendered on the SAME LINE as its "DEENAI" label, hard against the right edge.
+The card's children are a FLAT LIST -- avatar, head, body, [note], [row] -- and
+the `flex-basis: 100%` that was meant to force the wrap named a `.dcai-answer`
+element **this card does not have**. As a grid the avatar owns column one and
+everything else is column two, whatever sections the card happens to hold.
+
+### The daylight sweep was measuring a half-applied theme
+
+**THIS IS THE ENTRY WORTH READING.** A contrast sweep reported **21 of 79 text
+nodes under AA in daylight**, several at 1.02:1 -- and on that evidence
+`studio-deenai.css` was added to `build-light-theme.mjs`'s SOURCES, with a note
+saying the sheet's own comment ("every colour here is a token, so daylight
+flips it for free") was wrong.
+
+It was not wrong. **The probe toggled the `dc-light` CLASS by hand, and the
+studio's next paint reverts it from the stored preference** (`dcApplyTheme`
+reads `localStorage.dcTheme`) -- so the sweep measured a theme that was on the
+body and off in the cascade. A screenshot taken in that state came back plainly
+NIGHT while `document.body.className` said `dc-light`.
+
+Re-measured properly -- `localStorage.setItem('dcTheme','light')` and a RELOAD,
+with the page ground read back as `rgb(236,236,238)` -- the answer is **0 under
+AA in daylight and 0 in night, with and without the sheet in SOURCES**. The
+generator change was reverted and the note corrected rather than left standing.
+
+**Set the preference and reload; then read the page ground back before
+believing any theme number.** This file already records the twin of this
+("a capture that says dark in its filename is not evidence it was dark"), and
+it cost most of an hour here.
+
+**Two more probe faults in the same sweep, both already in this file:** holding
+element references across an `await` measures nodes the 30s poll has already
+replaced (that is where the phantom failures came from -- fresh queries with no
+await inside gave 0), and a `.dcai-aurora` deliberately overflowing an
+`overflow:hidden` console is CLIPPED, not overflowing, so an overflow probe
+must skip `hidden`/`clip` ancestors while still counting `auto`/`scroll` ones.
+
+**One real AA failure survived all that**: `#E08770`, the app's "something
+failed" red, measures **2.67:1 on the paper card**. `theme-palette.mjs` leaves
+a saturated colour alone on purpose -- red still means failed -- so it is
+overridden in this sheet as `body.dc-light #dcAi .dcai-err` (#B4462C, 5.45:1).
+Scoped here rather than in the palette, because the same red sits on the
+generated export's own failure rows (`.sa3`, `.sh7`) and moving it is a
+decision about every screen. **That is still open for the rest of the app.**
+
+### THE COLLISION, and what to do about it next time
+
+**I did not check for the other session before starting, and it cost the whole
+first half of this piece of work.** By the time I looked, `origin` was three
+commits ahead with **"DeenAI V2: a creator growth copilot with tools, not a
+chat box" (v3.151.0)** -- the same screen, the same two files
+(`studio-deenai.js`, `studio-deenai.css`), the same test file, shipped hours
+earlier. I had by then built a complete competing rebuild of the V1 screen: a
+second template over the bindings, its own sheet, nineteen tests, twelve red
+probes.
+
+**It was thrown away, and that was the right call.** Their V2 carries the
+tools, the goals, the drafts and the analytics; mine carried a nicer layout.
+Merging two rebuilds of one screen is the worst available outcome, and the
+complaint Youssef made lands on THEIR screen just as squarely -- which is what
+made restyling it the answer. The discarded work is not in the repo.
+
+**The rule this file already had, restated because I broke it:** run
+`git fetch && git log --oneline origin/deenclipped-v2-2` BEFORE starting
+anything large, not after building it. Sixty seconds against half a session.
+And when two sessions are working the same afternoon, expect the version
+collision too -- this shipped as 3.153.0 against their 3.152.0, checked at
+merge time.
+
 
 ## Open items
 
