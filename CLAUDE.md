@@ -1,5 +1,39 @@
 # DeenClipped — working agreement
 
+## Who the owner is
+
+**`youssefchannaoui05@gmail.com` is Youssef's account — the operator.** Recorded
+here because sessions share no memory and every operator-only gate in this
+product turns on it.
+
+- **It is already the CODE DEFAULT**, not just a value on Render:
+  `config.operatorEmails` (src/config.js) falls back to that address, so a
+  fresh deploy with no `OPERATOR_EMAILS` set is administrable at all.
+- **`elevateOperators()` in auth.js promotes it to `role: 'admin'` on every
+  boot** — retroactively, so an account created before its address was listed
+  is fixed by the next deploy rather than by deleting and re-creating it. Only
+  ever upward, and never over `owner`.
+- **A PROVIDER must vouch for the address.** `verifiedIdentity` requires a
+  Google or Apple sub, because email/password sign-up takes any address
+  unverified — so typing the operator's address into that form is not enough
+  to become one. It is a Google account, which is what makes this work.
+- **The ROLE is the gate, never the plan.** `isUnlimited(user)` reads
+  `user.role` and is what grants three channels per platform (v3.172.0),
+  unlimited tokens, `tierOf` = studio, the Owner screen and eight posting
+  windows. A customer cannot set their own role, which is what keeps every one
+  of those owner-only. Deliberately not `atLeast('studio')`.
+- **It is also where operator alerts go** (`recipients()` in alerts.js), so
+  clearing the list silences the alarm channel as well as the access.
+- **`OPERATOR_EMAILS` on Render overrides it** (comma-separated). Whether it is
+  set there is NOT knowable from a session — Render's API returns no env vars —
+  so the default above is the fact, and a variable is a possibility. **An
+  EMPTY `OPERATOR_EMAILS` is not the default**: `??` falls back only on an
+  unset variable, so a blank one yields an empty list, nobody is elevated and
+  no alert has a recipient.
+- The address is an identity, not a credential, and it is already in seven
+  tracked files of this public repo (config, adapter, four tests,
+  META-SUBMISSION.md). Credentials still live only on the box and on Render.
+
 ## Ownership (split again 31 Aug 2026, by Youssef — then overridden same day)
 
 **OVERRIDDEN for the public-site rebuild, 31 Aug 2026, by Youssef's direct
