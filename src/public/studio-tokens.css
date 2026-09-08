@@ -54,7 +54,30 @@
      near-white, not near-black: the phone's finished step number goes 3.88 ->
      5.09 and white-on-gold 4.07 -> 5.34. That was measured rather than
      reasoned about -- the first reading here used the NIGHT ink on the
-     DAYLIGHT gold, a pair that never renders, and said the fill got worse. */
+     DAYLIGHT gold, a pair that never renders, and said the fill got worse.
+
+     AND #8A6425 WAS STILL SHORT, on the ground v3.127.3 did not measure
+     against: it clears the paper PAGE at 4.53 and reads 4.33 on --dc-bg-deep,
+     which is where the schedule's rows and the Tokens funnel sit. The pair is
+     #856022 / #7A5714 now (4.61 and 5.32 on that well), chosen by measuring
+     the two nodes that actually rendered under AA rather than by a rule of
+     thumb: "Invite a creator" on its 4% gold wash, 4.45 -> 4.73, and "Best
+     value" on a 16% one, 4.33 -> 4.60 -- that second is --dc-gold-LIT, which
+     is why both moved. The fill direction is untouched: no gold fill anywhere
+     carries text (every `background: var(--dc-gold*)` is a dot, a caret, a
+     slider thumb or a progress bar), and the buttons that do sit on gold use
+     --dc-gold-solid, which is declared once and never redeclared here.
+
+     A GOLD WASH ON PAPER IS DARKER THAN ITS GROUND, WHICH IS BACKWARDS, and
+     no ink move can fix it: daylight() remaps the gold inside rgba() too, so
+     a wash that LIGHTENS a black ground DARKENS a white one while the ink is
+     darkening as well -- both move towards each other. Measured, --dc-gold on
+     a 16% wash over the well is 3.90 even at #856022, and only stops failing
+     at a value that has stopped being gold. It does not render today (that
+     alpha pairs with --dc-gold-lit, which clears), so this is written down
+     rather than fixed: the correct answer is to treat a gold rgba BACKGROUND
+     as a surface and keep it light, and that is a change to every gold
+     surface on paper, not a token move. */
   --dc-gold:       #D9B478;   /* the channel's gold */
   --dc-gold-lit:   #F0D6A6;   /* its lit form, for text on black */
   /* THE ONLY TWO COLOURS IN THIS SHEET THAT ARE THE SAME IN BOTH THEMES, and
@@ -144,8 +167,8 @@ body.dc-light {
   --dc-bg-alt:     #F7F7F9;
   --dc-ink-soft:   #55555E;
   --dc-ink-muted:  #67676F;
-  --dc-gold:       #8A6425;
-  --dc-gold-lit:   #7E5B18;
+  --dc-gold:       #856022;
+  --dc-gold-lit:   #7A5714;
   --dc-well:       rgba(20, 20, 24, .05);
 }
 
@@ -1065,7 +1088,7 @@ body.dc-light #studioLiveBar {
 #dcTasks .dctk-fee { color: #8B8B93; letter-spacing: .01em; }
 /* var() with NO hex fallback, deliberately: the daylight generator re-emits
    any rule holding a hex, and its remap of #A2762C measured 4.07:1 on paper --
-   under AA. --dc-gold is already #D9B478 in night and the AA-clearing #8A6425
+   under AA. --dc-gold is already #D9B478 in night and the AA-clearing #856022
    on paper, so letting the token do it is both correct and self-maintaining. */
 #dcTasks .dctk-row:not(.is-done) .dctk-fee { color: var(--dc-gold); }
 #dcTasks .dctk-got { color: var(--dc-gold); font-size: 10.5px; font-weight: 700; }

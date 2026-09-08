@@ -43,8 +43,14 @@ export const NAMED = new Map(Object.entries({
   '#5e5e66': '#6A6A73', '#bcbcc3': '#33333A', '#e9e9ed': '#1D1D22', '#f2f2f4': '#141418',
   '#f8f8f9': '#141418',
   // Gold darkens rather than disappears: the brand colour at a luminance that
-  // can be read on paper.
-  '#d9b478': '#8A6425', '#f0d6a6': '#7E5B18', '#e6b770': '#8C6118',
+  // can be read on paper. Moved again at v3.161.0 (#8A6425/#7E5B18/#8C6118 ->
+  // #856022/#7A5714/#856022): the earlier pair cleared AA against the paper
+  // PAGE and not against --dc-bg-deep, and two nodes rendered under it. The
+  // three answer alike because the AA floor is what decides, not taste --
+  // exactly as --dc-ink-faint and --dc-ink-muted converged. See the note in
+  // studio-tokens.css for the measurements and for the gold WASH, which is
+  // darker than its ground on paper and is a surface question, not this one.
+  '#d9b478': '#856022', '#f0d6a6': '#7A5714', '#e6b770': '#856022',
   // The "+" in an empty posting slot. A faithful inversion keeps it as faint
   // on paper as it is on black, but it is an AFFORDANCE -- it says the square
   // can be pressed — and paper has less to hide behind than a dark ground.
@@ -70,7 +76,7 @@ export const NAMED = new Map(Object.entries({
   // Gold used as a small-caps LABEL. It fell through to the algorithm and
   // landed on #8B6530 -- 4.45:1 against the page, a hair under AA -- while the
   // brand gold beside it has a named answer that clears it. One gold as ink.
-  '#c9a87a': '#8A6425',
+  '#c9a87a': '#856022',
 }));
 
 const expand = (hex) => {

@@ -48,6 +48,31 @@ import { daylight } from './theme-palette.mjs';
 
 const remapColour = (value) => daylight(value);
 
+/*
+ * A TRANSLUCENT GOLD IS ANSWERED HERE AND NOT BY theme-palette.mjs, AND THAT IS
+ * DELIBERATE -- but it has drifted and the drift is worth knowing about before
+ * anyone "aligns" the two.
+ *
+ * The palette answers the INK question: what does this gold become when it has
+ * to be read on paper? It says #856022. These constants answer the SURFACE
+ * question, and #A2762C (162,118,44) is the gold the palette said before
+ * v3.127.3 -- so a gold WASH and the gold INK on top of it are now two
+ * different tans, from two different answers, and neither moved with the other.
+ *
+ * Reading the ink map here would make it WORSE, not better: the daylight gold
+ * is darker than #A2762C, so a wash built from it darkens the ground further
+ * while the ink darkens too, and the two close on each other. Measured,
+ * --dc-gold on a 16% wash over --dc-bg-deep is 3.90 at #856022 and does not
+ * clear 4.5 at any value that is still recognisably gold.
+ *
+ * The real fault is the direction: on black a gold wash LIGHTENS its ground,
+ * and on paper this makes it DARKEN. A background tint is a surface and should
+ * stay light; a border needs to be seen against white and should darken. That
+ * is a property-aware rule and a visible change to every gold surface on paper,
+ * so it is not made here. It does not currently render under AA -- the .161
+ * alpha pairs with --dc-gold-lit, which clears at 4.60 -- and that is the only
+ * reason this is a note rather than a fix.
+ */
 const remapRgba = (declaration) => declaration
   .replace(/rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*([0-9.]+)\s*\)/gi,
     (_, alpha) => `rgba(58, 44, 20, ${Math.min(0.18, Number(alpha) * 0.55).toFixed(3)})`)

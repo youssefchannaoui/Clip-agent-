@@ -72,25 +72,30 @@ test('every neutral ink clears AA on every ground, in both themes', () => {
   assert.deepEqual(bad, [], 'ink that cannot be read:\n  ' + bad.join('\n  '));
 });
 
-test('the gold as ink is under AA on the paper well, and nowhere else', () => {
-  // KNOWN AND REPORTED, not papered over. #8A6425 was chosen in v3.127.3
-  // against the paper PAGE (4.53) and reads 4.33 on the sunken well -- the
-  // ground that release did not enumerate. Darkening it to ~#856022 clears it
-  // (4.61) and is a change to the BRAND colour on every paper screen, so it is
-  // Youssef's call rather than a side effect of a grey fix.
+test('the gold reads as ink on every ground, in both themes', () => {
+  // This was a PINNED EXCEPTION until v3.161.0: #8A6425 was chosen in v3.127.3
+  // against the paper PAGE (4.53) and read 4.33 on the sunken well, the ground
+  // that release did not enumerate. Both golds moved together -- #856022 and
+  // #7A5714 -- because the two nodes that actually rendered under AA were one
+  // of each. There is no exception left, so a gold that gets worse turns this
+  // red rather than joining a list.
   //
-  // This list is pinned so the gap cannot GROW silently: a gold that gets worse,
-  // or a second ink joining it, turns this red. Fixing the gold is deleting the
-  // two entries.
-  const found = [];
+  // The FILL direction needs no entry here and that was checked rather than
+  // assumed: no gold fill anywhere carries text. Every `background:
+  // var(--dc-gold*)` is a dot, a caret, a slider thumb or a progress bar, and
+  // the buttons that do sit on gold use --dc-gold-solid, which is declared
+  // once on :root and deliberately never redeclared for daylight.
+  const bad = [];
   for (const [name, theme] of THEMES) {
-    for (const ground of GROUNDS) {
-      if (!theme.has('--dc-gold') || !theme.has(ground)) continue;
-      const c = contrast(theme.get('--dc-gold'), theme.get(ground));
-      if (c < AA) found.push(`${name} ${ground}`);
+    for (const gold of ['--dc-gold', '--dc-gold-lit']) {
+      for (const ground of GROUNDS) {
+        if (!theme.has(gold) || !theme.has(ground)) continue;
+        const c = contrast(theme.get(gold), theme.get(ground));
+        if (c < AA) bad.push(`${name}: ${gold} ${theme.get(gold)} on ${ground} ${theme.get(ground)} = ${c}`);
+      }
     }
   }
-  assert.deepEqual(found.sort(), ['paper --dc-bg-deep', 'paper --dc-page-2']);
+  assert.deepEqual(bad, [], 'gold that cannot be read:\n  ' + bad.join('\n  '));
 });
 
 test('a var() fallback names its own token\'s value in the DEFAULT theme', () => {

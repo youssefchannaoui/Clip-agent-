@@ -8482,6 +8482,93 @@ side is driven, but the first real connect is the proof and it needs the two
 credentials set.
 
 
+## The brand gold could not be read on paper either (v3.161.0, 8 Sept 2026)
+
+Youssef, on the "Needs fixing" line the grey release closed with: **"fix the
+gold too then"** -- approving the one item v3.159.0 reported as his, because
+it moves the BRAND colour on every daylight screen and that is a decision, not
+a side effect.
+
+### The floor decided it, and it took TWO golds, not one
+
+v3.127.3 set the daylight gold against the paper PAGE and v3.159.0 set the
+greys against the sunken WELL, which is stricter -- the gold had never been
+re-measured against it. `--dc-gold` reads **4.53 on the page and 4.33 on
+`--dc-bg-deep`**, where the schedule's rows and the Tokens funnel sit.
+
+The two nodes that actually rendered under AA were **one of each gold**, which
+is why both moved:
+
+    Invite a creator   --dc-gold      #8A6425 on rgb(235,234,233)   4.45 -> 4.73
+    Best value         --dc-gold-LIT  #7E5B18 on rgb(223,215,202)   4.33 -> 4.60
+
+`#856022` / `#7A5714`. Chosen by measuring what renders rather than by a rule
+of thumb: a table of token pairs says #856022 clears everything, and the real
+"Best value" ground is a 16% gold wash inside a 5% one, which no token pair
+describes.
+
+- **The palette map and the token block moved together**, as
+  `light-theme.test.mjs` requires -- those daylight values are generated, never
+  typed. `#c9a87a` (the small-caps label gold) and `#e6b770` (the connection
+  "idle" amber, which was landing on #8C6118 = **4.43** on the well) joined
+  them. Three golds answering alike on paper is the AA floor deciding, exactly
+  as `--dc-ink-faint` and `--dc-ink-muted` converged one release earlier.
+- **The FILL direction needed no move, and that was checked rather than
+  assumed** -- the trap this file records is reading the NIGHT ink against the
+  DAYLIGHT gold, a pair that never renders. Measured across every sheet: no
+  gold fill anywhere carries text. Every `background: var(--dc-gold*)` is a
+  dot, a caret, a slider thumb or a progress bar; the buttons that DO sit on
+  gold use `--dc-gold-solid`, declared once on `:root` and deliberately never
+  redeclared for daylight (the v3.127.0 escape hatch), so they are 9.87:1 in
+  both themes and untouched. `#E6B770` and `#C9A87A` are ink only -- zero
+  occurrences as a background value anywhere.
+- **The phone and the notify dock hardcode their own daylight golds** and had
+  to move with them (`--dcm-gold`/`--dcm-gold2` in studio-mobile.css,
+  `--dcn-gold` in studio-notify.css). Those sheets are outside the generator,
+  so nothing would have told anyone they had drifted.
+- **`test/ink-aa.test.mjs`'s pinned exception is GONE**, which is the point of
+  having pinned it: v3.159.0 wrote `['paper --dc-bg-deep', 'paper --dc-page-2']`
+  as a list so the gap could not grow silently, and fixing the gold is deleting
+  it. The assertion covers `--dc-gold-lit` now as well, so there is no exception
+  left and a gold that gets worse turns it red rather than joining a list.
+  Proven red against the restored pair.
+
+### A GOLD WASH ON PAPER IS DARKER THAN ITS GROUND, WHICH IS BACKWARDS
+
+Found on the way and NOT fixed, so it is written down where the constants live
+(`build-light-theme.mjs`) rather than left to be rediscovered.
+
+- **A translucent gold is answered by that file's own hardcoded regexes, not by
+  `theme-palette.mjs`** -- and its constant is `rgba(162,118,44,a)`, which is
+  `#A2762C`, the gold the palette said before v3.127.3. So a gold WASH and the
+  gold INK on top of it are two different tans from two different answers, and
+  neither has moved with the other for three releases.
+- **Aligning them naively makes it WORSE.** The daylight ink gold is darker
+  than #A2762C, so a wash built from it darkens the ground further while the
+  ink darkens too. Measured: `--dc-gold` on a 16% wash over the well is
+  **3.90** even at #856022, and only clears 4.5 at a value that has stopped
+  being gold.
+- The real fault is the DIRECTION: on black a gold wash lightens its ground, so
+  on paper the same remap darkens it. A background tint is a SURFACE and should
+  stay light; a border needs to be seen against white and should darken. That
+  is a property-aware rule and a visible change to every gold surface on paper,
+  which is why it is a note. It does not render under AA today -- the .161 alpha
+  pairs with `--dc-gold-lit`, which clears at 4.60 -- and that is the only
+  reason.
+
+### Measured after
+
+    desktop 1440, ten screens, composited, size-aware AA floors
+      night  634 text nodes, 0 under AA
+      paper  634 text nodes, 0 under AA      (from 2, both gold)
+
+    phone 320-430, both themes
+      0 sub-44 controls, 0 page errors, lowest contrast 5.12 -- v3.157.0's
+      own numbers, unchanged
+
+Night is untouched: `--dc-gold` and `--dc-gold-lit` are still #D9B478 and
+#F0D6A6, and every night value in the generated token sheet is byte-identical.
+
 ## Open items
 
 ### Google verification: branding VERIFIED and PUBLISHED (4 Sept 2026)
