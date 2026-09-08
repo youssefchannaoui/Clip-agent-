@@ -114,6 +114,75 @@ def recent_jobs() -> list[tuple[float, Path, dict]]:
     return rows[:JOBS]
 
 
+def import_posture() -> None:
+    """WHAT THE DOWNLOADER ACTUALLY HAS, because the refusal makes a claim.
+
+    A YouTube 403 comes back to the customer as one of two sentences, and
+    which one is chosen decides whether they read it as their video or as our
+    server:
+
+        "A proxy or cookies are configured and were used, so this looks like
+         the video itself rather than the address it was asked from."
+        "Every client failed, which usually means this server's IP is blocked."
+
+    _download_failure picks between them by asking whether the options dict
+    carries a proxy or a cookie file -- so the first sentence is a claim about
+    this box's configuration, and until now NOTHING anywhere could check it.
+    A pool file that failed to parse, or an empty VIDEO_IMPORT_PROXIES, leaves
+    the second sentence unreachable while the first is false, and the customer
+    is told to go and download a video that our own address was refused.
+
+    COUNTS AND SHAPES ONLY. A proxy URL carries its credentials in its
+    userinfo, so not one address is printed here -- the pool's SIZE is what
+    answers the question, and a burned pool and a missing pool look identical
+    from the message alone.
+    """
+    out("== the way in ==")
+    try:
+        import import_providers  # noqa: PLC0415
+    except Exception as exc:  # noqa: BLE001
+        out(f"  import_providers did not import: {type(exc).__name__}: {redact(str(exc))[:160]}")
+        out()
+        return
+    try:
+        pool = import_providers.proxy_pool()
+        options = import_providers.youtube_network_options()
+    except Exception as exc:  # noqa: BLE001
+        out(f"  could not read the network options: {type(exc).__name__}: {redact(str(exc))[:160]}")
+        out()
+        return
+
+    provider = str(os.getenv("VIDEO_IMPORT_PROVIDER", "") or "").strip() or "(unset)"
+    pool_file = str(os.getenv("VIDEO_IMPORT_PROXY_FILE", "") or "").strip()
+    where = "pool file" if pool_file and Path(pool_file).is_file() else "VIDEO_IMPORT_PROXIES"
+    cookie_file = str(options.get("cookiefile") or "")
+    out(f"  provider           {provider}")
+    out(f"  proxy pool         {len(pool)} address(es), from {where}")
+    out(f"  cookies            {'yes' if cookie_file else 'no'}"
+        + (f" ({Path(cookie_file).name})" if cookie_file else ""))
+    out(f"  PO token server    {'yes' if options.get('extractor_args') else 'no'}")
+    out(f"  clients tried      {len(getattr(import_providers, 'YOUTUBE_CLIENTS', []))} per plan, two plans")
+    try:
+        import yt_dlp  # noqa: PLC0415
+        out(f"  yt-dlp             {yt_dlp.version.__version__}")
+    except Exception:  # noqa: BLE001
+        out("  yt-dlp             not importable here")
+
+    # THE CLAIM ITSELF, stated rather than left to be worked out. This is the
+    # branch _download_failure takes, evaluated against what is really set.
+    blames_video = bool(options.get("proxy") or options.get("cookiefile")
+                        or options.get("cookiesfrombrowser"))
+    if blames_video:
+        out("  a 403 on every client will be reported as THE VIDEO"
+            " (a proxy or cookies were used), which is true here.")
+    else:
+        out("::warning::a 403 will be reported as this server being blocked -- no proxy and no cookies are live")
+        out("  !! a 403 on every client will be reported as THIS SERVER'S ADDRESS being blocked,")
+        out("     because neither a proxy nor cookies reached the downloader. If the pool is")
+        out("     configured but reads 0 above, the pool file or VIDEO_IMPORT_PROXIES is the fault.")
+    out()
+
+
 def resolved_for(settings: dict) -> dict[str, str]:
     """What THIS JOB would actually run, by asking the code that decides.
 
@@ -464,6 +533,7 @@ def machine() -> dict[str, str]:
     except Exception:  # noqa: BLE001
         pass
     out()
+    import_posture()
     # capacity.plan() already folds each environment override in, so this IS
     # what the container decided rather than a heuristic beside it. Ollama's
     # model is not part of that plan -- it is read straight from the container's

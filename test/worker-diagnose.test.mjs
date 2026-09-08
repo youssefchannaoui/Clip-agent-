@@ -149,3 +149,64 @@ test('the payload beating the box IS the alarm, and the monitor catches it', () 
   assert.match(printed, /::warning::job job_p: whisper model -- the PAYLOAD won/);
   assert.match(printed, /did NOT run what this box decided/, 'and the headline names it');
 });
+
+/**
+ * THE REFUSAL MAKES A CLAIM ABOUT THIS BOX, so the box can be asked to
+ * confirm it.
+ *
+ * A YouTube 403 reaches the customer as either "this looks like the video
+ * itself" or "this server's IP is blocked", and `_download_failure` chooses
+ * between them purely by whether a proxy or a cookie file reached yt-dlp.
+ * The first sentence sends somebody off to download a 1.5GB lecture by hand.
+ * It was unverifiable until this: an empty VIDEO_IMPORT_PROXIES or a pool
+ * file that would not parse leaves the message blaming the video while our
+ * own address is what was refused.
+ *
+ * Never an address: a proxy URL carries its credentials in its userinfo.
+ */
+test('the import posture is reported, and never an address', () => {
+  const body = script.replace(/#[^\n]*/g, '');
+  assert.match(body, /def import_posture\(\)/);
+  assert.match(body, /import_posture\(\)\s*\n/, 'and it is actually called');
+  assert.match(body, /proxy pool\s+\{len\(pool\)\}/, 'the pool is reported by SIZE');
+  // The two things that would leak a credential into a public run log.
+  const printed = body.split('\n').filter(line => /\bout\(/.test(line));
+  for (const line of printed) {
+    assert.ok(!/options\.get\(['"]proxy['"]\)\s*\}/.test(line),
+      `a proxy address must never be printed: ${line.trim()}`);
+    assert.ok(!/\bpool\[/.test(line) && !/join\(pool\)/.test(line),
+      `a pool address must never be printed: ${line.trim()}`);
+  }
+});
+
+test('it names which sentence a 403 would produce, and warns when that is us', () => {
+  const body = script.replace(/#[^\n]*/g, '');
+  // The condition must be the SAME one _download_failure branches on, or the
+  // diagnosis and the customer's message can disagree about this box.
+  assert.match(body, /options\.get\("proxy"\) or options\.get\("cookiefile"\)/);
+  assert.match(body, /::warning::a 403 will be reported as this server being blocked/);
+});
+
+test('the posture matches import_providers, against a real empty pool', () => {
+  const dir = fs.mkdtempSync('/tmp/deenclipped-posture-');
+  fs.mkdirSync(`${dir}/jobs`, { recursive: true });
+  const printed = execFileSync('python3', ['.github/scripts/worker-diagnose.py'], {
+    env: {
+      ...process.env,
+      WORKER_DATA_DIR: dir,
+      DC_WORKER_CODE: new URL('../worker', import.meta.url).pathname,
+      VIDEO_IMPORT_PROXIES: '',
+      VIDEO_IMPORT_PROXY: '',
+      VIDEO_IMPORT_COOKIES: '',
+      VIDEO_IMPORT_COOKIES_FROM_BROWSER: '',
+      YTDLP_POT_PROVIDER_URL: '',
+    },
+    encoding: 'utf8',
+  });
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.match(printed, /== the way in ==/);
+  assert.match(printed, /proxy pool\s+0 address\(es\)/, 'an empty pool reads as zero');
+  assert.match(printed, /cookies\s+no/);
+  assert.match(printed, /THIS SERVER'S ADDRESS being blocked/,
+    'with nothing configured the honest reading is that the block is ours');
+});

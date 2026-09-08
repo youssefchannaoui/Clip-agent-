@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1941 JS + 851 Python**
+- `npm test` and `npm run check` must pass. Currently **1944 JS + 851 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9451,6 +9451,47 @@ against the host.
 model or reserve ever makes 9G buy two jobs, that goes red rather than the box
 quietly losing a third of its throughput. SCALING.md carried the old ceilings
 and now carries these.
+
+## The refusal made a claim about the box, and nothing could check it (v3.173.0)
+
+Youssef's import was refused by YouTube and the app told him:
+
+    YouTube refused this download from every client tried. A proxy or cookies
+    are configured and were used, so this looks like the video itself rather
+    than the address it was asked from.
+
+**That sentence is a claim about THIS BOX'S CONFIGURATION, and it decides what
+the customer does next.** `_download_failure` chooses between it and *"this
+server's IP is blocked"* purely by asking whether the options dict handed to
+yt-dlp carried a proxy or a cookie file. If `VIDEO_IMPORT_PROXIES` were empty,
+or the pool file would not parse, the first sentence is FALSE and somebody is
+sent off to download a 1.5GB lecture by hand because our own address was
+refused. Nothing anywhere could tell the two apart.
+
+The diagnose dispatch reports it now -- provider, pool size and where the pool
+came from, cookies, the PO-token server, the client count, yt-dlp's version --
+and states outright **which of the two sentences a 403 would produce**, as a
+workflow WARNING when that sentence would be blaming the customer for our own
+block.
+
+- **COUNTS AND SHAPES ONLY. Not one address.** A proxy URL carries its
+  credentials in its userinfo and a run log is public, so the pool's SIZE is
+  what answers the question -- and a burned pool and a missing pool look
+  identical from the customer's message either way. A test reads every `out(`
+  line and fails on a printed address.
+- **The check is the SAME condition `_download_failure` branches on**, asserted
+  by test: a diagnosis that decided this on its own reasoning could disagree
+  with the sentence the customer is actually shown, which is the whole class of
+  fault the monitor rewrite in this release exists for.
+- Driven end to end against a real empty pool: `0 address(es)`, `cookies no`,
+  and the honest reading -- "THIS SERVER'S ADDRESS being blocked". Both probes
+  proven red, one of them by making it print the pool.
+
+**On Youssef's actual 403 the claim is TRUE**: another lecture imported cleanly
+seven minutes earlier through the same pool, all six client/plan combinations
+were refused at the MEDIA fetch rather than at extraction, and the box runs
+today's yt-dlp. So the message was right -- and it is now checkable rather than
+believed.
 
 ## Open items
 
