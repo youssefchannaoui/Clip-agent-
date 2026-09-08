@@ -9589,19 +9589,31 @@ touching anything.
 - **The proxy is re-picked per attempt**, and a test asserts the pool actually
   rotates -- ten attempts down one burned exit is one attempt repeated.
 
-### THE BOX WAS THREE WEEKS BEHIND ON yt-dlp, ON A CONTAINER REBUILT THAT MORNING
+### THE BUILD COULD NOT REFRESH yt-dlp -- AND IT WAS NOT STALE. BOTH ARE TRUE
 
-The import-posture readout shipped an hour earlier answered this in one
-dispatch: **19 proxies, no cookies, PO token yes, yt-dlp 2026.08.19** -- three
-weeks old on 9 Sept.
+The import-posture readout shipped an hour earlier answered the question in one
+dispatch: **19 proxies, no cookies, PO token yes, yt-dlp 2026.08.19** on 9 Sept.
+I read twenty days as three weeks behind and said so. **THAT WAS WRONG, AND THE
+DEPLOY DISPROVED IT WITHIN THE HOUR**: the new refresh layer installed with
+`--no-cache-dir` and came back with 2026.08.19. That IS the newest release on
+PyPI -- yt-dlp had simply not shipped for twenty days. The box was current.
 
-The Dockerfile's own comment claimed otherwise: *"--upgrade so a rebuild takes
-the current yt-dlp rather than a cached wheel."* **`--upgrade` upgrades within
-that layer; it does not make a REBUILD take a newer one.** The layer is cached
-on `requirements.txt`'s own bytes, that file changes maybe twice a year, so
-the pip never ran again and the deploy log stayed perfectly clean. This is the
-Dockerfile-ENV fault of v3.162.0 in a new place: **a build that cannot deliver
-what its comment promises, invisible because nothing reads the result.**
+The BUILD fault is real and is the reason the fix stays. The Dockerfile's own
+comment claimed *"--upgrade so a rebuild takes the current yt-dlp rather than a
+cached wheel."* **`--upgrade` upgrades within that layer; it does not make a
+REBUILD take a newer one.** The layer is cached on `requirements.txt`'s own
+bytes, that file changes maybe twice a year, so the pip never ran again and the
+deploy log stayed perfectly clean. This is the Dockerfile-ENV fault of v3.162.0
+in a new place: **a build that cannot deliver what its comment promises,
+invisible because nothing reads the result.** It had not yet cost anything only
+because upstream happened to be quiet -- the next yt-dlp release would have
+been the one the box never took, on the dependency YouTube breaks on purpose.
+
+**The age threshold cried wolf on its first run** and was corrected with it. It
+warned past 21 days, and the very first deploy printed "20 days old" from a
+freshly installed newest version: an alarm firing because upstream is quiet is
+the failure `alerts.js` exists to prevent, pointed at a dependency. 45 days now,
+where it means the refresh is not landing rather than that nobody has released.
 
 - yt-dlp gets **a layer of its own**, busted by `ARG YTDLP_REFRESH` which
   `deploy.sh` sets to the commit. One small layer misses the cache every
@@ -9610,10 +9622,11 @@ what its comment promises, invisible because nothing reads the result.**
   pinned `==` to the token server's image in docker-compose.yml and the plugin
   mints nothing when they differ -- the same 403 by another door. Caught by the
   repo's own pin before it shipped.
-- `verify-deploy.sh` reports the version **and its age in days**, warning past
-  21 -- not fatal, because failing the deploy would leave the box on something
-  older still. The version is named in the refusal too, so the next one of
-  these is answerable without a dispatch.
+- `verify-deploy.sh` reports the version **and its age in days** -- not fatal
+  at any age, because failing the deploy would leave the box on something older
+  still. The version is named in the refusal too, so the next one of these is
+  answerable without a dispatch, and reading it is what caught my own wrong
+  diagnosis here.
 
 ### What is NOT fixed, and it is the strongest defence
 

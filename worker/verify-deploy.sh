@@ -161,12 +161,25 @@ else:
     print((datetime.date.today() - released).days)
 PYAGE
 )
+  # THE AGE IS NOT A FAULT ON ITS OWN, and the first cut of this got that
+  # wrong. It warned past 21 days -- and the very first run printed
+  # "2026.08.19 (20 days old)" from a layer that had just installed with
+  # --no-cache-dir, i.e. that IS the newest release on PyPI. yt-dlp simply had
+  # not shipped for twenty days. A threshold near its release cadence is an
+  # alarm that fires because upstream is quiet, which is the cry-wolf failure
+  # alerts.js exists to prevent, pointed at a dependency.
+  #
+  # What a large age DOES mean, now that the refresh layer runs every deploy,
+  # is that the refresh is not working -- a cache hit, a pip that failed
+  # quietly, a box deploying from a stale image. 45 days is comfortably past
+  # any gap yt-dlp has left between releases, so it reads as "our build is
+  # broken" rather than "upstream is quiet".
   if [ "$ytdlp_days" -lt 0 ] 2>/dev/null; then
     ok "yt-dlp $ytdlp_version (age unknown)"
-  elif [ "$ytdlp_days" -gt 21 ]; then
+  elif [ "$ytdlp_days" -gt 45 ]; then
     # Not fatal: an old yt-dlp still imports most videos, and failing the
     # deploy would leave the box on something older still.
-    warn "yt-dlp $ytdlp_version is $ytdlp_days days old -- YouTube breaks older extractors, and it fails as a 403"
+    warn "yt-dlp $ytdlp_version is $ytdlp_days days old -- the refresh layer is not landing, and a stale extractor fails as a 403"
   else
     ok "yt-dlp $ytdlp_version ($ytdlp_days days old)"
   fi
