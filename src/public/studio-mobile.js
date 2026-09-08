@@ -640,6 +640,7 @@
            phone-shaped copy of it to keep in step. Drawn only while the ladder
            has something left to say. */
         iff('m.tasksOn', [row({ on: { click: 'm.openTasks' } }, [ph('ph ph-target'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Your tasks'), h('i', {}, [tx('m.tasksNote')])]), svg(I.next, { width: '15', height: '15' })])]),
+        row({ on: { click: 'm.openNews' } }, [ph('ph ph-sparkle'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'What\u2019s new'), h('i', {}, [tx('m.newsNote')])]), iff('m.newsNew', [h('span', { class: 'dcm-count' }, '1')]), svg(I.next, { width: '15', height: '15' })]),
         row({ on: { click: 'm.openConnections' } }, [ph('ph ph-plugs-connected'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Publishing connections'), h('i', {}, [tx('connSummary')])]), svg(I.next, { width: '15', height: '15' })]),
         row({ on: { click: 'm.goTokens' } }, [ph('ph-fill ph-coins'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Tokens & billing'), h('i', {}, [tx('tokenBalance'), ' tokens · ', tx('currentPlan')])]), svg(I.next, { width: '15', height: '15' })]),
         row({ on: { click: 'm.accountSettings' } }, [ph('ph ph-user-circle'), h('span', { class: 'dcm-row-t' }, [h('b', {}, 'Account settings')]), svg(I.next, { width: '15', height: '15' })]),
@@ -1278,6 +1279,13 @@
         + (ladder.claimable > 0 ? ' \u00b7 ' + ladder.claimable + ' to claim' : '')
       : '';
     m.openTasks = closeThen(function () { if (global.openTasks) global.openTasks(); });
+    /* What's new. The SAME host dialog the desktop raises -- one panel, not a
+       phone-shaped copy of it to keep in step. The row is always there
+       (release notes are a page you can always read); the dot appears only
+       while the SERVER still says this account has not seen the newest one. */
+    m.newsNew = Boolean(DATA && DATA.whatsNew && DATA.whatsNew.show);
+    m.newsNote = m.newsNew ? 'Something new since you were last here' : 'The last few updates, with pictures';
+    m.openNews = closeThen(function () { if (global.openWhatsNew) global.openWhatsNew(); });
     m.startTour = closeThen(vals.startTour);
     m.signOut = closeThen(vals.signOut);
     var q = String(ui.query || '').trim().toLowerCase();

@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1812 JS + 801 Python**
+- `npm test` and `npm run check` must pass. Currently **1823 JS + 801 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -1290,6 +1290,10 @@ saying a thing is done:
 5. Confirm CI went green (`gh run list --branch deenclipped-v2-2 --limit 2`).
    A red branch is worse than no branch when the next session is on a phone.
 6. Screenshot anything visible at desktop width and put it in the reply.
+7. **Ask whether it earns a What's new entry** (`src/whats-new.js`, and the
+   section below for the bar). Most releases do not. If it does, write the
+   entry and capture a REAL screenshot for it in the same commit -- an entry
+   added later describes a change nobody was told about at the time.
 
 **Before starting anything large, check for the other session.**
 `git fetch && git log --oneline origin/deenclipped-v2-2..origin/<their-branch>`.
@@ -14406,3 +14410,144 @@ qwen3:1.7b actually does with the CLIP REQUEST section is unknown until a
 lecture is imported with a brief on it. Worker change, so `deploy-worker.yml`
 ships it on push; `deploy-worker.yml`'s `diagnose` input is the way to read the
 prompt back off the running container.
+
+## What's new: the release notes a customer reads (v3.154.0, 8 Sept 2026)
+
+Youssef: "make a whats new page like opus does when people reopen and it pops
+up when opening dashboard has images and etc of whats new add to claude.md to
+the feature so when decently large changes has been added we add them, or
+fixes that acc matter so it shouldnt be spammed just the more important ones
+of course."
+
+### THE BAR, because the whole feature is worthless without it
+
+An entry costs a customer their attention and interrupts whatever they opened
+the dashboard to do. It earns its place only if BOTH are true:
+
+  1. It changes what somebody can **do**, or fixes something they had actually
+     noticed. A new screen, a new control, a limit lifted, a bug they hit.
+  2. They could not work it out by looking. A control that explains itself the
+     moment it is seen does not need an announcement.
+
+Which rules OUT, however much work went into them: refactors, test-only work,
+performance nobody complained about, copy fixes, an internal guard, anything
+behind a gate they cannot open, and anything on the **Owner** screen -- that
+surface has one reader and he already knows.
+
+**One entry per release at most, and not most releases.** A dozen a month is a
+notification nobody reads, and then the one that mattered is missed too --
+which is the same failure `alerts.js` exists to prevent, pointed at customers
+instead of at the operator. If in doubt, leave it out: nothing is lost,
+because the CHANGE still shipped.
+
+The full instructions for adding one live in `src/whats-new.js`'s own header,
+beside the data, so nobody has to come here to write an entry.
+
+### THE SERVER DECIDES WHEN IT APPEARS, AND THAT IS NOT A DETAIL
+
+`whatsNew.showFor()` answers it and `/api/state` carries only the ID.
+`localStorage` was the obvious place and it is the wrong one: a flag travels
+with the BROWSER rather than with the PERSON, which is exactly how the "one
+all the way through" dialog came to greet every established account on every
+new device, over every screen (v3.130.0). Marking it read is
+`POST /api/whats-new/seen`, a write to `state.userSettings[uid].whatsNewSeen`.
+
+- **The route takes NO id from the body** and stamps the newest release's own.
+  A client-supplied value here is a value that can be wrong, and there is
+  nothing this route could usefully do with one. Marking the newest marks
+  everything before it, which is what makes "you were away for three releases"
+  one dialog rather than three.
+- **Two accounts are never interrupted**, and both reach the page from Help
+  anyway -- withholding the interruption is not withholding the information:
+  one created AFTER the release (the notes describe a version they have never
+  used), and one that has never imported a lecture (the first-run panel is
+  teaching them step one, and a notice about last week lands on top of it).
+- An unknown `createdAt` reads as an old account: failing towards showing it
+  once beats never showing it at all.
+
+### The notes are fetched once, and never awaited
+
+Same bytes for every account, changing only on a deploy -- so `boot()` fires
+`/api/whats-new` in the background exactly as it does the help centre, and
+nobody watches a changelog load. A failure is swallowed: a release note must
+never stop the app booting.
+
+### THE BUG FOUND BY DRIVING IT, WHICH NO TEST WOULD HAVE CAUGHT
+
+The first version raised the dialog from `paintWhatsNew` and returned when
+anything else was up -- the boot veil, the walkthrough, another dialog. **The
+boot veil clears WITHOUT a paint**, so the one attempt landed while it was
+still there and nothing called the painter again until something else happened
+to repaint the studio. Measured: `blocked: true` at 800ms and still true at
+4s, and the dialog opened the instant a paint was forced by hand.
+
+**Reacting to a removal cannot win; asking again can.** It retries every 500ms
+and gives up after ~20s -- the server still says `show`, so the next visit
+raises it, and a notice that nags over a dialog somebody is using is worse
+than one that waits a day. This is the same shape as the watermark row that
+flickered for three releases (v3.53.3-v3.53.5); it is now recorded twice.
+
+### Three more defects, all found by measuring rather than reading
+
+- **The card rendered at 520px, not the 700 it asks for.**
+  `.studio-acct-card` sets `width: min(520px, 100%)` and is declared LATER in
+  index.html, so an equal-specificity class rule loses on document order. Id
+  scoped now. The pictures are the point of this dialog and at 520 the text
+  inside a capture is unreadable.
+- **The "NEW" chip measured 0 and the code was right.** It read
+  `DATA.whatsNew.show` live -- and OPENING the dialog marks it read, so the
+  very next paint repainted the body with the chip gone. It is captured once,
+  at open, into `newsUnseen`.
+- **The date sat at 3.7:1**, under AA, on `--dc-ink-faint`. `--dc-ink-dim`
+  reads **5.53 dark / 6.04 light**.
+
+### Every capture is a real screenshot of this app
+
+Never a drawing and never a mockup, the rule the help centre already holds.
+`test/whats-new.test.mjs` fails on an image an entry names that is not on
+disk, AND on a file on disk that no entry names -- a broken picture in front
+of a customer errors nowhere, and an orphan rots quietly in the directory.
+
+**How they were taken, so the next set can be:** a local server on a temp
+`DATA_DIR` with `AUTH_REQUIRED=false`, `state.json` seeded with the server
+STOPPED (three lectures, twelve clips in every state), then Playwright.
+Three things the harness must do or the captures are fiction:
+
+  1. **Serve Google Fonts and the Phosphor icon font FROM DISK** through a
+     Playwright route. Chromium here cannot reach `fonts.gstatic.com` or
+     `unpkg` -- curl can, which is the trap -- so without it every `<i>`
+     measures 0x0 and photographs as an empty box, and every string renders
+     in a fallback face about 10% wider. `registry.npmjs.org` IS reachable,
+     which is how the Phosphor package comes down.
+  2. **Set every `dcTour:<screen>` key** before loading, or a fixed veil lands
+     over the shot.
+  3. **Read `innerWidth` and the body class back.** A reused profile ignores
+     the window size and keeps the previous theme; a capture whose filename
+     says "dark" is not evidence it was dark.
+
+**The editor capture needs a plate**, and Chromium here has no H.264 decoder,
+so it is a VP9 build of `preview-sample.webp` -- the product's OWN template
+preview sample -- routed at `plate.local`. Everything over it (the caption,
+the live grade, the timeline, the panel) is the real editor drawing on a real
+DeenClipped asset. `plate.startSec/endSec` must EQUAL the clip's or
+`edPlate` refuses it and the editor falls back to the clean source, which
+reads as the plate being broken.
+
+### Where it is reachable, and what it does not do
+
+Auto-raised once per release; after that from **Help → What's new**, and from
+the phone's **More** sheet, which opens the SAME host dialog rather than a
+phone-shaped copy to keep in step. The action button goes through
+`StudioAdapter.goToStep` -- the studio's ONE destination map -- so an entry
+can never offer a screen the app cannot reach; a test walks every action
+against it.
+
+Measured at 1360 in both themes and at 390: raises itself, five entries, 5 of
+5 captures loaded, one left edge, 0 elements past the viewport, no page
+scroll, 0 focus escapes behind the scrim, **0 DOM operations on three
+unchanged repaints**, and the phone opens it with 0 overflow. Nine red probes
+proven, two of which came back GREEN first and were both my assertions rather
+than the code: `data-news-open` also appears in the click handler, so matching
+the bare string passed with the Help entry point deleted; and the route's own
+`!currentUser` check cannot be seen through a 401 that the app-wide gate
+serves anyway.

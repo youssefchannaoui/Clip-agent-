@@ -31,6 +31,7 @@ import * as auth from './auth.js';
 import * as billing from './billing.js';
 import * as geo from './geo.js';
 import * as help from './help.js';
+import * as whatsNew from './whats-new.js';
 import * as marketing from './marketing.js';
 import * as seoPages from './seo-pages.js';
 import * as financeAudit from './finance-audit.js';
@@ -862,6 +863,27 @@ function appState(user = null) {
      * second answer to that question.
      */
     tasks: onboarding.tasks(state, user.id, config, { unlimited: billing.isUnlimited(user) }),
+    /*
+     * Which release note, if any, to raise over the dashboard. Only the ID
+     * travels on this payload -- the notes themselves are the same bytes for
+     * every account and change only when somebody deploys, so they are
+     * fetched once from /api/whats-new rather than re-sent on every poll.
+     *
+     * The SERVER decides, never the browser: a localStorage guard travels
+     * with the browser rather than with the person, which is how the "one all
+     * the way through" dialog came to greet every established account on
+     * every new device.
+     */
+    whatsNew: {
+      show: whatsNew.showFor({
+        createdAt: Number(user.createdAt || 0),
+        seen: String(state.userSettings?.[user.id]?.whatsNewSeen || ''),
+        // The one definition of "has this account started" -- the same call
+        // the growth funnel, the nudge emails and DeenAI's next action read,
+        // so they cannot disagree about who is still a beginner.
+        imported: referrals.activationOf(state, user.id).imported,
+      }),
+    },
     selectedTemplate: templates.selectedTemplate(user), templates: templates.listTemplates(user), templateDraft: templates.defaultTemplateDraft(),
     // The two ACCOUNT-wide brand switches. Sent separately from any
     // template because the panel that draws them must not read the
@@ -1413,6 +1435,20 @@ async function route(req, res, url) {
     const candidate = path.resolve(dir, name);
     if (!candidate.startsWith(dir + path.sep)) return json(res, 404, { error: 'Help asset not found.' });
     if (!fs.existsSync(candidate) || !fs.statSync(candidate).isFile()) return json(res, 404, { error: 'Help asset not found.' });
+    const extension = path.extname(candidate).toLowerCase();
+    const contentType = extension === '.webp' ? 'image/webp' : extension === '.png' ? 'image/png'
+      : extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
+    return streamFile(req, res, candidate, { contentType, cacheControl: 'public, max-age=86400' });
+  }
+  // Release-note captures. Their own route rather than the help one for the
+  // reason the help route gives about marketing: two directories that cannot
+  // borrow each other's files cannot rename one into the other by accident.
+  if (method === 'GET' && pathname.startsWith('/whats-new-assets/')) {
+    const name = path.basename(decodeURIComponent(pathname));
+    const dir = path.resolve(config.root, 'src', 'public', 'whats-new-assets');
+    const candidate = path.resolve(dir, name);
+    if (!candidate.startsWith(dir + path.sep)) return json(res, 404, { error: 'Asset not found.' });
+    if (!fs.existsSync(candidate) || !fs.statSync(candidate).isFile()) return json(res, 404, { error: 'Asset not found.' });
     const extension = path.extname(candidate).toLowerCase();
     const contentType = extension === '.webp' ? 'image/webp' : extension === '.png' ? 'image/png'
       : extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
@@ -2614,6 +2650,31 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname === '/api/help') {
     if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
     return json(res, 200, help.helpPayload({ supportEmail: config.supportEmail }));
+  }
+  // The release notes. Fetched once in the background and never awaited --
+  // the same bytes for every account, changing only on a deploy, so nobody
+  // watches them arrive (the lesson "why does help need to load?" paid for).
+  if (method === 'GET' && pathname === '/api/whats-new') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    return json(res, 200, whatsNew.payload());
+  }
+  /*
+   * The page reports that it was read. It takes NO id from the body and
+   * stamps the newest release's own id: a client-supplied value here is a
+   * value that can be wrong, and there is nothing this route could usefully
+   * do with one. Marking the newest marks everything before it, which is what
+   * makes "you were away for three releases" one dialog rather than three.
+   */
+  if (method === 'POST' && pathname === '/api/whats-new/seen') {
+    if (!currentUser?.id) return json(res, 401, { error: 'Sign in first.' });
+    const newest = whatsNew.latest();
+    if (!newest) return json(res, 200, { ok: true, seen: '' });
+    state.userSettings[currentUser.id] = state.userSettings[currentUser.id] || {};
+    if (state.userSettings[currentUser.id].whatsNewSeen !== newest.id) {
+      state.userSettings[currentUser.id].whatsNewSeen = newest.id;
+      save();
+    }
+    return json(res, 200, { ok: true, seen: newest.id });
   }
   if (method === 'GET' && pathname === '/api/deenai') {
     if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });

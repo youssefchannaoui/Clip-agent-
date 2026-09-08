@@ -718,8 +718,60 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
    positioning rule of its own and rendered flush at the top-left with no
    backdrop -- it looked like part of the page. Each dialog declaring its own
    copy is how the fourth one gets missed. */
-#studioAccount, #studioBug, #dcTasks { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
-#studioAccount.hide, #studioBug.hide, #dcTasks.hide { display: none; }
+#studioAccount, #studioBug, #dcTasks, #dcNews { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
+#studioAccount.hide, #studioBug.hide, #dcTasks.hide, #dcNews.hide { display: none; }
+/* ── What's new ─────────────────────────────────────────────────────────
+   Release notes, raised once per release over the dashboard and reopenable
+   from Help for ever after. Same card, backdrop, close button and Escape as
+   the other four dialogs -- a fifth modal language would be a fifth thing to
+   keep in step. Wider than the rest because every entry carries a capture,
+   and a screenshot of a screen at 480px teaches nothing.
+
+   The gold rules below are written ENTIRELY in var() names with no hex
+   fallback, deliberately: build-light-theme re-emits any rule holding a hex
+   and would remap the brand gold to its daylight ink, so a rule with no hex
+   in it is skipped and the token flips itself. */
+/* Id-scoped, deliberately: `.studio-acct-card` sets 520px and is declared
+   LATER in this file, so an equal-specificity class rule loses on order. */
+#dcNews .dcnw-card { width: min(700px, 100%); }
+#dcNewsBody { display: flex; flex-direction: column; gap: 0; max-height: min(72vh, 720px); overflow: auto; overscroll-behavior: contain; }
+.dcnw-rel { padding: 20px 0; border-top: 1px solid var(--dc-line-soft, #1E1E22); }
+.dcnw-rel:first-child { border-top: 0; padding-top: 4px; }
+.dcnw-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+/* --dc-ink-faint measures 3.7:1 on this card -- under AA on the one line
+   that dates the entry. Measured, not chosen. */
+.dcnw-date { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--dc-ink-dim, #8B8B93); }
+.dcnw-new { display: inline-flex; align-items: center; height: 17px; padding: 0 7px; border-radius: 20px;
+  border: 1px solid var(--dc-gold); background: rgba(217,180,120,.13);
+  font-size: 9px; font-weight: 700; letter-spacing: .12em; line-height: 1; color: var(--dc-gold-lit); }
+.dcnw-rel h3 { margin: 0 0 5px; font-family: Outfit, Inter, sans-serif; font-size: 17px; font-weight: 600; line-height: 1.25; color: var(--dc-ink, #F2F2F4); }
+.dcnw-sum { margin: 0 0 13px; font-size: 12.5px; line-height: 18px; color: var(--dc-ink-body, #BCBCC3); }
+/* A real capture of this app, never a drawing. It sits on the deepest ground
+   so a screenshot of a dark screen does not float on a lighter card. */
+.dcnw-shot { display: block; width: 100%; margin: 0 0 13px; border: 1px solid var(--dc-line, #26262A); border-radius: 11px;
+  background: var(--dc-bg-deepest, #0E0E11); overflow: hidden; padding: 0; cursor: zoom-in; }
+.dcnw-shot img { display: block; width: 100%; height: auto; }
+.dcnw-items { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.dcnw-items li { position: relative; padding-left: 17px; font-size: 12.5px; line-height: 18px; color: var(--dc-ink-body, #BCBCC3); }
+.dcnw-items li::before { content: ""; position: absolute; left: 3px; top: 7px; width: 5px; height: 5px; border-radius: 50%; background: var(--dc-gold); }
+.dcnw-go { margin-top: 14px; display: inline-flex; align-items: center; height: 32px; padding: 0 15px; border: 0; border-radius: 8px;
+  background: var(--dc-gold-solid); color: var(--dc-on-gold);
+  font-family: Outfit, Inter, sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; }
+.dcnw-go:hover { background: var(--dc-gold-lit); }
+.dcnw-foot { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--dc-line-soft, #1E1E22);
+  font-size: 11.5px; line-height: 17px; color: var(--dc-ink-dim, #8B8B93); }
+/* The entry point on the Help screen, so a dialog shown once is not the only
+   way to read this. */
+.dcnw-open { display: flex; align-items: center; gap: 11px; width: 100%; margin: 0 0 18px; padding: 13px 15px; text-align: left;
+  border: 1px solid var(--dc-gold); border-radius: 12px; background: rgba(217,180,120,.07); cursor: pointer; }
+.dcnw-open i { font-size: 19px; color: var(--dc-gold-lit); }
+.dcnw-open b { display: block; font-family: Outfit, Inter, sans-serif; font-size: 13px; font-weight: 600; color: var(--dc-ink, #F2F2F4); }
+.dcnw-open span { display: block; margin-top: 2px; font-size: 11.5px; color: var(--dc-ink-dim, #8B8B93); }
+@media (max-width: 820px) {
+  .dcnw-rel h3 { font-size: 16px; }
+  #dcNewsBody { max-height: 68vh; }
+}
+
 .studio-acct-card { width: min(520px, 100%); }
 #studioAcctBody { display: flex; flex-direction: column; gap: 14px; }
 /* who you are */
@@ -2198,6 +2250,23 @@ select:focus{outline:none;border-color:var(--blue)}
   </div>
 </div>
 
+<!-- What's new. The fifth dialog on the same card, backdrop, close button and
+     Escape as the other four. The SERVER decides whether it is raised (see
+     whats-new.js); this is only what draws it. -->
+<div id="dcNews" class="hide" role="dialog" aria-modal="true" aria-label="What's new">
+  <div class="studio-conn-backdrop" data-news-close></div>
+  <div class="studio-conn-card studio-acct-card dcnw-card">
+    <div class="studio-conn-head">
+      <div>
+        <strong>What&rsquo;s new</strong>
+        <span id="dcNewsSub"></span>
+      </div>
+      <button type="button" class="studio-conn-x" data-news-close aria-label="Close">&times;</button>
+    </div>
+    <div id="dcNewsBody"></div>
+  </div>
+</div>
+
 <!-- ============ studio dashboard (generated design) ============ -->
 <div id="studio"></div>
 
@@ -2957,7 +3026,7 @@ async function boot(){try{DATA=await api('/api/state');
        INSIDE boot's own catch, so the whole app fell back to the password
        gate reading "refreshPushState is not defined". Same trap, and the same
        fix, as fireClipNotifs and paintAccount below. */
-    if(window.refreshPushState)window.refreshPushState().then(()=>{if(window.paintAccount)window.paintAccount()});localStorage.setItem('deenPw',PW);$('#gate')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#app')?.classList.remove('hide');renderAll();handleOAuthResult();/* The help content is the same bytes for everybody and never changes between deploys, so there is no reason to make someone watch it load when they open the tab. Fetched once here, in the background and never awaited, so it is already in hand by the time anyone clicks Help -- and a failure is swallowed, because help failing must never stop the app booting. */StudioAdapter.onLoadHelp();return true}catch(e){$('#app')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent=e.message;return false}}
+    if(window.refreshPushState)window.refreshPushState().then(()=>{if(window.paintAccount)window.paintAccount()});localStorage.setItem('deenPw',PW);$('#gate')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#app')?.classList.remove('hide');renderAll();handleOAuthResult();/* The help content is the same bytes for everybody and never changes between deploys, so there is no reason to make someone watch it load when they open the tab. Fetched once here, in the background and never awaited, so it is already in hand by the time anyone clicks Help -- and a failure is swallowed, because help failing must never stop the app booting. */StudioAdapter.onLoadHelp();/* The release notes, for the same reason and on the same terms: the same bytes for everybody, so nobody watches them arrive, and a failure is swallowed because a changelog must never stop the app booting. */loadWhatsNew();return true}catch(e){$('#app')?.classList.add('hide');$('#connect')?.classList.add('hide');$('#gate')?.classList.remove('hide');if($('#gateErr'))$('#gateErr').textContent=e.message;return false}}
 /* The open editor clip needs its heavy fields (caption timings, ayahs),
    which the list payload deliberately omits. Fetched once per clip version
    and merged back in after every poll. */
@@ -10300,6 +10369,151 @@ function closeTasks(){
 }
 window.openTasks=openTasks;
 
+/* ── What's new ─────────────────────────────────────────────────────────
+   The release notes, raised once per release and readable for ever after
+   from Help. The notes themselves are the same bytes for every account and
+   change only when somebody deploys, so they are fetched ONCE in the
+   background and never awaited -- nobody should watch a changelog load.
+   WHETHER to raise the dialog is the SERVER's answer (DATA.whatsNew.show),
+   never a localStorage flag: a flag travels with the browser rather than
+   with the person, which is how the "one all the way through" dialog came to
+   greet every established account on every new device. */
+let newsData=null,newsLoading=null,newsRaised=false,newsRetry=0,newsTimer=null,newsUnseen='';
+function loadWhatsNew(){
+  if(newsData||newsLoading)return newsLoading||Promise.resolve(newsData);
+  /* Latches on SUCCESS only, and shares one in-flight promise -- the exact
+     two mistakes that left the invite panel permanently blank on production
+     when an early call cached a null. */
+  newsLoading=api('/api/whats-new').then(r=>{newsData=r;newsLoading=null;paintWhatsNew();return r})
+    .catch(()=>{newsLoading=null;return null});
+  return newsLoading;
+}
+window.dcLoadWhatsNew=loadWhatsNew;
+/* Never over something else. Two dialogs stacked is the failure the tour
+   already refused to cause; a release note is the least urgent thing on the
+   screen and can always wait for the next paint. */
+function newsBlocked(){
+  if(document.getElementById('dcWin'))return true;            // the first-run moment
+  if(document.getElementById('dcTour'))return true;           // the walkthrough veil
+  const veil=document.getElementById('splash');
+  if(veil&&!veil.classList.contains('hide'))return true;
+  return ['studioConn','studioAccount','studioBug','dcTasks','dcFirstClip']
+    .some(id=>{const el=document.getElementById(id);return el&&!el.classList.contains('hide')});
+}
+function newsRelHtml(rel,unseen){
+  const base=(newsData&&newsData.imageBase)||'/whats-new-assets/';
+  const src=base+rel.image;
+  const when=(()=>{
+    const ms=Date.parse(rel.date+'T00:00:00Z');
+    if(!Number.isFinite(ms))return rel.date||'';
+    return new Date(ms).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'});
+  })();
+  return `<section class="dcnw-rel">
+    <div class="dcnw-meta">
+      <span class="dcnw-date">${esc(when)}</span>
+      ${unseen?'<span class="dcnw-new">NEW</span>':''}
+    </div>
+    <h3>${esc(rel.title)}</h3>
+    <p class="dcnw-sum">${esc(rel.summary||'')}</p>
+    ${rel.image?`<button type="button" class="dcnw-shot" data-news-zoom="${esc(src)}" aria-label="Enlarge this screenshot">
+      <img src="${esc(src)}" alt="${esc(rel.imageAlt||rel.title)}" loading="lazy">
+    </button>`:''}
+    <ul class="dcnw-items">${(rel.items||[]).map(t=>`<li>${esc(t)}</li>`).join('')}</ul>
+    ${rel.action&&rel.actionLabel?`<button type="button" class="dcnw-go" data-news-go="${esc(rel.action)}">${esc(rel.actionLabel)}</button>`:''}
+  </section>`;
+}
+function paintNewsBody(){
+  const body=document.getElementById('dcNewsBody');
+  const sub=document.getElementById('dcNewsSub');
+  if(!body||!newsData)return;
+  const rels=newsData.releases||[];
+  /* What was unseen WHEN IT OPENED, captured once. Reading the live payload
+     here read '' on the very next paint -- opening it marks it read -- so the
+     chip appeared and vanished within a frame and measured as never drawn. */
+  const unseen=newsUnseen;
+  if(sub)sub.textContent=rels.length?`The last ${rels.length} update${rels.length===1?'':'s'} to DeenClipped`:'';
+  window.dcSetHtml(body,rels.length
+    ? rels.map(r=>newsRelHtml(r,unseen&&r.id===unseen)).join('')
+      +'<p class="dcnw-foot">Everything here is live in your account already. Find this again under Help.</p>'
+    : '<p class="dcnw-foot">Nothing new to report.</p>');
+}
+/* Marking it read is a WRITE to the account, so a second device is not shown
+   it again. Fired when it is opened rather than when it is closed: somebody
+   who reads it and switches tab has still read it, and a dialog that only
+   counts as read on a tidy close comes back for ever. */
+function markNewsRead(){
+  if(!DATA||!DATA.whatsNew||!DATA.whatsNew.show)return;
+  DATA.whatsNew.show='';
+  api('/api/whats-new/seen',{method:'POST',body:'{}'}).catch(()=>{});
+}
+function openWhatsNew(){
+  const root=document.getElementById('dcNews');
+  if(!root)return;
+  if(!newsData){loadWhatsNew();return}
+  newsUnseen=String((DATA&&DATA.whatsNew&&DATA.whatsNew.show)||'');
+  root.classList.remove('hide');
+  paintNewsBody();
+  markNewsRead();
+  window.dcTrapFocus(root);
+}
+function closeWhatsNew(){
+  const root=document.getElementById('dcNews');
+  if(!root)return;
+  root.classList.add('hide');
+  window.dcReleaseFocus(root);
+}
+window.openWhatsNew=openWhatsNew;
+function paintWhatsNew(){
+  const root=document.getElementById('dcNews');
+  if(!root)return;
+  /* Open already: keep the words honest across a state poll, exactly as the
+     account dialog does, and do nothing else. */
+  if(!root.classList.contains('hide')){paintNewsBody();return}
+  if(newsRaised)return;
+  if(!DATA||!DATA.whatsNew||!DATA.whatsNew.show)return;
+  if(!newsData){loadWhatsNew();return}
+  /* Something else is up -- the boot veil, the walkthrough, another dialog.
+     TRY AGAIN SHORTLY rather than waiting for a repaint that may never come.
+     That was a real bug found by driving it: the veil is cleared without a
+     paint, so the one raise attempt landed while it was still up and nothing
+     called this again until something else happened to repaint the studio.
+     Reacting to a removal cannot win; asking again can. Given up on after
+     ~20s -- the server still says `show`, so the next visit raises it, and a
+     notice that nags over a dialog somebody is using is worse than one that
+     waits a day. */
+  if(newsBlocked()){
+    if(newsRetry<40){newsRetry++;clearTimeout(newsTimer);newsTimer=setTimeout(paintWhatsNew,500)}
+    return;
+  }
+  clearTimeout(newsTimer);
+  /* Latched BEFORE the dialog is opened, not after: paints are coalesced per
+     frame but not serialised, and a second one arriving mid-open would raise
+     it twice. */
+  newsRaised=true;
+  openWhatsNew();
+}
+document.addEventListener('keydown',e=>{
+  const root=document.getElementById('dcNews');
+  if(e.key==='Escape'&&root&&!root.classList.contains('hide'))closeWhatsNew();
+});
+document.addEventListener('click',event=>{
+  if(!event.target.closest)return;
+  if(event.target.closest('[data-news-open]')){event.preventDefault();openWhatsNew();return}
+  const root=document.getElementById('dcNews');
+  if(!root||root.classList.contains('hide'))return;
+  if(event.target.closest('[data-news-close]')){closeWhatsNew();return}
+  const zoom=event.target.closest('[data-news-zoom]');
+  if(zoom){helpZoom(zoom.getAttribute('data-news-zoom'),zoom.querySelector('img'));return}
+  const go=event.target.closest('[data-news-go]');
+  if(go){
+    event.preventDefault();
+    closeWhatsNew();
+    /* Through the studio's ONE destination map, never a second list of
+       screens that could drift from it. */
+    if(StudioAdapter.goToStep)StudioAdapter.goToStep(go.getAttribute('data-news-go'),event);
+  }
+});
+
 document.addEventListener('click',event=>{
   if(!event.target.closest)return;
   if(event.target.closest('#dcTaskCard')){ openTasks(); return; }
@@ -11422,6 +11636,10 @@ function paintHelp(){
       ${contact}`);
   } else {
     window.dcSetHtml(el,`<div class="dch-head"><h2>Help</h2><p>How to use DeenClipped, one thing at a time. Every screenshot is the real app.</p></div>
+      <button type="button" class="dcnw-open" data-news-open>
+        <i class="ph ph-sparkle"></i>
+        <span><b>What&rsquo;s new</b><span>The last few updates to DeenClipped, with pictures.</span></span>
+      </button>
       <div class="dch-find"><i class="ph ph-magnifying-glass"></i><input type="search" placeholder="Search help" value="" data-help-q></div>
       <div class="dch-grid">${cats.map(c=>`<button type="button" class="dch-cat" data-help-cat="${esc(c.id)}">
         <i class="${esc(c.icon||'ph ph-book-open')}"></i>
@@ -11563,6 +11781,7 @@ function paintStudio(){
      an attached clip, streaming and drafts -- none of which the export has. */
   try{ if(window.paintDeenai)window.paintDeenai(vals,DATA); }catch(e){ console.error('paintDeenai',e); }
   paintSetupCelebration(vals);
+  paintWhatsNew();
   paintTikTokOptions();
   paintLiveWork(vals);
   paintApplyLecture(vals);

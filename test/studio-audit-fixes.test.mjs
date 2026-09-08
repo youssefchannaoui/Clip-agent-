@@ -189,17 +189,27 @@ test('every aria-modal dialog is trapped on open and released on close', () => {
   // Read the ids off the markup rather than a typed list, so a dialog added
   // later shows up here instead of shipping untrapped.
   const ids = [...page.matchAll(/<div id="([A-Za-z]+)"[^>]*aria-modal="true"/g)].map(m => m[1]);
-  assert.ok(ids.length >= 4, 'expected the four studio dialogs, found ' + ids.join(','));
-  for (const id of ids) {
-    assert.ok(new RegExp('dcTrapFocus\\((?:[A-Za-z]+\\.root|root|document\\.getElementById\\(.' + id + '.\\))\\)')
-      .test(page) || page.includes(id),
-      id + ' has no trap');
-  }
-  // The four by name, since each is wired through its own variable.
-  assert.equal((page.match(/window\.dcTrapFocus\(/g) || []).length, 4,
-    'expected exactly four open sites');
-  assert.equal((page.match(/window\.dcReleaseFocus\(/g) || []).length, 4,
-    'expected exactly four close sites');
+  assert.ok(ids.length >= 4, 'expected the studio dialogs, found ' + ids.join(','));
+  /*
+   * ONE open site and ONE close site per dialog, DERIVED from the markup
+   * rather than a magic number. Two corrections here, both of the shape this
+   * repo keeps paying for:
+   *
+   *  - the per-dialog loop under this used to end `|| page.includes(id)`,
+   *    and the id came FROM the page -- so it was always true and asserted
+   *    nothing at all;
+   *  - the counts were the literal 4, so adding a fifth dialog turned this
+   *    red against a dialog that IS trapped (measured: 0 focus escapes).
+   *    A count tied to the dialogs still fails on an untrapped one, which is
+   *    the property, and stops failing on an honest addition.
+   *
+   * Each is wired through its own variable (acctEls.root, connEls.root, a
+   * local `root`), so there is no way to tie a call site to an id by regex.
+   */
+  assert.equal((page.match(/window\.dcTrapFocus\(/g) || []).length, ids.length,
+    'one dcTrapFocus per aria-modal dialog: ' + ids.join(','));
+  assert.equal((page.match(/window\.dcReleaseFocus\(/g) || []).length, ids.length,
+    'one dcReleaseFocus per aria-modal dialog: ' + ids.join(','));
 });
 
 // ── 5. Account settings does not rebuild itself on every poll ─────────────
