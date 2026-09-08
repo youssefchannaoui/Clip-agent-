@@ -97,10 +97,23 @@ test('every account gets them, credited rather than merely shared', () => {
   assert.equal(new Set(asCustomer.map(t => t.name)).size, 9);
 });
 
+test('booting copies NO audio: 27MB per boot was a real cost in the wrong place', () => {
+  resetLibrary();
+  assert.equal(audio.seedStarterNasheeds('owner-1'), 9);
+  const onDisk = fs.readdirSync(MUSIC).filter(f => /\.(mp3|m4a|wav|ogg)$/i.test(f));
+  // The suite boots the store in dozens of files with a fresh DATA_DIR each
+  // time. Copying at boot put 20GB of temp directories on this machine in one
+  // session and failed a Python test for want of disk. Nothing reads a
+  // nasheed's BYTES at boot -- only its row.
+  assert.deepEqual(onDisk, [], 'the library holds nine rows and no audio yet');
+  assert.equal(audio.listNasheeds('owner-1').length, 9, 'and all nine are listed');
+});
+
 test('the worker is handed a real path inside musicDir for each one', () => {
   const tracks = audio.workerMusicTracks('a-customer');
-  // workerMusicTracks filters out anything whose file is missing, so nine
-  // means nine were genuinely copied rather than merely listed.
+  // ASKING is what copies them (the render is where the bytes are wanted), and
+  // workerMusicTracks filters out anything whose file is missing -- so nine
+  // means nine genuinely landed rather than merely being listed.
   assert.equal(tracks.length, 9);
   for (const track of tracks) {
     assert.ok(track.path.startsWith(MUSIC), 'copied into musicDir, never read from the repo');
@@ -165,14 +178,59 @@ test('the studio credits DeenClipped and refuses a dead Remove', () => {
   };
   // Array.from: the list was built in the vm realm and its prototype is that
   // realm's Array (CLAUDE.md, four times over).
-  const rows = Array.from(A.bindings(STATE).nasheedList);
-  assert.equal(rows[0].mood, 'Added by DeenClipped', 'the slot says WHO, not merely that it is shared');
-  assert.equal(rows[1].mood, 'Yours');
+  const b = A.bindings(STATE);
+  const own = Array.from(b.nasheedList);
+  const library = Array.from(b.dcLibraryList);
+  // TWO SECTIONS, ONE BUILDER. "Your nasheeds" holds what this account added;
+  // the shipped nine are their own card (Youssef: "seperate").
+  assert.deepEqual(own.map(r => r.name), ['My own bed'], 'the design list is the account\'s own');
+  assert.deepEqual(library.map(r => r.name), ['Asmoo'], 'and the shipped ones are the library');
+  assert.equal(b.dcLibraryCount, 1);
+  assert.equal(b.rotCount, '2', 'rotation is still BOTH halves -- splitting is how they are shown, not used');
+  assert.equal(library[0].mood, 'Added by DeenClipped', 'the slot says WHO, not merely that it is shared');
+  assert.equal(own[0].mood, 'Yours');
   const noEvent = { preventDefault() {}, stopPropagation() {} };
-  rows[0].remove(noEvent);
+  library[0].remove(noEvent);
   assert.deepEqual(removed, [], 'pressing Remove on a starter track asks the server for nothing');
-  rows[1].remove(noEvent);
+  own[0].remove(noEvent);
   assert.deepEqual(removed, ['mine'], 'and your own track still removes');
+});
+
+test('a shared track is hidden from the one account that owns its own copy', () => {
+  // Youssef, 8 Sept 2026: "Allah Allah (Muffled) is duplicated keep this one."
+  // He uploaded it before the starter library shipped, so both were in his
+  // list -- and only HIS list, because his copy is private to him.
+  resetLibrary();
+  audio.seedStarterNasheeds('owner-1');
+  const before = audio.listNasheeds('owner-1').length;
+
+  // His own upload, named the way his files are named.
+  const lib = JSON.parse(fs.readFileSync(path.join(MUSIC, 'library.json'), 'utf8'));
+  lib.push({ id: 'his', userId: 'owner-1', shared: false, name: 'Allah Allah (Muffled)',
+    filename: 'allah-allah.mp3', durationSec: 434, sizeBytes: 1, addedAt: Date.now() });
+  fs.writeFileSync(path.join(MUSIC, 'library.json'), JSON.stringify(lib, null, 2));
+
+  const his = audio.listNasheeds('owner-1');
+  assert.equal(his.length, before, 'his own copy replaces ours rather than joining it');
+  assert.equal(his.filter(t => /allah allah/i.test(t.name)).length, 1, 'exactly one Allah Allah');
+  assert.equal(his.find(t => /allah allah/i.test(t.name)).owned, true, 'and it is HIS -- "keep this one"');
+
+  // NOTHING WAS DELETED, and no other account loses a track: the shared copy
+  // is hidden from him alone, and comes back by itself if he removes his own.
+  assert.equal(audio.listNasheeds('somebody-else').length, before, 'every other library is untouched');
+  assert.equal(audio.deleteNasheed('owner-1', 'his'), true);
+  assert.equal(audio.listNasheeds('owner-1').length, before, 'ours returns when his goes');
+});
+
+test('a bare name collision is not enough -- it has to be the same nasheed', () => {
+  resetLibrary();
+  audio.seedStarterNasheeds('owner-1');
+  const before = audio.listNasheeds('owner-1').length;
+  const lib = JSON.parse(fs.readFileSync(path.join(MUSIC, 'library.json'), 'utf8'));
+  lib.push({ id: 'other', userId: 'owner-1', shared: false, name: 'A different bed entirely',
+    filename: 'the-sins.mp3', durationSec: 226, sizeBytes: 1, addedAt: Date.now() });
+  fs.writeFileSync(path.join(MUSIC, 'library.json'), JSON.stringify(lib, null, 2));
+  assert.equal(audio.listNasheeds('owner-1').length, before + 1, 'an unrelated upload hides nothing');
 });
 
 test.after(() => { try { fs.rmSync(DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch {} });

@@ -2652,6 +2652,59 @@
     var projects = DATA.projects || [];
     var clips = DATA.clips || [];
     var tracks = DATA.tracks || [];
+    /* The account's own uploads and the nine DeenClipped ships with are
+       drawn as two separate sections (Youssef, 8 Sept 2026), so they are
+       split ONCE here rather than filtered at each of the places that read
+       them. `shared` is the app's own flag for a starter track.
+
+       Note listNasheeds has ALREADY hidden a shared track this account holds
+       its own copy of, so a duplicate cannot appear in both halves. */
+    var ownTracks = tracks.filter(function (t) { return t && !t.shared; });
+    var sharedTracks = tracks.filter(function (t) { return t && t.shared; });
+
+    /* ONE row builder for both lists (see the note at nasheedList).
+       Declared here rather than inline so the DeenClipped library can call
+       the very same function -- two copies of a play handler is how two
+       halves of one screen start behaving differently. */
+    function nasheedRow(t, i) {
+          return {
+            name: t.name || t.fileName || 'Untitled',
+            dur: t.durationSec ? secsToClock(t.durationSec) : '',
+            /* WHO PROVIDED THE TRACK, not merely that it is shared. The slot
+               already existed and read "Shared", which answers a question
+               nobody asks -- Youssef, 8 Sept 2026: "show its uploaded by
+               deenclipped". `shared` is the app's own definition of a starter
+               track (audio.js: "the app's own starter nasheeds"), so this reads
+               one field rather than adding a second that could disagree with
+               it, and the operator's own legacy tracks are credited correctly
+               too, because they are exactly what that flag has always meant. */
+            mood: t.shared ? 'Added by DeenClipped' : 'Yours',
+            rowStyle: 'display: flex; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid var(--dc-line-soft, #1E1E22); border-radius: 10px; background: var(--dc-bg, #121214); animation: dcRise .24s cubic-bezier(.2,.8,.2,1) ' + Math.min(i * 0.03, 0.3) + 's both;',
+            playStyle: 'display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%; border: 1px solid var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-gold-lit, #F0D6A6); cursor: pointer;',
+            playIcon: UI.playingTrack === t.id ? 'ph-fill ph-pause' : 'ph-fill ph-play',
+            play: function (e) { stop(e); setUI({ playingTrack: UI.playingTrack === t.id ? null : t.id }); global.StudioAdapter.onPlayTrack(t.id); },
+            waveStyle: 'flex: 1; height: 22px; border-radius: 4px; background: repeating-linear-gradient(90deg, var(--dc-line, #26262A) 0 2px, transparent 2px 5px);',
+            rotStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 600; cursor: pointer; border: 1px solid rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));',
+            rotIcon: 'ph-fill ph-check-circle',
+            rotLabel: 'In rotation',
+            /* A starter track is not this account's to delete -- deleteNasheed
+               refuses anything the account does not own -- so pressing Remove
+               on one did nothing at all, silently: a dead control (invariant 9)
+               that only becomes visible now that every library holds nine of
+               them. It says so instead. Removing the button would need the
+               design's own literal style to become a binding, which defeats the
+               style hoist and renumbers every hashed class in the app. */
+            remove: function (e) {
+              stop(e);
+              if (t.shared && !t.owned) {
+                toast('The DeenClipped nasheeds stay in every library. Switch the rotation off or add your own.');
+                return;
+              }
+              global.StudioAdapter.onRemoveTrack(t.id);
+            },
+          };
+    }
+
     var storage = DATA.storage || { sourceBytes: 0, clipBytes: 0 };
     var storageTotal = (storage.sourceBytes || 0) + (storage.clipBytes || 0);
     var signInSeen = false;
@@ -8941,46 +8994,25 @@
       },
 
       // ── Nasheed library ──
-      nasheedList: tracks.map(function (t, i) {
-        return {
-          name: t.name || t.fileName || 'Untitled',
-          dur: t.durationSec ? secsToClock(t.durationSec) : '',
-          /* WHO PROVIDED THE TRACK, not merely that it is shared. The slot
-             already existed and read "Shared", which answers a question
-             nobody asks -- Youssef, 8 Sept 2026: "show its uploaded by
-             deenclipped". `shared` is the app's own definition of a starter
-             track (audio.js: "the app's own starter nasheeds"), so this reads
-             one field rather than adding a second that could disagree with
-             it, and the operator's own legacy tracks are credited correctly
-             too, because they are exactly what that flag has always meant. */
-          mood: t.shared ? 'Added by DeenClipped' : 'Yours',
-          rowStyle: 'display: flex; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid var(--dc-line-soft, #1E1E22); border-radius: 10px; background: var(--dc-bg, #121214); animation: dcRise .24s cubic-bezier(.2,.8,.2,1) ' + Math.min(i * 0.03, 0.3) + 's both;',
-          playStyle: 'display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%; border: 1px solid var(--dc-line, #26262A); background: var(--dc-bg-raised, #17171A); color: var(--dc-gold-lit, #F0D6A6); cursor: pointer;',
-          playIcon: UI.playingTrack === t.id ? 'ph-fill ph-pause' : 'ph-fill ph-play',
-          play: function (e) { stop(e); setUI({ playingTrack: UI.playingTrack === t.id ? null : t.id }); global.StudioAdapter.onPlayTrack(t.id); },
-          waveStyle: 'flex: 1; height: 22px; border-radius: 4px; background: repeating-linear-gradient(90deg, var(--dc-line, #26262A) 0 2px, transparent 2px 5px);',
-          rotStyle: 'display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 10.5px; font-weight: 600; cursor: pointer; border: 1px solid rgba(127,209,166,.32); background: rgba(10,10,12,.82); color: var(--dc-on-scrim-7fd1a6, var(--dc-n-7fd1a6, #7FD1A6));',
-          rotIcon: 'ph-fill ph-check-circle',
-          rotLabel: 'In rotation',
-          /* A starter track is not this account's to delete -- deleteNasheed
-             refuses anything the account does not own -- so pressing Remove
-             on one did nothing at all, silently: a dead control (invariant 9)
-             that only becomes visible now that every library holds nine of
-             them. It says so instead. Removing the button would need the
-             design's own literal style to become a binding, which defeats the
-             style hoist and renumbers every hashed class in the app. */
-          remove: function (e) {
-            stop(e);
-            if (t.shared && !t.owned) {
-              toast('The DeenClipped nasheeds stay in every library. Switch the rotation off or add your own.');
-              return;
-            }
-            global.StudioAdapter.onRemoveTrack(t.id);
-          },
-        };
-      }),
+      /* ── Two lists, one row builder ──────────────────────────────────
+         Youssef, 8 Sept 2026: "make it so its like deenclipped libary and
+         seperate make it look cool."
+
+         The account's OWN uploads keep the design's own "Your nasheeds"
+         section; the nine that ship with the product are drawn separately by
+         the host (paintNasheedLibrary). Both come from THIS builder, so a play
+         button, a duration or a rotation chip cannot start behaving
+         differently depending on which half of the screen it is on -- which is
+         what a second row implementation would eventually do. */
+      nasheedList: ownTracks.map(nasheedRow),
+      /* The same rows for the shipped nine. Read by paintNasheedLibrary, not
+         by the generated template -- a second sc-for in the design export
+         would mean a re-import and every hashed class name in the app. */
+      dcLibraryList: sharedTracks.map(function (t, i) { return nasheedRow(t, i); }),
+      dcLibraryCount: sharedTracks.length,
       // The template already writes " nasheeds in rotation." after this, so it
-      // takes the bare count.
+      // takes the bare count. BOTH halves rotate, so this stays the total --
+      // splitting the list is a way of showing them, not of using them.
       rotCount: String(tracks.length),
       nasheedVol: musicVolume,
       nasheedVolLabel: musicVolume + '%',

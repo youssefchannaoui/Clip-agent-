@@ -55,15 +55,48 @@ async function probeDuration(file) {
  * starter nasheeds and every new account needs at least one track before it can
  * render anything.
  */
+/**
+ * What "the same nasheed" means when one copy is ours and one is theirs.
+ *
+ * Youssef, 8 Sept 2026: "Allah Allah (Muffled) is duplicated keep this one."
+ * He had uploaded that nasheed himself before the starter library shipped, so
+ * his own copy and ours sat in his list together.
+ *
+ * BYTES CANNOT ANSWER THIS. The starter copies were re-encoded to 96kbps for a
+ * ducked bed, so ours and his are the same recording and different files -- a
+ * content hash sees two unrelated tracks. The name is what a person is
+ * actually comparing, so that is what is compared: case, punctuation and the
+ * "(Muffled)" suffix his filenames carry are not differences anybody means.
+ */
+function sameNasheed(a, b) {
+  const key = value => String(value || '')
+    .toLowerCase()
+    .replace(/\((?:muffled|instrumental|bed|loop)\)/g, ' ')
+    .replace(/\.(mp3|m4a|wav|ogg)$/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  const left = key(a);
+  return Boolean(left) && left === key(b);
+}
+
 export function listNasheeds(user) {
   const userId = user?.id || user || '';
   if (!userId) return [];
+  const all = loadLibrary();
+  // An account that uploaded a nasheed BEFORE the starter library shipped
+  // holds both copies, and only that account does -- his own is private. So
+  // the shared one is HIDDEN FROM HIM rather than deleted: his copy wins, no
+  // other account loses a track, and if he ever removes his own the starter
+  // comes back by itself. Nothing is destroyed to tidy a list.
+  const mine = all.filter(entry => entry && !entry.shared && entry.userId === userId);
+  const hidden = entry => entry.shared && mine.some(own => sameNasheed(own.name, entry.name));
   // `owned` is derived here rather than left to each caller to work out from
   // userId: the browser needs to know whether Remove can do anything (a
   // starter track is not the account's to delete), and deriving it there would
   // mean shipping every entry's owner id to every account.
-  return loadLibrary()
+  return all
     .filter(entry => entry.shared || entry.userId === userId)
+    .filter(entry => !hidden(entry))
     .map(entry => ({ ...entry, owned: ownsTrack(entry, userId) }));
 }
 
@@ -119,6 +152,9 @@ export function deleteNasheed(user, id) {
   // Deleting is confined to your own uploads: the shared starter tracks stay
   // put, and another account's track is not even acknowledged to exist.
   if (!entry || !ownsTrack(entry, userId)) return false;
+  // `force` already tolerates a starter whose bytes were never copied here,
+  // and this only ever removes from musicDir -- never the repo asset, which
+  // every other account still reads.
   fs.rmSync(path.join(musicDir, path.basename(entry.filename)), { force: true });
   writeLibrary(list.filter(item => item.id !== id));
   // A starter track the operator deleted must stay deleted: the seeder runs on
@@ -132,6 +168,7 @@ export function nasheedFilePath(user, id) {
   const userId = user?.id || user || '';
   const entry = loadLibrary().find(item => item.id === id);
   if (!entry || !(entry.shared || ownsTrack(entry, userId))) return null;
+  ensureStarterFile(entry);
   const file = path.join(musicDir, path.basename(entry.filename));
   if (!file.startsWith(musicDir) || !fs.existsSync(file)) return null;
   return { file, entry };
@@ -139,6 +176,7 @@ export function nasheedFilePath(user, id) {
 
 export function workerMusicTracks(user) {
   return listNasheeds(user)
+    .filter(entry => ensureStarterFile(entry))
     .map(entry => ({ ...entry, path: path.join(musicDir, path.basename(entry.filename)) }))
     .filter(entry => fs.existsSync(entry.path));
 }
@@ -162,6 +200,33 @@ export function workerMusicTracks(user) {
  */
 const starterDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'assets', 'nasheeds');
 const removedFile = path.join(musicDir, 'starter-removed.json');
+
+/**
+ * The starter file, copied into musicDir the first time anything asks for it.
+ *
+ * IT USED TO BE COPIED AT BOOT, and that was a real cost in the wrong place:
+ * 27MB per boot, and the SUITE boots the store in dozens of files with a fresh
+ * DATA_DIR each time. Measured while it was live: 20GB of temp directories in
+ * one session, and a Python test failing for want of disk rather than for
+ * anything it was testing. In production it is one copy either way.
+ *
+ * Almost nothing reads a nasheed's bytes -- a boot, a screen, a schedule and
+ * every gate in between only ever read the library ROW -- so the copy belongs
+ * where the bytes are wanted, which is a render or the Play button.
+ *
+ * One home for audio is still the rule: it lands in musicDir, and everything
+ * downstream (the delete guard, the worker's path, the streaming route)
+ * resolves there exactly as it did.
+ */
+function ensureStarterFile(entry) {
+  if (!entry || !entry.starter) return true;
+  const name = path.basename(String(entry.filename || ''));
+  if (!name) return false;
+  const to = path.join(musicDir, name);
+  if (fs.existsSync(to)) return true;
+  try { fs.copyFileSync(path.join(starterDir, name), to); return true; }
+  catch { return false; }
+}
 
 /** STABLE across deploys, or every boot seeds a second copy of all nine. */
 function starterId(file) {
@@ -224,12 +289,10 @@ export function seedStarterNasheeds(ownerId) {
     if (!file || file !== path.basename(file)) continue;
     const id = starterId(file);
     if (have.has(id) || dropped.has(id)) continue;
-    const from = path.join(starterDir, file);
     let sizeBytes = 0;
     try {
-      sizeBytes = fs.statSync(from).size;
+      sizeBytes = fs.statSync(path.join(starterDir, file)).size;
       if (!sizeBytes) continue;
-      fs.copyFileSync(from, path.join(musicDir, file));
     } catch { continue; }
     list.push({
       id,
@@ -262,7 +325,11 @@ export async function fillStarterDurations() {
   if (!pending.length) return 0;
   const measured = new Map();
   for (const entry of pending) {
-    const file = path.join(musicDir, path.basename(entry.filename || ''));
+    // The ASSET, not a copy: measuring a duration is not a reason to spend
+    // 27MB of disk on a file nobody has asked to hear yet.
+    const name = path.basename(entry.filename || '');
+    const copied = path.join(musicDir, name);
+    const file = fs.existsSync(copied) ? copied : path.join(starterDir, name);
     if (!fs.existsSync(file)) continue;
     try {
       const seconds = await probeDuration(file);

@@ -10308,6 +10308,105 @@ function paintTrimTools(vals){
   }
 }
 
+/* ── The DeenClipped library, its own section ─────────────────────────────
+   Youssef, 8 Sept 2026: "make it so its like deenclipped libary and seperate
+   make it look cool."
+
+   The nine that ship with the product are not the account's own uploads and
+   should not read as though they were. The design's "Your nasheeds" section
+   now holds only what this account added; these get a card of their own,
+   warmed by the brand gold and headed by the arch mark, in a two-up grid so it
+   reads as a LIBRARY rather than as more of the same list.
+
+   HOST-RENDERED for the usual reason: a second sc-for in the design export
+   means a re-import and every hashed class name in the app regenerates. The
+   mount is found by the "Your nasheeds" HEADING TEXT, never by a class.
+
+   The rows come from `dcLibraryList`, which is the SAME builder that makes the
+   list above (studio-adapter's nasheedRow) -- so play, duration and the
+   rotation chip cannot start behaving differently on one half of the screen.
+
+   Colours: the grounds and inks are var() tokens so they follow the theme, and
+   the gold edges are TRANSLUCENT LITERALS. Deliberately not tokens -- there is
+   no --dc-gold-line or --dc-gold-wash declared anywhere in this app, and a
+   var() naming a token that does not exist falls silently to its fallback,
+   which reads as though a token were in charge when nothing is. A translucent
+   gold over a themed ground is correct in both themes by construction, which
+   is the same reasoning the safe-zone shade uses. */
+function paintNasheedLibrary(vals){
+  const ID='dcNasheedLib';
+  const gone=()=>{const n=document.getElementById(ID); if(n) n.remove()};
+  const rows=Array.isArray(vals.dcLibraryList)?vals.dcLibraryList:[];
+  if(!vals.isMusic||!rows.length){ gone(); return }
+  const head=[...document.querySelectorAll('#studio h2')]
+    .find(h=>(h.textContent||'').trim()==='Your nasheeds');
+  const col=head?head.closest('section'):null;
+  if(!col){ gone(); return }
+  let box=document.getElementById(ID);
+  if(!box||box.parentElement!==col||box.nextElementSibling){
+    if(box) box.remove();
+    box=document.createElement('section'); box.id=ID;
+    box.setAttribute('data-host-owned','');
+    col.appendChild(box);                       // under the list AND the dropzone
+  }
+  box.style.cssText='display:flex;flex-direction:column;gap:12px;margin-top:22px;padding:18px;'
+    +'border:1px solid rgba(217,180,120,.30);border-radius:14px;'
+    +'background:linear-gradient(180deg, rgba(217,180,120,.06), transparent 62%),'
+    +'var(--dc-bg-raised, #17171A);';
+  const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  /* The arch, drawn here rather than borrowed from the rail: the rail's mark is
+     inside the generated template and moving it would leave a hole. */
+  /* LITERAL GOLD, never a var(): a CSS custom property in an SVG PRESENTATION
+     ATTRIBUTE does not resolve -- the path falls back to the initial value and
+     draws a black fill with no stroke. That cost this repo a release once
+     (v3.96.0, the onboarding strip's arch) and test/light-theme.test.mjs has
+     guarded it ever since; it caught this within the same session. The brand
+     gold is the same colour in both themes anyway, so there is nothing here a
+     token would be deciding. */
+  const arch='<svg viewBox="0 0 40 52" width="17" height="22" fill="none" aria-hidden="true" style="flex:none">'
+    +'<path d="M20 2C11.2 2 4 9.2 4 18v32h32V18C36 9.2 28.8 2 20 2Z" stroke="#D9B478" stroke-width="2.6" stroke-linejoin="round"/>'
+    +'<path d="M16.6 20.4 25.4 26l-8.8 5.6V20.4Z" fill="#D9B478"/></svg>';
+  const html=
+     '<div style="display:flex;align-items:center;gap:10px">'
+    +  arch
+    +  '<span style="display:flex;flex-direction:column;gap:1px;min-width:0;flex:1">'
+    +    '<strong style="font:600 14px Outfit, Inter, sans-serif;letter-spacing:-.01em;color:var(--dc-ink, #E9E9ED)">DeenClipped library</strong>'
+    +    '<span style="font-size:11.5px;color:var(--dc-ink-dim, #8B8B93)">Nasheed beds that ship with the studio &middot; already in rotation</span>'
+    +  '</span>'
+    +  '<span style="flex:none;padding:3px 10px;border-radius:20px;font:600 10.5px Outfit, Inter, sans-serif;letter-spacing:.08em;'
+    +    'border:1px solid rgba(217,180,120,.34);color:var(--dc-gold-lit, #F0D6A6)">'+rows.length+'</span>'
+    +'</div>'
+    +'<div id="dcNasheedLibGrid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(248px, 1fr));gap:8px">'
+    + rows.map((r,i)=>
+       '<div style="display:flex;align-items:center;gap:10px;min-width:0;padding:8px 10px;border-radius:10px;'
+      +  'border:1px solid var(--dc-line-soft, #1E1E22);background:var(--dc-bg, #121214)">'
+      +  '<button type="button" data-dclib="'+i+'" aria-label="'+esc(r.playIcon&&r.playIcon.indexOf('pause')>-1?'Pause ':'Play ')+esc(r.name)+'" '
+      +    'style="display:grid;place-items:center;width:28px;height:28px;flex:none;border-radius:50%;cursor:pointer;'
+      +    'border:1px solid rgba(217,180,120,.34);background:var(--dc-bg-raised, #17171A);color:var(--dc-gold-lit, #F0D6A6)">'
+      +    '<i class="'+esc(r.playIcon)+'" style="font-size:12px"></i></button>'
+      +  '<span style="display:flex;flex-direction:column;gap:1px;min-width:0;flex:1">'
+      /* The full name on hover. A reciter's name makes some of these longer
+         than a grid cell ("Ila Rabbi - AbdulAziz Al-Rashed" truncates at three
+         columns), and a row that cannot say which nasheed it is has lost the
+         only thing it was for -- the same fix the calendar chip took. */
+      +    '<strong title="'+esc(r.name)+'" style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dc-ink, #E9E9ED)">'+esc(r.name)+'</strong>'
+      +    '<span style="font-size:10.5px;color:var(--dc-ink-faint, #6E6E76)">'+esc(r.dur)+'</span>'
+      +  '</span>'
+      +  '<i class="ph-fill ph-check-circle" title="In rotation" aria-label="In rotation" '
+      +    'style="flex:none;font-size:13px;color:var(--dc-gold, #D9B478)"></i>'
+      +'</div>').join('')
+    +'</div>';
+  if(window.dcSetHtml) window.dcSetHtml(box,html); else if(box.innerHTML!==html) box.innerHTML=html;
+  /* Rewired on every paint, never guarded by a dataset flag: the buttons are
+     rebuilt by the html above whenever the markup changes, and a flag would
+     leave the NEW buttons dead. */
+  box.querySelectorAll('[data-dclib]').forEach(el=>{
+    const r=rows[Number(el.getAttribute('data-dclib'))];
+    if(r&&typeof r.play==='function') el.onclick=e=>r.play(e);
+  });
+}
+window.paintNasheedLibrary=paintNasheedLibrary;
+
 /* ── The editor's Look tab gets the looks and the weather ─────────────────
    v3.118.0 put twelve graded looks and four atmosphere effects on Templates →
    Style and never taught the editor about them, so the editor's own Look tab
@@ -11375,6 +11474,7 @@ function paintStudio(){
   paintLoadingSkeleton();
   paintTrimTools(vals);
   paintEditorLook(vals);
+  paintNasheedLibrary(vals);
   paintEditorScrub();
   stepDirection();
   paintJobStyleRow(vals);

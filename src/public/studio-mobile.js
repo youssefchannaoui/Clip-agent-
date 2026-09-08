@@ -797,10 +797,14 @@
           h('input', { class: 'dcm-file', type: 'file', accept: 'audio/*', on: { change: 'onFile' } }),
         ]),
       ]),
+      /* The account's OWN uploads. The nine DeenClipped ships with are their
+         own section below (Youssef, 8 Sept 2026: "seperate"), built from the
+         SAME row builder, so a play button cannot behave differently in one
+         half of the screen than the other. */
       h('section', { class: 'dcm-sec' }, [
-        secHead('In rotation'),
-        iff('m.noTracks', [empty('No nasheeds yet. Every clip renders silent under the speech until you add one.')]),
-        iff('m.hasTracks', [h('div', { class: 'dcm-list' }, [
+        secHead('Your nasheeds'),
+        iff('m.noOwn', [empty('Nothing of your own yet. The DeenClipped library below is already in rotation.')]),
+        iff('m.hasOwn', [h('div', { class: 'dcm-list' }, [
           each('nasheedList', 't', [h('div', { class: 'dcm-track' }, [
             h('button', { type: 'button', class: 'dcm-track-p', on: { click: 't.play' }, 'aria-label': 'Play' }, [phb('t.playIcon')]),
             h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('t.name')]), h('i', {}, [tx('t.mood'), ' · ', tx('t.dur')])]),
@@ -808,6 +812,16 @@
           ])]),
         ])]),
       ]),
+      iff('m.hasLibrary', [h('section', { class: 'dcm-sec dcm-lib' }, [
+        secHead('DeenClipped library'),
+        h('p', { class: 'dcm-fine' }, 'Nasheed beds that ship with the studio, already in rotation.'),
+        h('div', { class: 'dcm-list' }, [
+          each('dcLibraryList', 't', [h('div', { class: 'dcm-track' }, [
+            h('button', { type: 'button', class: 'dcm-track-p', on: { click: 't.play' }, 'aria-label': 'Play' }, [phb('t.playIcon')]),
+            h('span', { class: 'dcm-row-t' }, [h('b', {}, [tx('t.name')]), h('i', {}, [tx('t.dur')])]),
+          ])]),
+        ]),
+      ])]),
       h('p', { class: 'dcm-fine' }, 'The Quran template never carries a nasheed, whatever is in rotation.'),
     ];
   }
@@ -1322,7 +1336,14 @@
       return { label: label, on: label === vals.activeTpl ? 'selected' : false };
     });
     (vals.tplAIRows || []).forEach(function (r) { r.onCls = r.on ? 'on' : ''; });
-    m.hasTracks = (vals.nasheedList || []).length > 0;
+    m.hasOwn = (vals.nasheedList || []).length > 0;
+    m.noOwn = !m.hasOwn;
+    m.hasLibrary = (vals.dcLibraryList || []).length > 0;
+    // Kept, and it is NOT the same question: other screens ask "does this
+    // account have ANY nasheed", which is both halves. Conflating that with
+    // "did they upload one" is how a blocker starts firing at an account that
+    // can already render.
+    m.hasTracks = m.hasOwn || m.hasLibrary;
     m.noTracks = !m.hasTracks;
     (vals.perfRanges || []).forEach(function (r) { r.onCls = r.on ? 'on' : ''; });
     var barFill = function (r, bad) {

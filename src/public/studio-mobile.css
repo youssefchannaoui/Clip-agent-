@@ -183,6 +183,19 @@
 
   /* ── sections & cards ──────────────────────────────────────────────── */
   .dcm-sec { margin: 26px 0 0; }
+  /* The DeenClipped library reads as a SECTION OF ITS OWN, not more of the
+     list above it (Youssef, 8 Sept 2026: "seperate make it look cool"). A
+     translucent gold edge and wash rather than tokens: there is no
+     --dc-gold-line in this app, and a var() naming a token that does not exist
+     falls silently to its fallback. Translucent gold is correct over either
+     theme's ground by construction, which is what lets one rule serve both. */
+  .dcm-lib {
+    padding: 16px 14px;
+    border: 1px solid rgba(217,180,120,.30);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(217,180,120,.07), transparent 60%);
+  }
+  .dcm-lib .dcm-track { background: transparent; }
   .dcm-sec-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 10px; }
   .dcm-sec-h h2 { position: relative; display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
     font: 600 11px var(--dcm-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--dcm-ink3); }

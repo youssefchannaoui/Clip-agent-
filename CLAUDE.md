@@ -13945,3 +13945,81 @@ a function that does not exist -- a probe that crashes is not a probe that
 failed. Measured at 1440x900 in both themes: nine rows, one left edge (268),
 one right edge (1082), one row height (62), 0 overflowing, 0 page scroll, 0
 page errors.
+
+## The DeenClipped library is its own section, and a duplicate keeps YOUR copy (v3.150.0, 8 Sept 2026)
+
+Youssef, looking at the shipped starter library: "Allah Allah (Muffled) is
+duplicated keep this one, also make it so its like deenclipped libary and
+seperate make it look cool."
+
+### The duplicate: hidden from ONE account, never deleted
+
+He had uploaded that nasheed himself before the starter library shipped, so his
+own copy and ours sat in his list together — and **only his**, because his is
+private to him. Every other account sees one.
+
+- **BYTES CANNOT ANSWER THIS, which is why the obvious fix does not work.** The
+  starter copies were re-encoded to 96kbps for a ducked bed (v3.149.0), so ours
+  and his are the same recording and different files: a content hash sees two
+  unrelated tracks. The NAME is what a person is comparing, so that is what is
+  compared — case, punctuation and the `(Muffled)` suffix his filenames carry
+  are not differences anybody means.
+- **`listNasheeds` HIDES the shared copy from that one account.** Nothing is
+  deleted: his copy wins ("keep this one"), no other library loses a track, and
+  if he ever removes his own the starter comes back by itself. Tidying a list is
+  never a reason to destroy a file.
+- A bare name collision is not enough on its own — the test drives an unrelated
+  upload and asserts it hides nothing.
+
+### The split: two sections, ONE row builder
+
+"Your nasheeds" now holds only what the account added; the nine that ship with
+the product get a card of their own — gold-edged, headed by the arch mark and a
+count, in a three-up grid so it reads as a LIBRARY rather than as more of the
+same list.
+
+- **Both lists come from the same `nasheedRow`.** A play button, a duration or a
+  rotation chip cannot start behaving differently on one half of the screen —
+  which is exactly what a second row implementation would eventually do.
+- **`rotCount` stays the TOTAL.** Splitting them is a way of SHOWING them, not
+  of using them: every one is still in rotation.
+- Host-rendered (`paintNasheedLibrary`), mounted by the "Your nasheeds" heading
+  TEXT — a second `sc-for` in the export means a re-import and every hashed
+  class name in the app. The phone gets the same split in its own template.
+- **The longest name carries its full text on hover.** "Ila Rabbi — AbdulAziz
+  Al-Rashed" truncates at three columns, and a row that cannot say which nasheed
+  it is has lost the only thing it was for — the fix the calendar chip took.
+
+### Two guards caught this within the session, and both were right
+
+- **`var()` IN AN SVG PRESENTATION ATTRIBUTE DOES NOT RESOLVE.** The arch mark
+  was written `stroke="var(--dc-gold, #D9B478)"`; the path falls back to the
+  initial value and draws a black fill with no stroke. That cost a release once
+  and `test/light-theme.test.mjs` has guarded it ever since. Literal gold now —
+  the brand colour is the same in both themes, so there is nothing a token would
+  be deciding.
+- **`--dc-gold-line` and `--dc-gold-wash` are declared NOWHERE.** A `var()`
+  naming a token that does not exist falls silently to its fallback, which reads
+  as though a token were in charge when nothing is — the fourth time this file
+  has recorded that shape. The gold edges are translucent literals, which are
+  correct over either theme's ground by construction.
+
+### 27MB per boot was a real cost in the wrong place
+
+v3.149.0 copied all nine into `DATA_DIR/music` at boot. In production that is
+one copy. **In the SUITE it is 27MB per test file that boots the store with a
+fresh directory** — measured: **20GB of temp directories in one session**, and a
+Python test failing for want of disk rather than for anything it was testing.
+
+Nothing reads a nasheed's BYTES at boot — a boot, a screen, a schedule and every
+gate in between read only the library ROW. So the copy moved to first READ
+(`ensureStarterFile`, called by `nasheedFilePath` and `workerMusicTracks`), and
+durations are probed from the ASSET rather than from a copy. One home for audio
+is still the rule: the bytes land in `musicDir` and everything downstream
+resolves there exactly as before.
+
+Measured after: **0 audio files on disk at boot, nine rows listed**, and a real
+`GET /api/music/dc-starter-asmoo/audio` returns 200 with 3.1MB. The suite now
+leaves ~200MB of temp behind instead of gigabytes.
+
+Six probes proven red, including the boot-copy one.
