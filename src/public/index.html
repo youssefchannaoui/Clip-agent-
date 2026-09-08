@@ -3332,7 +3332,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         +`<span class="dc-safe-band dc-safe-bottom" style="left:0;right:0;bottom:0;height:${B}"></span>`
         +`<span class="dc-safe-band dc-safe-left" style="left:0;width:${L};top:${T};bottom:${B}"></span>`
         +`<span class="dc-safe-band dc-safe-rail" style="right:0;width:${R};top:${T};bottom:${B}"></span>`
-        +safeSilhouette(box));
+        +safeSilhouette((vals&&vals.safeReal)||box));
     }
     /*
      * THE SILHOUETTE. Youssef, 6 Sept 2026: "show a siloet where side buttons
@@ -3868,7 +3868,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         +`<span class="dc-safe-band dc-safe-bottom" style="left:0;right:0;bottom:0;height:${B}"></span>`
         +`<span class="dc-safe-band dc-safe-left" style="left:0;width:${L};top:${T};bottom:${B}"></span>`
         +`<span class="dc-safe-band dc-safe-rail" style="right:0;width:${R};top:${T};bottom:${B}"></span>`
-        +safeSilhouette(box));
+        +safeSilhouette((vals&&vals.safeReal)||box));
     }
 
     /* The fallback's own label. When the render cannot be played the editor

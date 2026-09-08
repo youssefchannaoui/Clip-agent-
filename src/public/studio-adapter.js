@@ -1444,15 +1444,15 @@
   // no longer need listing here -- the list ran to two lines under the
   // preview and read as a warning label. The warning stays, because a caption
   // sitting in the shade is the one thing this line exists to say.
-  function safeHintText(platforms, points, over) {
-    var names = SAFE.describe(platforms);
-    var warn = over
-      ? ' Your caption sits ' + over + 'px into the shade — drag it up into the clear, or it is covered where it posts.'
-      : '';
-    var whose = platforms.length
-      ? names + '\u2019s own buttons and captions sit on screen'
-      : 'every platform\u2019s buttons and captions sit on screen, until one is connected';
-    return 'The shaded parts are where ' + whose + '. Keep text in the clear.' + warn;
+  /* IT NO LONGER CLAIMS THE CAPTION IS CLEAR, and that is the whole point of
+     the trade. The box is an even inset now, so it cannot say what any platform
+     covers -- the old sentence named them and warned in pixels, and repeating
+     that over a guide would be the app asserting a safety it has stopped
+     checking. It says what it is instead. */
+  function safeHintText() {
+    return 'A framing guide — an even margin inside the frame. It is not a '
+      + 'platform safe area: each app covers a different part of the screen, '
+      + 'so check a posted clip before trusting the edges.';
   }
 
   // Grab, then grabbing. Without it the overlay gives no sign it can be moved.
@@ -4404,10 +4404,16 @@
     // Always TikTok and Shorts, widened by anything else connected -- see
     // postingSet in safe-zones.js for why the pair is the floor.
     var SAFE_PLATFORMS = SAFE.postingSet(DATA.publishingSettings, DATA.social);
-    // postingBox, not safeArea: the shade shows what the phone's interface
-    // actually covers, which is the same number the silhouette is drawn from.
-    // See POSTING_BOTTOM in safe-zones.js for why the two differ.
-    var SAFE_BOX = (SAFE.postingBox || SAFE.safeArea)(SAFE_PLATFORMS, tpl.width, tpl.height);
+    /* THE EVEN GUIDE BOX, at Youssef's instruction (8 Sept 2026) and with the
+       trade stated to him: it does NOT match what the platforms cover, so
+       nothing here may call a caption inside it "clear". `safeArea` -- the real
+       union -- is untouched and still enforced on every shipped template by
+       test/safe-zones.test.mjs, and the public checker still cites the
+       published per-platform numbers. This box is a framing guide only. */
+    var SAFE_REAL = (SAFE.postingBox || SAFE.safeArea)(SAFE_PLATFORMS, tpl.width, tpl.height);
+    var SAFE_BOX = SAFE.guideBox
+      ? SAFE.guideBox(tpl.width, tpl.height)
+      : SAFE_REAL;
     var SAFE_TOP = SAFE_BOX.top;
     var SAFE_BOTTOM = SAFE_BOX.bottom;
     // The thirds and the half are only worth offering where they are actually
@@ -8843,12 +8849,18 @@
       // fall outside the box and be dropped. It says which platforms the box
       // is actually clearing instead, because a rectangle nobody can account
       // for is the thing that made this feel arbitrary.
-      safeHint: safeHintText(SAFE_PLATFORMS, SNAP_POINTS, captionOutsideBox(tpl, SAFE_BOX)),
+      safeHint: safeHintText(),
       // The same box as fractions of the picture, for the host-drawn covered
       // areas (paintSafeChrome). One source: the dashed edge the design draws
       // and the shade the host draws cannot disagree about where the clear
       // area is.
       safeBox: { left: SAFE_BOX.left, right: SAFE_BOX.right, top: SAFE_BOX.top, bottom: SAFE_BOX.bottom, degenerate: Boolean(SAFE_BOX.degenerate) },
+      /* The silhouette keeps being drawn from the REAL union, not the even
+         guide above. It shows where a phone's own buttons and captions sit, and
+         positioning that against a margin chosen for its looks would be
+         inventing chrome -- the fault the waveform strip was rebuilt to remove.
+         So the rectangle is even and the thing it draws stays truthful. */
+      safeReal: { left: SAFE_REAL.left, right: SAFE_REAL.right, top: SAFE_REAL.top, bottom: SAFE_REAL.bottom, degenerate: Boolean(SAFE_REAL.degenerate) },
       safePlatforms: SAFE_PLATFORMS,
       edSafe: true,
       // Output shape. The render pipeline has always been generic here -- every

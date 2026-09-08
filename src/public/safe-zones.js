@@ -301,6 +301,41 @@
   }
 
 
+  /*
+   * THE STUDIO'S GUIDE BOX -- EVEN ON ALL FOUR SIDES, AND A GUIDE ONLY.
+   *
+   * Youssef, 8 Sept 2026: "just make the box all around an equal rectangke a
+   * little smaller than the main recntangle cause it looks so bad now", and,
+   * told plainly that an even inset cannot match what the platforms cover,
+   * chose it anyway with the trade understood.
+   *
+   * So this is NOT a safety check and nothing may treat it as one. The real
+   * union (`safeArea`) is untouched and still enforced: the shipped-template
+   * law in test/safe-zones.test.mjs keeps every caption anchor inside the true
+   * box, and the public checker keeps citing the published per-platform
+   * numbers. Only the studio's own preview draws this.
+   *
+   * One inset in FRAME pixels, so the margin looks equal on screen rather than
+   * being equal in percentage terms and reading wider top-to-bottom on a 9:16
+   * frame.
+   */
+  var GUIDE_INSET = 64;
+
+  function guideBox(width, height) {
+    var w = Number(width) || REF_WIDTH;
+    var h = Number(height) || REF_HEIGHT;
+    var pad = Math.min(GUIDE_INSET, Math.floor(Math.min(w, h) / 6));
+    /* `right` and `bottom` are POSITIONS in this file, not insets -- every
+       reader does `1 - box.right` to get the band. Returning insets here made
+       the right band 94% wide and would have shaded almost the whole frame.
+       Caught by reading the numbers back, not the code. */
+    return {
+      left: pad / w, right: 1 - pad / w,
+      top: pad / h, bottom: 1 - pad / h,
+      degenerate: false, guide: true,
+    };
+  }
+
   function postingSet(publishingSettings, social) {
     var connected = platformsFor(publishingSettings, social);
     var out = [];
@@ -334,6 +369,8 @@
     postingSet: postingSet,
     postingInsets: postingInsets,
     postingBox: postingBox,
+    GUIDE_INSET: GUIDE_INSET,
+    guideBox: guideBox,
     describe: describe,
   };
 }(typeof globalThis !== 'undefined' ? globalThis : this));

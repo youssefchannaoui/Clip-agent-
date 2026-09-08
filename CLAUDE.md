@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1734 JS + 770 Python**
+- `npm test` and `npm run check` must pass. Currently **1737 JS + 770 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -13946,6 +13946,57 @@ failed. Measured at 1440x900 in both themes: nine rows, one left edge (268),
 one right edge (1082), one row height (62), 0 overflowing, 0 page scroll, 0
 page errors.
 
+## The safe zone became an even guide, and stopped claiming to be a check (v3.148.7, 8 Sept 2026)
+
+Youssef, on the Templates preview: "just make the box all around an equal
+rectangke a little smaller than the main recntangle cause it looks so bad now."
+
+**He was told the trade before anything changed** -- the platforms cover uneven
+areas (left 5.6%, top 7.8%, right 13.0%, bottom ~13%), so an even inset cannot
+match them; to be safe on every side it would have to use the LARGEST inset all
+round and leave about half the frame. Offered the choice, he took **"even box,
+and I accept it's a guide only"**.
+
+- **`guideBox()` is a new, separate function**: one inset in FRAME PIXELS
+  (`GUIDE_INSET = 64`), so the margin looks equal rather than being equal in
+  percentage and reading wider top-to-bottom on a 9:16 frame. Measured on the
+  rendered preview: **all four bands 18px on a 306x546 frame**.
+- **`safeArea` is untouched and still enforced.** The shipped-template law in
+  `test/safe-zones.test.mjs` keeps every caption anchor inside the REAL union,
+  and the public checker keeps citing the published per-platform numbers. Only
+  the studio's own preview draws the guide.
+- **The hint stops claiming safety**, which is the whole point of the trade. It
+  used to name the platforms and warn in pixels ("sits 42px into the shade");
+  repeating that over a rectangle chosen for its looks would be the app
+  asserting a safety it has stopped checking.
+- **The silhouette still draws from the REAL union.** It shows where a phone's
+  buttons and captions sit, and positioning that against a margin chosen for
+  its looks would be inventing chrome -- the fault the waveform strip was
+  rebuilt to remove. So the rectangle is even and the thing inside it stays
+  truthful.
+- **The accepted cost, stated rather than hidden:** a caption can now be
+  dragged and clamped BELOW what the platforms leave clear. A test asserts
+  exactly that (`low.captionMarginV < POSTING_BOTTOM`) so nobody later reads it
+  as a regression.
+
+### `right` and `bottom` are POSITIONS in safe-zones.js, not insets
+
+`guideBox` first returned them as insets, and every reader does
+`1 - box.right` -- so the right band came out **94% wide** and would have shaded
+almost the whole frame. Caught by reading the numbers back out of the bindings,
+not by reading the code. `boxFromInsets` is the reference: it returns
+`(x1 - offX) / drawnW`, a position.
+
+### Seven tests failed, and none was deleted
+
+All seven asserted the guarantee he traded away. Each was updated to the new
+contract with the property that SURVIVES kept: the shade and the design's edge
+span still read ONE box; the clamp and the snap points still honour whatever
+box the preview draws; the box is still DRAWN and never WRITTEN (nothing may
+rewrite a saved caption position); and both boxes still come from
+safe-zones.js rather than a literal. Three probes proven red -- the inset/
+position confusion, a hint that claims safety again, and the silhouette drawn
+from the guide.
 ## The DeenClipped library is its own section, and a duplicate keeps YOUR copy (v3.150.0, 8 Sept 2026)
 
 Youssef, looking at the shipped starter library: "Allah Allah (Muffled) is
