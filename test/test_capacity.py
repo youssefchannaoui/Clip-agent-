@@ -77,6 +77,33 @@ class CapacityTests(unittest.TestCase):
         """One GPU's memory serialises the work whatever the CPU says."""
         self.assertLessEqual(self.plan(cores=32, ram=64.0, gpus=1)["maxConcurrentJobs"], 2)
 
+    def test_a_bigger_model_costs_a_job_slot(self):
+        """medium is roughly twice small's weights, and four of them do not fit.
+
+        The box after the CPX41 resize: 8 cores, a 10G container. Left alone
+        the model would be `small` and four jobs would fit; forcing `medium`
+        (which the compose file does, deliberately) has to cost a slot, or the
+        container OOM killer takes the fourth job mid-render.
+        """
+        small = self.plan(cores=8, ram=10.0, reserved=0.5)
+        self.assertEqual(small["model"], "small")
+        self.assertEqual(small["maxConcurrentJobs"], 4)
+
+        os.environ["WHISPER_MODEL"] = "medium"
+        big = self.plan(cores=8, ram=10.0, reserved=0.5)
+        self.assertEqual(big["model"], "medium")
+        self.assertEqual(big["maxConcurrentJobs"], 3)
+        self.assertEqual(big["ffmpegThreads"], 2, "8 cores across 3 jobs")
+
+    def test_the_small_models_are_costed_exactly_as_they_were(self):
+        """Only medium and larger move the number.
+
+        A machine running base or small must not change its concurrency
+        because this table exists.
+        """
+        for model in ("tiny", "base", "small"):
+            self.assertEqual(cap._gb_per_job(model), cap._GB_PER_JOB, model)
+
     # ── the operator always wins ──
 
     def test_every_value_can_be_overridden(self):

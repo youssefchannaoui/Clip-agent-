@@ -29,9 +29,27 @@ from typing import Any
 _RESERVED_HOST_GB = 2.0
 _RESERVED_CGROUP_GB = 0.5
 # Measured shape of one job: roughly two cores busy between Whisper and ffmpeg,
-# and about a gigabyte and a half resident at peak.
+# and about a gigabyte and a half resident at peak on `small`.
 _CORES_PER_JOB = 2
 _GB_PER_JOB = 1.5
+# A JOB'S FOOTPRINT FOLLOWS THE MODEL, and until the CPX41 resize nothing here
+# knew that: `small` was the only model this box had ever run, so 1.5G was both
+# the measurement and the constant. Forcing `medium` (worker/docker-compose.yml
+# explains why) roughly doubles the weights, and four of those inside a 10G
+# container is the ceiling, not headroom -- which is the container OOM killer
+# rather than a slow queue.
+#
+# Only the LARGER models move the number. base and small keep the measured 1.5,
+# so no machine that runs one of them changes its concurrency because of this.
+_GB_PER_JOB_BY_MODEL = {
+    "medium": 2.5,
+    "large-v2": 4.0,
+    "large-v3": 4.0,
+}
+
+
+def _gb_per_job(model: str) -> float:
+    return _GB_PER_JOB_BY_MODEL.get(str(model or "").strip().lower(), _GB_PER_JOB)
 
 
 def _cgroup_cpu_quota() -> float | None:
@@ -173,7 +191,7 @@ def plan() -> dict[str, Any]:
         concurrency = max(1, int(env_concurrency))
     else:
         by_cpu = cores // _CORES_PER_JOB
-        by_ram = int((ram - reserved) // _GB_PER_JOB)
+        by_ram = int((ram - reserved) // _gb_per_job(model))
         concurrency = max(1, min(by_cpu, by_ram))
         # A GPU serialises on its own memory, so more parallel jobs there buys
         # contention rather than throughput.

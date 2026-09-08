@@ -14,13 +14,37 @@ services:
       WORKER_PORT: "8080"
       WORKER_DATA_DIR: /var/lib/deenclipped
       WORKER_TEMP_DIR: /var/lib/deenclipped/tmp
-      WORKER_MAX_CONCURRENT_JOBS: "1"
-      WHISPER_DEVICE: cpu
-      WHISPER_COMPUTE_TYPE: int8
-      WHISPER_MODEL: small
-      # Two, because the box has two cores. Four oversubscribed them and made
-      # ffmpeg contend with itself while Whisper wanted the same cores.
-      FFMPEG_THREADS: "2"
+      # NOT SET, DELIBERATELY: WORKER_MAX_CONCURRENT_JOBS, FFMPEG_THREADS,
+      # WHISPER_DEVICE and WHISPER_COMPUTE_TYPE.
+      #
+      # capacity.py picks all four from the machine, and an explicit value
+      # always wins -- so these lines, written for a 2-core 3.7G box, survived
+      # the move to 8 cores and 15.2G and pinned the worker to exactly what it
+      # could do before. Measured on the box after the resize, every one of
+      # them read "FORCED": one job at a time and two ffmpeg threads on a
+      # machine with eight cores. The upgrade bought nothing.
+      #
+      # Removing them is not a loosening: on a two-core box capacity.py returns
+      # the same 1 and 2 these forced. It is the difference between a number
+      # that follows the hardware and a number that was true once.
+      #
+      # WHISPER_MODEL *is* forced, and on purpose. capacity.py's threshold for
+      # `medium` is 12G and this container's ceiling is 10G, so left alone it
+      # would pick `small` -- the model CLAUDE.md names, repeatedly, as the
+      # ceiling on Arabic transcription and therefore on the Quran caption sync,
+      # the scoring and the ayah matching. medium is ~1.5G resident per job, so
+      # four of them sit well inside 10G; the 12G threshold is a proxy for
+      # "enough room", not a measurement of this model.
+      #
+      # This is the one setting where the heuristic is more cautious than the
+      # hardware warrants, and the override exists for exactly that (SCALING.md).
+      #
+      # IT COSTS A JOB SLOT, and that is the point rather than a side effect:
+      # capacity.py sizes a job's memory from the model, so forcing `medium`
+      # takes concurrency from four to three inside this 10G ceiling. A fourth
+      # medium job would not be a busier queue, it would be the container's OOM
+      # killer taking one mid-render.
+      WHISPER_MODEL: medium
       # Where the yt-dlp PO-token plugin finds its token server (the
       # bgutil-provider service below). Unset means no tokens, which is how
       # every import from this datacenter IP came to die on YouTube's
@@ -31,7 +55,10 @@ services:
       # called it; every title was the transcript-head fallback.
       OLLAMA_URL: http://ollama:11434
       # Sized to the box, not to preference. See the ollama memory note below.
-      OLLAMA_MODEL: qwen3:1.7b
+      # qwen3:4b since the resize: CLAUDE.md records 1.7b's titling as at its
+      # ceiling and names 4b as the lever, and 4b's 2.4-3.0G measured RSS is
+      # what did not fit under the old 2G cap.
+      OLLAMA_MODEL: qwen3:4b
     volumes:
       - deenclipped-worker-data:/var/lib/deenclipped
     ports:
@@ -39,17 +66,20 @@ services:
     deploy:
       resources:
         limits:
-          # The box has 3.7G. A 10G limit here was not a limit, it was a wish:
-          # nothing was ever capped, so the kernel's global OOM killer did the
-          # capping instead and took whatever it liked -- 42 times, all of them
-          # llama-server, some of them mid-job.
+          # THE CEILINGS MUST SUM TO LESS THAN THE HOST. That is the whole
+          # lesson of the 42 OOM kills: a 10G limit on a 3.7G box was not a
+          # limit, it was a wish, and the kernel's global OOM killer did the
+          # capping instead -- taking llama-server, sometimes mid-job.
+          #
+          # The box is 8 cores / 15.2G, measured. 10 + 3.5 + 0.5 = 14G of
+          # ceilings, leaving 1.2G for the OS and Docker.
           #
           # This is also the number worker/capacity.py sizes itself against --
-          # it reads the cgroup, not the host -- so it decides concurrency, the
-          # Whisper model and the ffmpeg thread count. On a bigger machine raise
-          # WORKER_MEMORY_LIMIT in worker/.env and everything downstream follows
-          # on its own. See SCALING.md.
-          memory: ${WORKER_MEMORY_LIMIT:-2G}
+          # it reads the CGROUP, not the host -- which is why the worker went
+          # on believing it had 2G on a 15.2G machine and would have picked
+          # `base` and one job if the forces above had simply been deleted.
+          # A smaller box overrides it in worker/.env. See SCALING.md.
+          memory: ${WORKER_MEMORY_LIMIT:-10G}
 
   # Local clip ranking and titling. Without this, refine_with_ollama() returns
   # its candidates untouched and every clip is named from a raw transcript
@@ -81,11 +111,11 @@ services:
     deploy:
       resources:
         limits:
-          # qwen3:1.7b is 1.4G on disk and sits near 1.8G loaded. qwen3:4b was
-          # 2.5G on disk and measured at 2.4-3.0G RSS, which does not fit beside
-          # Whisper and ffmpeg on a 3.7G box -- that is what the OOM kills were.
-          # Raise this and OLLAMA_MODEL together if the box ever grows.
-          memory: ${OLLAMA_MEMORY_LIMIT:-2G}
+          # qwen3:4b is 2.5G on disk and measured at 2.4-3.0G RSS. It did not
+          # fit beside Whisper and ffmpeg on the old 3.7G box -- that is what
+          # the OOM kills were -- and it does on this one. 3.5G leaves it real
+          # headroom without eating into the worker's.
+          memory: ${OLLAMA_MEMORY_LIMIT:-3500M}
 
   # Mints YouTube proof-of-origin tokens for yt-dlp. Hetzner's address ranges
   # get YouTube's bot wall -- playability LOGIN_REQUIRED, "Sign in to confirm
