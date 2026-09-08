@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 
@@ -40,22 +42,46 @@ const REAL = 'online.deenclipped.signin';
  * — two tests passed for the wrong reason and two failed against correct code.
  * The same trap this repo already records for PORT, one import deeper.
  */
+/* THE CHILD'S STDOUT IS NOT JUST THIS JSON, and assuming it was made this file
+ * fail on CI and nowhere else. Importing auth.js pulls in store.js, whose boot
+ * block writes its migration lines to stdout -- "[info] Added 9 DeenClipped
+ * starter nasheed(s) to the shared library." on the first run against a data
+ * directory that does not have them yet. JSON.parse then chokes on "[info]".
+ *
+ * It passed locally because the repo's default data directory had been seeded
+ * by an earlier run, so the line was printed once, ever, on a machine nobody
+ * was watching -- and a fresh CI checkout is exactly the first run. That is the
+ * worst shape a red branch can have.
+ *
+ * So the payload is DELIMITED and everything around it ignored, and the child
+ * gets its OWN data directory: this test is about auth.js's config shape and
+ * has no business writing into the repo's data dir, which is also what made it
+ * order-dependent. */
+const MARK = '<<<APPLE-JSON>>>';
 function page(env) {
   const script = `
     const auth = await import(${JSON.stringify(new URL('../src/auth.js', import.meta.url).href)});
-    process.stdout.write(JSON.stringify({
+    process.stdout.write(${JSON.stringify(MARK)} + JSON.stringify({
       html: auth.loginPage({ returnTo: '/app' }),
       providers: auth.publicConfig(),
-    }));`;
+    }) + ${JSON.stringify(MARK)});`;
   const clean = { ...process.env };
   for (const key of Object.keys(clean)) {
     if (key.startsWith('APPLE_SIGNIN_') || key.startsWith('GOOGLE_SIGNIN_')) delete clean[key];
   }
-  const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
-    env: { ...clean, APP_SESSION_SECRET: 'x'.repeat(40), ...env },
-    encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-  });
-  return JSON.parse(out);
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dc-apple-'));
+  try {
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      env: { ...clean, APP_SESSION_SECRET: 'x'.repeat(40), DATA_DIR: dataDir, ...env },
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const start = out.indexOf(MARK);
+    const end = out.lastIndexOf(MARK);
+    assert.ok(start > -1 && end > start, `the child printed no payload:\n${out.slice(0, 400)}`);
+    return JSON.parse(out.slice(start + MARK.length, end));
+  } finally {
+    try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch {}
+  }
 }
 
 const APPLE_FULL = {
