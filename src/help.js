@@ -96,6 +96,28 @@ export const CATEGORIES = Object.freeze([
         ],
       },
       {
+        id: 'clip-brief',
+        title: 'Telling it what to look for',
+        summary: 'The first step of the job panel is an optional note: name a subject and the clipper looks for it.',
+        // No image on purpose: every capture in this centre predates this step,
+        // and a screenshot that does not show what the article describes
+        // teaches the opposite of the truth.
+        steps: [
+          'Paste a link and press **Start job**. The first question is "What would you like clipped?".',
+          'Name a SUBJECT, not an instruction — "repentance and mercy", "the story about his mother". The clipper looks for what you named in what was actually said.',
+          'Put quotes around words that must appear together, like "night prayer", if the exact phrase matters.',
+          'Or leave it empty and press Continue. That is the normal path, and the clipper picks the strongest moments on its own.',
+          'The review step near the end shows what it is looking for, so you can check it before spending anything.',
+        ],
+        notes: [
+          'It RANKS, it never filters. Moments that mention what you asked for go first; you still get the number of clips you asked for.',
+          'If the lecture never covers it, you are told so rather than quietly handed clips about something else.',
+          'A note like "the good bits" names no subject, so it steers nothing. The app says that too.',
+          'It steers WHICH moments are chosen, never how they look. Captions, style and the nasheed are the steps after it.',
+          'A "more clips" run and a retry of the same lecture keep looking for the same thing.',
+        ],
+      },
+      {
         id: 'upload-mp4',
         title: 'Upload your own file',
         summary: 'For lectures that are not on YouTube, or a link that will not download.',

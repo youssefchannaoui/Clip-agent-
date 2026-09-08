@@ -515,10 +515,21 @@
     };
     var rows = [];
     var current = DATA && DATA.billing && DATA.billing.current;
+    // First, because it is the first question and because it is the one thing
+    // on this summary that changes WHICH clips come back rather than how they
+    // look. Drawn even when empty: silence would read as the step not having
+    // happened, and "Anything worth clipping" is the honest description of
+    // what an empty brief actually does.
+    var brief = String(UI.jobBrief || '').trim();
+    // A non-breaking space: the value is long enough to squeeze the label
+    // column, and "Looking" / "for" on two lines reads as a broken row.
+    rows.push(Object.assign({ label: 'Looking\u00a0for' },
+      brief ? value(brief.length > 60 ? brief.slice(0, 57) + '\u2026' : brief, 'gold', jobStepNo('brief'))
+        : value('Anything worth clipping', '', jobStepNo('brief'))));
     var cost = Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate));
     if (job.durationKnown) {
       rows.push(Object.assign({ label: 'From the lecture' },
-        value(humanDuration(job.end - job.start) + ' of ' + humanDuration(job.durationSec), '', 2)));
+        value(humanDuration(job.end - job.start) + ' of ' + humanDuration(job.durationSec), '', jobStepNo('trim'))));
     }
     var settings = (DATA && DATA.clipSettings) || {};
     var chosen = Array.isArray(settings.clipLengthBands) ? settings.clipLengthBands.length : 0;
@@ -526,7 +537,7 @@
     // empty list -- so it is stated, not flagged. The old "Pick at least one"
     // blocked every new account on a requirement the pipeline never had.
     rows.push(Object.assign({ label: 'Clip lengths' },
-      chosen ? value(chosen + ' of 4 chosen', '', 3) : value('Any length', '', 3)));
+      chosen ? value(chosen + ' of 4 chosen', '', jobStepNo('lengths')) : value('Any length', '', jobStepNo('lengths'))));
     if (current && !current.unlimited && isFinite(Number(current.totalAvailable))) {
       var left = Number(current.totalAvailable);
       rows.push(Object.assign({ label: 'Balance afterwards' }, left >= cost
@@ -537,26 +548,26 @@
     if (tpl) {
       var locked = Boolean(tpl.pro) && !planAllowsProTemplates(DATA);
       rows.push(Object.assign({ label: 'Style' },
-        value(tpl.name + (locked ? ' \u00b7 Pro' : ''), locked ? 'gold' : '', 4)));
+        value(tpl.name + (locked ? ' \u00b7 Pro' : ''), locked ? 'gold' : '', jobStepNo('style'))));
       // The one behavioural difference between the kinds, said where the
       // choice is actually being made.
       rows.push(Object.assign({ label: 'Captions from' },
-        value(tpl.captionMode === 'quran' ? 'The Quran corpus' : 'What was said', '', 4)));
+        value(tpl.captionMode === 'quran' ? 'The Quran corpus' : 'What was said', '', jobStepNo('style'))));
       // Said here because a wrong guess is invisible until the clips arrive
       // captioned in the wrong script.
       var jobLangNames = { en: 'English', ar: 'Arabic', ur: 'Urdu', auto: 'Auto-detect' };
       var jobLangPick = UI.jobLang || (tpl.captionMode === 'quran' ? 'ar' : 'en');
       rows.push(Object.assign({ label: 'Spoken language' },
-        value(jobLangNames[jobLangPick] || 'Auto-detect', '', 1)));
+        value(jobLangNames[jobLangPick] || 'Auto-detect', '', jobStepNo('kind'))));
       // "Nasheed, ducked" over an empty library was the last step's lie: the
       // refusal ("Music is required on every clip") arrived only on Generate.
       var musicWanted = tpl.captionMode !== 'quran' && UI.jobMusic !== false;
       var haveTracks = ((DATA && DATA.tracks) || []).length > 0;
       rows.push(Object.assign({ label: 'Underneath' },
-        tpl.captionMode === 'quran' ? value('Nothing \u2014 recitation', '', 6)
-          : !musicWanted ? value('Nothing \u2014 switched off', '', 6)
-          : !haveTracks ? value('No nasheed uploaded yet', 'warn', 6)
-          : value('Nasheed, ducked', '', 6)));
+        tpl.captionMode === 'quran' ? value('Nothing \u2014 recitation', '', jobStepNo('sound'))
+          : !musicWanted ? value('Nothing \u2014 switched off', '', jobStepNo('sound'))
+          : !haveTracks ? value('No nasheed uploaded yet', 'warn', jobStepNo('sound'))
+          : value('Nasheed, ducked', '', jobStepNo('sound'))));
     }
     // Where this job would land, from the queue as it stands right now.
     var waiting = ((DATA && DATA.projects) || []).filter(function (project) {
@@ -587,6 +598,13 @@
    * other, and the cost last because it is the sum of them.
    */
   var JOB_STEPS = [
+    // OPTIONAL, and deliberately first. Every other step asks how the clips
+    // should LOOK; this one asks what they should be ABOUT, and that is the
+    // question somebody has in mind at the moment they paste a link -- asked
+    // after six styling questions it reads as an afterthought. Nothing blocks
+    // on it: Continue is enabled with the box empty, and an empty box takes
+    // exactly the decisions this product took before the step existed.
+    { id: 'brief', title: 'What would you like clipped?', hint: 'Optional. Name a subject and the clipper looks for it. Leave it empty to take the best moments.' },
     { id: 'kind', title: 'What are you clipping?', hint: 'This decides which styles fit and whether a nasheed belongs underneath.' },
     { id: 'trim', title: 'How much of the lecture?', hint: 'This is the part you pay for. Drag either handle.' },
     { id: 'lengths', title: 'How long should the clips be?', hint: 'Pick any. Moments are cut to fit the lengths you allow.' },
@@ -603,6 +621,19 @@
 
   function jobStepId() {
     return JOB_STEPS[jobStepIndex() - 1].id;
+  }
+
+  /**
+   * Which step number a step ID is, 1-based.
+   *
+   * The review's rows used to carry HARDCODED numbers -- 2 for the trim, 4 for
+   * the style -- so inserting a step at the front would have repointed every
+   * one of them at the question after the one it names, silently. The list is
+   * the single source of the order; nothing else may hold a copy of it.
+   */
+  function jobStepNo(id) {
+    for (var i = 0; i < JOB_STEPS.length; i += 1) if (JOB_STEPS[i].id === id) return i + 1;
+    return 1;
   }
 
   /**
@@ -7514,6 +7545,19 @@
         + ' background: linear-gradient(90deg, var(--dc-n-c9a468, #C9A468), var(--dc-gold-lit, #F0D6A6));'
         + ' transition: width .34s cubic-bezier(.2,.75,.3,1);'
         + ' width: ' + ((jobStepIndex() / JOB_STEPS.length) * 100).toFixed(2) + '%;',
+      jobIsStepBrief: jobStepId() === 'brief',
+      // What the person typed, and the three things the step needs to draw
+      // itself. The examples FILL the box rather than merely suggesting -- a
+      // chip that does nothing is a control that does nothing (invariant 9),
+      // and the DeenAI screen already settled this the same way.
+      jobBrief: String(UI.jobBrief || ''),
+      jobBriefMax: 400,
+      jobBriefExamples: [
+        'The parts about repentance and mercy',
+        'Any story he tells',
+        'Advice for young Muslims',
+        'Where he talks about the hereafter',
+      ],
       jobIsStepKind: jobStepId() === 'kind',
       jobIsStepTrim: jobStepId() === 'trim',
       jobIsStepLengths: jobStepId() === 'lengths',
@@ -7567,6 +7611,9 @@
         setUI({ jobStep: Math.min(JOB_STEPS.length, jobStepIndex() + 1) });
       },
       jobBack: function (e) { stop(e); setUI({ jobStep: Math.max(1, jobStepIndex() - 1) }); },
+      // Capped here as well as in the textarea, because this is also what an
+      // example chip writes and what a paste can carry past a maxlength.
+      onJobBrief: function (text) { UI.jobBrief = String(text || '').slice(0, 400); },
       // Every answered step is editable from the review, which is the point of
       // showing the summary before anything is spent.
       jobEditSteps: JOB_STEPS.slice(0, JOB_STEPS.length - 1).map(function (step, i) {
@@ -7650,12 +7697,12 @@
       // and left behind it pinned activeTemplate everywhere -- the Templates
       // screen preview stopped following the selection because a stale job
       // choice silently outranked it.
-      closeJob: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, volumeDraft: null }); },
+      closeJob: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, jobBrief: '', volumeDraft: null }); },
       runGenerate: function (e) {
         stop(e);
         if (!job || UI.generating) return;
-        if (jobGate === 'nasheed') { setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, volumeDraft: null, screen: 'music' }); return; }
-        if (jobGate === 'plan') { setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, volumeDraft: null, screen: 'tokens' }); return; }
+        if (jobGate === 'nasheed') { setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, jobBrief: '', volumeDraft: null, screen: 'music' }); return; }
+        if (jobGate === 'plan') { setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, jobBrief: '', volumeDraft: null, screen: 'tokens' }); return; }
         UI.jobError = null;
         setUI({ generating: true });
         global.StudioAdapter.onGenerate(job.url, job.durationKnown
@@ -7666,6 +7713,10 @@
             // The chip row was cosmetic before this: a picked nasheed was
             // never sent, so every job shuffled the whole library anyway.
             musicTrackId: (jobMusicOn && UI.jobTrackId) || '',
+            // The optional first step. Empty for everyone who skipped it, and
+            // the server reads an empty string as "no brief" rather than as a
+            // brief that matches nothing.
+            clipBrief: String(UI.jobBrief || '').trim(),
           });
       },
       // The panel stays mounted while an error is showing. It used to render
@@ -7678,7 +7729,7 @@
       genGate: jobGate,
       // The sound step's own statement of the same fact, with its way out.
       jobNoNasheed: jobMusicOn && !tracks.length,
-      jobGoNasheed: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, volumeDraft: null, screen: 'music' }); },
+      jobGoNasheed: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, jobBrief: '', volumeDraft: null, screen: 'music' }); },
       genIcon: UI.generating ? 'ph ph-circle-notch' : 'ph-fill ph-sparkle',
       genIconStyle: 'font-size: 15px;' + (UI.generating ? ' animation: dcSpin 1.1s linear infinite;' : ''),
       // A real percentage while bytes move, a sweep while the server thinks.

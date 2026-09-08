@@ -277,12 +277,34 @@ export function jobLanguage(options = {}) {
   return JOB_LANGUAGES.has(picked) ? picked : config.aiLanguage;
 }
 
+/**
+ * The optional note from the job panel's first step: what this person actually
+ * wants clipped out of this lecture.
+ *
+ * ONE definition, here, because three things have to agree about it -- the
+ * record it is stored on, the settings the worker reads, and the more-clips
+ * run that reads it back off the project a week later. A second copy of the
+ * cap is how a brief that saved fine comes back truncated somewhere else.
+ *
+ * Capped rather than refused. It is an optional creative note, the textarea
+ * enforces the same limit, and failing a whole import over a long one would
+ * be the wrong trade; the worker caps again independently, because a payload
+ * can arrive from anywhere.
+ */
+export const CLIP_BRIEF_MAX = 400;
+export function clipBrief(options = {}) {
+  return String(options.clipBrief || '').replace(/\s+/g, ' ').trim().slice(0, CLIP_BRIEF_MAX);
+}
+
 function sharedSettings(user, options = {}) {
   return {
     ...clipSettings(user), ...musicSettings(user),
     musicEnabled: options.musicEnabled !== false,
     model: config.aiModel, device: config.aiDevice, computeType: config.aiComputeType,
     task: config.aiTask, language: jobLanguage(options), maxSourceMinutes: config.maxSourceMinutes,
+    // Steers which moments are chosen, never how they are rendered. Empty for
+    // every job that skipped the step, which is what makes the step optional.
+    clipBrief: clipBrief(options),
     keepSourceFiles: config.keepSourceFiles, ollamaUrl: config.ollamaUrl, ollamaModel: config.ollamaModel,
   };
 }
@@ -675,6 +697,9 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     // Persisted so a later "more clips" run transcribes in the same language
     // the person chose, rather than re-guessing from the greetings.
     language: jobLanguage(options) || null,
+    // Persisted so a "more clips" run and a retry look for the same thing the
+    // first run was asked for, rather than reverting to the general scoring.
+    clipBrief: clipBrief(options) || null,
     sourceStartSec: sourceRange.startSec || 0, sourceEndSec: sourceRange.endSec || null,
     sourceTitle: sourceMeta?.title || null, sourceDurationSec: sourceMeta?.durationSec || null,
     // Falls back to the URL's own poster: the dashboard did not send sourceMeta,
@@ -1878,14 +1903,14 @@ export function queueMoreClips(projectId, requestedCount = 8) {
       : {}),
     background: jobBackground(project, owner, { remote: true }),
     transcript: { objectKey: project.transcriptObjectKey }, existingRanges,
-    template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner, { language: project.language }), clipsPerVideo: count, renderQuality: 'final' },
+    template, musicTracks: remoteMusicTracks(tracks, owner.id), settings: { ...sharedSettings(owner, { language: project.language, clipBrief: project.clipBrief }), clipsPerVideo: count, renderQuality: 'final' },
     callbackUrl: '',
   } : {
     mode: 'more_clips', id: moreId, projectId: project.id, projectTitle: project.title, requestedCount: count,
     background: jobBackground(project, owner),
     sourceFile: project.sourceFile, transcriptFile: project.transcriptFile, transcriptSegments, existingRanges,
     outputDir, resultPath, ffmpeg: config.ffmpegPath, ffprobe: config.ffprobePath,
-    template, musicTracks: tracks, settings: { ...sharedSettings(owner, { language: project.language }), clipsPerVideo: count, renderQuality: 'final' },
+    template, musicTracks: tracks, settings: { ...sharedSettings(owner, { language: project.language, clipBrief: project.clipBrief }), clipsPerVideo: count, renderQuality: 'final' },
   };
   const file = path.join(dir, 'job.json');
   fs.writeFileSync(file, JSON.stringify(payload, null, 2));
@@ -2367,7 +2392,13 @@ export function retryProject(projectId) {
   const template = projectTemplate(project, projectOwner); const tracks = workerMusicTracks(projectOwner);
   if (!template?.id) throw new Error('Select a template before retrying.');
   if (!tracks.length) throw new Error('Upload at least one nasheed before retrying.');
-  job.template = template; job.musicTracks = tracks; job.settings = sharedSettings(projectOwner);
+  // The project's own choices, not the account defaults. This passed NO
+  // options, so a self-hosted retry silently re-transcribed in the configured
+  // default language rather than the one the person pinned on the wizard --
+  // the project stores `language` for exactly this and nothing was reading it
+  // back. The brief is stored for the same reason and joins it here.
+  job.template = template; job.musicTracks = tracks;
+  job.settings = sharedSettings(projectOwner, { language: project.language, clipBrief: project.clipBrief });
   job.existingRanges = existingRangesFor(projectId);
   fs.writeFileSync(jobFile(projectId), JSON.stringify(job, null, 2));
   fs.rmSync(resultFile(projectId), { force: true });

@@ -2218,6 +2218,11 @@ async function route(req, res, url) {
           musicEnabled: body.musicEnabled !== false,
           musicTrackId: String(body.musicTrackId || ''),
           language: String(body.language || ''),
+          // The wizard's first step. Optional, and the same field on every way
+          // in -- an uploaded MP4 that skipped it and a pasted link that used
+          // it must reach the worker through one path, or the step would work
+          // on one route and be silently dropped on the other.
+          clipBrief: String(body.clipBrief || ''),
           backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds,
           publishTo: Array.isArray(body.publishTo) ? body.publishTo : null,
           sourceKind: 'object_storage', originalFileName: body.fileName || '', displayUrl: `Uploaded file · ${body.fileName || 'video'}`,
@@ -2239,7 +2244,7 @@ async function route(req, res, url) {
     const sourceMeta = Array.isArray(body.sourceMeta) ? body.sourceMeta : [];
     const results = [];
     for (const source of urls) {
-      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, musicTrackId: String(body.musicTrackId || ''), templateId: String(body.templateId || ''), backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds, language: String(body.language || ''), publishTo: Array.isArray(body.publishTo) ? body.publishTo : null }) }); }
+      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, musicTrackId: String(body.musicTrackId || ''), templateId: String(body.templateId || ''), backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds, language: String(body.language || ''), publishTo: Array.isArray(body.publishTo) ? body.publishTo : null, clipBrief: String(body.clipBrief || '') }) }); }
       catch (error) { results.push({ url: source, error: error.message }); }
     }
     return json(res, 200, { results, sourceRange });
@@ -2262,6 +2267,11 @@ async function route(req, res, url) {
         publishTo: String(req.headers['x-publish-to'] || '').split(',').map(v => v.trim()).filter(Boolean).length
           ? String(req.headers['x-publish-to']).split(',').map(v => v.trim()).filter(Boolean) : null,
         language: String(req.headers['x-source-language'] || ''),
+        // A header is ASCII only, and a brief may be Arabic, so this one is
+        // percent-encoded by whoever sends it. decodeURIComponent throws on a
+        // malformed sequence -- a bad header must not fail an upload, so the
+        // raw value stands rather than the request dying over an optional note.
+        clipBrief: (() => { const raw = String(req.headers['x-clip-brief'] || ''); try { return decodeURIComponent(raw); } catch { return raw; } })(),
         sourceRange: { startSec: sourceStartSeconds, endSec: sourceEndSeconds },
         sourceMeta: { title: upload.title, durationSec: durationSec || null, thumbnail: '' },
         sourceKind: 'upload', originalFileName: upload.fileName, uploadedInputFile: upload.filePath,

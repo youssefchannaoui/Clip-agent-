@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1798 JS + 770 Python**
+- `npm test` and `npm run check` must pass. Currently **1812 JS + 801 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -14248,3 +14248,161 @@ own ayah matches so the model knows before it suggests anything. The rules are
 stated last, immediately before the data — the placement this repo has measured
 twice as the only one that lands — and the tool ceiling is what makes them
 safe rather than hopeful: DeenAI can navigate and draft, and nothing else.
+
+## The job panel asks what you want clipped (v3.152.0, 8 Sept 2026)
+
+Youssef: "we're gonna add one more step ... in the beginning ... it's an
+optional stage where you can describe what you would like the clipper to do.
+So a lot of AI clips do this in the beginning where they ask you what you
+wanted to do ... So then I can specifically find specific areas or things that
+they've said."
+
+A free-text note as the wizard's FIRST step, seven steps becoming eight. It is
+the only question in the panel that changes WHICH clips come back rather than
+how they look, which is why it is first and why it is the first row of the
+review.
+
+### The ranking is arithmetic, and that is the load-bearing decision
+
+`refine_with_ollama` is handed the brief too, but this file's record on
+qwen3:1.7b is unambiguous: it closes arrays early, it does not reliably obey a
+negative instruction, and it invents. Steering clip SELECTION on a model that
+behaves like that would make "clip the parts about repentance" a coin toss. So
+the ranking is `apply_brief` -- coverage of the brief's terms over each
+candidate's transcript, computed in code, working with no Ollama at all -- and
+the model's job is only to write about moments the arithmetic has surfaced.
+
+Measured on a five-subject lecture, real `build_candidates`, real
+`select_candidates`, the picks reported by which brief terms they contain:
+
+    'repentance and forgiveness'  ->  54-117s cov 1.00 (repentance+forgiveness)
+    'the story about the mother'  ->   9-54 s cov 0.50 (mother)
+    'death and the grave'         ->  81-144s cov 1.00 (death+grave)
+    '"halal earning" and rizq'    ->  18-81 s cov 1.00 (halal earning+rizq)
+    'fasting in Ramadan'          ->  nothing matched, clips still delivered
+    'the good bits'               ->  no subject named, and it says so
+
+**Coverage, never frequency.** A clip saying "repentance" eight times must not
+out-rank one saying "repentance" and "mercy" once each when the brief asked for
+both: the second answers more of the question. Frequency would reward a
+speaker's verbal tic. **A quoted phrase must be ADJACENT**, which is what makes
+quoting mean something rather than being decoration.
+
+### IT IS A SORT KEY AND NEVER THE SCORE, and measuring is what forced that
+
+The first cut added the bonus to `candidate.score` and produced clips scored
+**140**. That number is not cosmetic: the review deck shows it to the customer,
+and `automationSettings` compares a MINIMUM SCORE against it -- so a brief
+would have made every matching clip clear any auto-approve threshold ever set.
+`score_candidate` clamps to 0-100 and real candidates pile up ON that ceiling,
+which is also why the bonus is decisive at all.
+
+`Candidate.brief_coverage` and `rank_key()` now answer the second question
+separately, and `rank_key` is read at all three ordering sites -- the two sorts
+inside `select_candidates` and `refine_with_ollama`'s shortlist, so the model
+reads the windows that answer the brief rather than whatever scored highest.
+With no brief every coverage is 0 and the key IS the score.
+
+**"OPTIONAL" IS A CLAIM ABOUT THE PIPELINE, NOT ABOUT A SCREEN**, and it is
+tested as one: with an empty brief every candidate's score, reasons and order
+come back byte-identical, the payload omits the field entirely, and
+`job.settings.clipBrief` is `''` rather than absent -- the worker must not have
+to tell a missing key from a bug.
+
+### It RANKS, it never filters
+
+A brief the lecture barely touches must not return an empty run. The matches go
+first, the best of the rest follow, and a brief that matched NOTHING says so
+through a warning rather than quietly handing back clips about something else --
+which is the failure this whole feature exists to avoid and is indistinguishable
+from it not working.
+
+### Two more things the measurement disproved
+
+- **The suffix fold was a stemmer and had to stop being one.** Folding "-ing"
+  turns "evening" into "even", a word nearly every lecture says, so a brief
+  about the evening prayer would have matched the whole lecture -- noise
+  wearing the shape of a signal. Folding "-ss" turned "forgiveness" into
+  "forgivenes", which reached the customer in the "matches your brief" line.
+  Plurals only now. Both sides fold identically, so a suffix left alone costs a
+  MISS ("churches" not finding "church") and one folded wrongly costs a clip
+  about the wrong thing; this errs entirely towards misses.
+- **Quality words are not subjects.** "the good bits" yielded the term "good"
+  and ranked the lecture on wherever the speaker happened to say it. They are
+  stopwords, which is what lets `brief_warning` ask for a subject instead.
+
+### The brief is the one field in a job a CUSTOMER TYPES
+
+So it is the one place someone can close the prompt's fence and have what
+follows read as our instructions -- the hole measured on the box in v3.144.1,
+where a question carrying "END UNTRUSTED" was obeyed. `fence_safe` neutralises
+every marker this prompt uses; the text still travels, it simply cannot escape.
+**The lecture title goes through it too**: that is a YouTube title a stranger
+wrote, and it had been fenced by convention alone since the day it was added.
+
+### Where it lives, and what it cost
+
+- **`clipBrief()` in local-engine.js is the ONE definition** -- normalise, cap
+  at 400. Three things must agree about it (the record, the worker settings,
+  and a more-clips run reading it back a week later), and a second copy of the
+  cap is how a brief that saved fine comes back truncated somewhere else. A
+  test compares the textarea's cap against it.
+- **Stored on the project**, so a "more clips" run and a retry keep looking for
+  the same thing. That retry path passed NO options, so it had silently been
+  losing the PINNED LANGUAGE too since the wizard added one; both are read back
+  now.
+- **The panel is host-rendered into `#studioJobSlot`**, the same mount the
+  kind/style/background blocks already use, so it lands on the phone's
+  full-height sheet as well and cost no design re-import. Built ONCE and
+  updated in place: a rebuild per paint eats the caret, the selection and
+  anything half-typed, which is the trap that destroyed the paste box and is
+  at its worst on a textarea. Measured: three consecutive `paintStudio()` calls
+  leave the value and the focus alone.
+- **The review's step numbers were HARDCODED** -- 2 for the trim, 4 for the
+  style -- so inserting a step at the front would have repointed every one of
+  them at the question AFTER the one it names, silently. `jobStepNo(id)` reads
+  the list that defines the order, and the test DRIVES each row's Edit rather
+  than grepping for a literal (a regex could not tell a step argument from
+  `brief.slice(0, 57)`, and the first version of that test proved it by failing
+  on exactly that).
+
+### Verified in a browser, and three probes that lied first
+
+At 1440/1280/1100 in both themes and at 390: one left edge, no overflow, no
+page scroll, **0 page errors**, 44px chips on the phone, and contrast measured
+from the PIXELS -- note 5.63 dark / 5.74 light, chips 7.44 / 7.08.
+
+**A DOM ground-walk cannot measure this panel and was wrong twice**: it read an
+honest 5.6 as a failing **3.35**, then, once alpha was composited, as **1.01**.
+The panel's grounds are translucent and its stack has no opaque layer the walk
+can stop at. Screenshot the element, hide the text, screenshot again, take the
+mean as the ground -- decoded through a canvas in the page, so no image library
+is needed.
+
+**THE THEME FOLLOWS `prefers-color-scheme` WHEN NOTHING IS SAVED, and
+Playwright's default is LIGHT.** The first run's four "dark" captures were the
+light theme under a dark filename. Set `dcTheme` in localStorage and READ THE
+BODY CLASS BACK before measuring anything.
+
+**A first cut of the phone CSS was inert and looked load-bearing**: it set
+`flex-wrap: nowrap` on a row whose wrap is an INLINE style, which no stylesheet
+outranks. Removed rather than given an `!important` -- three rows of 44px chips
+is the right answer on a phone anyway, and a hidden horizontal scroller with no
+affordance hides options.
+
+**18 red probes, all proven, and three came back GREEN first** -- each a real
+gap in the tests rather than in the code: a stopword probe that removed one of
+two guards and left the other doing the work; an ordering probe whose fixture
+asked for as many clips as it offered, so it could only see the second of
+`select_candidates`' two sorts; and a hardcoded-step-number probe whose test
+had no template in its fixture and therefore SILENTLY SKIPPED the very row it
+attacked.
+
+### Not proven, said plainly
+
+**Nothing here has been through the real Ollama on the box.** The arithmetic,
+the fence and the payload are driven by test and by the browser; what
+qwen3:1.7b actually does with the CLIP REQUEST section is unknown until a
+lecture is imported with a brief on it. Worker change, so `deploy-worker.yml`
+ships it on push; `deploy-worker.yml`'s `diagnose` input is the way to read the
+prompt back off the running container.

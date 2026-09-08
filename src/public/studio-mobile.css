@@ -852,4 +852,17 @@
   .dcm-code { margin-top: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
   .dcm-said { margin: 9px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--dcm-ok); }
   .dcm-said.is-bad { color: var(--dcm-bad); }
+
+  /* The job panel's own first step, which is the design export's overlay and
+     therefore the STAGE -- night in both themes, like the rest of that sheet.
+     Only the touch target moves here: the example chips are drawn at the
+     desktop's 30px, and measured on a phone that is a control a thumb cannot
+     reliably hit. The panel's own inline styles set padding, not height, so a
+     min-height reaches them without an !important. */
+  #studioJobBrief #jobBriefEx button { min-height: 44px; }
+  /* They WRAP on a phone, and that is left alone deliberately. A first cut
+     made the row scroll horizontally; it was inert -- the painter sets
+     flex-wrap inline, which no stylesheet outranks -- and a hidden scroller
+     with no affordance hides options anyway. Three rows of 44px chips is
+     what a phone should show. */
 }

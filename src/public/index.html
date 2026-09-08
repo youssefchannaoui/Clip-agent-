@@ -6092,6 +6092,105 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         n.style.animationDelay=(0.05+i*0.045).toFixed(3)+'s';
       });
     }
+    /* ── The optional first step: what would you like clipped? ──────────
+       Host-rendered into the panel's own step slot, exactly like the
+       kind/style/background blocks beside it, because adding a section to the
+       design export regenerates every hashed class name in the app for one
+       textarea. It docks in #studioJobSlot, which is the same mount those
+       three already use, so it lands correctly on the phone's full-height
+       sheet as well as on the desktop panel. */
+    const jobBriefEl=document.createElement('div');jobBriefEl.id='studioJobBrief';
+    jobBriefEl.setAttribute('data-host-owned','');
+    function paintJobBrief(vals){
+      alive(jobBriefEl);
+      const open=Boolean(StudioAdapter.ui.job);
+      if(!open||!vals.jobIsStepBrief){jobBriefEl.classList.add('hide');jobBriefEl.dataset.enteredAs='';return}
+      const slot=$('#studioJobSlot');
+      jobBriefEl.classList.toggle('hide',!slot);
+      if(!slot)return;
+      if(jobBriefEl.parentElement!==slot)slot.appendChild(jobBriefEl);
+      const max=Number(vals.jobBriefMax)||400;
+      /* Built ONCE. Rebuilding on every paint would destroy the textarea on
+         every state poll -- the caret, the selection and anything half-typed
+         with it. That is the fault the whole host-panel rule exists for, and
+         a textarea is where it is most obvious. */
+      if(jobBriefEl.dataset.built!=='1'){
+        jobBriefEl.dataset.built='1';
+        jobBriefEl.style.cssText='display:block;margin:14px 0 2px';
+        jobBriefEl.innerHTML=
+          '<label style="display:block;position:relative">'
+            +'<textarea id="jobBriefBox" rows="3" maxlength="'+max+'" '
+              +'placeholder="e.g. the parts about repentance, or the story he tells about his mother" '
+              +'style="width:100%;box-sizing:border-box;resize:vertical;min-height:78px;padding:12px 13px 26px;'
+              +'border-radius:11px;border:1px solid var(--dc-line, #26262A);background:var(--dc-n-131315, #131315);'
+              +'color:var(--dc-ink, #F2F2F4);font:400 13.5px/1.5 Outfit,Inter,sans-serif;outline:none;'
+              +'transition:border-color .16s ease, box-shadow .16s ease"></textarea>'
+            +'<span id="jobBriefCount" style="position:absolute;right:11px;bottom:9px;font:500 10.5px Outfit,Inter,sans-serif;'
+              +'color:var(--dc-ink-faint, #6E6E76);pointer-events:none;font-variant-numeric:tabular-nums"></span>'
+          +'</label>'
+          /* The examples FILL the box. A chip that only suggests wording is a
+             control that does nothing, and this row is also the fastest way to
+             teach what a brief is FOR -- a subject, not an instruction. */
+          +'<div id="jobBriefEx" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:10px"></div>'
+          +'<p id="jobBriefNote" style="margin:11px 0 0;font:400 11.5px/1.5 Outfit,Inter,sans-serif;'
+            +'color:var(--dc-ink-dim, #8B8B93)"></p>';
+        const box=jobBriefEl.querySelector('#jobBriefBox');
+        box.addEventListener('input',()=>{
+          StudioAdapter.bindings(DATA).onJobBrief(box.value);
+          paintBriefState();
+        });
+        box.addEventListener('focus',()=>{box.style.borderColor='rgba(217,180,120,.55)';box.style.boxShadow='0 0 0 3px rgba(217,180,120,.10)'});
+        box.addEventListener('blur',()=>{box.style.borderColor='';box.style.boxShadow=''});
+      }
+      const box=jobBriefEl.querySelector('#jobBriefBox');
+      const wanted=String(vals.jobBrief||'');
+      /* Only when they differ, or setting .value on every paint would move the
+         caret to the end while somebody is editing the middle of a sentence. */
+      if(box.value!==wanted)box.value=wanted;
+      const exRow=jobBriefEl.querySelector('#jobBriefEx');
+      const examples=vals.jobBriefExamples||[];
+      if(exRow.dataset.sig!==examples.join('|')){
+        exRow.dataset.sig=examples.join('|');
+        exRow.innerHTML='';
+        for(const text of examples){
+          const chip=document.createElement('button');
+          chip.type='button';chip.textContent=text;chip.dataset.fill=text;
+          chip.style.cssText='padding:6px 11px;border-radius:999px;cursor:pointer;font:500 11.5px Outfit,Inter,sans-serif;'
+            +'border:1px solid var(--dc-line, #26262A);background:var(--dc-n-131315, #131315);color:var(--dc-ink-soft, #A2A2AA);'
+            +'transition:border-color .14s ease, color .14s ease';
+          chip.onclick=e=>{
+            e.preventDefault();e.stopPropagation();
+            const b=jobBriefEl.querySelector('#jobBriefBox');
+            b.value=text;StudioAdapter.bindings(DATA).onJobBrief(text);b.focus();paintBriefState();
+          };
+          exRow.appendChild(chip);
+        }
+      }
+      paintBriefState();
+      if(jobBriefEl.dataset.enteredAs!=='brief'){jobBriefEl.dataset.enteredAs='brief';slideIn(jobBriefEl);stagger(jobBriefEl,'#jobBriefEx button')}
+    }
+    /* Everything that changes as you type, applied in place. Kept out of the
+       build above so a keystroke never rebuilds the textarea it came from. */
+    function paintBriefState(){
+      const box=jobBriefEl.querySelector('#jobBriefBox');
+      if(!box)return;
+      const text=box.value.trim(),len=box.value.length,max=Number(box.maxLength)||400;
+      const count=jobBriefEl.querySelector('#jobBriefCount');
+      /* Silent until it starts to matter. A counter on an empty optional box
+         reads as a requirement. */
+      count.textContent=len>max-120?len+' / '+max:'';
+      count.style.color=len>max-25?'var(--dc-n-ff5566, #FF5566)':'var(--dc-ink-faint, #6E6E76)';
+      const note=jobBriefEl.querySelector('#jobBriefNote');
+      note.textContent=text
+        ? 'Moments that mention this are ranked first. If the lecture never covers it, you still get its strongest moments and we say so.'
+        : 'Skip this and the clipper picks the strongest moments on its own.';
+      for(const chip of jobBriefEl.querySelectorAll('#jobBriefEx button')){
+        const on=chip.dataset.fill===text;
+        chip.style.borderColor=on?'rgba(240,214,166,.9)':'var(--dc-line, #26262A)';
+        chip.style.color=on?'var(--dc-gold-lit, #F0D6A6)':'var(--dc-ink-soft, #A2A2AA)';
+        chip.style.background=on?'rgba(217,180,120,.14)':'var(--dc-n-131315, #131315)';
+      }
+    }
     const jobTypeEl=$('#studioJobType');
     function paintJobType(vals){
       alive(jobTypeEl);
@@ -7956,6 +8055,11 @@ StudioAdapter.onProbeSource=async url=>{try{
       if(opts&&opts.templateId)body.templateId=opts.templateId;
       /* One chosen nasheed for this job; absent means rotate the library. */
       if(opts&&opts.musicTrackId)body.musicTrackId=opts.musicTrackId;
+      /* The wizard's optional first step. Only sent when there is one, so an
+         ordinary job's payload is byte-identical to what it was before the
+         step existed -- which is what makes "optional" true on the wire as
+         well as on the screen. */
+      if(opts&&opts.clipBrief)body.clipBrief=opts.clipBrief;
       /* The probe already fetched the title, duration and poster; sending them
          stores the maxres thumbnail rather than leaving the server to derive
          hqdefault from the URL. Not sending it at all is why every lecture had
@@ -11493,6 +11597,7 @@ function paintStudio(){
   paintClipStars(vals);
   paintClipActions(vals);
   paintHighlight(vals);
+  paintJobBrief(vals);
   paintJobType(vals);
   paintJobBackground(vals);
   paintJobDest(vals);
