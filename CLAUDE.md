@@ -199,7 +199,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1737 JS + 770 Python**
+- `npm test` and `npm run check` must pass. Currently **1798 JS + 770 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -14074,3 +14074,177 @@ Measured after: **0 audio files on disk at boot, nine rows listed**, and a real
 leaves ~200MB of temp behind instead of gigabytes.
 
 Six probes proven red, including the boot-copy one.
+
+## DeenAI V2: a copilot with tools, not a chat box (v3.151.0, 8 Sept 2026)
+
+Youssef: "deenai highkey sucks theres not real use for it, no helpfulness from
+it", then the brief — a real creator growth copilot, implemented rather than
+advised about.
+
+**The old shape was the whole problem, and it was not the prompt.** V1 sent one
+question plus a prose summary to the box's qwen3:1.7b, got one answer, and kept
+no memory. It could not see a clip, could not read a transcript, had no goal to
+rank for, had no audience data, and could do nothing at all afterwards. Every
+failure this repo recorded about it — an invented "80%", an audience claim no
+platform sends, a role recital, BANANA — is what a small model does when it is
+asked to reason from prose. Three releases of prompt work did not fix it and
+were never going to.
+
+### THE MODEL NEVER CALCULATES
+
+Every figure in an answer comes from a tool in `deenai-tools.js`, computed in
+ordinary JavaScript from the account's own records. `ungroundedFigures()` then
+reads the FINISHED answer back and refuses one carrying a number that appeared
+in no tool result — the guard, not the prompt, is what makes an invented
+statistic impossible.
+
+It is deliberately lenient in three places, because a guard that fires on
+honest prose gets switched off: 0–2 are ordinary words, a year is not a
+measurement, and a percentage rendered from a ratio a tool returned (0.48 →
+"48%") is the same figure, not a new claim. That last rule has a consequence
+worth knowing: **a rate the model works out from two counts IS a number no tool
+returned**, so `get_account_status` returns `keepRatePercent` and
+`postedRatePercent` itself. If an honest answer is ever refused for stating a
+rate, the fix is to return the rate from the tool, never to loosen the guard.
+
+**A refused answer ships NOTHING.** `unusable()` is the worker's own device —
+leaked prompt wording, a role recital, an audience claim with nothing imported,
+an ungrounded figure — and the route answers **502 `answer_refused`**, not 503:
+a refusal is not an outage, and 503 sends somebody to look at a box that is
+fine.
+
+### Fifteen tools, three permission classes
+
+`read` runs automatically. `draft` writes a PROPOSAL that changes nothing the
+account already has. `confirm` is refused by `runTool` and comes back as a
+button — `add_draft_to_schedule` is described to the model precisely so it can
+be proposed properly, and refused precisely so proposing it is safe.
+
+**Tenant isolation is in the LOOKUP**, never a check after it: `ownClip`
+resolves owner-scoped, and there is no path here that fetches by id and then
+asks whose it is. A tool asked for another account's clip answers `attached:
+false` and the other account's title never reaches the model — driven, not
+argued.
+
+**A variant is a draft beside the clip and the original is byte-identical**
+while it waits. Accepting is a separate, explicit route that goes through
+`agent.updateClip` — the one function that already owns a metadata change and
+knows it must not touch `stylePending`. Measured on a real accept in a browser:
+title changed, `renderVersion` unmoved, `stylePending` false. One line moving
+that flag onto this path would silently start re-rendering every retitled clip
+on a single-slot worker.
+
+### The model, and the honest fallback
+
+`ai-provider.js` is a hand-written adapter — `fetch`, a hand-rolled SSE reader,
+no dependency, because the no-dependency property is what lets CI and a phone
+session run the whole suite. `claude-sonnet-5` is primary with streaming and
+tool use; the box's qwen3:1.7b stays as a **clearly labelled limited fallback**
+with no tools, and every surface says when it answered. An assistant quietly
+answering from a much smaller model is how somebody comes to believe the
+product got worse for no reason.
+
+**`ANTHROPIC_API_KEY` on Render arms it.** Without it the screen still works
+— goals, today's three actions, the insight cards and the computed answers are
+arithmetic — and asking is switched off with a sentence rather than a box that
+refuses. It is a group in `configReady()`, so Owner → Health says so.
+
+**THE PRIVACY POSTURE CHANGED AND THAT IS DELIBERATE.** Transcripts still never
+leave the server for TRANSCRIBING, SCORING or TITLING — the worker does all
+three locally, exactly as before. What reaches the hosted model is the
+account's own computed figures plus whatever text the person deliberately
+attaches to a conversation. That boundary is stated in `deenai-chat.js` and
+driven by test.
+
+### Analytics are IMPORTED, never fetched
+
+DeenClipped requests no audience statistics from any platform, the privacy
+policy says so, and widening a scope to get views would make that sentence
+false and reopen a closed compliance review. So `deenai-analytics.js` is a
+manual and CSV import in the shape an API would fill: every row carries its
+`source` and its `measuredAt`, and every surface says both. When an approved
+integration exists the importer changes and nothing downstream does —
+`source` becomes `'api'`.
+
+- **A comparison holds platform, age, length and sample size in view**, and
+  under `minPosts` it returns `not enough` rather than a percentage. That is
+  the rule that makes the other three honest.
+- **The baseline is the creator's OWN posts.** There is no benchmark and no
+  industry figure, because the only honest comparison this product can make is
+  between one creator's post and the rest of that creator's posts.
+- A ratio arrives as 0.42, 42 or "42%"; getting it wrong by a factor of a
+  hundred puts 4200% on somebody's screen, so `ratio()` reads anything over 1
+  as a percentage. A row with no figure at all is REFUSED rather than stored
+  empty — an import that "worked" and shows nothing is a lie about their data.
+
+### Product questions come from the product's own documentation
+
+`deenai-kb.js` indexes `src/help.js` — the same articles the Help screen
+renders — and returns NOTHING below a floor that scales with how much was
+asked. "The least bad article" is how an assistant starts making things up with
+a citation attached. A returned article may only ever offer a screen the frozen
+`deenai-actions.js` table names, so a documentation answer cannot invent "the
+Platforms page" again.
+
+**The floor was measured, not guessed**: at a flat 6 a one-word question
+returned nothing while a four-word one worked. `3 + terms.length` fixed it.
+Note also what this found: **the help centre has no article about nasheeds at
+all**, so "what is a nasheed for" correctly answers nothing.
+
+### Two bugs the browser found that no test could have
+
+1. **`window.DATA` is a DIFFERENT object from the studio's DATA** — the scope
+   trap this file has now recorded six times. Reading it drew NO clip picker,
+   so "attach a clip" simply did not exist.
+2. **A parameter named `data` SHADOWS the module's own `data()` reader.**
+   `paintDeenai` then threw on every paint, swallowed by index.html's
+   try/catch — the screen never drew and nothing anywhere said why. **It was
+   masked for two runs because the driver itself called
+   `StudioDeenai.reload()`, which paints by another road.** A driver that
+   works around the bug it is meant to find is worse than no driver.
+
+Both are pinned in `test/deenai-screen.test.mjs` as SOURCE tests, the same
+reason `overflow-anchor` and `dc-nav-tail` are: CI has no browser, and both
+fail with no error anywhere.
+
+**And the screen redraws only when what it shows has changed** — the v3.124.5
+rule for a panel built as nodes rather than markup. Measured: three unchanged
+repaints cost 1 DOM operation, focus stays in the textarea and the half-typed
+question survives. The typed question is deliberately NOT in the signature, or
+the field would be rebuilt on every keystroke.
+
+### The end-to-end flow, driven
+
+Signed in at 1440x950: choose goal → attach a real clip → ask → tools run
+(`get selected clip`, `create clip variant`) → grounded answer in the
+Recommendation / Evidence / Next action / Measure / Confidence / Source shape →
+draft with its before/after diff → accept → clip updated with `renderVersion`
+unmoved → outcome recorded → CSV imported and the coverage line changes.
+Measured: ONE card left edge (268), ONE right edge (1400), 0 overflowing, 0
+page scroll, lowest daylight contrast 5.36, 0 app errors.
+
+### WHAT IS NOT PROVEN, said plainly
+
+**No answer has been through the real model.** There is no `ANTHROPIC_API_KEY`
+in this container, and `scripts/deenai-eval.mjs` deliberately refuses to fall
+back to a stub — an evaluation of a fixture tells you nothing about what a
+customer would read. Everything above is proven against a stub that speaks the
+real Messages SSE wire format, which exercises the parse, the tool loop, the
+permission gate, the grounding refusal and the fallback, and exercises the
+model's TASTE not at all.
+
+So: set the key on Render, then run
+`ANTHROPIC_API_KEY=sk-... node scripts/deenai-eval.mjs` and READ the answers.
+Eleven realistic questions, including the Qur'an-safety one and an injection.
+A dull answer is not a failed run; a refusal is the guard reporting one.
+
+### Islamic safeguards, in the prompt AND in the ceiling
+
+Never a fatwa, never scripture stated or altered from memory, canonical text
+never rewritten for engagement, never an edit that removes a speaker's
+qualifier, never a nasheed under recitation, scripture clips always
+`reviewRequired`. `get_selected_clip` reports `holdsScripture` from the clip's
+own ayah matches so the model knows before it suggests anything. The rules are
+stated last, immediately before the data — the placement this repo has measured
+twice as the only one that lands — and the tool ceiling is what makes them
+safe rather than hopeful: DeenAI can navigate and draft, and nothing else.

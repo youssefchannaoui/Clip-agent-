@@ -267,6 +267,35 @@ export const config = {
   // own default, so raising the box means raising it here too.
   ollamaModel: process.env.OLLAMA_MODEL || 'qwen3:1.7b',
 
+  /*
+   * DeenAI V2's primary model.
+   *
+   * The strategist is a hosted Claude model; the box's qwen3:1.7b stays as a
+   * clearly-labelled limited fallback and nothing more. That is a change of
+   * posture and it is deliberate: TRANSCRIPTS still never leave the server
+   * (the worker transcribes, scores and titles locally, exactly as before),
+   * and what goes to this model is the account's own COMPUTED figures plus
+   * whatever text the person deliberately attaches to a conversation.
+   * `deenai-chat.js` states that boundary and a test drives it.
+   *
+   * Trimmed, like every other credential read here: a key pasted into
+   * Render's variable field picks up a trailing newline routinely, and the
+   * resulting 401 is indistinguishable from a wrong key.
+   */
+  anthropicApiKey: String(process.env.ANTHROPIC_API_KEY || '').trim(),
+  anthropicBaseUrl: String(process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').trim().replace(/\/+$/, ''),
+  deenaiModel: String(process.env.DEENAI_MODEL || 'claude-sonnet-5').trim(),
+  // Medium effort, per the brief. Sent as the thinking budget where the model
+  // supports it; ignored where it does not.
+  deenaiEffort: String(process.env.DEENAI_EFFORT || 'medium').trim().toLowerCase(),
+  deenaiMaxTokens: Math.max(256, Math.min(8000, Math.round(number(process.env.DEENAI_MAX_TOKENS, 2000)))),
+  // A whole conversation turn, tool round trips included. Under the browser's
+  // own patience and well under any proxy's -- an answer nobody receives is
+  // the single Ollama slot spent for nothing, the fault v3.143.2 fixed on the
+  // worker side.
+  deenaiBudgetMs: Math.max(10_000, Math.min(180_000, Math.round(number(process.env.DEENAI_BUDGET_MS, 75_000)))),
+  deenaiMaxToolRounds: Math.max(1, Math.min(12, Math.round(number(process.env.DEENAI_MAX_TOOL_ROUNDS, 6)))),
+
   socialTokenKey: process.env.SOCIAL_TOKEN_KEY || '',
   socialPublishEnabled: boolean(process.env.SOCIAL_PUBLISH_ENABLED, true),
   socialMaxAttempts: Math.max(1, Math.round(number(process.env.SOCIAL_MAX_ATTEMPTS, 5))),

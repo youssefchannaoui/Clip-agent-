@@ -207,6 +207,18 @@ function configReady({ env = process.env } = {}) {
       costs: 'no lecture can be imported, clipped or rendered',
     },
     {
+      name: 'DeenAI',
+      need: ['ANTHROPIC_API_KEY'],
+      ok: every(['ANTHROPIC_API_KEY']),
+      // Not "DeenAI is broken": the insight cards, today's actions and the
+      // computed answers are arithmetic and work with no model at all. What is
+      // lost is the strategist, and the small model on the box takes over only
+      // where a worker is connected -- with neither, asking is switched off and
+      // the screen says so rather than offering a box that refuses.
+      costs: 'DeenAI falls back to the small model on the render box, and with no worker '
+        + 'either, asking is switched off (the computed insights still work)',
+    },
+    {
       name: 'Media storage',
       need: ['OBJECT_STORAGE_BUCKET', 'MEDIA_PUBLIC_BASE'],
       ok: every(['OBJECT_STORAGE_BUCKET', 'MEDIA_PUBLIC_BASE']),

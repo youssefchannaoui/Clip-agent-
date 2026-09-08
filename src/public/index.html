@@ -76,6 +76,7 @@
 <!-- The desktop Templates screen. A second template over the same bindings,
      mounted only on that screen and only above the phone seam. -->
 <link rel="stylesheet" href="/studio-templates.css">
+<link rel="stylesheet" href="/studio-deenai.css">
 <!-- The clip editor is held back for launch: it opens, blurred, behind a
      "coming soon" notice. Deleting these two lines and the two files they name
      turns it back on. -->
@@ -2730,6 +2731,7 @@ select:focus{outline:none;border-color:var(--blue)}
 <script src="/studio-adapter.js"></script>
 <script src="/studio-mobile.js"></script>
 <script src="/studio-templates.js"></script>
+<script src="/studio-deenai.js"></script>
 <script src="/studio-notify.js"></script>
 
 <script>
@@ -11452,6 +11454,10 @@ function paintStudio(){
   /* Before every painter that docks into a frame or reads a bound node: this
      one mounts the Templates screen those painters then find. */
   try{ if(window.paintTemplates)window.paintTemplates(vals); }catch(e){ console.error('paintTemplates',e); }
+  /* The DeenAI V2 screen, mounted the same way and for the same reason: it
+     replaces the generated one (hidden in place) with a screen that has modes,
+     an attached clip, streaming and drafts -- none of which the export has. */
+  try{ if(window.paintDeenai)window.paintDeenai(vals,DATA); }catch(e){ console.error('paintDeenai',e); }
   paintSetupCelebration(vals);
   paintTikTokOptions();
   paintLiveWork(vals);

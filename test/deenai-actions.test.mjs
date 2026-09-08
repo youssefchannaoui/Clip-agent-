@@ -60,9 +60,19 @@ test('EVERY action only navigates — none of them mutates anything', () => {
   // the file, which protects nothing. So: every step must be one of the
   // studio's navigation destinations, and this module must import nothing
   // that could act.
-  const NAVIGATION_ONLY = new Set(['review', 'connect', 'schedule', 'nasheed', 'paste', 'library']);
+  //
+  // The destinations are READ OUT OF THE STUDIO'S OWN MAP rather than typed
+  // here. A typed list has to be edited every time a screen is added, and the
+  // edit is indistinguishable from weakening the guard -- which is exactly
+  // what happened when DeenAI V2 added four screens. Read from goToStep, a
+  // step that is not a real destination fails whatever anybody types.
+  const adapter = fs.readFileSync(new URL('../src/public/studio-adapter.js', import.meta.url), 'utf8');
+  const map = adapter.slice(adapter.indexOf('goToStep: function'));
+  const body = map.slice(0, map.indexOf("}[String(action || '')]"));
+  const NAVIGATION_ONLY = new Set([...body.matchAll(/^\s{8}(\w+): function \(\) \{/gm)].map(m => m[1]));
+  assert.ok(NAVIGATION_ONLY.size >= 6, 'the studio\'s destination map was found and read');
   for (const [id, entry] of Object.entries(actions.ACTIONS)) {
-    assert.ok(NAVIGATION_ONLY.has(entry.step), `${id} goes to a screen (${entry.step})`);
+    assert.ok(NAVIGATION_ONLY.has(entry.step), `${id} goes to a screen the studio can reach (${entry.step})`);
   }
   const src = fs.readFileSync(new URL('../src/deenai-actions.js', import.meta.url), 'utf8');
   assert.doesNotMatch(src, /^import /m, 'it imports nothing, so it can reach nothing');

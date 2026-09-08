@@ -10134,6 +10134,14 @@
         connect: function () { global.StudioAdapter.onOpenConnections(); },
         schedule: function () { setUI({ screen: 'schedule' }); },
         library: function () { setUI({ screen: 'library' }); },
+        // DeenAI V2's open_deenclipped_screen resolves through this same map,
+        // so a documentation answer can only ever offer a screen the studio
+        // can actually reach -- the "Platforms page" failure by construction.
+        template: function () { setUI({ screen: 'templates' }); },
+        plan: function () { setUI({ screen: 'tokens' }); },
+        performance: function () { setUI({ screen: 'performance' }); },
+        help: function () { setUI({ screen: 'help' }); },
+        deenai: function () { setUI({ screen: 'deenai' }); },
       }[String(action || '')];
       if (!where) return false;
       if (e && e.preventDefault) e.preventDefault();

@@ -1,0 +1,193 @@
+/*
+ * studio-deenai.css — the DeenAI V2 screen.
+ *
+ * HAND-WRITTEN. A design re-import never touches this file and nothing in it
+ * names one of the export's hashed classes.
+ *
+ * THE DESIGN LANGUAGE DOES NOT CHANGE. Same near-black grounds, same gold ink,
+ * same hairlines and radii as the rest of the dashboard: every colour here is
+ * a token the studio already declares, so daylight flips this screen with the
+ * others and nothing had to be re-derived. Where a rule sets no colour it is
+ * written in var() names alone, which is what keeps build-light-theme.mjs from
+ * re-emitting it at a specificity that would outrank a state class.
+ */
+
+#dcAi {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  /* Chrome's scroll anchoring runs a repainting column to the end of its
+     range -- the v3.118.1 fault, and this screen repaints on every stream
+     delta. */
+  overflow-anchor: none;
+  padding: 22px 40px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+/* Every direct child of a scrolling flex column needs this, or a long page
+   below squeezes the row above it to nothing while it still reads correctly
+   in innerText. */
+#dcAi > * { flex: none; }
+
+#dcAi .dcai-head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+#dcAi .dcai-title { font-size: 19px; font-weight: 650; letter-spacing: -.01em; color: var(--dc-ink, #F2F2F4); margin: 0; }
+#dcAi .dcai-sub { margin: 4px 0 0; font-size: 12px; line-height: 18px; color: var(--dc-ink-dim, #8B8B93); max-width: 62ch; }
+#dcAi .dcai-spacer { flex: 1 1 auto; }
+
+#dcAi .dcai-pill {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 9px; border-radius: 20px;
+  border: 1px solid var(--dc-line, #26262A);
+  font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--dc-ink-dim, #8B8B93);
+}
+#dcAi .dcai-pill.is-gold { border-color: rgba(217,180,120,.42); color: var(--dc-gold, #D9B478); }
+#dcAi .dcai-pill.is-warn { border-color: rgba(224,135,112,.45); color: #E08770; }
+
+#dcAi .dcai-card {
+  border: 1px solid var(--dc-line, #26262A);
+  border-radius: 12px;
+  background: var(--dc-bg-raised, #17171A);
+  padding: 18px 20px;
+}
+#dcAi .dcai-card.is-gold { border-color: rgba(217,180,120,.32); }
+#dcAi .dcai-label {
+  margin: 0 0 12px; font-size: 9.5px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--dc-ink-faint, #8B8B93);
+}
+
+/* ── the goal row ─────────────────────────────────────────────────────── */
+#dcAi .dcai-goals { display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); gap: 10px; }
+#dcAi .dcai-goal {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  padding: 11px 13px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--dc-line, #26262A);
+  background: var(--dc-bg, #09090A);
+  color: var(--dc-ink, #F2F2F4);
+  font: inherit;
+  transition: border-color .16s ease, background .16s ease;
+}
+#dcAi .dcai-goal:hover { border-color: rgba(217,180,120,.4); }
+#dcAi .dcai-goal[aria-pressed="true"] { border-color: var(--dc-gold, #D9B478); background: rgba(217,180,120,.07); }
+#dcAi .dcai-goal b { font-size: 12.5px; font-weight: 600; }
+#dcAi .dcai-goal span { font-size: 11px; line-height: 16px; color: var(--dc-ink-dim, #8B8B93); }
+
+/* ── today's three actions ────────────────────────────────────────────── */
+#dcAi .dcai-todo { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+#dcAi .dcai-do {
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 15px 16px; border-radius: 11px;
+  border: 1px solid var(--dc-line, #26262A);
+  background: var(--dc-bg, #09090A);
+}
+#dcAi .dcai-do:first-child { border-color: rgba(217,180,120,.34); }
+#dcAi .dcai-do h4 { margin: 0; font-size: 13px; font-weight: 620; color: var(--dc-ink, #F2F2F4); line-height: 18px; }
+#dcAi .dcai-do p { margin: 0; font-size: 11.5px; line-height: 17px; color: var(--dc-ink-body, #BCBCC3); }
+#dcAi .dcai-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 10px; color: var(--dc-ink-faint, #8B8B93); }
+#dcAi .dcai-meta b { font-weight: 600; color: var(--dc-ink-dim, #8B8B93); }
+
+/* ── modes ────────────────────────────────────────────────────────────── */
+#dcAi .dcai-modes { display: flex; flex-wrap: wrap; gap: 6px; }
+#dcAi .dcai-mode {
+  padding: 7px 13px; border-radius: 8px; cursor: pointer; font: inherit;
+  font-size: 11.5px; font-weight: 560;
+  border: 1px solid var(--dc-line, #26262A);
+  background: transparent; color: var(--dc-ink-body, #BCBCC3);
+  transition: border-color .16s ease, color .16s ease;
+}
+#dcAi .dcai-mode:hover { color: var(--dc-ink, #F2F2F4); border-color: rgba(217,180,120,.4); }
+#dcAi .dcai-mode[aria-pressed="true"] { border-color: var(--dc-gold, #D9B478); color: var(--dc-gold, #D9B478); }
+
+/* ── the ask box ──────────────────────────────────────────────────────── */
+#dcAi .dcai-ask { display: flex; flex-direction: column; gap: 10px; }
+#dcAi .dcai-field {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 78px;
+  padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--dc-line, #26262A);
+  background: var(--dc-bg, #09090A);
+  color: var(--dc-ink, #F2F2F4);
+  font: inherit; font-size: 13px; line-height: 20px;
+}
+#dcAi .dcai-field:focus { outline: none; border-color: rgba(217,180,120,.6); }
+#dcAi .dcai-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#dcAi .dcai-attach {
+  flex: 1 1 220px; min-width: 0; height: 34px; padding: 0 10px; border-radius: 8px;
+  border: 1px solid var(--dc-line, #26262A);
+  background: var(--dc-bg, #09090A); color: var(--dc-ink-body, #BCBCC3);
+  font: inherit; font-size: 11.5px;
+}
+#dcAi .dcai-btn {
+  flex: none; display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 16px; border-radius: 8px; cursor: pointer; font: inherit;
+  font-size: 12px; font-weight: 620;
+  border: 1px solid var(--dc-line, #26262A);
+  background: transparent; color: var(--dc-ink-body, #BCBCC3);
+}
+#dcAi .dcai-btn:hover:not(:disabled) { color: var(--dc-ink, #F2F2F4); border-color: rgba(217,180,120,.45); }
+#dcAi .dcai-btn:disabled { opacity: .45; cursor: default; }
+/* Written in var() names alone and given NO hex fallback, so the light-theme
+   generator finds nothing to remap and the tokens flip it themselves. A hex
+   here would be re-emitted at body.dc-light specificity and beat this rule. */
+#dcAi .dcai-btn.is-primary {
+  border-color: var(--dc-gold-solid);
+  background: var(--dc-gold-solid);
+  color: var(--dc-on-gold);
+}
+#dcAi .dcai-btn.is-primary:hover:not(:disabled) { background: var(--dc-gold-hover); border-color: var(--dc-gold-hover); }
+
+/* ── the answer ───────────────────────────────────────────────────────── */
+#dcAi .dcai-answer { display: flex; flex-direction: column; gap: 12px; }
+#dcAi .dcai-body {
+  font-size: 13px; line-height: 21px; color: var(--dc-ink-body, #BCBCC3);
+  white-space: pre-wrap; word-break: break-word;
+}
+#dcAi .dcai-body strong { color: var(--dc-ink, #F2F2F4); font-weight: 620; }
+#dcAi .dcai-steps { display: flex; flex-wrap: wrap; gap: 8px; }
+#dcAi .dcai-step {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 9px; border-radius: 20px; font-size: 10.5px;
+  border: 1px solid var(--dc-line, #26262A); color: var(--dc-ink-faint, #8B8B93);
+}
+#dcAi .dcai-step.is-live { border-color: rgba(217,180,120,.45); color: var(--dc-gold, #D9B478); }
+#dcAi .dcai-caret {
+  display: inline-block; width: 7px; height: 14px; vertical-align: -2px;
+  background: var(--dc-gold, #D9B478); animation: dcaiBlink 1s steps(2) infinite;
+}
+@keyframes dcaiBlink { 50% { opacity: 0 } }
+
+#dcAi .dcai-draft {
+  border: 1px solid rgba(217,180,120,.3); border-radius: 10px;
+  background: rgba(217,180,120,.05); padding: 13px 15px;
+  display: flex; flex-direction: column; gap: 9px;
+}
+#dcAi .dcai-diff { display: grid; gap: 6px; font-size: 11.5px; line-height: 17px; }
+#dcAi .dcai-was { color: var(--dc-ink-faint, #8B8B93); text-decoration: line-through; }
+#dcAi .dcai-now { color: var(--dc-ink, #F2F2F4); }
+
+#dcAi .dcai-convos { display: flex; flex-wrap: wrap; gap: 6px; }
+#dcAi .dcai-convo {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 260px;
+  padding: 5px 10px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 11px;
+  border: 1px solid var(--dc-line, #26262A); background: transparent;
+  color: var(--dc-ink-dim, #8B8B93);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#dcAi .dcai-convo:hover { color: var(--dc-ink, #F2F2F4); }
+#dcAi .dcai-convo[aria-pressed="true"] { border-color: rgba(217,180,120,.45); color: var(--dc-gold, #D9B478); }
+
+#dcAi .dcai-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+#dcAi .dcai-input {
+  width: 100%; box-sizing: border-box; height: 32px; padding: 0 9px; border-radius: 7px;
+  border: 1px solid var(--dc-line, #26262A); background: var(--dc-bg, #09090A);
+  color: var(--dc-ink, #F2F2F4); font: inherit; font-size: 11.5px;
+}
+#dcAi .dcai-input:focus { outline: none; border-color: rgba(217,180,120,.55); }
+#dcAi label.dcai-lab { display: flex; flex-direction: column; gap: 4px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dc-ink-faint, #8B8B93); }
+
+#dcAi .dcai-note { font-size: 11px; line-height: 17px; color: var(--dc-ink-faint, #8B8B93); margin: 0; }
+#dcAi .dcai-err { font-size: 12px; line-height: 18px; color: #E08770; margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  #dcAi .dcai-caret { animation: none; }
+}

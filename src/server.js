@@ -41,6 +41,11 @@ import * as onboarding from './onboarding.js';
 import * as admin from './admin.js';
 import * as owner from './owner.js';
 import * as deenai from './deenai.js';
+import * as deenaiGoal from './deenai-goal.js';
+import * as deenaiAnalytics from './deenai-analytics.js';
+import * as deenaiDrafts from './deenai-drafts.js';
+import * as deenaiChat from './deenai-chat.js';
+import * as aiProvider from './ai-provider.js';
 import * as metrics from './metrics.js';
 import { startYouTubeRetention } from './youtube-retention.js';
 import { saveVideoUpload, removeUploadedFile } from './uploads.js';
@@ -95,6 +100,8 @@ const STUDIO_ASSETS = {
   '/studio-mobile.js': { file: studioAsset('studio-mobile.js'), type: JS_TYPE },
   // The desktop Templates screen: a second template over the same bindings,
   // mounted only on that screen and only above the phone seam.
+  '/studio-deenai.css': { file: studioAsset('studio-deenai.css'), type: 'text/css; charset=utf-8' },
+  '/studio-deenai.js': { file: studioAsset('studio-deenai.js'), type: JS_TYPE },
   '/studio-templates.css': { file: studioAsset('studio-templates.css'), type: 'text/css; charset=utf-8' },
   '/studio-templates.js': { file: studioAsset('studio-templates.js'), type: JS_TYPE },
   /*
@@ -2649,6 +2656,245 @@ async function route(req, res, url) {
     } catch (error) {
       return json(res, error.statusCode || (error.code === 'worker_unavailable' ? 503 : 500), { error: error.message });
     }
+  }
+
+
+  /* ── DeenAI V2 ─────────────────────────────────────────────────────────
+   *
+   * Everything below is behind the SAME gate as the ask above -- one feature,
+   * one tier, read from the FEATURES table. The V1 route stays exactly as it
+   * is: a browser holding an older payload keeps working, and the computed
+   * answers it serves are the same arithmetic V2's tools return.
+   */
+
+  // The screen's own payload: goal, today's three actions, what analytics are
+  // known, the conversation list, and which model would actually answer.
+  if (method === 'GET' && pathname === '/api/deenai/v2') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    const unlocked = deenai.deenaiAccess(currentUser);
+    return json(res, 200, {
+      unlocked,
+      goals: deenaiGoal.goalOptions(currentUser),
+      profile: deenaiGoal.creatorProfile(currentUser),
+      modes: deenaiChat.MODE_IDS.map(id => deenaiChat.MODES[id]),
+      // Computed with no model, so this is present and correct even on a
+      // deployment with no key -- the screen opens on it.
+      today: unlocked ? deenaiChat.todayActions(currentUser) : [],
+      coverage: deenaiAnalytics.coverage(currentUser),
+      metricFields: deenaiAnalytics.METRIC_FIELDS,
+      conversations: unlocked ? deenaiChat.conversations(currentUser) : [],
+      experiments: unlocked ? deenaiDrafts.experiments(currentUser) : [],
+      recommendations: unlocked ? deenaiDrafts.recommendationScore(currentUser) : null,
+      provider: aiProvider.providerStatus(),
+    });
+  }
+
+  if (method === 'POST' && pathname === '/api/deenai/goal') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    let body;
+    try { body = await readBody(req, 16 * 1024); } catch (error) { return json(res, 400, { error: error.message }); }
+    try { return json(res, 200, { ok: true, profile: deenaiGoal.setCreatorProfile(currentUser, body) }); }
+    catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
+
+  /*
+   * The conversation, STREAMED.
+   *
+   * Server-sent events rather than a JSON reply: a growth answer reads several
+   * tools and takes seconds, and a button that sits still for eight of them is
+   * the complaint that produced this rebuild. The client sees each tool as it
+   * runs and the text as it is written.
+   *
+   * The stream is aborted when the socket closes, so pressing Stop -- or
+   * closing the tab -- stops the model rather than leaving it writing an
+   * answer nobody will read.
+   */
+  if (method === 'POST' && pathname === '/api/deenai/chat') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    if (!deenai.deenaiAskAccess(currentUser)) {
+      return json(res, 403, { error: 'DeenAI is a ' + deenai.deenaiAskTierName() + ' feature. Upgrade to see your own numbers and ask.' });
+    }
+    const chatGate = throttle.rateLimit(`deenai-chat:${currentUser.id}`, 40, 60 * 60_000);
+    if (!chatGate.allowed) {
+      return json(res, 429, { error: 'That is a lot of questions in an hour. Give DeenAI a moment.', retryAfterSec: chatGate.retryAfterSec });
+    }
+    let body;
+    try { body = await readBody(req, 64 * 1024); } catch (error) { return json(res, 400, { error: error.message }); }
+
+    const controller = new AbortController();
+    req.on('close', () => controller.abort());
+    res.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache, no-transform',
+      connection: 'keep-alive',
+      // Render sits behind a proxy that will happily buffer an event stream
+      // into nothing until it completes, which is a stream in name only.
+      'x-accel-buffering': 'no',
+    });
+    const send = (event, data) => {
+      if (res.writableEnded) return;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    send('open', { at: Date.now() });
+    try {
+      const out = await deenaiChat.askV2(currentUser, {
+        question: body?.question,
+        mode: body?.mode,
+        conversationId: body?.conversationId,
+        clipId: body?.clipId,
+        signal: controller.signal,
+        now: Date.now(),
+        onDelta: text => send('delta', { text }),
+        onEvent: payload => send('step', payload),
+      });
+      send('done', out);
+    } catch (error) {
+      send('failed', {
+        error: String(error?.message || 'DeenAI could not answer.'),
+        code: error?.code || '',
+        statusCode: error?.statusCode || 500,
+      });
+    }
+    if (!res.writableEnded) res.end();
+    return undefined;
+  }
+
+  if (method === 'GET' && pathname === '/api/deenai/chats') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    return json(res, 200, { conversations: deenaiChat.conversations(currentUser) });
+  }
+  const deenaiChatOne = pathname.match(/^\/api\/deenai\/chats\/([^/]+)$/);
+  if (deenaiChatOne && currentUser) {
+    const id = decodeURIComponent(deenaiChatOne[1]);
+    if (method === 'GET') {
+      const found = deenaiChat.conversation(currentUser, id);
+      if (!found) return json(res, 404, { error: 'That conversation is not on this account.' });
+      return json(res, 200, { conversation: found });
+    }
+    if (method === 'DELETE') {
+      return json(res, 200, { ok: deenaiChat.deleteConversation(currentUser, id) });
+    }
+  }
+  if (method === 'POST' && pathname === '/api/deenai/feedback') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    let body;
+    try { body = await readBody(req, 8 * 1024); } catch (error) { return json(res, 400, { error: error.message }); }
+    try { return json(res, 200, deenaiChat.rateTurn(currentUser, body?.conversationId, body?.turn, body?.rating)); }
+    catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
+
+  /*
+   * Imported platform results.
+   *
+   * The manual path, shipped because the approved-API path does not exist:
+   * DeenClipped requests no audience statistics from any platform, the privacy
+   * policy says so, and widening a scope to get views would make that sentence
+   * false. Every row stores its source and its measurement date, and every
+   * screen that shows one says both.
+   */
+  if (method === 'GET' && pathname === '/api/deenai/metrics') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    return json(res, 200, {
+      coverage: deenaiAnalytics.coverage(currentUser),
+      posts: deenaiAnalytics.latestPerPost(currentUser).slice(0, 200),
+      fields: deenaiAnalytics.METRIC_FIELDS,
+    });
+  }
+  if (method === 'POST' && pathname === '/api/deenai/metrics') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    let body;
+    try { body = await readBody(req, 2 * 1024 * 1024); }
+    catch { return json(res, 413, { error: 'That file is too large. Split the export and import it in parts.' }); }
+    try {
+      let rows = Array.isArray(body?.rows) ? body.rows : [];
+      let source = 'manual';
+      if (typeof body?.csv === 'string' && body.csv.trim()) {
+        const parsed = deenaiAnalytics.parseCsv(body.csv);
+        if (parsed.error) return json(res, 400, { error: parsed.error });
+        rows = parsed.rows;
+        source = 'csv';
+      }
+      const out = deenaiAnalytics.importRows(currentUser, rows, {
+        source, now: Date.now(), defaults: body?.defaults && typeof body.defaults === 'object' ? body.defaults : {},
+      });
+      return json(res, 200, { ok: true, ...out, coverage: deenaiAnalytics.coverage(currentUser) });
+    } catch (error) {
+      return json(res, error.statusCode || 400, { error: error.message });
+    }
+  }
+  if (method === 'DELETE' && pathname === '/api/deenai/metrics') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    return json(res, 200, { ok: true, removed: deenaiAnalytics.clearRows(currentUser) });
+  }
+
+  /*
+   * Drafts.
+   *
+   * Creating one is a DRAFT tool the model may run; ACCEPTING one is this
+   * route, and it is a separate, explicit act by the person. The write itself
+   * goes through `agent.updateClip` -- the one function that already owns a
+   * metadata change and knows it must not touch `stylePending`, because a
+   * title change has never re-rendered a clip and must not start.
+   */
+  if (method === 'GET' && pathname === '/api/deenai/drafts') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    const clipId = String(new URL(req.url, 'http://x').searchParams.get('clipId') || '');
+    return json(res, 200, { drafts: deenaiDrafts.draftsFor(currentUser, clipId) });
+  }
+  const deenaiDraftDecide = pathname.match(/^\/api\/deenai\/drafts\/([^/]+)\/(accept|discard)$/);
+  if (method === 'POST' && deenaiDraftDecide) {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    const [, rawId, verb] = deenaiDraftDecide;
+    const draftId = decodeURIComponent(rawId);
+    const found = deenaiDrafts.findDraft(currentUser, draftId);
+    if (!found) return json(res, 404, { error: 'That draft is not on this account.' });
+    try {
+      if (verb === 'accept') {
+        // OWNER-SCOPED FIRST. `agent.updateClip` takes an id and does not know
+        // whose account it is on -- the shape of every IDOR -- so the clip is
+        // resolved through the same helper every other clip route uses before
+        // anything is written. A draft can only ever name a clip its own
+        // account owns, and this makes that structural rather than assumed.
+        const clip = assertCanAccessClip(currentUser, found.clipId);
+        // `clip.hashtags` is a STRING with the hashes in it -- social.js reads
+        // it with `String(clip.hashtags).match(/#.../)` -- while a draft holds
+        // the bare words so the preview can show them as chips. Converted here
+        // rather than storing the app's wire format in the draft, which would
+        // put a second definition of the field in a module that only proposes.
+        const changes = { ...found.changes };
+        if (Array.isArray(changes.hashtags)) changes.hashtags = changes.hashtags.map(t => `#${t}`).join(' ');
+        agent.updateClip(clip.id, changes);
+      }
+      const decided = deenaiDrafts.decideDraft(currentUser, draftId, verb === 'accept' ? 'accepted' : 'discarded', { now: Date.now() });
+      return json(res, 200, { ok: true, draft: decided });
+    } catch (error) {
+      return json(res, error.statusCode || 400, { error: error.message });
+    }
+  }
+
+  if (method === 'POST' && pathname === '/api/deenai/experiments') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    let body;
+    try { body = await readBody(req, 16 * 1024); } catch (error) { return json(res, 400, { error: error.message }); }
+    try { return json(res, 200, { ok: true, experiment: deenaiDrafts.createExperiment(currentUser, body, { now: Date.now() }) }); }
+    catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
+  const deenaiExperimentClose = pathname.match(/^\/api\/deenai\/experiments\/([^/]+)\/close$/);
+  if (method === 'POST' && deenaiExperimentClose) {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    let body;
+    try { body = await readBody(req, 16 * 1024); } catch (error) { return json(res, 400, { error: error.message }); }
+    try {
+      const closed = deenaiDrafts.closeExperiment(currentUser, decodeURIComponent(deenaiExperimentClose[1]), { ...body, now: Date.now() });
+      return json(res, 200, { ok: true, experiment: closed });
+    } catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
+  }
+  if (method === 'POST' && pathname === '/api/deenai/recommendations') {
+    if (!currentUser) return json(res, 401, { error: 'Sign in to continue.' });
+    let body;
+    try { body = await readBody(req, 16 * 1024); } catch (error) { return json(res, 400, { error: error.message }); }
+    try { return json(res, 200, { ok: true, recorded: deenaiDrafts.recordRecommendationResult(currentUser, body, { now: Date.now() }) }); }
+    catch (error) { return json(res, error.statusCode || 400, { error: error.message }); }
   }
 
   if (method === 'GET' && pathname === '/api/music') return json(res, 200, { tracks: audio.listNasheeds(currentUser), settings: musicSettings(currentUser) });

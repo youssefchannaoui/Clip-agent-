@@ -45,6 +45,7 @@ function healthy(over = {}) {
       STRIPE_SECRET_KEY: 'x', STRIPE_WEBHOOK_SECRET: 'x', STRIPE_PRICE_PRO_MONTHLY: 'x',
       EMAIL_API_KEY: 'x', EMAIL_FROM: 'x',
       WORKER_BASE_URL: 'x', WORKER_SHARED_SECRET: 'x',
+      ANTHROPIC_API_KEY: 'x',
       OBJECT_STORAGE_BUCKET: 'x', MEDIA_PUBLIC_BASE: 'x',
       APP_SESSION_SECRET: 'x', SOCIAL_TOKEN_KEY: 'x', GOOGLE_CLIENT_ID: 'x',
     },

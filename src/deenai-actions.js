@@ -35,6 +35,14 @@ export const ACTIONS = Object.freeze({
   'open-nasheed': Object.freeze({ label: 'Open the nasheed library', step: 'nasheed' }),
   'open-paste': Object.freeze({ label: 'Add a lecture', step: 'paste' }),
   'open-library': Object.freeze({ label: 'Open the lecture library', step: 'library' }),
+  // Added for DeenAI V2's `open_deenclipped_screen` tool. Still navigation and
+  // nothing else -- the ceiling above is unchanged, and every one of these
+  // resolves through StudioAdapter.goToStep like the six before them, so the
+  // studio keeps ONE destination map rather than growing a second.
+  'open-templates': Object.freeze({ label: 'Open Templates', step: 'template' }),
+  'open-plans': Object.freeze({ label: 'Open Tokens & billing', step: 'plan' }),
+  'open-performance': Object.freeze({ label: 'Open Performance', step: 'performance' }),
+  'open-help': Object.freeze({ label: 'Open Help', step: 'help' }),
 });
 
 // The steps referrals.nextStep can return, mapped to an action. Frozen and
