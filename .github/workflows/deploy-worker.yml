@@ -97,6 +97,17 @@ on:
         description: 'Seconds of the video to actually fetch (proves the media leg, not just extraction)'
         required: false
         default: '8'
+      # PROVE THE RETRY ROUNDS ON THE BOX. With a number here the probe fetches
+      # once as a control, then again with the first N attempts refused with a
+      # 403 -- so the real rounds, the real backoff and the real proxy rotation
+      # run against the box's own network. 10 or more forces a second round.
+      # Only this half can fail the run, and only when the control has already
+      # proven the video fetchable: that is the rounds broken, not a blocked
+      # video.
+      probe_url_block_first:
+        description: 'Refuse the first N attempts with a 403 to prove the retry rescues it (10+ forces a real backoff)'
+        required: false
+        default: '0'
       diagnose:
         description: Only diagnose (no deploy) -- ask the box about its recent jobs
         type: boolean
@@ -433,6 +444,7 @@ jobs:
           RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
           PROBE_URL: ${{ inputs.probe_url }}
           PROBE_WINDOW: ${{ inputs.probe_url_window }}
+          PROBE_BLOCK_FIRST: ${{ inputs.probe_url_block_first }}
         run: |
           set -euo pipefail
           export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
@@ -447,9 +459,14 @@ jobs:
             const src = fs.readFileSync(".github/scripts/import-probe.py", "utf8");
             if (!src.includes("PARAMS = {}")) throw new Error("the import probe lost its PARAMS seam");
             const window = Number.parseFloat(process.env.PROBE_WINDOW || "8");
+            const blockFirst = Number.parseInt(process.env.PROBE_BLOCK_FIRST || "0", 10);
             const params = {
               url: String(process.env.PROBE_URL || ""),
               window: Number.isFinite(window) && window > 0 ? Math.min(120, window) : 8,
+              // Capped at 30 -- three rounds of ten is every attempt the
+              // provider has, and asking for more would only ever produce the
+              // refusal it is meant to recover from.
+              blockFirst: Number.isFinite(blockFirst) && blockFirst > 0 ? Math.min(30, blockFirst) : 0,
             };
             fs.writeFileSync(process.env.RUNNER_TEMP + "/import-probe.py",
               src.replace("PARAMS = {}", "PARAMS = " + JSON.stringify(params)));

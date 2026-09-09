@@ -41,6 +41,26 @@ PARAMS = {}
 URL = str(PARAMS.get("url") or "").strip()
 WINDOW = float(PARAMS.get("window") or 8)
 
+# HOW MANY ATTEMPTS TO REFUSE BEFORE LETTING THE REAL DOWNLOAD THROUGH.
+#
+# The retry rounds were written for a refusal that clears on a second ask, and
+# they have never run on this box -- there was no 403 left to rescue by the
+# time they shipped, so every claim about them rests on a test with a fake
+# yt_dlp. That is the weakest kind of proof for the one path a customer meets
+# at two in the morning, and waiting for YouTube to refuse again is not a plan.
+#
+# So the refusal is INJECTED, here in the probe and nowhere near production
+# code: the real provider runs, builds its real options, picks a real proxy,
+# and its first N attempts are made to fail with a 403-shaped message. Anything
+# past N downloads for real. What that exercises is the whole rounds loop as
+# it ships -- _looks_blocked, the plan and client rotation, the backoff, and
+# the recovery -- against the box's own network.
+#
+# A round is len(YOUTUBE_CLIENTS) x len(plans) attempts, so a value at or above
+# that forces a SECOND round and makes the real backoff run. That is the part
+# worth proving: a rescue inside one rotation costs nothing and proves little.
+BLOCK_FIRST = int(PARAMS.get("blockFirst") or 0)
+
 
 def out(line: str = "") -> None:
     print(line, flush=True)
@@ -101,6 +121,93 @@ def last_failed_url() -> str:
     return best[1]
 
 
+class Refusals:
+    """Makes the provider's first N attempts fail the way a block does.
+
+    The real yt_dlp.YoutubeDL is still constructed -- with the real options,
+    the real proxy and the real cookies -- and only extract_info is replaced,
+    so the failure lands exactly where a genuine 403 lands and the rounds loop
+    takes exactly the branch it would take. Refusing at CONSTRUCTION would have
+    been simpler and would have skipped the options being built at all, which
+    is half of what is being tested.
+
+    It also records when each attempt happened and which exit it was given, so
+    the report can say whether the backoff really ran and whether the pool
+    really rotated. Both are claims the tests make against a fake; neither had
+    ever been watched on the box.
+    """
+
+    def __init__(self, ytdlp, refuse_first: int) -> None:
+        self.ytdlp = ytdlp
+        self.refuse_first = refuse_first
+        self.real = ytdlp.YoutubeDL
+        self.refused = 0
+        self.attempts: list[tuple[float, str]] = []
+
+    def __enter__(self) -> "Refusals":
+        probe = self
+
+        def build(options=None, *args, **kwargs):
+            instance = probe.real(options, *args, **kwargs)
+            proxy = str((options or {}).get("proxy") or "")
+            probe.attempts.append((time.time(), proxy))
+            if probe.refused < probe.refuse_first:
+                probe.refused += 1
+
+                def refuse(*_a, **_k):
+                    # 403 because that is the refusal being chased, and because
+                    # _looks_blocked must recognise it -- a message it does not
+                    # recognise takes the "gone for ever" branch and the rounds
+                    # never run, which would prove the opposite of the point.
+                    raise probe.ytdlp.utils.DownloadError(
+                        "ERROR: [youtube] probe: HTTP Error 403: Forbidden"
+                        " (refusal injected by import-probe)")
+
+                instance.extract_info = refuse
+            return instance
+
+        self.ytdlp.YoutubeDL = build
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.ytdlp.YoutubeDL = self.real
+
+    def longest_gap(self) -> float:
+        times = [when for when, _ in self.attempts]
+        return max((b - a for a, b in zip(times, times[1:])), default=0.0)
+
+    def distinct_exits(self) -> int:
+        return len({proxy for _, proxy in self.attempts if proxy})
+
+
+def fetch(canonical: str, refuse_first: int = 0):
+    """One run of the REAL provider. Returns (imported, seconds, note, spy)."""
+    destination = Path("/tmp") / f"dc-import-probe-{os.getpid()}.mp4"
+    spy = None
+    started = time.time()
+    try:
+        import yt_dlp
+        holder = Refusals(yt_dlp, refuse_first)
+        with holder as spy:
+            result = ip.YtDlpImportProvider().import_video(
+                {
+                    "type": "youtube",
+                    "url": canonical,
+                    "windowStartSec": 0,
+                    "windowEndSec": WINDOW,
+                },
+                destination,
+                lambda *a, **k: False,
+            )
+        size = destination.stat().st_size if destination.is_file() else 0
+        return True, time.time() - started, (result, size), spy
+    except ip.ImportProviderError as exc:
+        return False, time.time() - started, scrub(exc)[:700], spy
+    finally:
+        for leftover in Path("/tmp").glob(f"dc-import-probe-{os.getpid()}*"):
+            leftover.unlink(missing_ok=True)
+
+
 def main() -> int:
     url = URL
     if url == "last-failed":
@@ -140,38 +247,68 @@ def main() -> int:
     out(f"  rounds         {ip.IMPORT_ROUNDS} (backoff {ip.IMPORT_BACKOFF_SEC})")
     out()
 
-    destination = Path("/tmp") / f"dc-import-probe-{os.getpid()}.mp4"
-    started = time.time()
-    try:
-        # The REAL provider. Its own rounds, its own backoff, its own rotation.
-        result = ip.YtDlpImportProvider().import_video(
-            {
-                "type": "youtube",
-                "url": canonical,
-                "windowStartSec": 0,
-                "windowEndSec": WINDOW,
-            },
-            destination,
-            lambda *a, **k: False,
-        )
-    except ip.ImportProviderError as exc:
-        out(f"  FAILED after {time.time() - started:.1f}s")
-        out(f"  {scrub(exc)[:700]}")
+    per_round = len(ip.YOUTUBE_CLIENTS) * 2  # two plans: the section, then the full
+    if BLOCK_FIRST:
+        out(f"  injecting      the first {BLOCK_FIRST} attempt(s) refused with a 403"
+            f" ({per_round} attempts a round, so"
+            f" {'a SECOND round and a real backoff' if BLOCK_FIRST >= per_round else 'the same round'})")
+    out()
+
+    # THE CONTROL COMES FIRST, and it is what makes the injected run readable.
+    # Without it a failure afterwards is ambiguous: the rounds may have broken,
+    # or YouTube may simply be refusing this video this minute -- and the whole
+    # reason this probe exists is that the second answer changes between one
+    # ask and the next. Proving the video is fetchable NOW is what turns the
+    # injected run into a statement about the code.
+    ok, seconds, detail, _ = fetch(canonical)
+    label = "control" if BLOCK_FIRST else "fetch"
+    if not ok:
+        out(f"  {label}: FAILED after {seconds:.1f}s")
+        out(f"  {detail}")
         # A refusal is the ANSWER to the question asked, not a broken probe.
         # Failing the run here would make "this video is genuinely blocked"
         # indistinguishable from "the box could not be reached".
+        if BLOCK_FIRST:
+            out()
+            out("  the rounds were NOT exercised: the video refused on its own,")
+            out("  so an injected refusal afterwards would prove nothing either way.")
         return 0
-    finally:
-        size = destination.stat().st_size if destination.is_file() else 0
-        destination.unlink(missing_ok=True)
-        for leftover in Path("/tmp").glob(f"dc-import-probe-{os.getpid()}*"):
-            leftover.unlink(missing_ok=True)
 
-    out(f"  IMPORTED in {time.time() - started:.1f}s")
+    result, size = detail
+    out(f"  {label}: IMPORTED in {seconds:.1f}s")
     out(f"  title          {scrub(result.title)[:120]}")
     out(f"  bytes          {size:,}")
     out(f"  windowed       {result.windowed}")
     out(f"  source length  {result.source_duration_sec}")
+    if not BLOCK_FIRST:
+        return 0
+
+    out()
+    out("== does the retry rescue a refusal ==")
+    ok, seconds, detail, spy = fetch(canonical, refuse_first=BLOCK_FIRST)
+    attempts = len(spy.attempts) if spy else 0
+    refused = spy.refused if spy else 0
+    gap = spy.longest_gap() if spy else 0.0
+    exits = spy.distinct_exits() if spy else 0
+    out(f"  attempts       {attempts} ({refused} refused, then the real download)")
+    out(f"  longest pause  {gap:.1f}s between attempts"
+        + (" -- the backoff ran" if gap >= 5 else ""))
+    out(f"  exits used     {exits} distinct proxy address(es) across the attempts")
+    if not ok:
+        out(f"  NOT RESCUED after {seconds:.1f}s")
+        out(f"  {detail}")
+        # THE ONE CASE THAT FAILS THE RUN. The control just proved this video
+        # is fetchable from this box right now, so a refusal the rounds could
+        # not recover from is the rounds being broken -- which is a regression
+        # in the thing this workflow exists to protect, not an answer about a
+        # video.
+        out("::error::the retry rounds did not rescue an injected 403"
+            " that the control proved was recoverable")
+        return 1
+
+    result, size = detail
+    out(f"  RESCUED in {seconds:.1f}s -- {size:,} bytes after {refused} refusal(s)")
+    out(f"  title          {scrub(result.title)[:120]}")
     return 0
 
 
