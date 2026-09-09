@@ -142,6 +142,26 @@ on:
         description: 'Quran sync: how many cached transcripts to walk, newest first'
         required: false
         default: '3'
+      # Where the crop actually lands on this box's own footage. Dispatch-only
+      # and deploy-free like the two above: it renders nothing and changes
+      # nothing, it reads real frames with the shipped detector and reports
+      # where the shipped static crop puts its centre against where the faces
+      # actually are. CLAUDE.md has carried "wiring active-speaker framing in
+      # unseen is the failure this file exists to prevent" as an open item for
+      # weeks -- this is the measurement that has to come before that.
+      framing:
+        description: Only measure framing (no deploy) -- where the crop lands against where the faces are
+        type: boolean
+        required: false
+        default: false
+      framing_seconds:
+        description: 'Framing: seconds of the source to sample across'
+        required: false
+        default: '30'
+      framing_duration:
+        description: 'Framing: pick the cached source nearest this many seconds (0 = newest)'
+        required: false
+        default: '0'
   # Only worker/ code. Editing this file changes how the deploy runs, not what
   # is running on the box, so it must not trigger a deploy of its own -- an
   # unarmed run going red on every edit to the deploy script is noise, and the
@@ -264,7 +284,7 @@ jobs:
         # measurement: a question must not become a rebuild, because a rebuild
         # sends whatever is running back to its start. On a push `inputs` is
         # empty, so this runs exactly as before.
-        if: inputs.diagnose != true && inputs.quran_sync != true && inputs.probe_url == ''
+        if: inputs.diagnose != true && inputs.quran_sync != true && inputs.framing != true && inputs.probe_url == ''
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
@@ -304,7 +324,7 @@ jobs:
         # prove -- and the box legitimately holds whatever it last built,
         # which is behind any commit that touched only src/. The diagnostics
         # step prints the running version instead.
-        if: inputs.diagnose != true && inputs.quran_sync != true && inputs.probe_url == ''
+        if: inputs.diagnose != true && inputs.quran_sync != true && inputs.framing != true && inputs.probe_url == ''
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
@@ -560,6 +580,48 @@ jobs:
           trap 'rm -f /tmp/dc-quran-sync-probe.py' EXIT
           printf '%s' "$SYNC_B64" | base64 -d > /tmp/dc-quran-sync-probe.py
           docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-quran-sync-probe.py
+          REMOTE
+
+      # WHERE THE CROP LANDS, against where the faces actually are. This
+      # container is the only place with OpenCV, the Haar cascades and real
+      # lectures at the same time, so it is the only place the question can be
+      # asked. It renders nothing, writes nothing and deploys nothing.
+      #
+      # It prints face positions as PERCENTAGES OF THE FRAME WIDTH and box
+      # heights in pixels -- geometry, not pictures. No frame and no image
+      # leaves the box.
+      - name: Measure where the crop lands against where the faces are
+        if: inputs.framing == true
+        env:
+          HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
+          USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
+          RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
+          FRAMING_SECONDS: ${{ inputs.framing_seconds }}
+          FRAMING_DURATION: ${{ inputs.framing_duration }}
+        run: |
+          set -euo pipefail
+          export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
+          # Same rule as every other probe here: no dispatch input is ever
+          # interpolated into a shell command. It becomes a JSON literal in the
+          # script, and the script travels as one base64 blob.
+          node -e '
+            const fs = require("fs");
+            const src = fs.readFileSync(".github/scripts/framing-probe.py", "utf8");
+            if (!src.includes("PARAMS = {}")) throw new Error("the framing probe lost its PARAMS seam");
+            const num = (name, fallback) => { const v = Number.parseFloat(process.env[name] || ""); return Number.isFinite(v) && v >= 0 ? v : fallback; };
+            // NUMBERS ONLY, for the reason the probes above record: this literal
+            // is substituted into a PYTHON file and JSON.stringify spells a
+            // boolean `true`, which Python reads as an undefined name.
+            const params = { seconds: Math.min(120, num("FRAMING_SECONDS", 30) || 30), duration: num("FRAMING_DURATION", 0), frames: 12 };
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/framing-probe.py",
+              src.replace("PARAMS = {}", "PARAMS = " + JSON.stringify(params)));
+          '
+          BLOB=$(base64 -w0 < "$RUNNER_TEMP/framing-probe.py")
+          "$RUNNER_TEMP/rssh" "FRAMING_B64=$BLOB bash -s" <<'REMOTE'
+          set -euo pipefail
+          trap 'rm -f /tmp/dc-framing-probe.py' EXIT
+          printf '%s' "$FRAMING_B64" | base64 -d > /tmp/dc-framing-probe.py
+          docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-framing-probe.py
           REMOTE
 
       - name: Clean up the credential
