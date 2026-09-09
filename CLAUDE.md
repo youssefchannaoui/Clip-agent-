@@ -9364,6 +9364,25 @@ differs from the container's.
   better pattern. Left as a known pre-existing intermittent rather than claimed
   fixed.
 
+### CONFIRMED ON THE BOX AFTER THE DEPLOY (v3.180.0 verified in the container)
+
+Same window, same audio, the shipped code this time:
+
+    as shipped (vad off)   speech 83.5s of 90   ar@0.49   arabic 10/24   logprob -0.27
+    vad on                 speech 54.1s of 90   en@0.49   arabic  0/26   logprob -0.32
+    no language at all     speech 82.7s of 90   ar@0.49   arabic 29/29   logprob -0.60
+    ar forced              speech 83.4s of 90   ar@1.00   arabic 28/28   logprob -0.60
+
+So the fix is live and it produces the MIXED reading the content actually is.
+
+**The two all-Arabic rows are a warning, not a better answer.** An English
+lecture is not 29 Arabic segments of 29 -- that is Whisper writing English
+speech in Arabic script, and its mean logprob says so (-0.60 against -0.27).
+Anyone tempted to "improve" this by pinning `ar` or by dropping the auto
+setting would be trading a transliteration fault for a worse one in the other
+direction. The shipped combination is the one that reads the lecture as what
+it is.
+
 ### What is NOT proven
 
 **No lecture has been imported since this landed.** Every claim here is about which
