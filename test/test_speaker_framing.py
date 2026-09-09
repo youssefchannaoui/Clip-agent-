@@ -18,62 +18,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "worker"))
 
-from clip_worker import crop_origin_from_center, dominant_subject_track  # noqa: E402
+from clip_worker import crop_origin_from_center  # noqa: E402
 
 WIDTH = 1920
 
 
-def track(xs):
-    """A raw track at one-second samples, all at the same height."""
-    return [(float(i), float(x), 540.0) for i, x in enumerate(xs)]
-
-
-class DominantSubjectTests(unittest.TestCase):
-    def test_two_people_collapse_onto_the_one_present_most(self):
-        # Speaker at 1300, listener at 300, detection flapping between them.
-        xs = [1300, 300, 1300, 1300, 300, 1300, 1300, 1300, 300, 1300]
-        out = dominant_subject_track(track(xs), WIDTH)
-        self.assertTrue(all(x > 1000 for _, x, _ in out),
-                        f"every sample should sit on the speaker, got {[round(x) for _, x, _ in out]}")
-
-    def test_the_minority_is_held_not_dropped(self):
-        # Replacing rather than removing keeps the timeline intact, so the crop
-        # holds still instead of lurching away and back.
-        xs = [1300, 300, 1300, 1300, 300, 1300, 1300, 1300, 300, 1300]
-        out = dominant_subject_track(track(xs), WIDTH)
-        self.assertEqual(len(out), len(xs))
-        self.assertEqual([t for t, _, _ in out], [float(i) for i in range(len(xs))])
-
-    def test_a_speaker_walking_across_is_left_alone(self):
-        # A continuous sweep is one person moving, and the crop must follow.
-        xs = list(range(300, 1500, 120))
-        out = dominant_subject_track(track(xs), WIDTH)
-        self.assertEqual([x for _, x, _ in out], [float(x) for x in xs],
-                         "a moving speaker must not be clamped to where they started")
-
-    def test_one_person_wobbling_is_left_alone(self):
-        xs = [900, 915, 890, 905, 898, 902, 910, 895]
-        out = dominant_subject_track(track(xs), WIDTH)
-        self.assertEqual([x for _, x, _ in out], [float(x) for x in xs])
-
-    def test_a_few_stray_detections_are_not_a_second_subject(self):
-        # One bad frame is the scoring doing its job; collapsing on it would
-        # make the fix more twitchy than the bug.
-        xs = [1300, 1310, 1290, 1300, 1305, 1295, 1300, 1302, 1298, 300]
-        out = dominant_subject_track(track(xs), WIDTH)
-        self.assertEqual(len(out), len(xs))
-        self.assertEqual(out[-1][1], 300.0, "a lone outlier is left for the smoothing to absorb")
-
-    def test_too_short_to_judge_is_left_alone(self):
-        xs = [1300, 300]
-        self.assertEqual(dominant_subject_track(track(xs), WIDTH), track(xs))
-
-    def test_an_empty_track_is_safe(self):
-        self.assertEqual(dominant_subject_track([], WIDTH), [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+# DominantSubjectTests lived here and is retired with the function it covered.
+# `dominant_subject_track` collapsed a two-person track onto whichever person
+# appeared most and held the other's samples at that position -- which stopped
+# the crop settling in the gap between them, and stopped it EVER following the
+# second person. Youssef, 9 Sept 2026: "whenever someone's speaking, it should
+# be there centered in the frame." speaker_positions() in clip_worker.py does
+# both now, and test/test_active_speaker.py covers it -- including the property
+# this file's tests were protecting, that somebody walking across the stage is
+# followed rather than collapsed.
 
 
 class SubjectStaysInsideTheCropTests(unittest.TestCase):

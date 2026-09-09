@@ -21,13 +21,12 @@ frame of a real source:
 * how many faces the shipped detector finds, and where;
 * what the shipped static crop chooses, and whether that centre sits between
   two clusters of faces rather than on one;
-* what `track_speaker_keyframes` -- the active-speaker tracker that has been
-  written, unit-tested and wired to NOTHING since it was built -- chooses over
-  the same window, and whether it moves.
+* what `track_speaker_keyframes` -- the active-speaker tracker the render now
+  calls -- chooses over the same window, and whether it moves.
 
-It changes nothing and renders nothing. CLAUDE.md has carried "wiring active
-speaker framing in unseen is the failure this file exists to prevent" as an
-open item for weeks; this is the measurement that has to come first.
+It changes nothing and renders nothing. CLAUDE.md carried "wiring active speaker
+framing in unseen is the failure this file exists to prevent" as an open item
+for weeks; this is how it stopped being unseen.
 """
 import json
 import math
@@ -250,9 +249,9 @@ def main() -> int:
     target = (tight or results)[:1]
     for r in target:
         out()
-        out(f"== what the ACTIVE-SPEAKER tracker would choose for {r['source'].name[:28]} ==")
-        out("   (it is written, unit-tested and wired to NOTHING: the render calls")
-        out("    detect_main_face_crop instead)")
+        out(f"== what the ACTIVE-SPEAKER tracker chooses for {r['source'].name[:28]} ==")
+        out("   (this is what the render now uses; the static crop above is its")
+        out("    fallback for a box with no OpenCV or a clip with no face)")
         plan = cw.track_speaker_keyframes(r["source"], "ffprobe", 0.0, r["duration"], 1080, 1920)
         if not plan.get("available"):
             out(f"   unavailable: {plan.get('reason')}")

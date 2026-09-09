@@ -98,15 +98,22 @@ test('it measures the SHIPPED detector, not one of its own', () => {
     'which still matches clip_worker');
 });
 
-test('it compares the shipped crop against the tracker that is wired to nothing', () => {
-  // track_speaker_keyframes has been written, unit-tested and reachable only
-  // from a --framing CLI flag since it was built; the render calls
-  // detect_main_face_crop instead. The whole point of asking is to see what the
-  // unused one would have chosen.
+test('THE RENDER FOLLOWS THE SPEAKER, and the probe measures both paths', () => {
+  // This guard was written the other way round -- "the render calls
+  // detect_main_face_crop, so if it ever starts calling the tracker this
+  // comparison has to be re-read" -- and it fired within the hour, which is
+  // exactly what it was for. The render calls the tracker now; the static
+  // detector remains only as the fallback for a box with no OpenCV, a source
+  // that will not open, or a clip with no face in it.
+  const worker = fs.readFileSync(path.join(ROOT, 'worker/clip_worker.py'), 'utf8');
+  const render = worker.slice(worker.indexOf('    crop_plan = None\n    if bg_visual is None'));
+  const body = render.slice(0, render.indexOf('bg_prelude'));
+  assert.match(body, /track_speaker_keyframes\(/, 'the render asks who is speaking');
+  assert.match(body, /detect_main_face_crop\(/, 'and still has a fallback');
+  assert.ok(body.indexOf('track_speaker_keyframes(') < body.indexOf('detect_main_face_crop('),
+    'the tracker is tried FIRST, the static crop is what it falls back to');
+  // The probe reports both, so a run says what the render did and what the
+  // other method would have done with the same frames.
   assert.match(script, /detect_main_face_crop/);
   assert.match(script, /track_speaker_keyframes/);
-  const worker = fs.readFileSync(path.join(ROOT, 'worker/clip_worker.py'), 'utf8');
-  const renderPath = worker.slice(worker.indexOf('def build_video_filter'), worker.indexOf('def track_speaker_keyframes'));
-  assert.ok(!renderPath.includes('track_speaker_keyframes('),
-    'if the render ever starts calling the tracker, this comparison has to be re-read');
 });

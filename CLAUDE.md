@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1995 JS + 882 Python**
+- `npm test` and `npm run check` must pass. Currently **1995 JS + 892 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -17528,6 +17528,108 @@ this version already exists there (anywhere in its recent history, not only at
 its tip -- another session may have pushed past it), and what the next free
 number is. It writes nothing and never fails a build; it is a question, so it
 exits 0 whatever the answer. Its first real run found 3.177.1 already taken.
+
+## Whoever is speaking is centred, and the crop follows them (v3.179.0, 9 Sept 2026)
+
+Youssef, describing the shot exactly: "two people are sitting with each other,
+then on the other side, there's another person ... with the person who's alone,
+it's framing him perfectly, and then it's confused to what to do on the other
+end because there's two people sitting next to each other, so then it hits it in
+the middle. So it should be whenever someone's speaking, it should be there
+centered in the frame."
+
+**His two observations are two code paths meeting the same footage.** With ONE
+face there is nothing to average with, so the lone man was framed perfectly.
+With TWO faces close together the crop was the exponential average of every
+sample, and the average of A and B is the gap between A and B. "Hits it in the
+middle" is arithmetic, not a misjudgement.
+
+### Three faults, and they were separate
+
+1. **The crop was an exponential average over every sample.** Two people sitting
+   together make detection alternate between them and the smoother converges on
+   the midpoint, framing neither.
+2. **Mouth movement was a BONUS, not the signal.** Score was face area plus
+   movement times 2.5 plus a continuity term worth up to 0.42 -- and a 346px
+   face on a 1920x1080 frame scores 0.058 for area while a talking mouth adds
+   perhaps 0.03. Continuity outweighed speech by an order of magnitude, so once
+   the crop settled it stayed whoever was talking.
+3. **`dominant_subject_track` collapsed a two-subject track onto ONE subject for
+   the whole clip.** It was written to stop fault 1 and it does -- by refusing
+   to ever follow the other person, which is the opposite of what was asked.
+   Retired, with its tests, and the one property they protected (somebody
+   walking across the stage is followed rather than collapsed) moved to
+   `test_active_speaker.py`, where grouping by face size gets it for free.
+
+### The detector only MEASURES now
+
+Which face is talking, and where the crop goes, is arithmetic -- so it is three
+pure functions (`assign_subjects`, `speaking_subject`, `speaker_positions`) that
+can be driven against the shot Youssef described without OpenCV, a camera or a
+face. The detector's job is reduced to reporting boxes and how much each mouth
+moved. That split is what made seventeen tests possible on a machine with no cv2
+installed.
+
+- **Movement is compared WITHIN the frame, never against an absolute.** Lighting,
+  grain and codec noise move every face's pixels by an amount that has nothing
+  to do with speech, so "moved 0.04" is meaningless and "moved four times more
+  than the other face in the same frame" is not.
+- **A speaker is HELD until a challenger beats them by 1.35x for three
+  consecutive samples** -- about a second of genuinely talking at 2Hz. Without
+  it the camera swings on one frame of noise.
+- **THE POSITION IS ALWAYS A REAL FACE'S**, never a blend of two. That single
+  property is fault 1.
+
+### The crop moves, and ffmpeg does the interpolating
+
+`crop=` takes expressions for x and y and evaluates them per frame, so following
+a speaker costs no second pass and no re-encode. `crop_expression()` writes a
+SUM of gated segments rather than nested ifs -- `gte*lt`, never `between()`,
+because between is inclusive at both ends and two adjacent segments would fire
+on the boundary frame and sum to double the value.
+
+**A switch is emitted as its own PAIR of keyframes**, not sampled into one. The
+first attempt computed the travel at the detector's rate and a 0.45s move landed
+inside a single 0.5s gap -- a cut wearing a pan's name. Emitted explicitly,
+ffmpeg interpolates it once per rendered frame whatever rate the detector ran at.
+
+`simplify_keyframes` drops the ones a straight line already covers, and **a plan
+that survives as one keyframe becomes a plain static crop** -- byte-identical to
+every render before this existed.
+
+### Verified on rendered frames, not argued
+
+A 1920x1080 source with a marker where each person would sit, through the REAL
+`build_video_filter` graph, measured off the decoded output:
+
+    t=0,1,2s   speaker A at output x=487, frame centre 540, marker 107px wide
+               -> its centre is 540.3.  DEAD CENTRE.
+    t=3,5s     speaker B at output x=487.  The same.
+
+So each speaker, when chosen, is centred to within half a pixel, and the crop
+travels between them. **A crop width must be EVEN**: the first attempt used 405
+and yuv420p silently shifted everything by 44 pixels, which read as an
+arithmetic bug and was not one. `fitted_crop_size` already guarantees it.
+
+### Two red probes came back GREEN, and both were my tests being weak
+
+The failure this file records more than any other, twice in one sitting:
+
+* Removing the switch hysteresis entirely passed, because the test asserted
+  where the crop ENDED. It swung to the other person and back; the last frame
+  was on the right person either way. It now asserts **every** position.
+* Reordering the key so size beats movement passed, because every face in the
+  fixture was the same size. There is a test now where the SILENT face is half
+  again as big as the talking one -- which is the real shot, since the person
+  nearer the camera is bigger.
+
+### What is NOT proven
+
+**The reported clip is still not on the box.** Six cached sources, none of them
+the tight two-shot he described. What is proven is the decision logic against
+that shot as described, and the moving crop on rendered pixels. What is not is
+the detector finding those two faces in that lighting -- which needs the lecture
+re-imported, and then one `framing=true` dispatch.
 
 ## The crop was built on the biggest box in each frame, noise included (v3.178.0, 9 Sept 2026)
 
