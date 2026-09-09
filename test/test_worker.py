@@ -367,7 +367,7 @@ class CaptionAnimationTests(unittest.TestCase):
         return worker.caption_word_override(
             "word", active=True, primary="&H00FFFFFF", highlight="&H0078B4D9",
             highlight_font="Amiri", arabic_font="Amiri", highlight_italic=True,
-            highlight_glow=0, scale_y=88, **kw,
+            highlight_glow=0, scale_y=88, arabic_size=None, **kw,
         )
 
     def test_the_pop_uses_the_configured_size_and_speed(self):
@@ -393,7 +393,8 @@ class CaptionAnimationTests(unittest.TestCase):
     def test_an_inactive_word_never_pops(self):
         quiet = worker.caption_word_override(
             "word", active=False, primary="&H00FFFFFF", highlight="&H0078B4D9",
-            highlight_font="Amiri", arabic_font="Amiri", highlight_italic=True,
+            highlight_font="Amiri", arabic_font="Amiri", arabic_size=None,
+            highlight_italic=True,
             highlight_glow=0, scale_y=88, pop_scale=128, pop_ms=240,
         )
         self.assertNotIn(r"\fscx", quiet)
@@ -1195,11 +1196,21 @@ class MixedScriptCaptionTests(unittest.TestCase):
     """
 
     def test_each_word_gets_a_face_that_can_draw_it(self):
+        # The PROPERTY, not the tag count: the three Arabic words are drawn in
+        # the Arabic face and the seven English ones are not. Consecutive
+        # Arabic words share ONE override block now -- splitting a phrase
+        # across a block per word hands the bidi algorithm a fragment at a time
+        # and is not how the recitation path draws Arabic -- so counting tags
+        # was pinning the mechanism rather than the behaviour.
         line = worker.mixed_script_line(
             "The Prophet said إن الله جميل and he loved beauty",
             font="DejaVu Sans", arabic_font="Amiri", uppercase=False,
         )
-        self.assertEqual(line.count(r"\fnAmiri"), 3, "the three Arabic words")
+        arabic_run = line[line.index(r"\fnAmiri"):]
+        arabic_run = arabic_run[:arabic_run.index(r"\fnDejaVu Sans")]
+        for word in ("إن", "الله", "جميل"):
+            self.assertIn(word, arabic_run, word)
+        self.assertEqual(line.count(r"\fnAmiri"), 1, "one run, not one block per word")
         self.assertEqual(line.count(r"\fnDejaVu Sans"), 7, "the seven English words")
 
     def test_uppercase_applies_to_the_latin_words_only(self):
@@ -1892,10 +1903,10 @@ class FillCaptionTests(unittest.TestCase):
 
     def _render(self, **overrides):
         words = [
-            {"start": 0.0, "end": 1.4, "word": "Astaghfirullah"},
+            {"start": 0.0, "end": 1.4, "word": "Repentance"},
             {"start": 1.5, "end": 2.1, "word": "means"},
         ]
-        segments = [{"start": 0.0, "end": 2.4, "text": "Astaghfirullah means", "words": words}]
+        segments = [{"start": 0.0, "end": 2.4, "text": "Repentance means", "words": words}]
         candidate = worker.Candidate(0, 2.4, segments[0]["text"], segments, 90, [], False)
         template = {
             "width": 1080, "height": 1920, "captionMode": "fill", "captionMaxWords": 1,
@@ -1912,8 +1923,9 @@ class FillCaptionTests(unittest.TestCase):
         self.assertEqual(len(lines), 2, "one event per word")
         # \kf takes centiseconds, and the sweep has to last exactly as long as
         # the word was spoken -- 1.4s and 0.6s here.
-        self.assertIn("{\\kf140}Astaghfirullah", lines[0])
-        self.assertIn("{\\kf60}means", lines[1])
+        self.assertIn("{\\kf140}", lines[0])
+        self.assertIn("Repentance", lines[0])
+        self.assertIn("{\\kf60}means", lines[1])  # an all-Latin line carries no tag of its own
 
     def test_the_two_colours_are_the_style_pair_the_sweep_runs_between(self):
         # \kf sweeps SecondaryColour -> PrimaryColour, so the template's
@@ -1928,12 +1940,12 @@ class FillCaptionTests(unittest.TestCase):
     def test_without_word_timings_it_still_captions(self):
         # A re-render of an edited transcript has no word timings; the clip must
         # not come out silent.
-        segments = [{"start": 0.0, "end": 2.4, "text": "Astaghfirullah means", "words": []}]
+        segments = [{"start": 0.0, "end": 2.4, "text": "Repentance means", "words": []}]
         candidate = worker.Candidate(0, 2.4, segments[0]["text"], segments, 90, [], False)
         out = pathlib.Path(tempfile.mkdtemp()) / "c.ass"
         worker.write_ass(candidate, {"width": 1080, "height": 1920, "captionMode": "fill"}, out)
         text = out.read_text(encoding="utf-8")
-        self.assertIn("Astaghfirullah", text)
+        self.assertIn("Repentance", text)
 
 
 class WrappedCaptionTests(unittest.TestCase):

@@ -3019,6 +3019,204 @@ def contains_arabic(text: str) -> bool:
     return bool(re.search(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]", str(text)))
 
 
+# ---------------------------------------------------------------------------
+# Spoken Arabic that Whisper wrote in Latin letters, put back into Arabic
+# script -- at DRAW time, and nowhere else.
+#
+# WHY THIS EXISTS. Whisper commits to one language per SEGMENT. Since v3.180.0
+# the voice filter is off, so a stretch of Arabic -- a quotation, a du'a, a
+# whole sentence -- is detected as Arabic and written in Arabic script, which
+# is what the box measured (0 Arabic segments before the fix, 10 of 24 after).
+# What no language choice can fix is a single Arabic word dropped into an
+# English sentence with no pause around it: the segment is English, so the word
+# comes out transliterated -- "fikulli qarni min ummati", "alhamdulillah",
+# "sabr". Nothing downstream can tell that is Arabic, because it is not:
+# contains_arabic is false, so no Arabic face and no translation line.
+#
+# WHERE IT IS APPLIED, and why that is the whole safety argument. Only the
+# CAPTION is rewritten -- caption_words() and mixed_script_line(), both of them
+# display. Whisper's own words stay on candidate.segments and on
+# candidate_words(), so:
+#   * the editor's caption blocks are still Whisper's text, and "the editor
+#     must never save what it only draws" holds;
+#   * titles stay English -- clip_english() and the titler never see this;
+#   * the ayah matcher cannot be handed an Arabic word we invented, so no
+#     scripture can be matched off a substitution;
+#   * the spoken-Arabic treatment (Arabic line + English under it) needs BOTH
+#     Arabic in the segment AND a translation from Whisper's second pass, and
+#     this changes neither -- so an English sentence with one Arabic word in it
+#     cannot grow an English translation line beneath itself.
+#
+# WHAT IS IN THE LIST, and the rule that decides. A token is here when the
+# speaker is SPEAKING ARABIC at that moment, not using a loanword that has
+# entered English. "Alhamdulillah" and "dunya" are Arabic; "Quran", "Ramadan",
+# "hajj", "halal", "imam", "sheikh", "hadith", "surah", "sunnah" and "mosque"
+# are English words an English sentence uses, and they are deliberately absent.
+# Anything ambiguous is LEFT OUT: a false positive puts Arabic script on an
+# English word, which is visible and wrong, where a miss is only the behaviour
+# that shipped yesterday. Particles (min, wa, fi, bi, la) are absent for the
+# same reason -- they would convert one word in the middle of a transliterated
+# quotation and leave a line half in each script.
+#
+# ONE TOKEN IN, ONE STRING OUT, always. Word and karaoke modes redraw a group
+# once per word against Whisper's own timings, so a substitution that changed
+# the word COUNT would slide the highlight off the word being spoken. An entry
+# may hold spaces -- "ما شاء الله" is three Arabic words -- but it occupies the
+# single timing slot of the single token that was spoken.
+ARABIC_TRANSLITERATIONS: dict[str, str] = {
+    # The invocations and honorifics. Nobody says these in English.
+    "allah": "الله",
+    "allaah": "الله",
+    "bismillah": "بسم الله",
+    "bismillahi": "بسم الله",
+    "bismillahirrahmanirrahim": "بسم الله الرحمن الرحيم",
+    "alhamdulillah": "الحمد لله",
+    "alhamdulillahi": "الحمد لله",
+    "subhanallah": "سبحان الله",
+    "subhanaallah": "سبحان الله",
+    "subhanahu": "سبحانه",
+    "subhanahuwataala": "سبحانه وتعالى",
+    "wataala": "وتعالى",
+    "taala": "تعالى",
+    "tabarakawataala": "تبارك وتعالى",
+    "mashallah": "ما شاء الله",
+    "mashaallah": "ما شاء الله",
+    "inshallah": "إن شاء الله",
+    "inshaallah": "إن شاء الله",
+    "insha": "إن شاء",
+    "astaghfirullah": "أستغفر الله",
+    "astaghfiru": "أستغفر",
+    "jazakallah": "جزاك الله",
+    "jazakallahu": "جزاك الله",
+    "jazakumullah": "جزاكم الله",
+    "khayran": "خيرا",
+    "barakallah": "بارك الله",
+    "barakallahu": "بارك الله",
+    "sallallahu": "صلى الله",
+    "alayhi": "عليه",
+    "alaihi": "عليه",
+    "wasallam": "وسلم",
+    "wasalam": "وسلم",
+    "radiyallahu": "رضي الله",
+    "radiallahu": "رضي الله",
+    "radhiyallahu": "رضي الله",
+    "anhu": "عنه",
+    "anha": "عنها",
+    "anhum": "عنهم",
+    "anhuma": "عنهما",
+    "rahimahullah": "رحمه الله",
+    "rahmatullah": "رحمة الله",
+    "azzawajal": "عز وجل",
+    "wallahi": "والله",
+    "billahi": "بالله",
+    "rabbana": "ربنا",
+    "ameen": "آمين",
+    "laailahaillallah": "لا إله إلا الله",
+    "lailahaillallah": "لا إله إلا الله",
+    # The vocabulary an English sentence has no word for.
+    "dunya": "دنيا",
+    "akhirah": "آخرة",
+    "akhira": "آخرة",
+    "aakhirah": "آخرة",
+    "taqwa": "تقوى",
+    "sabr": "صبر",
+    "shukr": "شكر",
+    "tawbah": "توبة",
+    "tawba": "توبة",
+    "istighfar": "استغفار",
+    "ikhlas": "إخلاص",
+    "riya": "رياء",
+    "khushu": "خشوع",
+    "rizq": "رزق",
+    "qadar": "قدر",
+    "nafs": "نفس",
+    "tawheed": "توحيد",
+    "tawhid": "توحيد",
+    "shirk": "شرك",
+    "jannah": "جنة",
+    "janna": "جنة",
+    "jahannam": "جهنم",
+    "barzakh": "برزخ",
+    "qiyamah": "قيامة",
+    "qiyaamah": "قيامة",
+    "sirat": "صراط",
+    "mizan": "ميزان",
+    "shaytan": "شيطان",
+    "shaitan": "شيطان",
+    "malaikah": "ملائكة",
+    "rahmah": "رحمة",
+    "maghfirah": "مغفرة",
+    "hidayah": "هداية",
+    "dhikr": "ذكر",
+    "zikr": "ذكر",
+    "dua": "دعاء",
+    "duaa": "دعاء",
+    "sadaqah": "صدقة",
+    "sadaqa": "صدقة",
+    "ihsan": "إحسان",
+    "yaqeen": "يقين",
+    "tawakkul": "توكل",
+    "sakinah": "سكينة",
+    "barakah": "بركة",
+    "baraka": "بركة",
+    "fitrah": "فطرة",
+    "ghaflah": "غفلة",
+    "hasanat": "حسنات",
+    "sayyiat": "سيئات",
+    "niyyah": "نية",
+    "ummah": "أمة",
+    "deen": "دين",
+    "eeman": "إيمان",
+    "emaan": "إيمان",
+    "kufr": "كفر",
+    "zulm": "ظلم",
+    "hikmah": "حكمة",
+    "akhlaq": "أخلاق",
+    "hayaa": "حياء",
+    "amanah": "أمانة",
+    "muhasabah": "محاسبة",
+}
+
+# Whisper spells these inconsistently -- Insha'Allah, insha-Allah, INSHAALLAH --
+# and the token arrives wearing whatever punctuation the sentence gave it.
+_TRANSLIT_INNER = re.compile(r"[’ʼ'`‐‑‒–\-_.]")
+_TRANSLIT_EDGE = re.compile(
+    r"^[^0-9A-Za-z؀-ۿ]+|[^0-9A-Za-z؀-ۿ]+$"
+)
+
+
+def transliteration_key(token: str) -> str:
+    """The lookup form of a spoken token: no punctuation, no case."""
+    return _TRANSLIT_INNER.sub("", _TRANSLIT_EDGE.sub("", str(token))).lower()
+
+
+def arabise_word(token: str) -> str:
+    """One spoken token, in Arabic script if the lexicon recognises it.
+
+    Idempotent by construction: a token that already holds Arabic is returned
+    untouched, so applying this twice down one render path cannot double a
+    substitution. The punctuation the token was wearing is kept -- dropping the
+    full stop off the end of a sentence is a caption fault of its own.
+    """
+    text = str(token)
+    if not text or contains_arabic(text):
+        return text
+    core = _TRANSLIT_EDGE.sub("", text)
+    if not core:
+        return text
+    replacement = ARABIC_TRANSLITERATIONS.get(transliteration_key(core))
+    if not replacement:
+        return text
+    head = text[:text.index(core)]
+    tail = text[text.index(core) + len(core):]
+    return f"{head}{replacement}{tail}"
+
+
+def arabise_text(text: str) -> str:
+    """Every token of a caption line, whitespace preserved."""
+    return re.sub(r"\S+", lambda m: arabise_word(m.group(0)), str(text))
+
+
 _INSTALLED_FAMILIES: set[str] | None = None
 
 
@@ -3331,6 +3529,30 @@ AYAH_VISUAL = AYAH_SIZE_SCALE / AYAH_FONT_CELL["Amiri"]
 
 def ayah_nominal_scale(face: str) -> float:
     return AYAH_VISUAL * AYAH_FONT_CELL.get(str(face), AYAH_FONT_CELL["Amiri"])
+
+
+# How much bigger an Arabic word must be asked for to LOOK the same size as the
+# English words beside it on ONE caption line.
+#
+# MEASURED ON THE BOX, in its own libass with its own Amiri, not computed:
+# "MERCY" in Outfit at nominal 62 draws 34px of ink; "الحمد لله" in Amiri at
+# the same nominal 62 draws EIGHT. So every Arabic word Whisper has ever put
+# inside an English caption line has been drawn at a quarter the height of the
+# words around it -- an illegible smudge, on a frame, for as long as
+# mixed_script_line has existed. libass sizes by the face's win ascent+descent
+# rather than its em (VSFilter compat) and Amiri reserves roughly three times
+# its em for tashkeel it may never draw.
+#
+# This is NOT ayah_nominal_scale. That one is tuned against the TRANSLATION
+# size on the ayah treatment, where the Arabic has a line of its own; this is
+# against the caption size, on a line the Arabic shares with English.
+# `caption_frame` in deploy-worker.yml is the rig, and it renders the frame.
+ARABIC_INLINE_SCALE = 4.25
+
+
+def arabic_inline_size(font_size: float) -> int:
+    """The nominal size an inline Arabic run is asked for, in a Latin line."""
+    return max(1, int(round(float(font_size) * ARABIC_INLINE_SCALE)))
 
 
 # The end-of-ayah ornament, relative to the ayah text. At 1.0 the verse number
@@ -3681,7 +3903,9 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
 
 
 def mixed_script_line(raw: str, *, font: str, arabic_font: str, uppercase: bool,
-                      tag_latin: bool = True) -> str:
+                      tag_latin: bool = True, arabic_size: int | None = None,
+                      latin_size: int | None = None,
+                      letter_spacing: float | None = None) -> str:
     """A line that may switch between Arabic and English, word by word.
 
     Word and stacked modes already switch face per word through
@@ -3697,28 +3921,78 @@ def mixed_script_line(raw: str, *, font: str, arabic_font: str, uppercase: bool,
     already set in that face. Every override block starts a fresh layout run in
     libass, and the style's Spacing is not carried across one -- so naming the
     face again on every word silently threw the tracking away.
+
+    THE SIZE. libass sizes by the face's win cell, not its em, so Arabic at the
+    caption's own nominal size draws a QUARTER of the height of the English
+    beside it -- measured on the box, 8px against 34px. arabic_size is what
+    makes the two match. It is named only on a line that actually holds Arabic,
+    so an English caption is laid out exactly as it was before this existed.
+
+    CONSECUTIVE ARABIC WORDS ARE ONE RUN. A substitution may be several Arabic
+    words ("ما شاء الله"), and splitting those across an override block each --
+    with a Latin-sized space between them -- is not how the recitation path or
+    spoken_events draw Arabic, and it hands the bidi algorithm a fragment at a
+    time. The Latin side is deliberately left exactly as it is: changing when
+    its tags are emitted would move the tracking on every English caption.
     """
-    out: list[str] = []
-    for word in str(raw).split():
-        # wrap_caption hands us ASS's own \\N breaks, stuck to the word they
+    words = str(raw).split()
+    # The substitution comes FIRST: whether this line holds Arabic at all is a
+    # question about what will be drawn, not about what Whisper wrote.
+    pieces: list[tuple[str, str]] = []
+    for index, word in enumerate(words):
+        if index:
+            pieces.append(("space", " "))
+        # wrap_caption hands us ASS's own \N breaks, stuck to the word they
         # follow. Escaping one turns it into a backslash PRINTED on screen --
-        # "wajhullah\\" sat at the end of a line in a shipped clip. The break is
+        # "wajhullah\" sat at the end of a line in a shipped clip. The break is
         # kept as a break and only the text around it is escaped.
-        pieces = word.split("\\N")
-        rendered: list[str] = []
-        for piece in pieces:
-            if not piece:
-                rendered.append("")
+        parts = word.split("\\N")
+        for part_index, part in enumerate(parts):
+            if part_index:
+                pieces.append(("break", "\\N"))
+            if not part:
                 continue
-            if contains_arabic(piece):
-                rendered.append(f"{{\\fn{arabic_font}\\i0}}{ass_escape(piece)}")
+            part = arabise_word(part)
+            if contains_arabic(part):
+                pieces.append(("arabic", part))
             else:
-                value = piece.upper() if uppercase else piece
-                rendered.append(
-                    f"{{\\fn{font}}}{ass_escape(value)}" if tag_latin else ass_escape(value)
-                )
-        out.append("\\N".join(rendered))
-    return " ".join(out)
+                pieces.append(("latin", part.upper() if uppercase else part))
+
+    sized = bool(arabic_size and latin_size and any(k == "arabic" for k, _ in pieces))
+    spacing = f"\\fsp{letter_spacing:g}" if sized and letter_spacing else ""
+    size_tag = f"\\fs{int(arabic_size)}" if sized else ""
+    open_arabic = f"{{\\fn{arabic_font}{size_tag}\\i0}}"
+    # Closed only where the Latin words carry no tag of their own. With
+    # tag_latin on, the next Latin word names the face and the size itself, and
+    # a close as well would open a second layout run for nothing.
+    close_arabic = ""
+    if not tag_latin:
+        back = f"\\fs{int(latin_size)}{spacing}" if sized else ""
+        close_arabic = f"{{\\fn{font}{back}}}"
+
+    out: list[str] = []
+    in_arabic = False
+    for kind, text in pieces:
+        if kind in ("space", "break"):
+            out.append(text)
+            continue
+        if kind == "arabic":
+            if not in_arabic:
+                out.append(open_arabic)
+                in_arabic = True
+            out.append(ass_escape(text))
+            continue
+        if in_arabic:
+            out.append(close_arabic)
+            in_arabic = False
+        if tag_latin:
+            size = f"\\fs{int(latin_size)}" if sized else ""
+            out.append(f"{{\\fn{font}{size}}}{ass_escape(text)}")
+        else:
+            out.append(ass_escape(text))
+    if in_arabic:
+        out.append(close_arabic)
+    return "".join(out)
 
 
 def caption_word_override(
@@ -3729,6 +4003,7 @@ def caption_word_override(
     highlight: str,
     highlight_font: str,
     arabic_font: str,
+    arabic_size: int | None,
     highlight_italic: bool,
     highlight_glow: float,
     scale_y: int,
@@ -3737,8 +4012,15 @@ def caption_word_override(
 ) -> str:
     color = highlight if active else primary
     tags = [f"\\c{color.replace('&H00', '&H')}&"]
+    # NOT substituted here: the words this is handed come from caption_words(),
+    # which has already done it. Doing it twice is two answers to one question
+    # and it made the test for the first one unable to fail.
     if contains_arabic(text):
         tags.append(f"\\fn{arabic_font}")
+        # The size is closed by the {\\rCaption} this returns, so it cannot
+        # leak into the next word the way it does on an untagged line.
+        if arabic_size:
+            tags.append(f"\\fs{int(arabic_size)}")
         tags.append("\\i0")
     elif active:
         tags.append(f"\\fn{highlight_font}")
@@ -3867,6 +4149,21 @@ def candidate_words(candidate: Candidate) -> list[dict[str, Any]]:
     return words
 
 
+def caption_words(candidate: Candidate) -> list[dict[str, Any]]:
+    """The words a caption DRAWS -- Whisper's, with spoken Arabic put back.
+
+    Deliberately a second function rather than a flag on candidate_words: the
+    editor, the transcript and everything that reads a clip's words must keep
+    Whisper's own, so the default has to be the honest record and the display
+    has to ask for the substitution by name. A render path that calls the wrong
+    one draws a transliteration -- yesterday's behaviour -- where an editor path
+    calling the wrong one would write our substitution into a saved transcript.
+    """
+    words = candidate_words(candidate)
+    for word in words:
+        word["word"] = arabise_word(word["word"])
+    return words
+
 def chunked(items: list[Any], size: int) -> Iterable[list[Any]]:
     for index in range(0, len(items), max(1, size)):
         yield items[index:index + max(1, size)]
@@ -3920,7 +4217,7 @@ def caption_blocks(candidate: Candidate) -> list[dict[str, Any]]:
 
 def dynamic_caption_frames(candidate: Candidate, template: dict[str, Any]) -> list[dict[str, Any]]:
     """Build TikTok-style caption states: mostly one word, sometimes a growing stack."""
-    words = candidate_words(candidate)
+    words = caption_words(candidate)
     if not words:
         return []
     max_stack = max(1, min(6, int(template.get("captionStackMaxWords", 4))))
@@ -4043,7 +4340,7 @@ def caption_cards(candidate: Candidate, template: dict[str, Any]) -> list[dict[s
     Cards also break on a sentence ending, so a full stop never lands mid-card
     with the next sentence's opening words beside it.
     """
-    words = candidate_words(candidate)
+    words = caption_words(candidate)
     if not words:
         return []
     max_words = max(1, min(12, int(template.get("captionMaxWords", 5) or 5)))
@@ -4108,7 +4405,7 @@ def stack_build_blocks(candidate: Candidate, template: dict[str, Any]) -> list[d
     with that because the speaker is standing in front of the overflow; run it
     off the edge of the frame instead and the words are simply gone.
     """
-    words = candidate_words(candidate)
+    words = caption_words(candidate)
     if not words:
         return []
     max_words = max(1, min(6, int(template.get("captionStackMaxWords", 4) or 4)))
@@ -4281,7 +4578,14 @@ def stack_build_events(
                     value = str(lines[draw_line][draw_word]["word"]).strip()
                     if uppercase and not contains_arabic(value):
                         value = value.upper()
-                    face = f"\\fn{arabic_font}" if contains_arabic(value) else ""
+                    # Every word here already emits its own override block, so
+                    # the size is named on each rather than restored after the
+                    # Arabic -- an \\fs left open would draw the rest of the
+                    # line at the Arabic size.
+                    if contains_arabic(value):
+                        face = f"\\fn{arabic_font}\\fs{arabic_inline_size(pixel_sizes[draw_line])}"
+                    else:
+                        face = f"\\fs{pixel_sizes[draw_line]}"
                     if draw_line == line_index and draw_word == word_index:
                         delay = max(0, int(round((float(word["start"]) - appear) * 1000)))
                         colour = (
@@ -4475,7 +4779,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         events.append(f"Dialogue: 1,0:00:00.00,{ass_time(candidate.duration)},Watermark,,0,0,0,,{watermark}")
 
     mode = str(template.get("captionMode", "dynamic-stack"))
-    words = candidate_words(candidate)
+    words = caption_words(candidate)
 
     # Recited scripture is captioned from the Quran on every template, not only
     # the Quran one.
@@ -4753,6 +5057,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                             line = mixed_script_line(
                                 wrap_caption(" ".join(gap), 28),
                                 font=font, arabic_font=arabic_font, uppercase=uppercase,
+                                arabic_size=arabic_inline_size(font_size),
+                                latin_size=int(font_size), letter_spacing=letter_spacing,
                             )
                             # Same \q0 guard as the phrase captions: a flat
                             # character count must never be what keeps words
@@ -4829,6 +5135,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 lines.append(caption_word_override(
                     raw_value, active=is_active, primary=primary, highlight=highlight,
                     highlight_font=highlight_font, arabic_font=arabic_font,
+                    arabic_size=arabic_inline_size(font_size),
                     highlight_italic=highlight_italic, highlight_glow=highlight_glow, scale_y=scale_y,
                     pop_scale=pop_scale, pop_ms=pop_ms,
                 ))
@@ -4870,6 +5177,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             text = mixed_script_line(
                 " ".join(str(word["word"]).strip() for word in card["words"]),
                 font=font, arabic_font=arabic_font, uppercase=uppercase, tag_latin=False,
+                arabic_size=arabic_inline_size(font_size), latin_size=int(font_size),
+                letter_spacing=letter_spacing,
             )
             # Tracking is stated on the line rather than left to the style's
             # Spacing: an Arabic word in the card introduces an override block,
@@ -4896,8 +5205,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for word in group:
                 value = word["word"].upper() if uppercase else word["word"]
                 centiseconds = max(1, int(round((float(word["end"]) - float(word["start"])) * 100)))
-                face = f"{{\\fn{arabic_font}}}" if contains_arabic(value) else ""
-                parts.append(f"{{\\kf{centiseconds}}}{face}{ass_escape(value)}")
+                # Already in Arabic where it should be: `words` is caption_words().
+                # An override is opened on the Arabic word and CLOSED straight
+                # after it -- both the face and the size. Neither ends with the
+                # word on its own: today an Arabic word in this mode already
+                # leaves every Latin word after it drawn in Amiri, and a size
+                # left open would draw them at the Arabic size as well. Only
+                # the Arabic word carries a tag, so a line with none in it is
+                # laid out exactly as it is today, tracking included.
+                face = ""
+                close = ""
+                if contains_arabic(value):
+                    face = f"{{\\fn{arabic_font}\\fs{arabic_inline_size(font_size)}}}"
+                    close = f"{{\\fn{font}\\fs{int(font_size)}}}"
+                parts.append(f"{{\\kf{centiseconds}}}{face}{ass_escape(value)}{close}")
             if inside_ayah((start + end) / 2) or inside_arabic((start + end) / 2):
                 continue
             # \q0, for the same reason the phrase and ayah lines carry it: this
@@ -4919,6 +5240,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     text_parts.append(caption_word_override(
                         raw_value, active=index == active_index, primary=primary, highlight=highlight,
                         highlight_font=highlight_font, arabic_font=arabic_font,
+                        arabic_size=arabic_inline_size(font_size),
                         highlight_italic=highlight_italic, highlight_glow=highlight_glow, scale_y=scale_y,
                         pop_scale=pop_scale, pop_ms=pop_ms,
                     ))
@@ -4947,6 +5269,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             text = mixed_script_line(
                 wrap_caption(str(segment["text"]), 28),
                 font=font, arabic_font=arabic_font, uppercase=uppercase,
+                arabic_size=arabic_inline_size(font_size), latin_size=int(font_size),
+                letter_spacing=letter_spacing,
             )
             # \q0: wrap_caption breaks at a flat 28 characters, which assumes
             # the template's own face. When fontconfig resolves the family to

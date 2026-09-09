@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2007 JS + 908 Python**
+- `npm test` and `npm run check` must pass. Currently **2007 JS + 928 Python**
   (13 Python skipped) — the skips are where ffmpeg or OpenCV is absent, which
   is CI.
   These numbers were once wrong by more than a factor of
@@ -10145,6 +10145,174 @@ Three probes proven red: the branch removed (the shipped bug, 3 failures), the
 Page road forced onto the Facebook host, and a Page failure written to the
 `instagram` record instead of the Meta one.
 
+
+## Every Arabic word reaches the frame in Arabic script (v3.183.0, 9 Sept 2026)
+
+Youssef, restating the requirement after v3.180.0: "in all types of Islamic
+lectures there should be an auto detect that would ... regardless of anything,
+will pick through -- if they speak Arabic, it will come up with Arabic writing.
+Every single Arabic word will turn into an Arabic writing, and it can be in the
+same sentence as an English sentence. It just translates every time it swaps
+through."
+
+### The honest answer to "is auto detection working?", measured
+
+**Yes as of five hours before this shipped, and no before that.** The box's own
+measurement over the same 90 seconds of his own lecture, one variable, `medium`:
+
+    as shipped (voice filter OFF, v3.180.0)   ar@0.49   arabic 10/24   logprob -0.27
+    voice filter on (what shipped before)     en@0.49   arabic  0/26   logprob -0.32
+
+**AND THE CACHED TRANSCRIPTS THE DIAGNOSE PROBE RETURNS ARE THE OLD BEHAVIOUR,
+which is a trap worth writing down.** The newest one on the box (516 segments,
+`arabic=8/516`) was written **01:17Z; the fix reached the container at 05:05Z**.
+Reading it as the current state would have said the fix had barely worked. A
+cached transcript is a record of the code that was running when it was made --
+check its age against the deploy before drawing a conclusion from it.
+
+### What no language choice can fix, and what closes it
+
+**Whisper commits to one language per SEGMENT.** So a stretch of Arabic -- a
+quotation, a du'a, a sentence -- is now detected and written in Arabic script,
+and a single Arabic word dropped into an English sentence with no pause around
+it is not: the segment is English, so the word comes out transliterated.
+Nothing downstream can tell that is Arabic, because it is not --
+`contains_arabic` is false, so no Arabic face, no ayah match, no translation
+line. That is the whole of the remaining gap, and it is what "fikulli qarni min
+ummati" and "alhamdulillah" have in common.
+
+`ARABIC_TRANSLITERATIONS` closes it: ~120 tokens, mapped to Arabic script,
+applied when the caption is DRAWN.
+
+- **THE RULE FOR THE LIST is whether the speaker is SPEAKING ARABIC at that
+  moment, not whether the word is Arabic in origin.** "Alhamdulillah" and
+  "dunya" are Arabic; "Quran", "Ramadan", "hajj", "halal", "imam", "sheikh",
+  "hadith", "surah", "sunnah" and "mosque" are words an English sentence uses,
+  and they are deliberately absent. Anything ambiguous is LEFT OUT -- a false
+  positive puts Arabic script on an English word, which is visible and wrong,
+  where a miss is only the behaviour that shipped yesterday.
+- **No particles.** "min", "wa", "fi", "bi", "la" would convert one word in the
+  middle of a transliterated quotation and leave the line half in each script,
+  which is worse than the all-Latin line it started as. A test pins their
+  absence, and another pins the loanwords out.
+- **ONE TOKEN IN, ONE STRING OUT.** Word and karaoke modes redraw a group once
+  per word against Whisper's own timings, so a substitution that changed the
+  word COUNT would slide the highlight off the word being spoken. An entry may
+  hold spaces -- "ما شاء الله" is three Arabic words -- but it occupies the
+  single slot of the single token that was spoken. Driven by test on the real
+  `caption_words`, comparing counts and timings against `candidate_words`.
+
+### WHERE IT IS APPLIED IS THE WHOLE SAFETY ARGUMENT
+
+Only the drawing. `caption_words()` for every word-based mode and
+`mixed_script_line()` for the text-based ones; `candidate_words()` and
+`candidate.segments` stay Whisper's own. So:
+
+* the editor's caption blocks are still Whisper's text, and **"the editor must
+  never save what it only draws"** holds -- a block carrying our substitution
+  could be written over the transcript on Save;
+* titles stay English: `clip_english` never sees it, so `is_english_title`
+  cannot reject a title into the numbered "Important reminder N" fallback;
+* the ayah matcher cannot be handed an Arabic word we invented, so no scripture
+  can be matched off a substitution;
+* the spoken-Arabic treatment needs BOTH Arabic in the segment AND a
+  translation from Whisper's second pass, and this changes neither -- an
+  English sentence with one Arabic word in it cannot grow an English
+  translation line beneath itself;
+* a recitation is untouched, and not by a special case: a Latin lexicon cannot
+  match Arabic script.
+
+**`caption_words` is a second function rather than a flag on `candidate_words`,
+and the direction matters.** A render path that calls the wrong one draws a
+transliteration -- yesterday's behaviour. An editor path calling the wrong one
+would write our substitution into a saved transcript.
+
+### THE FRAME FOUND A BUG THAT HAS BEEN SHIPPING SINCE mixed_script_line WAS WRITTEN
+
+    MERCY       Outfit at nominal 62 -> 34px of ink
+    الحمد لله   Amiri  at nominal 62 ->  8px of ink
+
+**Every Arabic word Whisper has ever put inside an English caption line has
+been drawn at a QUARTER the height of the words around it** -- an illegible
+smudge, on a frame, for as long as that function has existed. libass sizes by
+the face's win ascent+descent rather than its em, and Amiri reserves roughly
+three times its em for tashkeel it may never draw. `ARABIC_INLINE_SCALE` is
+**4.25**, measured, and `arabic_inline_size()` is what every caption mode now
+asks for.
+
+**This is NOT `ayah_nominal_scale`.** That one is tuned against the TRANSLATION
+size on the ayah treatment, where the Arabic has a line of its own; this is
+against the caption size, on a line the Arabic shares with English.
+
+**AND THE FIRST ATTEMPT AT IT WAS WORSE THAN THE BUG, which only the frame
+showed.** An override block holds until something changes it, so an `\fs` on
+one word draws every word AFTER it at that size: the rendered frame came back
+with the Arabic legible, "and carried on" at three times its own size, and the
+line wrapped. The size is closed the moment the Arabic ends -- named back on
+the Latin word where the Latin words carry tags, and closed explicitly where
+they do not (cards pass `tag_latin=False`). Two separate tests, because the
+phrase path cannot reach the cards branch and a probe that empties the close
+came back GREEN against the first one.
+
+Two more faults fell out of writing that:
+
+- **The size is named only on a line that actually holds Arabic**, so an
+  English caption is byte-identical to before. Without that guard every Latin
+  word in phrase mode grew a tag it did not have.
+- **Consecutive Arabic words are ONE run.** A substitution may be several
+  Arabic words, and an override block each -- with a Latin-sized space between
+  them -- is not how the recitation path or `spoken_events` draw Arabic, and it
+  hands the bidi algorithm a fragment at a time. The Latin side is deliberately
+  left exactly as it is: changing when its tags are emitted would move the
+  tracking on every English caption. The fill mode's Arabic word also closes
+  its FACE now -- today it leaves every Latin word after it drawn in Amiri.
+
+### The box can render a caption frame now, and be measured
+
+`deploy-worker.yml` dispatched with `caption_frame: true` runs
+`.github/scripts/caption-frame.py` inside the container -- its libass, its
+fontconfig, its bundled faces -- renders one line, measures the ink of each
+face at one nominal size, and **uploads the frames as a run artifact**.
+Deploy-free and dispatch-only like diagnose.
+
+CLAUDE.md's oldest rule is that only a rendered frame settles a caption
+question, and until now the rigs for it were a throwaway container or a whole
+clip re-rendered through the app. This is the machine that ships the clips.
+Geometry and pictures leave the box; the pictures are of text the probe wrote,
+never a frame from anybody's lecture.
+
+**The probe was wrong before the code was**, which is now twice in this file
+for a measurement that classifies: its first version patched the `\fs` into
+`mixed_script_line`'s OUTPUT instead of calling the function with a size, so
+what it rendered was its own patching leaking, not the renderer. It sets
+`cw.ARABIC_INLINE_SCALE` and CALLS the real function now.
+
+### Twelve red probes, and TWO CAME BACK GREEN
+
+Both were a second mechanism hiding the first, which is the shape this file
+keeps recording:
+
+- Reverting the render path to `candidate_words` changed nothing, because
+  `caption_word_override` and the fill site each substituted AGAIN at the draw
+  site. Two answers to one question. The draw-site copies are gone;
+  `caption_words()` is the one answer for every word-based mode.
+- Emptying the Arabic run's close changed nothing, because the only test for it
+  rendered in PHRASE mode, where `tag_latin=True` means the close is
+  deliberately empty. The cards branch has its own test now.
+
+### What is NOT proven
+
+**No lecture has been imported since this landed.** Every claim here is
+measured on the real functions, on real frames from the box, and on what
+Whisper returns for that audio -- not on a finished clip with a mixed caption
+on it. The next import of a lecture holding a quotation is the confirmation.
+
+**A lexicon cannot cover arbitrary Arabic.** A transliterated quotation of
+words nobody wrote down -- "fikulli qarni min ummati" -- is closed by v3.180.0
+reading it as Arabic in the first place, not by this. Where that fails, this
+leaves it in Latin rather than converting one word of it.
+
+**Worker change, so `deploy-worker.yml` deploys it on push.**
 
 ## Open items
 

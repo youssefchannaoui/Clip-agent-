@@ -170,6 +170,22 @@ on:
         description: 'Framing: how many cached sources to sweep, newest first'
         required: false
         default: '4'
+      # Deploy-free like the probes above, and the only one that produces a
+      # PICTURE. CLAUDE.md: only a rendered frame settles a caption question,
+      # and the arithmetic that sizes Arabic against Latin has been disproved
+      # by two frames already. This renders on the box -- its libass, its
+      # fontconfig, its bundled faces -- measures the ink, and uploads the
+      # frames as a run artifact. Nothing of anybody's lecture is in the
+      # picture: the sample line is written in the probe.
+      caption_frame:
+        description: Only render a caption frame (no deploy) -- measure Arabic against Latin and upload the picture
+        type: boolean
+        required: false
+        default: false
+      caption_font_size:
+        description: 'Caption frame: the template caption size to render at'
+        required: false
+        default: '62'
   # Only worker/ code. Editing this file changes how the deploy runs, not what
   # is running on the box, so it must not trigger a deploy of its own -- an
   # unarmed run going red on every edit to the deploy script is noise, and the
@@ -292,7 +308,7 @@ jobs:
         # measurement: a question must not become a rebuild, because a rebuild
         # sends whatever is running back to its start. On a push `inputs` is
         # empty, so this runs exactly as before.
-        if: inputs.diagnose != true && inputs.quran_sync != true && inputs.framing != true && inputs.probe_url == ''
+        if: inputs.diagnose != true && inputs.quran_sync != true && inputs.framing != true && inputs.caption_frame != true && inputs.probe_url == ''
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
@@ -332,7 +348,7 @@ jobs:
         # prove -- and the box legitimately holds whatever it last built,
         # which is behind any commit that touched only src/. The diagnostics
         # step prints the running version instead.
-        if: inputs.diagnose != true && inputs.quran_sync != true && inputs.framing != true && inputs.probe_url == ''
+        if: inputs.diagnose != true && inputs.quran_sync != true && inputs.framing != true && inputs.caption_frame != true && inputs.probe_url == ''
         env:
           HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
           USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
@@ -633,6 +649,65 @@ jobs:
           printf '%s' "$FRAMING_B64" | base64 -d > /tmp/dc-framing-probe.py
           docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-framing-probe.py
           REMOTE
+
+      # Geometry AND pictures -- and the pictures are of text this probe wrote,
+      # never a frame from anybody's lecture. The measurement is the whole
+      # point: libass sizes by the face's win cell rather than its em, so two
+      # faces at one nominal size are NOT one size on screen.
+      - name: Render a caption frame and measure Arabic against Latin
+        if: inputs.caption_frame == true
+        env:
+          HOST: ${{ secrets.WORKER_HOST || '135.181.149.182' }}
+          USER_NAME: ${{ secrets.WORKER_USER || 'root' }}
+          RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
+          CAPTION_FONT_SIZE: ${{ inputs.caption_font_size }}
+        run: |
+          set -euo pipefail
+          export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
+          # No dispatch input is ever interpolated into a shell command: it
+          # becomes a JSON literal in the script and the script travels as one
+          # base64 blob, which has no shell metacharacter in it.
+          node -e '
+            const fs = require("fs");
+            const src = fs.readFileSync(".github/scripts/caption-frame.py", "utf8");
+            if (!src.includes("PARAMS = {}")) throw new Error("the caption frame probe lost its PARAMS seam");
+            const n = Number.parseInt(process.env.CAPTION_FONT_SIZE || "", 10);
+            // NUMBERS ONLY. JSON.stringify spells a boolean `true`, which
+            // Python reads as an undefined name -- run 91 died on line one.
+            const params = { fontSize: Number.isFinite(n) && n > 0 ? Math.min(400, n) : 62, scales: [1, 1.5, 2, 2.5, 3] };
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/caption-frame.py",
+              src.replace("PARAMS = {}", "PARAMS = " + JSON.stringify(params)));
+          '
+          BLOB=$(base64 -w0 < "$RUNNER_TEMP/caption-frame.py")
+          "$RUNNER_TEMP/rssh" "CAPTION_B64=$BLOB bash -s" <<'REMOTE' | tee "$RUNNER_TEMP/caption-frame.out"
+          set -euo pipefail
+          trap 'rm -f /tmp/dc-caption-frame.py' EXIT
+          printf '%s' "$CAPTION_B64" | base64 -d > /tmp/dc-caption-frame.py
+          docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-caption-frame.py
+          REMOTE
+          mkdir -p "$RUNNER_TEMP/frames"
+          node -e '
+            const fs = require("fs");
+            const lines = fs.readFileSync(process.env.RUNNER_TEMP + "/caption-frame.out", "utf8").split(/\r?\n/);
+            let name = null, buf = [];
+            for (const line of lines) {
+              if (line.startsWith("@@PNG ")) { name = line.split(" ")[1].replace(/[^A-Za-z0-9._-]/g, "_"); buf = []; continue; }
+              if (line.startsWith("@@ENDPNG")) {
+                if (name) fs.writeFileSync(process.env.RUNNER_TEMP + "/frames/" + name, Buffer.from(buf.join(""), "base64"));
+                name = null; buf = []; continue;
+              }
+              if (name) buf.push(line.trim());
+            }
+            console.log("frames written:", fs.readdirSync(process.env.RUNNER_TEMP + "/frames").join(", ") || "none");
+          '
+
+      - name: Upload the caption frames
+        if: inputs.caption_frame == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: caption-frames
+          path: ${{ runner.temp }}/frames
+          if-no-files-found: warn
 
       - name: Clean up the credential
         if: always()
