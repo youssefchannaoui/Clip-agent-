@@ -1,20 +1,6 @@
 {
   "artboards": [
-    { "file": "Presets.dc.html", "x": 0,    "y": 0,   "w": 900,  "h": 660, "title": "1 · Straight to work" },
-    { "file": "Main.dc.html",    "x": 1020, "y": 0,   "w": 1240, "h": 880, "title": "2 · The panel", "is_interactive": true },
-    { "file": "Phone.dc.html",   "x": 2360, "y": 0,   "w": 390,  "h": 844, "title": "3 · On a phone" }
-  ],
-  "annotations": [
-    { "id": "n-presets", "x": 0, "y": 730, "w": 320,
-      "text": "Eight steps is a lot to do twice.\n\nA saved setup does the whole configuration in one tap. It is also the honest way round the rule that clears your destinations on every job — picking a preset is a deliberate act, so nothing changes behind your back." },
-    { "id": "n-main", "x": 1020, "y": 950, "w": 380,
-      "text": "The rail replaces \"1 / 8\" — done steps carry their answer, so you can see what you chose without going back.\n\nCost and ETA are pinned next to the range that sets them, not revealed at the end.\n\nThe preview stays on screen through every step and reacts to the style." },
-    { "id": "n-clips", "x": 1440, "y": 950, "w": 360,
-      "text": "Step 4 is the fix for the worst bug in the current panel: the clip count and the length bands write your ACCOUNT settings today, so configuring one lecture silently changes every future one.\n\nHere they are per-lecture, with saving as default a separate, deliberate act." },
-    { "id": "n-style", "x": 1840, "y": 950, "w": 360,
-      "text": "Step 5 adds per-lecture style tweaks — bigger captions, a warm look — stored on the project and never written back to the template. Same shape as the per-clip overrides the editor already writes, so it does not break one-template-per-content-type." },
-    { "id": "n-phone", "x": 2360, "y": 900, "w": 340,
-      "text": "The same bindings as a bottom sheet. Progress becomes a segmented bar, every target is 44px, and the cost sits above the button.\n\nNo fake status bar or keyboard — the real ones draw on top." }
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1440, "h": 900, "title": "Start job", "is_interactive": true }
   ],
   "launch": { "view": "focused", "file": "Main.dc.html" }
 }
