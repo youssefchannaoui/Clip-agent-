@@ -657,6 +657,83 @@ def job_network_options(source: dict, scratch: Path) -> dict[str, Any]:
     return options
 
 
+# HOW LONG A METADATA PROBE MAY TAKE. A person is watching a paste box, so
+# this is a different budget from a download: two clients, a few seconds each.
+METADATA_TIMEOUT_SEC = max(5, int(os.getenv("SOURCE_METADATA_TIMEOUT_SEC", "20") or 20))
+
+
+def probe_source_metadata(url: str, network: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Title, length and thumbnail for a link, WITHOUT downloading anything.
+
+    THIS EXISTS BECAUSE THE WEB SERVICE MUST NOT ASK GOOGLE ABOUT THE VIDEO.
+    Google refused this app's data-access verification on 8 Sept 2026 citing
+    API ToS section 5a over clipping arbitrary third-party videos -- and the
+    only reason an arbitrary video was ever inside a Google API's jurisdiction
+    is that the app called `videos.list` for these three fields. So they are
+    read here instead, from the same downloader, the same proxy pool and the
+    same cookies that will fetch the file if the customer goes ahead.
+
+    That also makes the answer AUTHORITATIVE rather than merely available: the
+    duration reported is the duration of the stream that will actually be
+    downloaded, and a link this box cannot reach is refused at the paste box
+    rather than at the front of the render queue twenty minutes later.
+
+    Downloads nothing: `download=False` fetches the player response only.
+    """
+    import yt_dlp  # noqa: PLC0415  -- imported here so the module loads without it
+
+    target = validate_youtube_url(url)
+    failures: list[str] = []
+    # Two clients, not the download rotation's five. Every attempt costs a
+    # person's patience, and a link the first two clients cannot describe is
+    # one the caller should stop waiting for -- the app falls back to its own
+    # lookup and the worker confirms the real length after it downloads.
+    for client in (None, "android_vr"):
+        options: dict[str, Any] = {
+            "quiet": True,
+            "no_warnings": True,
+            "noplaylist": True,
+            "skip_download": True,
+            "socket_timeout": METADATA_TIMEOUT_SEC,
+            # A random pool exit PER ATTEMPT, exactly as a download picks one:
+            # a burned address must not make a paste box look broken.
+            **youtube_network_options(),
+        }
+        if network:
+            options.update(network)
+        if client:
+            args = dict(options.get("extractor_args") or {})
+            args["youtube"] = {"player_client": [client]}
+            options["extractor_args"] = args
+        try:
+            with yt_dlp.YoutubeDL(options) as ydl:
+                info = ydl.extract_info(target, download=False)
+        except Exception as exc:  # noqa: BLE001 -- yt-dlp raises many shapes
+            failures.append(_clean_ytdlp(str(exc)))
+            continue
+        if not isinstance(info, dict):
+            failures.append("the extractor returned nothing")
+            continue
+        duration = info.get("duration")
+        thumbnails = info.get("thumbnails") or []
+        best = ""
+        for thumb in thumbnails:
+            if isinstance(thumb, dict) and thumb.get("url"):
+                best = str(thumb["url"])
+        return {
+            "url": target,
+            "title": str(info.get("title") or info.get("fulltitle") or "").strip(),
+            "durationSec": int(duration) if isinstance(duration, (int, float)) and duration > 0 else None,
+            "thumbnail": str(info.get("thumbnail") or best or ""),
+            "extractor": str(info.get("extractor_key") or info.get("extractor") or "yt-dlp"),
+        }
+    # Never the raw yt-dlp text: it quotes the proxy it used, and this answer
+    # is on its way to a browser. _clean_ytdlp has already redacted userinfo,
+    # and the reason is the customer's, not the pool's.
+    raise ImportProviderError(
+        failures[-1] if failures else "Could not read this video's details.", retryable=True)
+
+
 # HOW MANY TIMES THE WHOLE ROTATION IS TRIED, AND HOW LONG IT WAITS BETWEEN.
 #
 # Youssef, 9 Sept 2026, on a lecture that failed and then imported: "I NEED TO

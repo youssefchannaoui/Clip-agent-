@@ -93,13 +93,20 @@ test('III.A.2d: the privacy policy lists the API Data actually accessed', () => 
   // including API Data, the client accesses, collects, stores and uses.
   for (const item of [
     'Channel identifier, channel name and channel profile image',
-    'Video title, duration and thumbnail image URL',
     'video identifier of a clip DeenClipped uploaded',
     'youtube.upload',
     'youtube.readonly',
   ]) {
     assert.ok(marketing.includes(item), `the policy must state: ${item}`);
   }
+});
+
+test('III.A.2d: the policy says the API is used only for the customer\'s own channel', () => {
+  // This is the sentence Google's reviewer needs to find, and it has to stay
+  // true of the code -- the two tests above are what keep it true.
+  assert.match(marketing, /limited to <strong>your own channel<\/strong>/);
+  assert.match(marketing, /does not use the YouTube API to search, browse, list, or retrieve/);
+  assert.match(marketing, /read from that video's own public watch page/);
 });
 
 test('III.A.2d: the policy states the retention period and the statistics position', () => {
@@ -109,14 +116,48 @@ test('III.A.2d: the policy states the retention period and the statistics positi
   assert.match(marketing, /myaccount\.google\.com\/permissions/);
 });
 
-test('the claim that no statistics are read stays true in the code', () => {
-  // The policy says no view, like or comment counts are retrieved. That is only
-  // honest while the API request asks for snippet and contentDetails alone.
-  const requests = engine.match(/youtube\/v3\/videos\?part=[^&`]*/g) || [];
-  assert.ok(requests.length > 0, 'the metadata request should still exist');
-  for (const request of requests) {
-    assert.doesNotMatch(request, /statistics/, 'asking for statistics would make the privacy policy false');
+test('ToS 5a: no YouTube API call is made about a video this account does not own', () => {
+  // Google refused the data-access verification on 8 Sept 2026 citing API ToS
+  // section 5a, "Content Accessible Through our APIs", over clipping arbitrary
+  // third-party videos. Section 5a governs what is reached THROUGH a Google
+  // API -- so the answer is not to restrict which links a customer may paste,
+  // it is to stop asking Google about them. A pasted link's title, length and
+  // thumbnail come from the video's own public watch page instead.
+  //
+  // This is the law that keeps it true. The ONLY youtube/v3/videos endpoint
+  // permitted anywhere in src/ is the resumable UPLOAD, which sends the
+  // customer's own finished clip to their own channel.
+  const files = fs.readdirSync(path.join(ROOT, 'src')).filter(f => f.endsWith('.js'));
+  const offenders = [];
+  for (const file of files) {
+    const text = fs.readFileSync(path.join(ROOT, 'src', file), 'utf8');
+    for (const call of text.match(/[a-zA-Z/`${}.\w-]*youtube\/v3\/videos[^`'"\s]*/g) || []) {
+      if (!call.includes('upload/youtube/v3/videos')) offenders.push(`${file}: ${call}`);
+    }
   }
+  assert.deepEqual(offenders, [], 'reading a third-party video through the YouTube API is what ToS 5a refuses');
+});
+
+test('ToS 5a: every channels read is scoped to the connected account itself', () => {
+  // channels.list is the other half of the surface, and mine=true is what
+  // makes it a question about the customer rather than about YouTube at
+  // large. Without it this would be a way to look up any channel by id.
+  const files = fs.readdirSync(path.join(ROOT, 'src')).filter(f => f.endsWith('.js'));
+  for (const file of files) {
+    const text = fs.readFileSync(path.join(ROOT, 'src', file), 'utf8');
+    for (const call of text.match(/youtube\/v3\/channels[^`'"\s]*/g) || []) {
+      assert.match(call, /mine=true/, `${file} reads channels without mine=true: ${call}`);
+    }
+  }
+});
+
+test('no API key is configured for the YouTube Data API', () => {
+  // An unread key in config is how a videos.list call quietly comes back. The
+  // OAuth calls that remain need a token, not a key, so there is nothing a
+  // key could legitimately be for.
+  const cfg = fs.readFileSync(path.join(ROOT, 'src/config.js'), 'utf8');
+  assert.doesNotMatch(cfg, /^\s*youtubeDataApiKey\s*:/m,
+    'a YouTube Data API key has no use in this product and invites one back');
 });
 
 test('the YouTube mark is unmodified, uncontained and at least 20px', () => {
@@ -140,7 +181,7 @@ test('the privacy policy names the API calls, the retention and the way out', as
   const marketing = await import('../src/marketing.js');
   const html = marketing.privacy({ base: 'https://deenclipped.online', currentUser: null });
   for (const needle of [
-    'channels.list', 'videos.list',                     // what is called
+    'channels.list',                                    // what is called
     'encrypted OAuth access and refresh tokens',        // what is stored
     'automatically deleted after 30 days',              // how long
     'https://policies.google.com/privacy',              // Google's own policy

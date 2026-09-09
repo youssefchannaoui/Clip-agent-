@@ -55,3 +55,16 @@ export const advise = payload => request('/ai/advise', { method: 'POST', body: p
 // is metadata on the clip, never burned into the frame -- so this is the whole
 // cost of the button. Same window as Ask, for the same reason.
 export const retitle = payload => request('/ai/title', { method: 'POST', body: payload, timeoutMs: 90_000 });
+
+// Title, length and thumbnail for a pasted link, from the box that has yt-dlp,
+// the cookies and the proxy pool -- the same machine, and the same options,
+// that will fetch the file. Nothing is downloaded and no job is created.
+//
+// This is what replaced the app's own `videos.list` call. Google refused the
+// data-access verification on 8 Sept 2026 citing API ToS section 5a, and the
+// only reason a third-party video was inside a Google API's jurisdiction is
+// that the app asked Google about it for these three fields.
+//
+// 25 seconds, not the 90 the AI routes take: a person is watching a paste box,
+// and every caller has a fallback of its own.
+export const sourceMetadata = payload => request('/source-info', { method: 'POST', body: payload, timeoutMs: 25_000 });
