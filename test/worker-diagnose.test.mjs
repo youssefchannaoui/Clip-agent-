@@ -174,9 +174,14 @@ test('a finished job reports where its seconds went', () => {
   fs.mkdirSync(`${dir}/jobs/job_t`, { recursive: true });
   fs.writeFileSync(`${dir}/jobs/job_t/status.json`, JSON.stringify({
     status: 'completed', stage: 'completed', progress: 100,
+    // THE REAL SHAPE upload_result returns: {project, clips}, with the clock
+    // hung off the project. A fixture that puts timings at the top level
+    // passes against a reader that looks there and proves nothing about the
+    // box -- which is exactly what the first version of this test did, while
+    // the box printed no timings at all.
     result: {
+      project: { timings: { import: 10, transcribe: 300, score: 90, render: 600, total: 1000 } },
       clips: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
-      timings: { import: 10, transcribe: 300, score: 90, render: 600, total: 1000 },
     },
   }));
   fs.writeFileSync(`${dir}/jobs/job_t/payload.json`, JSON.stringify({ title: 'A lecture' }));

@@ -298,7 +298,14 @@ def describe_job(mtime: float, folder: Path, status: dict, decided: dict) -> dic
     # is what actually answers "which phase is worth attacking": a phase at 5%
     # of the job cannot be made to matter however well it is optimised.
     result = status.get("result") if isinstance(status.get("result"), dict) else {}
-    timings = result.get("timings") if isinstance(result.get("timings"), dict) else {}
+    # ON result["project"], NOT on the result. upload_result returns
+    # {"project": ..., "clips": ...} and clip_worker hangs the clock off the
+    # project -- which is why this file has always called it `project.timings`.
+    # Read at the top level it is simply absent, and a job prints nothing while
+    # looking perfectly healthy: the first cut of this did exactly that, and
+    # its test passed because the FIXTURE had the same wrong shape.
+    project = result.get("project") if isinstance(result.get("project"), dict) else {}
+    timings = project.get("timings") if isinstance(project.get("timings"), dict) else {}
     if timings:
         total = float(timings.get("total") or 0) or 1.0
         parts = " ".join(
@@ -306,7 +313,9 @@ def describe_job(mtime: float, folder: Path, status: dict, decided: dict) -> dic
             for name, value in timings.items()
             if name != "total" and isinstance(value, (int, float)) and float(value) > 0)
         out(f"  timings: total {float(timings.get('total') or 0):.0f}s -- {parts}")
-        clips = result.get("clips")
+        clips = result.get("clips") or project.get("clipCount")
+        if isinstance(clips, int):
+            clips = [None] * clips
         if isinstance(clips, list) and clips and float(timings.get("render") or 0) > 0:
             out(f"           {len(clips)} clip(s), so"
                 f" {float(timings['render']) / len(clips):.0f}s a clip rendered")
