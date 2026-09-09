@@ -18144,17 +18144,54 @@ whole budget. A partial answer is safe, because the last shot simply holds.
 the expression far simpler and far less likely to be refused, but nothing about
 a nicer crop is ever worth a lecture.
 
-### What is NOT proven
+### MEASURED ON THE BOX, on the footage that failed
 
-**No lecture has been imported since this landed, and no frame from the BOX has
-been seen.** Everything above is measured on the real functions, on real
-rendered frames from this machine, and on a described shot -- not on a face.
-Whether MediaPipe finds those two men in that lighting, and whether their
-apertures actually separate, is the next measurement: the source is still in
-the box's cache, `.github/scripts/framing-probe.py` was rewritten to ask the
-shipped functions about it, and `deploy-worker.yml` dispatched with
-`framing: true` is how. **Worker change, so `deploy-worker.yml` deploys it on
-push.**
+`deploy-worker.yml` dispatched with `framing: true`, against the cached source
+of the lecture Youssef reported (run 157, then 159 and 160 for the two below).
+The shipped functions, not a copy of them:
+
+    750 samples over 60s in 10s          MediaPipe is fast enough to be free
+    2 people: 35.0% and 47.8% of width   12.8% apart -- the tight two-shot
+      #0 mouth open 0.033, moving 0.0113 a sample
+      #1 mouth open 0.022, moving 0.0115 a sample
+    audio read, loud on 359 of 750
+
+    THE STATIC CROP SAT AT 38.5% -- between the two of them.
+
+    5 shots, motion cut:  44.1%  35.9%  43.7%  47.8%  43.0%
+
+**The two mouths MOVE BY THE SAME AMOUNT** -- 0.0113 against 0.0115 -- so
+movement alone is a coin toss on this footage and the audio correlation is
+what separates them. That is the case this design was built for, and the
+numbers say it is the case that actually occurs.
+
+Every shot sits on a real person; the shortest is 2.88s, above the minimum.
+A second window (420s in) holds ONE person, and there the answer is one shot
+and no cuts at all -- which is the locked camera, and correct.
+
+**THE SAMPLE WIDTH IS NOT THE LIMIT, and that was measured rather than
+assumed.** 464 of 750 samples find no face, which is easy to read as "the
+frames are decoded too small for the mesh". Decoding the same seconds larger:
+
+    960px   464 with none, most 2, 0.4 a frame,  9s
+    1440px  468 with none, most 2, 0.4 a frame, 10s
+    1920px  467 with none, most 1, 0.4 a frame, 12s
+
+Full resolution finds FEWER faces and costs a third more time. So 960 stays,
+and the empty frames are the FOOTAGE -- a lecture cuts to slides, wide shots
+and profiles. A shot holds through them, so it degrades gracefully. Do not
+spend a deploy raising this; it has been asked.
+
+### What is STILL not proven
+
+**Nobody has watched a frame to say it picked the RIGHT person.** The probe
+reports geometry only, deliberately -- a run log is public and a frame would be
+somebody's lecture and a face in it -- so what is proven is that it finds both
+men, cuts between them, and never frames the gap. Whether the person on screen
+is the one talking at that second is one import and one look.
+
+**Worker change, so `deploy-worker.yml` deploys it on push**; run 156 verified
+v3.186.1 in the running container.
 
 ## Automatic framing killed a whole lecture (v3.184.1, 9 Sept 2026)
 
