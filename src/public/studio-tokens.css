@@ -1548,22 +1548,53 @@ body.dc-light #studioLiveBar {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   ROOM FOR THE LIVE BAR.
+   THE LIVE BAR FLOATS, AND THE SCREEN STILL ENDS AT THE VIEWPORT.
 
-   `#studioLiveBar` is `position: fixed; bottom: 18px; z-index: 150` and
-   nothing reserved space for it, so while a job runs it is drawn on top of
-   whatever the screen has in that band -- and a control whose centre falls
-   inside its rectangle gets no clicks at all, because the click is dispatched
-   to the bar. Measured 4 Sept 2026: on the review deck at 1100x950 it covered
-   Reject, Edit, Approve and Previous, and a real click at Approve's centre
-   landed on `div.slb-head`; on Templates it took 171x26px of the
-   watermark-position row.
+   Youssef, 8 Sept 2026: "why is there a black bar behind the hpapenign now",
+   then, asked whether to keep the reserved lane or let the bar float over the
+   cards: "make it a float over all tabs".
+
+   It used to be one blunt rule -- 92px of padding on `#studio main` -- and it
+   worked: every screen shrank, so nothing was ever under the bar. What it cost
+   is that `main` is transparent, so on the Schedule (whose card fills its
+   container) the card ended 92px early and the page ground showed through as a
+   black band around the bar.
+
+   The bar floats now: `main` reserves nothing and every screen runs to the
+   bottom of the viewport. What replaces the reservation is SCROLL CLEARANCE --
+   the same 92px, added to the CONTENT rather than taken out of the box, so the
+   last of it can be scrolled out from under the bar instead of being fenced
+   off from it. Two rules, because one shape cannot carry it:
+
+   * the screen wrapper carries it, which covers every screen whose content is
+     in flow with it;
+   * A WRAPPER HOLDING ONE CLAMPED BOX CARRIES IT ON THAT BOX'S CHILDREN. That
+     shape -- `flex: 1 1 0` with `min-height: 0`, its own columns spilling past
+     it -- is the Schedule, the review queue, the Lecture library and the
+     Nasheed library, and it is the one case where padding the scroller does
+     NOTHING: the padding lands after the clamped box, at y=732 of a 1530px
+     scroll, so `scrollHeight` never moves. Measured on the Schedule: range 798
+     with the wrapper padded, 890 with its columns padded.
+
+   MEASURED, covered-not-clipped controls with a job running, thirteen screens
+   at 1100 / 1280 / 1440 in both themes: 0 with the old reservation, 8 with it
+   simply deleted (six month-grid day cells, and at 1100 the Posting-windows
+   switch at 100% covered with nothing left to scroll), 0 with these two rules.
+   A control scrolled out of its own overflow container is CLIPPED, not
+   covered, and is not counted -- the distinction this file records twice.
 
    `body.dc-livebar` is stamped by paintLiveWork from the same place that
-   un-hides the bar, so the allowance appears and disappears with it.
-   55px of bar + 18px of offset + margin.
+   un-hides the bar, so the clearance appears and disappears with it.
    ───────────────────────────────────────────────────────────────────────── */
-body.dc-livebar #studio main { padding-bottom: 92px; }
+:root {
+  /* 55px of bar + 18px of offset + margin. Declared on its own line, like
+     every other token here: `test/clip-preview-panel.test.mjs` finds a
+     declaration with `^\s*--dc-...:` and a one-line block is invisible to it,
+     so an inline declaration reads as a var() nobody declares. */
+  --dc-livebar-lane: 92px;
+}
+body.dc-livebar #studio main > :not(#dcTopbar) { padding-bottom: var(--dc-livebar-lane); }
+body.dc-livebar #studio main > :not(#dcTopbar) > :only-child > * { padding-bottom: var(--dc-livebar-lane); }
 
 /* INK THAT SITS ON THE DARK SCRIM, AND MUST NOT FLIP WITH THE THEME.
    A score badge, a duration chip and every state pill are drawn over a

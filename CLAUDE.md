@@ -17065,9 +17065,98 @@ then as 3 covered controls on the queue at 1280 and 1 on the library at 1100,
 0 after. On the Schedule both cards STRETCH to their container, so shrinking it
 ends them 92px early and exposes the ground.
 
-**It is not fixed here, and the reason is a trade rather than an oversight.**
+**It was not fixed there, and the reason was a trade rather than an oversight.**
 Removing the reservation puts the bar back over the Posting-windows card's last
-row; keeping it leaves the band. Anything in between (reserving only when the
-screen scrolls) feeds itself -- the padding is what makes it scroll, which is
-the self-measuring trap v3.75.4 records. It is Youssef's call which way it
-goes, and it is on the list rather than guessed at.
+row; keeping it leaves the band. It was Youssef's call which way it went, and
+he made it the same day -- see the entry below, which also shows the third
+option that paragraph missed: neither reserving nor removing, but adding the
+same 92px to the CONTENT as scroll clearance.
+
+
+## The live bar floats, and nothing is reserved for it (v3.175.0, 9 Sept 2026)
+
+Youssef, on the black band under the Schedule's card: "why is there a black bar
+behind the hpapenign now". Put the two options to him -- keep the reserved lane,
+or let the bar float over the cards -- he answered: **"make it a float over all
+tabs".**
+
+### The lane was one blunt rule, and it worked
+
+`body.dc-livebar #studio main { padding-bottom: 92px }` (v3.125.0). `main` is a
+flex column the height of the viewport, so 92px of padding shrinks every screen
+by 92px and nothing can ever be under the bar. **Measured before touching it:
+0 covered controls, every screen, every width.** The cost is that `main` is
+transparent -- so the screen ends at y=708 of an 800px viewport and the page
+ground (#09090A) shows through as a band with the bar floating in it. That is
+the black bar.
+
+### Deleting it costs eight controls, and I measured that before believing it
+
+The obvious change -- drop the rule -- was measured first, with a job running,
+covered-not-clipped, at three widths:
+
+    library    "More"                              room 0
+    templates  "Restore the shipped defaults"      room 0
+    schedule   six month-grid day cells            room 0, 61% covered each
+    schedule   Posting windows switch + its time   room 0, 100% COVERED at 1100
+
+Eight controls with **no scroll left to clear them**, and two of them fully
+covered with no clickable edge at all. That is v3.125.0's regression restored,
+and it is not what "float" was asking for.
+
+### WHAT REPLACES A RESERVATION IS CLEARANCE, NOT NOTHING
+
+The same 92px, added to each screen's CONTENT instead of taken out of its box.
+The screen then runs to the bottom of the viewport (no band) and whatever the
+bar covers can be scrolled out from under it. Two rules, because one shape
+cannot carry it:
+
+- **the screen wrapper** carries it, which covers every screen whose content is
+  in flow with it;
+- **a wrapper holding ONE clamped box passes it to that box's CHILDREN.**
+
+**The second rule is the whole finding, and only measuring produced it.** The
+Schedule's scroller holds a single `flex: 1 1 0` child with `min-height: 0`; its
+columns spill past that child, and the scroller's own `scrollHeight` is driven
+by the spill. So padding the scroller lands **after the clamped box, at y=732 of
+a 1530px scroll** -- `scrollHeight` never moves and the padding buys nothing.
+Measured on the Schedule: **range 798 with the wrapper padded, 890 with its
+columns padded.** `> :only-child > *` says exactly that shape and matches four
+screens today (schedule, review queue, lecture library, nasheed library) and
+nothing else -- checked screen by screen. Where the shape is absent the rule
+simply does not apply, which is the right way for it to fail.
+
+### Measured after
+
+    15 screens x 4 widths (1100/1280/1440/1920) x 2 themes, a job running
+      covered-not-clipped controls    0        (8 with the lane simply deleted)
+      page errors                     0
+      horizontal overflow             0
+      page scroll                     none
+      screen bottom vs viewport       708 -> 800 on every screen (the band)
+      Templates preview frame         293x521 before AND after
+      queue deck stage                345x613 before AND after
+
+A control scrolled out of its own overflow container is **clipped, not
+covered**, and is not counted -- the distinction this file records twice. The
+probe was proven able to report a fault before any of that was believed: an
+opaque 92px box planted over the same band is reported on every screen.
+
+### Traps paid for
+
+- **A one-line `:root { --token: ... }` is invisible to
+  `test/clip-preview-panel.test.mjs`**, which finds a declaration with
+  `^\s*--dc-...:` -- so the new token read as "used and never declared" and
+  the suite went red. Declare a token on its own line, like every other one
+  here. (That guard also slices **to the end of the file**, which is why it saw
+  a rule 500 lines below the panel at all -- left alone deliberately: the
+  over-wide scope is what caught this.)
+- **The CSP inline-script hash is computed at server start**, so the preview
+  server has to be restarted after an index.html edit. Tenth recorded
+  occurrence.
+- `pkill -f` kills the calling shell when the pattern is in its own command
+  line; kill by scanning `/proc/*/environ` for the port instead.
+
+Five probes proven red -- the reservation restored, each clearance rule deleted,
+the token hardcoded twice, and the body class no longer stamped -- each
+asserting it had edited exactly one occurrence before the run.
