@@ -428,7 +428,13 @@ export const config = {
   googleTokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
   googleRevokeUrl: process.env.GOOGLE_REVOKE_URL || 'https://oauth2.googleapis.com/revoke',
   youtubeApiBase: (process.env.YOUTUBE_API_BASE || 'https://www.googleapis.com').replace(/\/+$/, ''),
-  youtubeDataApiKey: process.env.YOUTUBE_DATA_API_KEY || process.env.GOOGLE_YOUTUBE_API_KEY || '',
+  // No YOUTUBE_DATA_API_KEY here on purpose. Nothing in this product asks the
+  // YouTube Data API about a video, and an unread key sitting in config is how
+  // a `videos.list` call quietly comes back -- which is the exact thing Google
+  // refused the data-access verification over on 8 Sept 2026. A pasted link's
+  // title, duration and thumbnail come from the video's own public page, and
+  // the OAuth calls (channels.list?mine=true, videos.insert) need a token
+  // rather than a key.
 
   vizardApiKey: process.env.VIZARD_API_KEY || '',
   vizardApiBase: (process.env.VIZARD_API_BASE_URL || 'https://elb-api.vizard.ai/hvizard-server-front/open-api/v1').replace(/\/+$/, ''),

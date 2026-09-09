@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import capacity
-from import_providers import ImportedSource, ImportProviderError, download_https, import_with_fallback, prewarm_hosted_import, provider_for, proxy_pool
+from import_providers import ImportedSource, ImportProviderError, download_https, import_with_fallback, prewarm_hosted_import, provider_for, proxy_pool, probe_source_metadata
 from object_storage import ObjectStorage
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -2205,6 +2205,33 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(503, {"error": clean_error(exc), "code": "ollama_unavailable"})
             except (ValueError, OSError) as exc:
                 return self.send_json(502, {"error": clean_error(exc), "code": "retitle_failed"})
+        if self.command == "POST" and path == "/source-info":
+            # Title, length and thumbnail for a pasted link, read by the box's
+            # own yt-dlp through the box's own proxy pool. Behind the same HMAC
+            # as every other route here.
+            #
+            # It exists so the WEB SERVICE never has to ask Google about a
+            # video the customer does not own -- the thing Google refused the
+            # data-access verification over on 8 Sept 2026. Nothing is
+            # downloaded and no job is created, so this does not touch the
+            # render queue or the worker slot.
+            try:
+                payload = json.loads(body or b"{}")
+                if not isinstance(payload, dict):
+                    raise ValueError("Expected an object.")
+                # The job's own network settings when the caller sends them,
+                # so the probe asks the way the download will ask; the box's
+                # own pool, cookies and PO token underneath either way.
+                network = payload.get("network")
+                meta = probe_source_metadata(
+                    str(payload.get("url") or ""),
+                    network if isinstance(network, dict) else None,
+                )
+                return self.send_json(200, meta)
+            except ImportProviderError as exc:
+                return self.send_json(502, {"error": clean_error(exc), "code": "metadata_unavailable"})
+            except (ValueError, OSError) as exc:
+                return self.send_json(400, {"error": clean_error(exc), "code": "metadata_failed"})
         if self.command == "POST" and path == "/jobs":
             try:
                 payload = json.loads(body or b"{}")

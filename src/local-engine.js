@@ -17,7 +17,6 @@ import * as billing from './billing.js';
 import * as vizard from './vizard.js';
 import * as workerClient from './worker-client.js';
 import { parseYouTubeUrl, assertStorageObjectKey } from './video-import.js';
-import * as youtubeOwnership from './youtube-ownership.js';
 import * as objectStorage from './object-storage.js';
 import * as backgroundsLib from './backgrounds.js';
 
@@ -528,6 +527,28 @@ function metadataFromYouTubeHtml(html, url) {
     extractor: 'youtube-html',
   };
 }
+async function sourceInfoViaWorker(url) {
+  // The box has yt-dlp, the cookies and the residential pool; this web service
+  // has none of them and cannot reliably fetch a watch page from a datacentre
+  // address. So the machine that will download the video is the one asked what
+  // it is -- which also makes the answer authoritative rather than merely
+  // available: the length reported is the length of the stream that will
+  // actually be fetched.
+  //
+  // Nothing is downloaded and no job is created, so this never touches the
+  // render queue. Every caller falls through to the page lookup if it fails.
+  if (!workerClient.configured()) return null;
+  const info = await workerClient.sourceMetadata({ url, network: importNetworkForYouTube() || undefined });
+  if (!info?.durationSec) return null;
+  return {
+    url,
+    title: String(info.title || url),
+    durationSec: Math.round(Number(info.durationSec)) || null,
+    thumbnail: String(info.thumbnail || '') || fallbackThumb(url),
+    extractor: String(info.extractor || 'worker-yt-dlp'),
+  };
+}
+
 async function sourceInfoViaYouTubeHtml(url) {
   const watch = youtubeWatchUrl(url);
   if (!youtubeIdFromUrl(watch)) return null;
@@ -536,37 +557,25 @@ async function sourceInfoViaYouTubeHtml(url) {
   return meta.durationSec ? meta : null;
 }
 
-async function sourceInfoViaYouTubeDataApi(url) {
-  const videoId = youtubeIdFromUrl(url);
-  const key = String(config.youtubeDataApiKey || '').trim();
-  if (!videoId || !key) return null;
-  const apiUrl = `${config.youtubeApiBase}/youtube/v3/videos?part=snippet,contentDetails&id=${encodeURIComponent(videoId)}&key=${encodeURIComponent(key)}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
-  try {
-    const response = await fetch(apiUrl, { signal: controller.signal });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = payload?.error?.message || `YouTube Data API HTTP ${response.status}`;
-      throw new Error(message);
-    }
-    const item = Array.isArray(payload?.items) ? payload.items[0] : null;
-    if (!item) return null;
-    const durationSec = Math.round(parseIsoDuration(item?.contentDetails?.duration || '') || 0) || null;
-    const thumbs = item?.snippet?.thumbnails || {};
-    const thumbnail = thumbs.maxres?.url || thumbs.standard?.url || thumbs.high?.url || thumbs.medium?.url || thumbs.default?.url || fallbackThumb(url);
-    return {
-      url,
-      title: String(item?.snippet?.title || url),
-      durationSec,
-      durationKnown: Boolean(durationSec),
-      thumbnail,
-      extractor: 'youtube-data-api',
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// The YouTube Data API is deliberately NOT used to read a pasted link.
+//
+// Google refused this app's data-access verification on 8 Sept 2026, citing
+// API ToS section 5a -- "Content Accessible Through our APIs" -- over clipping
+// arbitrary third-party videos. That section governs what is reached THROUGH a
+// Google API, and the only reason an arbitrary video was ever inside its
+// jurisdiction is that this function asked `videos.list` about it for a title,
+// a duration and a thumbnail.
+//
+// Those three fields are on the video's own public watch page, so nothing is
+// lost by reading them there (metadataFromYouTubeHtml) or from yt-dlp's own
+// info dict. After this the whole product's YouTube API surface is
+// `channels.list?mine=true` and `videos.insert` -- the customer's own channel,
+// and their own finished clip going onto it. Neither touches anyone else's
+// content, which is what makes the scope justification true rather than
+// arguable.
+//
+// So: never call a googleapis.com endpoint about a video this account does not
+// own. test/youtube-compliance.test.mjs fails if one appears.
 
 async function sourceInfoViaYtDlp(url) {
   const baseArgs = ['-m', 'yt_dlp', '--dump-single-json', '--skip-download', '--no-playlist', '--no-warnings'];
@@ -596,9 +605,9 @@ export async function sourceInfo(url) {
   if (!value) throw new Error('No source URL supplied.');
   if (remoteProcessing()) {
     const parsed = parseYouTubeUrl(value);
-    // Downloading needs the worker; reading the video's metadata does not. Both
-    // lookups below are plain HTTP from this process, so there was never a
-    // reason to skip them here -- and skipping them is why the job panel could
+    // Downloading needs the worker; reading the video's own public page does
+    // not. That lookup is plain HTTP from this process, so there was never a
+    // reason to skip it here -- and skipping it is why the job panel could
     // not offer a range picker, showed the design's placeholder length, called
     // the lecture by its URL, and could only say "cost confirmed before
     // processing" instead of a real token estimate.
@@ -607,9 +616,9 @@ export async function sourceInfo(url) {
     // the web service, and this runs while the user waits on a paste.
     const remoteWarnings = [];
     try {
-      const apiInfo = await sourceInfoViaYouTubeDataApi(value);
-      if (apiInfo?.durationSec) return { ...apiInfo, durationKnown: true };
-    } catch (error) { remoteWarnings.push(`YouTube Data API failed: ${error.message}`); }
+      const workerInfo = await sourceInfoViaWorker(value);
+      if (workerInfo?.durationSec) return { ...workerInfo, durationKnown: true };
+    } catch (error) { remoteWarnings.push(`Worker metadata lookup failed: ${error.message}`); }
 
     try {
       const htmlInfo = await sourceInfoViaYouTubeHtml(value);
@@ -627,12 +636,6 @@ export async function sourceInfo(url) {
     };
   }
   const warnings = [];
-
-  try {
-    const apiInfo = await sourceInfoViaYouTubeDataApi(value);
-    if (apiInfo?.durationSec) return { ...apiInfo, durationKnown: true };
-    if (youtubeIdFromUrl(value) && !config.youtubeDataApiKey) warnings.push('No YOUTUBE_DATA_API_KEY configured for reliable preflight duration.');
-  } catch (error) { warnings.push(`YouTube Data API failed: ${error.message}`); }
 
   try {
     const info = await sourceInfoViaYtDlp(value);
@@ -753,12 +756,6 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   }
 
   const { value, template, tracks, backgroundMode, background, introSeconds } = validateSubmission(url, user, options);
-  // A pasted YouTube link must be a video on a channel this account has
-  // connected. See src/youtube-ownership.js for why -- it is the whole answer
-  // to Google's 8 Sept 2026 verification refusal, and it is checked HERE,
-  // before the billing hold and before the project record exists, so a refused
-  // import costs nothing and leaves nothing behind. Uploads never reach it.
-  const ownedChannel = youtubeOwnership.isYouTubeLink(value) ? await youtubeOwnership.assertOwnsVideo(user, value) : null;
   billing.assertCanStartProject(user);
   const sourceRange = cleanSourceRange(options);
   const sourceMeta = Array.isArray(options?.sourceMeta) ? options.sourceMeta.find(item => String(item?.url || '') === value) || options.sourceMeta[0] : (options?.sourceMeta || {});
@@ -806,10 +803,6 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     // ever NARROWS the account's settings -- see enabledTargetsForClip.
     publishTo: Array.isArray(options.publishTo) ? options.publishTo.map(String) : null,
     sourceKind: options.sourceKind || 'link', originalFileName: options.originalFileName || null,
-    // The channel that authorised this import, so a later re-run can ask
-    // whether it is still connected without another API call. Null for an
-    // upload, which needs no authorisation from anybody.
-    sourceChannelId: ownedChannel?.channelId || null,
     uploadedInputFile: options.uploadedInputFile || null, sourceObjectKey: options.sourceKind === 'object_storage' ? value : null,
   }, user.id);
   state.projects.unshift(project);
@@ -2025,9 +2018,6 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   if (project.moreJob && ['queued', 'processing'].includes(project.moreJob.status)) {
     throw new Error('This lecture is already generating more clips.');
   }
-  // A more-clips run can re-fetch the source, so it asks the same question a
-  // retry does: is the channel that authorised this import still connected?
-  youtubeOwnership.assertStillOwns(ownerOfRecord(project), project);
   // A remote lecture with a link can be fetched again; only one with neither an
   // upload nor a link is genuinely stuck.
   if ((!project.sourceFile || !fs.existsSync(project.sourceFile))
@@ -2116,13 +2106,21 @@ function remoteSourceFor(project) {
 // downloads from YouTube gets them without separate plumbing. Only YouTube
 // sources: an upload never talks to YouTube and must not carry credentials it
 // has no use for. Exported for tests.
-export function withImportNetwork(source) {
-  if (source?.type !== 'youtube') return source;
+export function importNetworkForYouTube() {
+  // ONE definition of the network block the worker is handed. The metadata
+  // probe and the download must ask the same way, or the length quoted at the
+  // paste box is the length of a stream the download never gets.
   const settings = importNetworkSettings();
   const network = {};
   if (settings.proxy) network.proxy = settings.proxy;
   if (settings.cookiesText) network.cookiesText = settings.cookiesText;
-  return Object.keys(network).length ? { ...source, network } : source;
+  return Object.keys(network).length ? network : null;
+}
+
+export function withImportNetwork(source) {
+  if (source?.type !== 'youtube') return source;
+  const network = importNetworkForYouTube();
+  return network ? { ...source, network } : source;
 }
 
 // Priority 1, not 0. A free re-render is interactive and should be quick, but
@@ -2530,9 +2528,6 @@ export function retryProject(projectId) {
   // The same condition the dashboard uses to offer Retry. Without it a finished
   // project could be re-run: every clip imported a second time and charged again.
   if (!['failed', 'cancelled'].includes(project.status) && !project.error) throw new Error('Only a failed project can be retried.');
-  // A retry re-downloads the source, so the licence has to still hold. See
-  // src/youtube-ownership.js -- disconnecting a channel withdraws it.
-  youtubeOwnership.assertStillOwns(ownerOfRecord(project), project);
   // The hold was released when the project failed; a rerun needs a new one, or
   // the work runs with nothing held against the account.
   const retryEstimate = project.sourceEndSec ? project.sourceEndSec - (project.sourceStartSec || 0) : Number(project.sourceDurationSec || 0);

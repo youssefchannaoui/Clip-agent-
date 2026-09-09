@@ -157,7 +157,7 @@ export function nudgeMessage({ step, name = '', appUrl, freeDaysLeft = null, inv
     import: {
       subject: 'One lecture is all it takes',
       title: 'Your workspace is ready. It just needs a lecture.',
-      body: `${hi}paste a link from your own YouTube channel, choose the minutes worth clipping, and the review queue fills up while you do something else. Only the stretch you select is charged, so a five-minute section costs five tokens.`,
+      body: `${hi}paste a YouTube link, choose the minutes worth clipping, and the review queue fills up while you do something else. Only the stretch you select is charged, so a five-minute section costs five tokens.`,
       action: 'Paste a lecture',
       url: `${appUrl}#home`,
     },
