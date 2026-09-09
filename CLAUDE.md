@@ -18714,3 +18714,64 @@ what it always did at one slot**, and that property has its own test.
 **Worker change, so `deploy-worker.yml` deploys it on push.** The 0% fix reaches
 imports started after the box has it; the panel and the queue count are the web
 service and are live on the next Render deploy.
+
+## The caption look was finally SEEN, and three probes lied first (v3.185.1-.4, 10 Sept 2026)
+
+Youssef, with a TikTok reference: "Quran recitation should be like this instead
+of ugly old fashion outlines of text ... it has a light shadow thing in the back
+... it looks SO MUCH NICER AND CLEANER." The glow itself shipped in v3.185.0 with
+nine tests, five probes proven red and a commit message admitting the honest
+limit: *"NOT YET SEEN: no frame has been rendered ... the 6 is typesetting
+practice, not a measurement."* Closing that gap took four releases, and every one
+of them was a fault in the MEASUREMENT rather than in the code being measured.
+
+**The frames exist now** -- `deploy-worker.yml` dispatched with
+`caption_frame=true` renders the ayah through the real `write_ass` in real Amiri
+on the box, crops the caption band and hands the PNGs back as a run artifact.
+Hard outline against blur 3 / 4.5 / 6 / 9, on a bright ground, decided by looking.
+
+### The three ways a probe reported nothing and called it a finding
+
+1. **`edge_spread` walked right from the PEAK pixel** and stopped when two
+   neighbours matched -- and the pixel beside the peak is the glyph's own flat
+   white interior, so it stopped immediately and printed **0px for the hard
+   outline and the soft shadow alike**. A measurement that cannot tell two
+   obviously different things apart is broken, not a finding. It asks directly
+   now: on a bright ground the halo is the only thing DARKER than the ground, so
+   step off the glyph edge and count how far the darkening reaches.
+2. **The fix deleted the script's entry point.** `s.replace(s[s.index("def
+   edge_spread"):], new)` replaced a slice that ran to the END OF THE FILE, so it
+   took `if __name__ == "__main__": sys.exit(main())` with it. Python then defined
+   every function, ran none, and exited 0: run 34378396672 **finished in 2.5
+   seconds having printed not one line, uploaded an empty artifact and reported
+   success.** A byte range is not a boundary -- the third slice-based edit in this
+   repo to remove more than it named, and the first to do it where nothing
+   downstream could tell. **The step now refuses silence**: no `== done ==` in the
+   output fails the run.
+3. **`for ground, name in (("0xB4AFA6", "bright"), ...)` and then
+   `if ground == "bright"`.** `ground` is the COLOUR and `name` is the label, so
+   the emit branch was unreachable -- and so were the two lines I had just added
+   to explain an emit that produced nothing. That is why the run before it
+   measured a halo and still returned no scripture frames, silently. It also fed
+   the black ground's floor to the bright measurement, undercounting a real
+   difference (2px/12px, actually 4px against the cap).
+
+**The black-ground pass was DELETED rather than fixed.** The halo is the one
+thing darker than its ground, so on near-black there is nothing for it to be
+darker than -- it duly reported an identical 12px for both variants. A test that
+cannot apply must not print a number.
+
+### The halo figure distinguishes the KIND and not the DEGREE, and says so
+
+Measured: hard outline **4px**, and every blur from 3 to 9 saturates the walk's
+80px cap, because all four share the same 9px border. So the number settles
+"outline or shadow" and settles nothing about which blur -- which is exactly why
+the ladder emits a PICTURE per rung. Do not quote 80 as a difference.
+
+### The standing constraints on these probes, unchanged
+
+No customer frame, transcript or footage leaves the box: a probe prints geometry
+only, and any PNG is a generated ground plus text the probe itself wrote. No
+dispatch input is interpolated into a shell command -- inputs become a JSON
+literal in the `PARAMS = {}` seam and the script travels as one base64 blob.
+`WORKER_SHARED_SECRET` is read inside the container and never printed.
