@@ -8263,14 +8263,21 @@ window.fireClipNotifs=function(prev,next){try{
     if(t.status==='posted'&&!prevPosted.has(tkey(c,t)))show('Clip published',`"${c.title||'Your clip'}" is live on ${t.accountName?t.provider+' ('+t.accountName+')':t.provider}.`);
   }}
 }catch(e){}};
-StudioAdapter.onProbeSource=async url=>{try{
+StudioAdapter.onProbeSource=async url=>{
+      /* The panel opens BEFORE the lookup, not after it. Reading a link now
+         means asking the box -- yt-dlp through the residential pool, seconds
+         rather than milliseconds -- because since v3.182.0 no Google API is
+         asked about anybody else's video. Until this, pressing Start job did
+         nothing visible for that whole wait. See StudioAdapter.beginJob. */
+      StudioAdapter.beginJob(url);
+      try{
       const r=await api('/api/source-info',{method:'POST',body:JSON.stringify({urls:url})});
       const src=(r.sources||[])[0];
       if(!src||src.error)throw new Error(src?.error||'That link could not be read.');
       /* thumbnail included deliberately: openJob reads source.thumbnail for the
          poster, and passing only three fields here left it '' on every job, so
          the preview painted an empty black box however the panel was wired. */
-      StudioAdapter.openJob({url,title:src.title||url,durationSec:src.durationSec,thumbnail:src.thumbnail})}catch(e){toast(e.message,'bad')}};
+      StudioAdapter.resolveJob({url,title:src.title||url,durationSec:src.durationSec,thumbnail:src.thumbnail})}catch(e){StudioAdapter.failJob(url);toast(e.message,'bad')}};
     /* No range means the whole lecture. In remote mode the duration is unknown
        until the worker downloads it, so sending 0/0 would be a lie the server
        would have to interpret. */

@@ -1133,20 +1133,41 @@ export function queuePriority(item, project = null) {
   return owner && billing.paysForAtLeast(owner, 'studio') ? 0.5 : 1;
 }
 
+/*
+ * HOW MANY LECTURES MUST FINISH BEFORE THIS ONE STARTS -- which is not the same
+ * as how many are in front of it, and stopped being the same the day the box
+ * grew a second slot.
+ *
+ * This counted every running lecture as one to wait for, which was exactly
+ * right while there was ONE worker slot and is wrong now the box reports three
+ * (measured in production, 9 Sept 2026: "The worker reports 3 render slots").
+ * A lecture queued behind one that is importing is not waiting for it -- two
+ * slots are free and it starts on the next pump -- but the row said "1 job
+ * ahead of yours", and the queued ETA multiplies that count by a whole
+ * lecture, so it also quoted twenty minutes of a wait that was not going to
+ * happen.
+ *
+ * At one slot the arithmetic below returns exactly what it always did.
+ */
 export function queueAhead(projectId) {
   const target = projectById(projectId);
   if (!target || target.status !== 'queued') return 0;
-  let ahead = 0;
+  let running = 0;
+  let queuedAhead = 0;
   const rank = project => [queuePriority(project), Number(project.submittedAt || 0)];
   const mine = rank(target);
   for (const project of state.projects) {
     if (project.id === target.id) continue;
-    if (project.status === 'processing') { ahead += 1; continue; }
+    if (project.status === 'processing') { running += 1; continue; }
     if (project.status !== 'queued') continue;
     const theirs = rank(project);
-    if (theirs[0] < mine[0] || (theirs[0] === mine[0] && theirs[1] < mine[1])) ahead += 1;
+    if (theirs[0] < mine[0] || (theirs[0] === mine[0] && theirs[1] < mine[1])) queuedAhead += 1;
   }
-  return ahead;
+  // Everything ahead of me, less the slots that will take them in parallel,
+  // plus the one that has to free up for me. Never below zero: fewer than a
+  // boxful ahead means nothing has to finish first, which is "Next in line".
+  const slots = Math.max(1, Number(concurrencyLimit()) || 1);
+  return Math.max(0, running + queuedAhead - slots + 1);
 }
 
 export function acceptRemoteUpdate(projectId, update) {

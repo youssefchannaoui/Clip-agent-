@@ -1509,14 +1509,29 @@ class Processor:
                 # Turn bytes into something the customer can read. The import
                 # occupies 3-8% of the job, so the download maps onto that band
                 # rather than pretending to be the whole thing.
-                fields: dict[str, Any] = {"heartbeatAt": now_ms()}
+                # THE IMPORT NAMES ITS OWN PHASE, and until now it was the one
+                # phase in the pipeline that did not. clip_worker.py stamps
+                # `phase` for transcribe, score and render (phase_for), but the
+                # download runs in THIS process before clip_worker is spawned,
+                # so nothing ever wrote one for it -- and the app stamps
+                # `phaseStartedAt` when the phase CHANGES, so the import had no
+                # clock at all. That is the whole of "it says zero percent but
+                # you can clearly see the MB has went up": with no denominator
+                # the dashboard falls back to elapsed-over-expected, and that
+                # fallback had nothing to measure from, so it returned 0 for the
+                # entire download. Reproduced against the shipped adapter with
+                # production's own payload: "importing - 0% of this step -
+                # 31.0 MB - 283 KB/s", and 33% with this one field present.
+                #
+                # IT IS A CONSTANT, DELIBERATELY. A human note that changes
+                # every beat ("waiting (2m 05s)") would re-stamp the clock on
+                # every poll and put the fraction straight back at zero -- the
+                # same bug wearing a longer string. `phase` is the stable
+                # identifier the UI switches on; the human line is `stage`, and
+                # the note below is what pushes an unchanged one past the
+                # throttle rather than something a customer ever reads.
+                fields: dict[str, Any] = {"heartbeatAt": now_ms(), "phase": "import"}
                 if note:
-                    # "phase" has been in the job payload all along and
-                    # nothing ever wrote to it, so an import that was
-                    # waiting on a third party was indistinguishable
-                    # from one that had died. A provider that knows why
-                    # it is waiting says so here.
-                    fields["phase"] = note[:120]
                     last_note = note
                 if done_bytes:
                     # The raw counts travel too, so the app can say "142 MB of

@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2007 JS + 928 Python**
+- `npm test` and `npm run check` must pass. Currently **2018 JS + 931 Python**
   (13 Python skipped) — the skips are where ffmpeg or OpenCV is absent, which
   is CI.
   These numbers were once wrong by more than a factor of
@@ -18315,3 +18315,96 @@ before changing what the product does.
 **And when the operator says a fix ruins the product, that is a finding, not an
 objection to work around.** Youssef has now been right about this three times
 in this file (the nasheed banner, the clip-AI probe, and here).
+
+## The import had no clock, so it read 0% for its whole length (v3.184.0, 9 Sept 2026)
+
+Youssef, watching an import: "it says it's on fifty seven MB, but it's zero
+percent of this step. So surely, it would be more than zero percent at that
+stage" — plus "it takes a little bit more time for it to pop up. So either add
+a loading screen ... or speed it up", and a question about how many lectures
+run at once.
+
+### REPRODUCED FIRST, against production's own payload
+
+v3.177.0 rebuilt this whole model and its own test file opens with the same
+complaint, so the obvious reading was that the fix had not worked. It had. What
+had not been noticed is that **its fixture hardcodes `phase: 'import'` and
+production sends no phase at all** — the fixture-does-not-match-production trap
+this repo has now hit three times. The shipped adapter, given the row from the
+screenshot:
+
+    no phase   "importing · 0% of this step · 31.0 MB · 283 KB/s · 36 min left"
+    phase      "importing · 33% of this step · 31.0 MB · 283 KB/s · 34 min left"
+
+**Every phase in the pipeline carries a stable identifier except the one that
+runs first.** `clip_worker.py` stamps `phase` for transcribe, score and render
+(`phase_for`); the DOWNLOAD runs in service.py before clip_worker is spawned, so
+nothing ever wrote one for it. The app stamps `phaseStartedAt` when the phase
+CHANGES, so the import had no clock — and `stageFraction`'s last resort is
+elapsed-over-expected, which with no clock returns 0 for the entire download.
+The megabytes climbed because they were the one figure not behind that gate.
+
+- **The pulse names it, and it is a CONSTANT.** A human note that changes every
+  beat ("waiting (2m 05s)") would re-stamp the clock on every poll and put the
+  fraction straight back to zero — the same bug wearing a longer string.
+  `phase` is the stable identifier the UI switches on; the human line is
+  `stage`, and the note that used to be written here reached no screen (the row
+  renders `stage`), so nothing visible was lost.
+- **A denominator would answer it too and often does** — `DownloadProgress` is
+  thorough about finding one. It cannot for a fragmented format or a section
+  download (ffmpeg, which fires no byte hooks), and those are exactly the
+  imports that read 0%. The clock covers all of them.
+- Both halves are pinned separately, because either alone hides the other:
+  `test/test_import_phase.py` drives the real pulse (the worker names it, and
+  does not change it between beats), and `test/import-phase-clock.test.mjs`
+  drives the app's own writer rather than a hand-typed row — worker payload →
+  `acceptRemoteUpdate` → the bindings the screen renders. All red first.
+
+### Start job opens the panel and fills it in
+
+The wait is real and is not a fault: since v3.182.0 the title, length and
+thumbnail are read by the BOX — yt-dlp through the residential pool, seconds
+rather than milliseconds — because asking Google's API about somebody else's
+video is what the data-access refusal was about. **It is also the same request
+the download will make**, which is what makes a link the box cannot reach get
+refused at the paste box instead of at the front of the queue twenty minutes
+later. That is worth the seconds; waiting for it in silence is not.
+
+- `beginJob(url)` opens the panel on the press. **The first step is the brief,
+  which does not depend on the source at all**, so this is the panel arriving
+  usable rather than a spinner in front of one — and `durationKnown: false` is a
+  state this panel has always had to render, so nothing new is asked of it.
+- **`resolveJob` patches the source fields and LEAVES THE REST ALONE.** The
+  naive fix is to call `openJob` again, which resets the step, the brief and
+  every choice — throwing away somebody's typing because a network call came
+  back. A probe that does exactly that is one of the four red ones.
+- **A stale answer cannot reopen a closed panel or overwrite a second link**
+  pasted while the first was still being read: `resolveJob`/`failJob` are keyed
+  on the url they were started for.
+- The labels are honest while it runs: "Reading the link…" rather than the raw
+  URL as a title, and not "Whole lecture", which reads as a decision that has
+  been taken.
+- **NOT sped up, deliberately.** The probe is already two clients and one
+  extract; the only way to make it quick is to stop asking the box, which
+  trades away the authority above. Racing the app's own watch-page lookup would
+  win sometimes and lose that property whenever it won.
+
+### Three lectures at once — and the queue was counting as though it were one
+
+**Confirmed from production rather than from the code**: the app logs
+`The worker reports 3 render slots.` on every boot (9 Sept 2026, every instance).
+The box computes it from its own hardware (`capacity.py`: 9G container, `medium`
+at 2.5G a job) and `MAX_CONCURRENT_JOBS` may only ever CAP that, never raise it.
+
+That found a second live bug. `queueAhead` counted every RUNNING lecture as one
+to wait for — exactly right at one slot, wrong at three: a lecture queued behind
+a single import is not waiting for it, two slots are free and it starts on the
+next pump. The row said "1 job ahead of yours" anyway, and `pipelineEta`'s queued
+branch multiplies that count by what a whole lecture costs, so it also quoted a
+lecture's worth of wait that was never going to happen. It is
+`running + queuedAhead - slots + 1`, floored at zero — **which returns exactly
+what it always did at one slot**, and that property has its own test.
+
+**Worker change, so `deploy-worker.yml` deploys it on push.** The 0% fix reaches
+imports started after the box has it; the panel and the queue count are the web
+service and are live on the next Render deploy.

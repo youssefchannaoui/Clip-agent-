@@ -7827,7 +7827,10 @@
       // token estimate are based on the real source rather than a guess. The
       // chosen range becomes sourceStartSeconds/sourceEndSeconds on /api/videos.
       jobOpen: Boolean(job),
-      jobSourceLabel: job ? job.title : '',
+      // Named while it is being read, rather than showing the raw URL as
+      // though that were the lecture's title. See beginJob.
+      jobProbing: Boolean(job && UI.jobProbing),
+      jobSourceLabel: !job ? '' : (UI.jobProbing ? 'Reading the link…' : job.title),
       // The design baked a marketing image into this element's style, so every
       // lecture was previewed with the same picture — and the URL it used was
       // repo-relative, so it 404'd and showed an empty box. sourceInfo already
@@ -7886,7 +7889,11 @@
         ? 'position: absolute; top: 0; bottom: 0; left: ' + (job.start / job.durationSec * 100) + '%; width: ' +
           Math.max(1, (job.end - job.start) / job.durationSec * 100) + '%; border-radius: 4px; background: rgba(217,180,120,.28); border: 1px solid rgba(217,180,120,.5);'
         : 'position: absolute; inset: 0; border-radius: 4px; background: rgba(217,180,120,.18); border: 1px solid rgba(217,180,120,.35);',
-      jobRangeLabel: !job ? '' : job.durationKnown ? secsToClock(job.start) + ' – ' + secsToClock(job.end) : 'Whole lecture',
+      // While the box is still being asked, the length is not UNKNOWN, it is
+      // not back yet -- and 'Whole lecture' reads as a decision that has been
+      // taken. Only after the answer lands does it mean what it says.
+      jobRangeLabel: !job ? '' : job.durationKnown ? secsToClock(job.start) + ' \u2013 ' + secsToClock(job.end)
+        : (UI.jobProbing ? 'Reading the length\u2026' : 'Whole lecture'),
       // The expectation is set before tokens are committed, not discovered
       // mid-wait. The range is measured, not vibes: whisper-small transcribes
       // at ~0.21x duration on the worker (benchmarked 20 Aug 2026 on a real
@@ -7895,8 +7902,10 @@
       jobLenLabel: !job ? '' : job.durationKnown
         ? humanDuration(job.end - job.start) + ' selected · ready in roughly '
           + jobEtaRange(job.end - job.start)
-        : 'Length is confirmed once the worker downloads the source. '
-          + 'As a guide: a 60-minute lecture takes roughly 35\u201360 minutes to transcribe and render.',
+        : (UI.jobProbing
+          ? 'Reading the lecture\u2019s length. You can carry on \u2014 the range opens as soon as it lands.'
+          : 'Length is confirmed once the worker downloads the source. '
+            + 'As a guide: a 60-minute lecture takes roughly 35\u201360 minutes to transcribe and render.'),
       // The design followed that label with the literal "of 42:11 — drag the top
       // handle...", so every lecture claimed to be 42 minutes 11 seconds long no
       // matter its real length. text-overrides.json turns it into this binding.
@@ -10493,7 +10502,57 @@
       }
       refresh();
     },
-    jobDone: function () { UI.job = null; UI.generating = false; refresh(); },
+    // THE PANEL OPENS FIRST AND FILLS ITSELF IN.
+    //
+    // Youssef, 9 Sept 2026: "it takes a little bit more time for it to pop up.
+    // So either add a loading screen ... or speed it up." He is right that it
+    // got slower and right about why: since v3.182.0 the title, length and
+    // thumbnail come from the BOX -- yt-dlp through the residential pool,
+    // seconds rather than milliseconds -- because asking Google's API about
+    // somebody else's video is what the data-access refusal was about. That
+    // lookup is not one to hurry: it is the same request the download will
+    // make, which is what makes a link the box cannot reach get refused at the
+    // paste box instead of at the front of the queue twenty minutes later.
+    //
+    // So the wait is kept and made visible. The first step is the brief, which
+    // does not depend on the source at all, so this is not a spinner in front
+    // of a panel -- it is the panel, usable, while the last three facts about
+    // the lecture arrive. `durationKnown: false` is a state this panel has
+    // always had to render (a link whose length nothing could read), so
+    // nothing new is being asked of it.
+    beginJob: function (url) {
+      global.StudioAdapter.openJob({ url: url, title: '', durationSec: 0, thumbnail: '' });
+      UI.jobProbing = String(url || '');
+      refresh();
+    },
+    // The metadata landed. The step, the brief and every choice already made
+    // are LEFT ALONE -- openJob resets them, and resetting somebody's typing
+    // because a network call came back is the fault this exists to avoid.
+    resolveJob: function (source) {
+      var url = String((source && source.url) || '');
+      // A stale answer must never reopen a panel that was closed, or overwrite
+      // a second link pasted while the first was still being read.
+      if (!UI.job || UI.jobProbing !== url) return;
+      var dur = Number(source && source.durationSec) || 0;
+      UI.job.title = source.title || url;
+      UI.job.thumbnail = source.thumbnail || '';
+      UI.job.durationSec = dur;
+      UI.job.durationKnown = dur > 0;
+      UI.job.start = 0;
+      UI.job.end = dur;
+      UI.jobProbing = null;
+      refresh();
+    },
+    // The link could not be read. The panel closes rather than sitting on a
+    // lecture that does not exist; the host says why.
+    failJob: function (url) {
+      if (UI.jobProbing && UI.jobProbing !== String(url || '')) return;
+      UI.job = null;
+      UI.jobProbing = null;
+      UI.jobStep = 1;
+      refresh();
+    },
+    jobDone: function () { UI.job = null; UI.jobProbing = null; UI.generating = false; refresh(); },
     // Called when the server refused the source. The panel stays open so the
     // reason sits next to the button that caused it.
     jobFailed: function (message) {
