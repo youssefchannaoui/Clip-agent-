@@ -1585,10 +1585,39 @@ class StderrFloodTests(unittest.TestCase):
 class SpeedPassTests(unittest.TestCase):
     """The speed pass's worker-side facts, pinned."""
 
-    def test_transcription_is_greedy_with_vad(self):
+    def test_transcription_is_greedy(self):
         source = (ROOT / "worker" / "clip_worker.py").read_text(encoding="utf-8")
         self.assertIn('"beam_size": 1,', source)
-        self.assertIn('"vad_filter": True,', source)
+
+    def test_the_voice_filter_is_off_and_the_no_speech_gate_is_not(self):
+        """Silero eats the Arabic, so it does not run -- but silence is still
+        refused.
+
+        Measured on the box 9 Sept 2026 over 90s of an English lecture holding
+        a quoted hadith: filter on gave 54.1s of speech, language en, and ZERO
+        Arabic segments of 26; filter off gave 83.5s, language ar, and 10 of
+        24. A transliterated quotation is unrecoverable downstream --
+        contains_arabic is false, so no Arabic face, no translation line, no
+        ayah match.
+
+        The two guards are deliberately NOT symmetric. Dropping both together
+        hallucinates captions onto silence, which is worse than the fault this
+        fixes, so the no-speech gate must stay at the library default.
+        """
+        job = {"settings": {}, "template": {}}
+        options = worker.first_pass_options(job)
+        self.assertIs(options["vad_filter"], False, "the voice filter eats the Arabic")
+        self.assertNotIn("vad_parameters", options,
+                         "no parameters for a filter that does not run")
+        self.assertNotIn("no_speech_threshold", options,
+                         "the gate stays at the library default, which is on")
+
+    def test_a_quran_job_needs_no_special_case_for_the_filter_any_more(self):
+        """It reached this conclusion first (v3.132.0); now everyone has."""
+        plain = worker.first_pass_options({"settings": {}, "template": {}})
+        quran_job = worker.first_pass_options(
+            {"settings": {}, "template": {"captionMode": "quran"}})
+        self.assertEqual(plain["vad_filter"], quran_job["vad_filter"])
 
     def test_the_transcript_cache_key_covers_everything_that_changes_the_words(self):
         job = {"transcriptCacheDir": "/tmp/tc", "sourceCacheKey": "vid123",

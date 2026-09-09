@@ -237,7 +237,34 @@ class TranslationSpanTests(unittest.TestCase):
         translate = [c for c in calls if c.get("task") == "translate"]
         self.assertTrue(translate, "fell back to the whole file rather than failing the job")
         self.assertNotIn("clip_timestamps", translate[0])
-        self.assertTrue(translate[0].get("vad_filter"), "and VAD comes back for the whole-file pass")
+        # The whole-file pass MIRRORS the first pass rather than carrying a
+        # setting of its own. That used to mean the voice filter came back for
+        # it; since v3.180.0 the filter is off at the base for every template,
+        # because Silero discards the third of the audio the Arabic is in --
+        # and this is the pass that exists to translate that Arabic, so forcing
+        # the filter back on here would silence exactly what it is reading.
+        self.assertEqual(translate[0].get("vad_filter"), calls[0].get("vad_filter"),
+                         "the translate pass hears what the first pass heard")
+
+    def test_the_fallback_never_switches_the_voice_filter_ON_for_the_arabic(self):
+        """A caller that omits vad_filter must not have Silero turned on for it.
+
+        This is the pass that exists to translate the Arabic, and the filter is
+        what discards the third of the audio the Arabic is in (measured 9 Sept
+        2026). Production always passes the key -- first_pass_options sets it
+        -- so the default is only reached by a caller that omits it, and a True
+        there would silence exactly what this pass reads. Driven, because the
+        production path cannot exercise a default it always overrides.
+        """
+        calls = []
+
+        class Model:
+            def transcribe(self, _audio, **kwargs):
+                calls.append(kwargs)
+                return ([FakeSegment(0.0, 1.0, "Indeed We created you")], FakeInfo("ar"))
+
+        cw.translate_audio(Model(), Path("/tmp/x.wav"), {}, spans=None)
+        self.assertIs(calls[0].get("vad_filter"), False)
 
     def test_the_first_pass_does_not_condition_on_previous_text(self):
         # The repeat-loop setting: a small model on an hour of audio.

@@ -633,9 +633,23 @@ class FasterWhisperBackend(TranscriptionBackend):
 # the trigger is deliberately "plainly stopped", not "a bit short".
 SECOND_LISTEN_MIN_SEC = 60.0
 SECOND_LISTEN_SHARE = 0.5
+# A GATE THAT IS SOFTENED, NEVER ONE THAT IS REMOVED. Whisper discards a
+# window whose no_speech_prob passes this threshold; the library's default is
+# 0.6. Raising it keeps the guard against captioning pure silence while
+# accepting a window the default called silent -- which is the whole of what a
+# second listen needs. Setting it to None removes the guard outright, and with
+# the voice filter now off at the base (first_pass_options) that would be BOTH
+# silencers gone at once: the one combination this table exists to avoid,
+# because it hallucinates text onto silence, which is worse than the fault
+# being fixed. Whether a softened gate actually rescues a recording the default
+# gate silenced is NOT measured on the box -- the 9 Sept 2026 audio probe found
+# the gate changed nothing in either direction there. It is the only pass left
+# that is safe to try.
+SECOND_LISTEN_GATE = 0.9
+
 SECOND_LISTEN_PASSES: tuple[tuple[str, dict[str, Any]], ...] = (
     ("voice detection off", {"vad_filter": False}),
-    ("no-speech gate off", {"no_speech_threshold": None}),
+    ("the no-speech gate softened", {"no_speech_threshold": SECOND_LISTEN_GATE}),
 )
 
 
@@ -654,6 +668,38 @@ def relaxed_guards(options: dict[str, Any]) -> frozenset[str]:
     if "no_speech_threshold" in options and options["no_speech_threshold"] is None:
         off.add("no_speech_threshold")
     return frozenset(off)
+
+
+def gate_level(options: dict[str, Any]) -> float:
+    """How permissive the no-speech gate is: higher lets more speech through.
+
+    Absent is faster-whisper's own 0.6, and None is no gate at all -- so
+    "absent" and "off" are two ends of the same scale rather than the same
+    thing, which is the distinction relaxed_guards exists for.
+    """
+    if "no_speech_threshold" not in options:
+        return 0.6
+    value = options["no_speech_threshold"]
+    return float("inf") if value is None else float(value)
+
+
+def relaxes(retry: dict[str, Any], base: dict[str, Any]) -> bool:
+    """Is this pass strictly more permissive than the base, and never less?
+
+    A second listen exists to hear MORE, so a pass that changes nothing wastes
+    a whole transcription of the file and a pass that tightens a guard the base
+    had already relaxed can only hear less. Both were reachable once the voice
+    filter went off at the base for every template: "voice detection off" IS
+    the base state now, and a softened gate handed to a caller who had already
+    switched the gate off would put one back.
+    """
+    retry_vad, base_vad = bool(retry.get("vad_filter")), bool(base.get("vad_filter"))
+    if retry_vad and not base_vad:
+        return False                      # would put the filter back
+    retry_gate, base_gate = gate_level(retry), gate_level(base)
+    if retry_gate < base_gate:
+        return False                      # would tighten the gate
+    return (base_vad and not retry_vad) or retry_gate > base_gate
 
 
 def transcript_reach(segments: list[dict[str, Any]], duration_sec: float) -> float:
@@ -691,19 +737,18 @@ def second_listen(
         retry.update(changes)
         if not retry.get("vad_filter"):
             retry.pop("vad_parameters", None)
-        # A QUR'AN JOB ALREADY STARTS WITH THE VAD OFF (v3.132.0, measured on
-        # the box), and that is what made both of these reachable. Each pass
-        # was applied blind to the base options, so on a recitation the first
-        # pass changed NOTHING -- a whole wasted transcription of the file --
-        # and the second then ran with the voice filter AND the no-speech gate
-        # off together, which is the one combination SECOND_LISTEN_PASSES
-        # exists to avoid: it hallucinates captions onto silence, worse than
-        # the fault being fixed. Both are decided against the base rather than
-        # against the template, so nothing here has to know what kind of job
-        # this is.
+        # EVERY PASS IS DECIDED AGAINST THE BASE, never against the template,
+        # so nothing here has to know what kind of job this is. A Qur'an job
+        # started with the voice filter off first (v3.132.0) and every job does
+        # now (first_pass_options, v3.180.0) -- so "voice detection off" is the
+        # base state on the live path and would waste a whole transcription of
+        # the file, while a pass that put a guard BACK could only hear less.
+        # The one combination that must never be reached is both silencers off
+        # at once: it hallucinates captions onto silence, which is worse than
+        # the fault being fixed.
+        if not relaxes(retry, options):
+            continue  # it would hear no more than the base, or less
         retry_off = relaxed_guards(retry)
-        if retry_off == base_off:
-            continue  # this pass is already the base state; it can only waste one
         if len(retry_off) > 1:
             continue  # never both silencers off at once
         try:
@@ -769,6 +814,84 @@ def no_clip_reason(segments: list[dict[str, Any]], duration_sec: float, settings
     return f"No complete clip candidates fit the selected duration range ({minimum:.0f}-{maximum:.0f}s)."
 
 
+def first_pass_options(job: dict[str, Any]) -> dict[str, Any]:
+    """The transcribe options for a job's first pass.
+
+    Its own function so a test can DRIVE it rather than grep this file for
+    a literal -- a source-string test on exactly these options went red on
+    the change it was meant to protect, which is the failure this repo has
+    recorded more than any other.
+    """
+    settings = job.get("settings") if isinstance(job.get("settings"), dict) else {}
+    kwargs: dict[str, Any] = {
+        # Greedy decoding. beam_size=5 cost roughly a third more wall time on
+        # the 2-vCPU worker for a marginal gain on clear lecture speech; the
+        # speed pass measured and chose 1.
+        "beam_size": 1,
+        # THE VOICE FILTER IS OFF, AND IT IS OFF BECAUSE IT EATS THE ARABIC.
+        # Measured on the box 9 Sept 2026 over 90 seconds of an English lecture
+        # holding a quoted hadith (medium, same audio, one variable):
+        #
+        #   filter on    speech 54.1s of 90   language en@0.49   arabic  0/26
+        #   filter off   speech 83.5s of 90   language ar@0.49   arabic 10/24
+        #
+        # Silero discards a third of the audio, and the third it discards is
+        # where the Arabic is -- so the file is then detected as English and
+        # every quotation comes back transliterated into Latin letters
+        # ("fikulli qarni min ummati"). Nothing downstream can recover from
+        # that: contains_arabic is false, so no Arabic face, no translation
+        # line, no ayah match (invariant 7 collapses in silence).
+        #
+        # The Quran template has run without it since v3.132.0 for the same
+        # reason, measured the same way. This only extends that to every
+        # template, which is what the content demands: an Islamic lecture in
+        # English is not English audio, it is English with Arabic in it.
+        #
+        # THE NO-SPEECH GATE STAYS. That is the guard against captioning
+        # silence, and it is a different mechanism -- dropping both together
+        # hallucinates text onto silence, which is worse than the fault being
+        # fixed.
+        "vad_filter": False,
+        "word_timestamps": True,
+        # False, deliberately. With the previous window fed back as context, a
+        # small model on an hour of audio falls into the classic repeat loop --
+        # one phrase transcribed over and over until the VAD breaks it -- and
+        # drifts after any misheard passage. Whisper still decodes in its own
+        # 30-second windows without the voice filter, so each window stands on
+        # its own; nothing is lost but the failure mode.
+        "condition_on_previous_text": False,
+        "task": settings.get("task") or DEFAULT_WHISPER_TASK,
+    }
+    # Recitation reached this conclusion first (v3.132.0): with the filter on,
+    # Whisper was handed 26 of the first 120 seconds and wrote two segments;
+    # with it off, 119 seconds and ten. That measurement is why the default
+    # above is now off for everything, so this template needs no special case
+    # any more.
+    language = str(settings.get("language") or "").strip()
+    if language:
+        kwargs["language"] = language
+    else:
+        # Auto-detect means BOTH, switching as it hears them (Youssef, 28 Aug
+        # 2026: "auto detect should do BOTH ARABIC AND ENLISH AND SHOULD SWITCH
+        # WHEN DETECT").
+        #
+        # `multilingual` IS A MEASURED NO-OP ON THIS BOX AND IS KEPT ANYWAY.
+        # 9 Sept 2026, same 90 seconds of audio, medium, one variable: with
+        # multilingual and without it are byte-identical -- 26 segments, 54.1s
+        # of speech, en@0.49, arabic 0/26 both times. So the flag added on
+        # 28 Aug as the fix for transliterated Arabic has never once changed
+        # an output here, and this file recorded it as working for twelve
+        # days. What actually recovers the Arabic is the voice filter being
+        # off, above.
+        #
+        # It stays because it costs nothing, it is correct on a library
+        # version where it does work, and removing it would leave nothing at
+        # all asking for per-segment detection. Do not credit it with a fix.
+        kwargs["multilingual"] = True
+
+    return kwargs
+
+
 def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, duration_sec: float) -> list[dict[str, Any]]:
     supplied = job.get("transcriptSegments")
     if isinstance(supplied, list) and supplied:
@@ -814,47 +937,11 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
     if threads.isdigit() and int(threads) > 0:
         model_kwargs["cpu_threads"] = int(threads)
     model = WhisperModel(model_name, device=device, compute_type=compute_type, **model_kwargs)
-    kwargs: dict[str, Any] = {
-        # Greedy decoding. beam_size=5 cost roughly a third more wall time on
-        # the 2-vCPU worker for a marginal gain on clear lecture speech; the
-        # speed pass measured and chose 1.
-        "beam_size": 1,
-        "vad_filter": True,
-        "vad_parameters": {"min_silence_duration_ms": 450},
-        "word_timestamps": True,
-        # False, deliberately. With the previous window fed back as context, a
-        # small model on an hour of audio falls into the classic repeat loop --
-        # one phrase transcribed over and over until the VAD breaks it -- and
-        # drifts after any misheard passage. VAD is already on, so each window
-        # stands on its own; nothing is lost but the failure mode.
-        "condition_on_previous_text": False,
-        "task": settings.get("task") or DEFAULT_WHISPER_TASK,
-    }
-    # RECITATION SKIPS THE VOICE FILTER FROM THE START. Measured on the box on
-    # 5 Sept 2026 over the first 120 seconds of the recitation that failed
-    # (567s, AAC, mean -18.6 dB -- a healthy recording): with the filter on,
-    # Whisper was handed 26 seconds and wrote two segments; with it off, 119
-    # seconds and ten. The no-speech gate changed nothing either way, and
-    # neither did the language. Silero hears elongated tajweed as something
-    # other than speech, so a recitation would pay for a whole first pass
-    # only to have second_listen throw it away. The no-speech gate stays, so
-    # real silence is still refused.
-    if str((job.get("template") or {}).get("captionMode") or "") == "quran":
-        kwargs["vad_filter"] = False
-        kwargs.pop("vad_parameters", None)
-    language = str(settings.get("language") or "").strip()
-    if language:
-        kwargs["language"] = language
-    else:
-        # Auto-detect means BOTH, switching as it hears them (Youssef, 28 Aug
-        # 2026: "auto detect should do BOTH ARABIC AND ENLISH AND SHOULD SWITCH
-        # WHEN DETECT"). Whisper's own default detects one language from the
-        # first 30 seconds and applies it to the whole lecture, so an English
-        # talk containing recitation transcribed the Arabic as Latin nonsense
-        # -- and nothing downstream could recognise it as Arabic, because by
-        # then it was not. `multilingual` detects per segment instead.
-        kwargs["multilingual"] = True
-
+    kwargs: dict[str, Any] = first_pass_options(job)
+    # Read back rather than re-derived: the translate pass below asks whether a
+    # language was PINNED, and first_pass_options is the one place that decides
+    # what pinning means (a blank or whitespace setting is not one).
+    language = str(kwargs.get("language") or "")
     info: Any = None
 
     def run_pass(options: dict[str, Any], stage: str = "Transcribing speech") -> list[dict[str, Any]]:
@@ -1004,7 +1091,7 @@ def translate_audio(model: Any, audio_file: Path, kwargs: dict[str, Any],
     """
     options: dict[str, Any] = {
         "beam_size": kwargs.get("beam_size", 1),
-        "vad_filter": kwargs.get("vad_filter", True),
+        "vad_filter": kwargs.get("vad_filter", False),
         "condition_on_previous_text": False,
         "task": "translate",
     }
@@ -1027,7 +1114,7 @@ def translate_audio(model: Any, audio_file: Path, kwargs: dict[str, Any],
         # clip_timestamps either. The whole file is slower, not a failed job.
         options.pop("multilingual", None)
         if options.pop("clip_timestamps", None) is not None:
-            options["vad_filter"] = kwargs.get("vad_filter", True)
+            options["vad_filter"] = kwargs.get("vad_filter", False)
             if kwargs.get("vad_parameters"):
                 options["vad_parameters"] = kwargs["vad_parameters"]
         translated = model.transcribe(str(audio_file), **options)[0]
@@ -7933,10 +8020,11 @@ def track_speaker_keyframes(
     step = 1.0 / max(0.5, min(8.0, sample_hz))
     # sample_count, not `samples`: the collected measurements are called
     # `samples` below, and naming both the same made `range(samples + 1)` add an
-    # int to a list -- so the tracker raised TypeError on its first real frame
-    # and every render silently fell back to the static crop. Caught by the box,
-    # because this function needs OpenCV and a real video and the unit tests
-    # drive the pure functions underneath it.
+    # int to a list. Caught on the box rather than here, because this function
+    # needs OpenCV and a real video and the unit tests drive the pure functions
+    # underneath it. The render's try/except meant it fell back to the static
+    # crop rather than failing a job, which is exactly why it needed a probe to
+    # surface at all.
     sample_count = max(2, int(duration / step))
     min_face = max(28, min(src_w, src_h) // 24)
 

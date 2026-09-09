@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1995 JS + 896 Python**
+- `npm test` and `npm run check` must pass. Currently **1995 JS + 900 Python**
   (13 Python skipped) — the skips are where ffmpeg or OpenCV is absent, which
   is CI.
   These numbers were once wrong by more than a factor of
@@ -9951,6 +9951,106 @@ nothing while the job looked perfectly healthy. The test passed because the
 FIXTURE was seeded the same wrong way. **A fixture that does not match what
 production writes tests the reader against itself**; it is seeded from
 `upload_result`'s real shape now, and the old reader turns it red.
+
+## The Arabic came back transliterated because Silero ate it (v3.180.0, 9 Sept 2026)
+
+Youssef, with a clip on screen captioned **"fikulli qarni min ummati"**: "so
+whenever, uh, they speak Arabic, you can see it comes up perfectly in a
+transliteration version, but I wanted to come up in Arabic ... with all
+templates, of course. And then with Quran recitation, leave it as is."
+
+### THE CAUSE WAS THE VOICE FILTER, AND MY FIRST DIAGNOSIS WAS WRONG
+
+I told him the pinned `"language": "en"` was doing it. It is not. The probe ran
+on **auto** and still produced `arabic=0/26`. Measured on the box over the same
+90 seconds (860-950s) of his own lecture -- one variable, `medium`, same audio:
+
+    setting                       speech found   detected   arabic segs
+    as shipped (vad on)            54.1s of 90   en@0.49        0/26
+    vad off                        83.5s of 90   ar@0.49       10/24
+    language auto, multilingual    54.1s         en@0.49        0/26
+    no language at all             54.1s         en@0.49        0/26
+    ar forced (control)            80.8s         ar@1.00       39/39
+
+**Silero discards a third of the audio and the third it discards is the
+Arabic.** The file is then detected as English and every quotation comes back
+in Latin letters -- and nothing downstream can recover from that, because
+`contains_arabic()` is false: no Arabic face, no translation line, no ayah
+match. Invariant 7 collapses in silence.
+
+**`multilingual=True` IS A MEASURED NO-OP**, byte-identical with and without.
+The mechanism added on 28 Aug 2026 as the fix for exactly this has never once
+changed an output on this box, and this file recorded it as working for twelve
+days. It is KEPT -- it costs nothing and is correct on a library version where
+it works -- with a comment forbidding anyone from crediting it with a fix.
+
+**`per-segment-langs` came back EMPTY**: faster-whisper returns no language per
+segment here, so a targeted "re-read only the segments heard as Arabic" repair
+is not buildable. Said rather than attempted.
+
+### The fix, and what it deliberately did NOT touch
+
+`first_pass_options(job)` -- extracted so a test can DRIVE it rather than grep
+this file for a literal -- runs **`vad_filter: False` for every template**. The
+Qur'an template has run that way since v3.132.0 for the same reason, measured
+the same way; its special case is deleted because it is now the default. **An
+Islamic lecture in English is not English audio, it is English with Arabic in
+it**, and the pipeline now listens to it that way.
+
+**THE NO-SPEECH GATE STAYS.** It is a different mechanism, and dropping both
+together hallucinates captions onto silence -- worse than the fault being
+fixed. Caption timing, the ayah pager and the Qur'an path are untouched: the
+recitation path already ran without the filter, so nothing about the sync
+Youssef is happy with moved.
+
+### The second listen had to be rebuilt around the new base, not left dead
+
+`SECOND_LISTEN_PASSES` relaxes one guard at a time and skips a pass whose
+relaxed set equals the base's (v3.168.0). With the filter off at the base,
+"voice detection off" IS the base -- so pass one is skipped, and pass two
+(`no_speech_threshold: None`) was then refused by the both-off rule. **The
+whole mechanism would have gone quietly dead**: a recording Whisper stops early
+on would get no rescue at all, with a green suite and nothing saying so.
+
+- The remaining pass **SOFTENS** the gate (`SECOND_LISTEN_GATE = 0.9`) rather
+  than removing it. Whisper still discards a window it is confident is silence,
+  so the forbidden combination is never reached, and there is still a real
+  second listen. **Whether a softened gate rescues a gate-silenced recording is
+  NOT measured** -- the 5 Sept box probe found the gate changed nothing in
+  either direction there -- and the comment says so rather than claiming it.
+- **`relaxes(retry, base)` replaces the relaxed-set comparison.** A pass must be
+  strictly more permissive than the base and never less: one that changes
+  nothing wastes a whole transcription of the file, and one that puts a guard
+  BACK (a softened gate handed to a caller who had already switched the gate
+  off) can only hear less. Both became reachable the moment the base moved.
+- `translate_audio`'s two `vad_filter` defaults are False now. A True there
+  would silently switch Silero on for the pass that exists to READ the Arabic
+  -- and the default is unreachable from production, so it is driven directly
+  by test rather than through the pipeline that always overrides it.
+
+### The probe that answered this, and what it had to be taught
+
+`.github/scripts/worker-diagnose.py` could not have found it: it reported
+segment counts and the FILE's detected language, so a run that transliterated
+everything looked identical to one that worked. It reports **`arabic=N/M
+latin=N/M per-segment-langs={...}`** per variant now, plus the timestamps
+Arabic was heard at, and takes a `diagnose_from` offset -- a 32-minute English
+lecture holds its Arabic in quotations scattered through it, so the first two
+minutes are all English and prove nothing.
+
+Cached-transcript evidence from the same run: the English podcast (pinned `en`)
+**8/516 Arabic**; both recitations (auto) **221/221** and **153/153** with
+translation lines. The Qur'an path is flawless, which is exactly what Youssef
+said.
+
+### What is NOT proven
+
+**No lecture has been imported since this landed.** Every claim here is a
+measurement of what Whisper returns on that audio and of which options a job
+now asks for -- not of a rendered frame with Arabic script on it. The next
+import of a lecture holding a quotation is the confirmation, and the frame is
+what settles it.
+
 
 ## Open items
 
