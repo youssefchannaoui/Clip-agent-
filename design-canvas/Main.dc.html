@@ -117,6 +117,34 @@
     .rainy { position: absolute; inset: 0; pointer-events: none; opacity: .5;
              background-image: repeating-linear-gradient(115deg, transparent 0 9px, rgba(242,236,223,.28) 9px 10px, transparent 10px 22px); background-size: 40px 120px; animation: rain .7s linear infinite; }
 
+    /* live preview */
+    .kbw { position: absolute; inset: 0; } .kbw img { width: 100%; height: 100%; object-fit: cover; }
+    .pv.live .kb, .pv.mini .kb { animation: kb 9s ease-in-out infinite alternate; }
+    .pv.live { box-shadow: 0 30px 80px rgba(0,0,0,.65); } .pv.live:hover { transform: none; }
+    .dark { position: absolute; inset: 0; background: #070607; opacity: var(--dk, 0); pointer-events: none; transition: opacity .35s; }
+    .wm.big { font-size: 10px; top: 12px; }
+    .cap.sm.clean { font-size: 9px; bottom: 22%; } .cap.sm.bold { font-size: 15px; } .cap.sm.headline { font-size: 11.5px; } .cap.sm.mono { font-size: 6.5px; }
+    .cap.m-phrase span { animation: none; color: #f2ecdf; }
+    .cap.m-cards span { padding: .18em .5em; background: rgba(7,6,7,.82); border-radius: .2em; animation: cardIn 4.2s ease-in-out infinite; color: #f2ecdf; transform: none; }
+    .cap.m-stack span { display: block; animation: stack 4.2s ease-in-out infinite; } .cap.m-stack span:nth-child(2) { animation-delay: .3s; } .cap.m-stack span:nth-child(3) { animation-delay: .6s; } .cap.m-stack span:nth-child(4) { animation-delay: .9s; }
+    .cap.m-fill span { animation: fillw 4.2s ease-in-out infinite; } .cap.m-fill span:nth-child(2) { animation-delay: .5s; } .cap.m-fill span:nth-child(3) { animation-delay: 1s; } .cap.m-fill span:nth-child(4) { animation-delay: 1.5s; }
+    @keyframes fillw { 0%,10% { color: rgba(242,236,223,.35); } 25%,100% { color: #f2ecdf; } }
+    .snowy { position: absolute; inset: 0; pointer-events: none; opacity: .7; background-image: radial-gradient(circle, rgba(242,236,223,.9) 1.2px, transparent 2px), radial-gradient(circle, rgba(242,236,223,.6) 1px, transparent 1.6px);
+             background-size: 38px 52px, 23px 31px; background-position: 0 0, 11px 7px; animation: snow 5s linear infinite; }
+    @keyframes snow { to { background-position: 14px 52px, -9px 31px; } }
+    .dusty { position: absolute; inset: 0; pointer-events: none; opacity: .5; background-image: radial-gradient(circle, rgba(241,209,142,.8) .8px, transparent 1.4px); background-size: 27px 41px; animation: dust 9s linear infinite; }
+    @keyframes dust { to { background-position: -27px -41px; } }
+    .bokeh { position: absolute; inset: 0; pointer-events: none; opacity: .55; filter: blur(3px);
+             background-image: radial-gradient(circle, rgba(241,209,142,.55) 6px, transparent 9px), radial-gradient(circle, rgba(242,236,223,.35) 4px, transparent 7px); background-size: 71px 97px, 53px 61px; background-position: 0 0, 30px 20px; animation: dust 14s linear infinite; }
+    .dst { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid rgba(245,241,232,.12); border-radius: 6px; background: rgba(7,6,7,.45); transition: border-color .3s, transform .3s; }
+    .dst:hover { border-color: rgba(245,241,232,.3); transform: translateY(-2px); }
+    .dst.on { border-color: rgba(217,182,111,.35); } .dst.off { opacity: .6; }
+    .dst svg { width: 26px; height: 26px; flex: none; }
+    .dst b { display: block; font-weight: 500; font-size: 13px; color: #f2ecdf; } .dst small { display: block; font-size: 11px; color: #a8a196; margin-top: 1px; }
+    .dstS { margin-left: auto; font-style: normal; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #d9b66f; }
+    .dstS.warn { color: #e6b770; }
+    .pv.mini { flex: none; }
+
     .write { font: inherit; font-size: 15px; width: 100%; min-height: 78px; padding: 12px 14px; border: 1px solid rgba(245,241,232,.14); border-radius: 4px; resize: none; line-height: 1.5;
              background: rgba(7,6,7,.5); color: #f2ecdf; transition: border-color .3s; }
     .write::placeholder { color: #736d63; } .write:focus { outline: none; border-color: #d9b66f; }
@@ -178,7 +206,7 @@
     .wr { display: flex; gap: 14px; align-items: flex-start; }
     .wn { font-family: "Fraunces", Georgia, serif; font-size: 20px; color: #d9b66f; width: 26px; flex: none; line-height: 1; }
     .wt { font-size: 13.5px; color: #f2ecdf; } .ws { font-size: 12px; color: #a8a196; margin-top: 2px; line-height: 1.45; }
-    .dests { display: flex; gap: 6px; margin-top: 10px; }
+    .dests { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
     .revR { width: 380px; flex: none; border-left: 1px solid rgba(245,241,232,.12); padding-left: 32px; }
     .cost { display: flex; align-items: baseline; gap: 10px; margin-top: 8px; }
     .cost b { font-family: "Fraunces", Georgia, serif; font-weight: 400; font-size: 54px; line-height: .9; color: #f1d18e; letter-spacing: -.02em; }
@@ -199,7 +227,7 @@
     .cta svg { transition: transform .3s; } .cta:hover svg { transform: translateX(4px); }
 
     @media (prefers-reduced-motion: reduce) {
-      .hall img, .rv, .hr > i, .pv.on, .shape.on, .kb, .fill img, .blurbg img, .cap span, .cap .tw, .wave i, .scan, .found, .rainy { animation: none; }
+      .hall img, .rv, .hr > i, .pv.on, .shape.on, .kb, .fill img, .blurbg img, .cap span, .cap .tw, .wave i, .scan, .found, .rainy, .snowy, .dusty, .bokeh, .pv.live .kb, .pv.mini .kb { animation: none; }
       .pv, .shape, .opt, .cta, .band, .stp > i { transition: none; }
     }
   </style>
@@ -261,7 +289,7 @@
           <div class="rv" style="display: flex; gap: 12px">
             <button class="{{ kLecCls }}" onClick="{{ pickLecture }}" style="width: 176px; aspect-ratio: 9 / 16">
               <img class="kb" src="preview-sample.webp"><div class="wm">DEENCLIPPED</div>
-              <div class="cap clean"><span>He</span><span>never</span><span>stops</span><span>answering</span></div>
+              <div class="cap clean {{ modeCls }}"><span>He</span><span>never</span><span>stops</span><span>answering</span></div>
               <div class="pvL">Islamic lecture<small>Captions, nasheed, your mark</small></div>
             </button>
             <button class="{{ kQurCls }}" onClick="{{ pickQuran }}" style="width: 176px; aspect-ratio: 9 / 16">
@@ -309,27 +337,48 @@
             <div class="sec"><div class="secT">How many</div><div style="display: flex; align-items: center; gap: 12px"><div class="stepper"><button onClick="{{ less }}">−</button><div class="stepV">{{ count }}</div><button onClick="{{ more }}">+</button></div><span class="fnote">clips from this lecture, up to 20</span></div></div>
             <div class="sec"><div class="secT">Lengths allowed</div><div class="opts"><sc-for list="{{ bands }}" as="b" hint-placeholder-count="6"><button class="{{ b.cls }}" onClick="{{ b.pick }}">{{ b.label }}</button></sc-for></div></div>
             <div class="sec"><div class="secT">Auto-approve this lecture</div><div class="seg"><button class="{{ apOff }}" onClick="{{ setApOff }}">Off — I review</button><button class="{{ ap80 }}" onClick="{{ setAp80 }}">Score 80+</button><button class="{{ ap90 }}" onClick="{{ setAp90 }}">Score 90+</button></div><div class="fnote">Scripture always waits for you, whatever this says.</div></div>
-            <div class="sec"><div class="secT">These settings</div><div class="seg"><button class="{{ scopeOnceCls }}" onClick="{{ scopeOnce }}">This lecture only</button><button class="{{ scopeAllCls }}" onClick="{{ scopeAll }}">Make them my default</button></div><div class="fnote">Nothing here touches your account unless you say so.</div></div>
           </div>
         </div>
       </sc-if>
 
       <sc-if value="{{ isStyle }}" hint-placeholder-val="{{ false }}">
         <div style="display: flex; gap: 30px; align-items: flex-start">
-          <div class="rv" style="display: flex; gap: 10px; flex: none">
-            <button class="{{ stCleanCls }}" onClick="{{ stCleanPick }}" style="width: 128px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="wm">DEENCLIPPED</div><div class="cap clean"><span>He</span><span>never</span><span>stops</span><span>answering</span></div><sc-if value="{{ isRain }}" hint-placeholder-val="{{ false }}"><div class="rainy"></div></sc-if><div class="pvL">Clean Line</div></button>
-            <button class="{{ stBoldCls }}" onClick="{{ stBoldPick }}" style="width: 128px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="wm">DEENCLIPPED</div><div class="cap bold"><span>He never</span><span style="animation-delay: .4s">stops</span><span style="animation-delay: .8s">answering</span></div><div class="pvL">Bold Stack</div></button>
-            <button class="{{ stHeadCls }}" onClick="{{ stHeadPick }}" style="width: 128px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="cap headline"><span>He never stops</span><span style="animation-delay: .25s; font-size: 21px">answering you</span></div><div class="pvL">Headline</div></button>
-            <button class="{{ stMonoCls }}" onClick="{{ stMonoPick }}" style="width: 128px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="wm">DEENCLIPPED</div><div class="cap mono"><span class="tw">he never stops answering you</span></div><div class="pvL">Mono Minimal</div></button>
-            <button class="{{ stQurCls }}" onClick="{{ stQurPick }}" style="width: 128px; aspect-ratio: 9 / 16"><img class="kb" src="reel-quran.webp"><div class="pvL">Quran Recitation</div></button>
+          <div class="rv" style="flex: none">
+            <div class="secT" style="margin-bottom: 10px">Live preview</div>
+            <div class="pv live" style="width: 236px; aspect-ratio: 9 / 16; cursor: default">
+              <div class="kbw" style="{{ lookStyle }}"><sc-if value="{{ liveQuran }}" hint-placeholder-val="{{ false }}"><img class="kb" src="reel-quran.webp"></sc-if><sc-if value="{{ liveNotQuran }}" hint-placeholder-val="{{ true }}"><img class="kb" src="preview-sample.webp"></sc-if></div>
+              <div class="dark"></div>
+              <sc-if value="{{ isRain }}" hint-placeholder-val="{{ false }}"><div class="rainy"></div></sc-if>
+              <sc-if value="{{ isSnow }}" hint-placeholder-val="{{ false }}"><div class="snowy"></div></sc-if>
+              <sc-if value="{{ isDust }}" hint-placeholder-val="{{ false }}"><div class="dusty"></div></sc-if>
+              <sc-if value="{{ isBokeh }}" hint-placeholder-val="{{ false }}"><div class="bokeh"></div></sc-if>
+              <sc-if value="{{ liveWm }}" hint-placeholder-val="{{ true }}"><div class="wm big">DEENCLIPPED</div></sc-if>
+              <sc-if value="{{ liveClean }}" hint-placeholder-val="{{ true }}"><div class="cap clean {{ modeCls }}" style="{{ liveCapStyle }}"><span>He</span><span>never</span><span>stops</span><span>answering</span></div></sc-if>
+              <sc-if value="{{ liveBold }}" hint-placeholder-val="{{ false }}"><div class="cap bold" style="{{ liveCapStyle }}"><span>He never</span><span style="animation-delay: .4s">stops</span><span style="animation-delay: .8s">answering</span></div></sc-if>
+              <sc-if value="{{ liveHead }}" hint-placeholder-val="{{ false }}"><div class="cap headline" style="{{ liveCapStyle }}"><span>He never stops</span><span style="animation-delay: .25s; font-size: .72em">answering you</span></div></sc-if>
+              <sc-if value="{{ liveMono }}" hint-placeholder-val="{{ false }}"><div class="cap mono" style="{{ liveCapStyle }}"><span class="tw">he never stops answering you</span></div></sc-if>
+                            <div class="pvL"><span>{{ liveLabel }}</span><small>{{ liveSub }}</small></div>
+            </div>
           </div>
-          <div class="rv" style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 16px 30px; min-width: 0">
-            <div class="sec"><div class="secT">Caption size</div><div class="seg"><sc-for list="{{ sizes }}" as="z" hint-placeholder-count="4"><button class="{{ z.cls }}" onClick="{{ z.pick }}">{{ z.label }}</button></sc-for></div></div>
-            <div class="sec"><div class="secT">Position</div><div class="seg"><sc-for list="{{ positions }}" as="p" hint-placeholder-count="3"><button class="{{ p.cls }}" onClick="{{ p.pick }}">{{ p.label }}</button></sc-for></div></div>
-            <div class="sec" style="grid-column: 1 / -1"><div class="secT">Look</div><div class="opts"><sc-for list="{{ looks }}" as="l" hint-placeholder-count="12"><button class="{{ l.cls }}" onClick="{{ l.pick }}">{{ l.label }}</button></sc-for></div></div>
-            <div class="sec"><div class="secT">Atmosphere</div><div class="opts"><sc-for list="{{ atmos }}" as="a" hint-placeholder-count="5"><button class="{{ a.cls }}" onClick="{{ a.pick }}">{{ a.label }}</button></sc-for></div></div>
-            <div class="sec"><div class="secT">Strength · Darken · Grain</div><div class="sld"><span>Strength</span><div class="sldT"><i style="width: 55%"></i><b style="left: 55%"></b></div><span class="sldV">55</span></div><div class="sld"><span>Darken</span><div class="sldT"><i style="width: 20%"></i><b style="left: 20%"></b></div><span class="sldV">20</span></div><div class="sld"><span>Grain</span><div class="sldT"><i style="width: 12%"></i><b style="left: 12%"></b></div><span class="sldV">12</span></div></div>
-            <div class="fnote" style="grid-column: 1 / -1">All of this applies to this lecture only. The style itself stays as it is on Templates.</div>
+          <div class="rv" style="flex: 1; min-width: 0">
+            <div class="secT">Style</div>
+            <div style="display: flex; gap: 8px; margin-top: 10px">
+              <button class="{{ stCleanCls }}" onClick="{{ stCleanPick }}" style="width: 82px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="wm">DEENCLIPPED</div><div class="cap clean sm"><span>He</span><span>never</span><span>stops</span><span>answering</span></div><div class="pvL">Clean Line</div></button>
+              <button class="{{ stBoldCls }}" onClick="{{ stBoldPick }}" style="width: 82px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="wm">DEENCLIPPED</div><div class="cap bold sm"><span>He never</span><span style="animation-delay: .4s">stops</span><span style="animation-delay: .8s">answering</span></div><div class="pvL">Bold Stack</div></button>
+              <button class="{{ stHeadCls }}" onClick="{{ stHeadPick }}" style="width: 82px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="cap headline sm"><span>He never stops</span><span style="animation-delay: .25s; font-size: .72em">answering you</span></div><div class="pvL">Headline</div></button>
+              <button class="{{ stMonoCls }}" onClick="{{ stMonoPick }}" style="width: 82px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="wm">DEENCLIPPED</div><div class="cap mono sm"><span class="tw">he never stops answering</span></div><div class="pvL">Mono Minimal</div></button>
+              <button class="{{ stQurCls }}" onClick="{{ stQurPick }}" style="width: 82px; aspect-ratio: 9 / 16"><img class="kb" src="reel-quran.webp"><div class="pvL">Quran</div></button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px 30px; margin-top: 16px">
+              <div class="sec"><div class="secT">Caption size</div><div class="seg"><sc-for list="{{ sizes }}" as="z" hint-placeholder-count="4"><button class="{{ z.cls }}" onClick="{{ z.pick }}">{{ z.label }}</button></sc-for></div></div>
+              <div class="sec"><div class="secT">Position</div><div class="seg"><sc-for list="{{ positions }}" as="p" hint-placeholder-count="3"><button class="{{ p.cls }}" onClick="{{ p.pick }}">{{ p.label }}</button></sc-for></div></div>
+              <div class="sec"><div class="secT">Motion</div><div class="seg"><sc-for list="{{ motions }}" as="m" hint-placeholder-count="4"><button class="{{ m.cls }}" onClick="{{ m.pick }}">{{ m.label }}</button></sc-for></div></div>
+              <div class="sec"><div class="secT">Watermark</div><div class="seg"><sc-for list="{{ wms }}" as="w" hint-placeholder-count="2"><button class="{{ w.cls }}" onClick="{{ w.pick }}">{{ w.label }}</button></sc-for></div></div>
+              <div class="sec" style="grid-column: 1 / -1"><div class="secT">Look</div><div class="opts"><sc-for list="{{ looks }}" as="l" hint-placeholder-count="12"><button class="{{ l.cls }}" onClick="{{ l.pick }}">{{ l.label }}</button></sc-for></div></div>
+              <div class="sec"><div class="secT">Atmosphere</div><div class="opts"><sc-for list="{{ atmos }}" as="a" hint-placeholder-count="5"><button class="{{ a.cls }}" onClick="{{ a.pick }}">{{ a.label }}</button></sc-for></div></div>
+              <div class="sec"><div class="secT">Darken</div><div class="seg"><sc-for list="{{ darks }}" as="d" hint-placeholder-count="4"><button class="{{ d.cls }}" onClick="{{ d.pick }}">{{ d.label }}</button></sc-for></div></div>
+              <div class="fnote" style="grid-column: 1 / -1">Every press redraws the preview on the left. The renderer produces exactly this frame.</div>
+            </div>
           </div>
         </div>
       </sc-if>
@@ -407,9 +456,15 @@
           <div class="revL rv">
             <div class="secT">Posting to</div>
             <div class="dests">
-              <div class="opt on">YouTube · DeenClipped</div><div class="opt on">Instagram · islamicreminders.dc</div><div class="opt on">Facebook · DeenClipped</div><div class="opt" style="opacity: .55">TikTok · needs reconnecting</div>
+              <div class="dst on"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="4" fill="#FF0000"></rect><path d="M10 9l5 3-5 3z" fill="#fff"></path></svg><div><b>YouTube</b><small>DeenClipped</small></div><i class="dstS">Posting</i></div>
+              <div class="dst on"><svg viewBox="0 0 24 24" fill="none" stroke="#E1306C" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1.2" fill="#E1306C" stroke="none"></circle></svg><div><b>Instagram</b><small>islamicreminders.dc</small></div><i class="dstS">Posting</i></div>
+              <div class="dst on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#1877F2"></circle><path d="M13.3 20v-6.2h2.1l.3-2.5h-2.4V9.8c0-.7.2-1.2 1.2-1.2h1.3V6.4c-.2 0-1-.1-1.9-.1-1.9 0-3.2 1.2-3.2 3.3v1.7H8.6v2.5h2.1V20z" fill="#fff"></path></svg><div><b>Facebook</b><small>DeenClipped</small></div><i class="dstS">Posting</i></div>
+              <div class="dst off"><svg viewBox="0 0 24 24"><path d="M16.5 3c.3 2.3 1.6 3.7 3.8 3.9v3.1c-1.4 0-2.7-.4-3.8-1.2v6.3c0 3.2-2.6 5.6-5.7 5.6S5 18.3 5 15.1s2.6-5.6 5.7-5.6c.3 0 .6 0 .9.1v3.2c-.3-.1-.6-.2-.9-.2-1.4 0-2.5 1.1-2.5 2.5s1.1 2.5 2.5 2.5 2.6-1.1 2.6-2.5V3z" fill="#fff"></path></svg><div><b>TikTok</b><small>@deenclipped</small></div><i class="dstS warn">Reconnect</i></div>
             </div>
-            <div class="secT" style="margin-top: 22px">What happens next</div>
+            <div class="secT" style="margin-top: 24px">These settings</div>
+            <div class="seg" style="margin-top: 10px"><button class="{{ scopeOnceCls }}" onClick="{{ scopeOnce }}">Keep for this lecture only</button><button class="{{ scopeAllCls }}" onClick="{{ scopeAll }}">Save as my defaults</button></div>
+            <div class="fnote" style="margin-top: 8px">{{ scopeNote }}</div>
+            <div class="secT" style="margin-top: 24px">What happens next</div>
             <div class="what">
               <div class="wr"><div class="wn">1</div><div><div class="wt">The lecture comes down and is transcribed</div><div class="ws">Word timings come from this, which is what every caption is cut against.</div></div></div>
               <div class="wr"><div class="wn">2</div><div><div class="wt">Moments are scored and cut</div><div class="ws">Only within the part you selected, and only to the lengths you allowed.</div></div></div>
@@ -418,8 +473,22 @@
             </div>
           </div>
           <div class="revR rv">
-            <div class="secT">This run costs</div>
-            <div class="cost"><b>{{ tokens }}</b><span>{{ costTail }}</span></div>
+            <div style="display: flex; gap: 18px; align-items: flex-start">
+              <div class="pv mini" style="width: 92px; aspect-ratio: 9 / 16; cursor: default">
+                <div class="kbw" style="{{ lookStyle }}"><sc-if value="{{ liveQuran }}" hint-placeholder-val="{{ false }}"><img class="kb" src="reel-quran.webp"></sc-if><sc-if value="{{ liveNotQuran }}" hint-placeholder-val="{{ true }}"><img class="kb" src="preview-sample.webp"></sc-if></div>
+                <div class="dark"></div>
+                <sc-if value="{{ liveWm }}" hint-placeholder-val="{{ true }}"><div class="wm">DEENCLIPPED</div></sc-if>
+                <sc-if value="{{ liveClean }}" hint-placeholder-val="{{ true }}"><div class="cap clean sm {{ modeCls }}"><span>He</span><span>never</span><span>stops</span><span>answering</span></div></sc-if>
+                <sc-if value="{{ liveBold }}" hint-placeholder-val="{{ false }}"><div class="cap bold sm"><span>He never</span><span style="animation-delay: .4s">stops</span><span style="animation-delay: .8s">answering</span></div></sc-if>
+                <sc-if value="{{ liveHead }}" hint-placeholder-val="{{ false }}"><div class="cap headline sm"><span>He never stops</span><span style="animation-delay: .25s; font-size: .72em">answering you</span></div></sc-if>
+                <sc-if value="{{ liveMono }}" hint-placeholder-val="{{ false }}"><div class="cap mono sm"><span class="tw">he never stops answering</span></div></sc-if>
+              </div>
+              <div>
+                <div class="secT">This run costs</div>
+                <div class="cost"><b>{{ tokens }}</b><span>{{ costTail }}</span></div>
+                <div class="ready" style="margin-top: 10px">Ready in roughly <b>{{ eta }}</b></div>
+              </div>
+            </div>
             <div class="rows">
               <div class="row"><span class="rk">Looking for</span><button class="re" onClick="{{ goBrief }}">Edit</button><span class="rvv">repentance and mercy</span></div>
               <div class="row"><span class="rk">From the lecture</span><button class="re" onClick="{{ goTrim }}">Edit</button><span class="rvv">{{ fromLecture }}</span></div>
@@ -430,7 +499,6 @@
               <div class="row"><span class="rk">Underneath</span><button class="re" onClick="{{ goSound }}">Edit</button><span class="rvv">{{ sSound }}</span></div>
               <div class="row"><span class="rk">Queue</span><span class="rvv">Next in line</span></div>
             </div>
-            <div class="ready">Ready in roughly <b>{{ eta }}</b> — measured on the worker, not a guess.</div>
           </div>
         </div>
       </sc-if>
@@ -451,7 +519,7 @@ class Component extends DCLogic {
   constructor(props) {
     super(props);
     this.state = { step: 1, dir: 'next', flip: false, brief: 1, lang: 'auto', kind: 'lecture', mode: 'word', range: 'whole', count: 6, band: '30-60', ap: 'off', scope: 'once',
-                   style: 'clean', size: 'M', pos: 'bottom', look: 'natural', atmo: 'none', shape: 1, bias: 'auto', fit: 'off', picture: 'own', intro: '0', sound: 'rotate' };
+                   style: 'clean', size: 'M', pos: 'bottom', look: 'natural', atmo: 'none', shape: 1, bias: 'auto', fit: 'off', picture: 'own', intro: '0', sound: 'rotate', motion: 'word', wm: 'on', dark: 0 };
   }
   go(n) { if (n < 1 || n > 9) return; this.setState({ step: n, dir: n > this.state.step ? 'next' : 'prev', flip: !this.state.flip }); }
   renderVals() {
@@ -499,7 +567,7 @@ class Component extends DCLogic {
       examples: chips([[1, 'The parts about repentance and mercy'], [2, 'Any story he tells'], [3, 'Advice for young Muslims'], [4, 'Where he talks about the hereafter'], [5, 'Every du’a he makes'], [6, 'The questions from the audience']], 'brief', s.brief),
       langAuto: on('', s.lang === 'auto'), langEn: on('', s.lang === 'en'), langAr: on('', s.lang === 'ar'), setAuto: set({ lang: 'auto' }), setEn: set({ lang: 'en' }), setAr: set({ lang: 'ar' }),
       kLecCls: on('pv', !quran), kQurCls: on('pv', quran), pickLecture: set({ kind: 'lecture' }), pickQuran: set({ kind: 'quran' }),
-      modes: chips([['phrase', 'Phrase', 'A line at a time'], ['word', 'Word', 'The spoken word lit'], ['dynamic-stack', 'Stack', 'Words build up'], ['cards', 'Cards', 'Each phrase boxed'], ['fill', 'Fill', 'Words fill the line'], ['stack-build', 'Stack build', 'One word a line']], 'mode', s.mode),
+      modes: [['phrase', 'Phrase', 'A line at a time'], ['word', 'Word', 'The spoken word lit'], ['stack', 'Stack', 'Words build up'], ['cards', 'Cards', 'Each phrase boxed'], ['fill', 'Fill', 'Words fill the line']].map(function (x) { return { label: x[1], sub: x[2], cls: on('opt', s.motion === x[0]), pick: set({ motion: x[0] }) }; }),
       kindRule: quran ? 'Captioned from the Qur’an itself — the verse the reciter is on and its translation — never from what the microphone heard. No nasheed, no watermark, nothing drawn over scripture, and every clip waits for your approval.'
                       : 'Captions follow the speech; recited scripture inside the lecture is shown as the ayah with its translation. A nasheed sits underneath, ducked, and your mark goes on the frame.',
       cells: [0,1,2,3,4,5,6,7,8,9,10,11,12,13].map(function (i) { return { img: 'object-position: ' + (35 + (i * 37) % 40) + '% ' + (10 + (i * 23) % 30) + '%; filter: brightness(' + (.7 + (i % 4) * .08) + ');' }; }),
@@ -534,6 +602,26 @@ class Component extends DCLogic {
       footNote: s.step === 9 ? 'Anything above can still be changed.' : 'Step ' + s.step + ' of 9 · ' + tokens + ' tokens · ready in roughly ' + eta,
       cta: s.step === 9 ? 'Generate clips' : 'Continue', next: goTo(s.step + 1), back: goTo(s.step - 1),
     };
+    var LOOKF = { natural: 'none', crisp: 'contrast(1.15) saturate(1.05)', vivid: 'saturate(1.5) contrast(1.08)', warm: 'sepia(.25) saturate(1.2)', cinematic: 'contrast(1.12) saturate(.85) sepia(.15)',
+                  teal: 'hue-rotate(-12deg) saturate(1.1) contrast(1.05)', faded: 'contrast(.85) brightness(1.08) saturate(.8)', night: 'brightness(.72) saturate(.8) hue-rotate(15deg) contrast(1.1)',
+                  monochrome: 'grayscale(1)', noir: 'grayscale(1) contrast(1.35) brightness(.9)', silver: 'grayscale(1) contrast(.9) brightness(1.12)', sepia: 'sepia(.8)' };
+    var SIZEF = { S: .85, M: 1, L: 1.22, XL: 1.5 };
+    var BASE = { clean: 23, bold: 36, headline: 29, mono: 16 };
+    var posStyle = s.style === 'headline' ? 'top: 8%;' : (s.pos === 'top' ? 'top: 12%; bottom: auto;' : s.pos === 'middle' ? 'top: 44%; bottom: auto;' : 'bottom: 22%;');
+    var MOTION_CLS = { phrase: 'm-phrase', word: '', cards: 'm-cards', stack: 'm-stack', fill: 'm-fill', 'dynamic-stack': 'm-stack', 'stack-build': 'm-stack' };
+    var liveSubs = { clean: 'One line, the spoken word lit', bold: 'Three heavy lines, stacked', headline: 'Ink on paper, at the top', mono: 'Typed, small, quiet', quran: 'Ayah and translation, nothing else' };
+    out.lookStyle = 'filter: ' + (LOOKF[s.look] || 'none') + '; --dk: ' + (s.dark / 100) + ';';
+    out.liveCapStyle = 'font-size: ' + Math.round(BASE[s.style] * SIZEF[s.size]) + 'px; ' + posStyle;
+    out.liveQuran = s.style === 'quran'; out.liveNotQuran = s.style !== 'quran';
+    out.liveClean = s.style === 'clean'; out.liveBold = s.style === 'bold'; out.liveHead = s.style === 'headline'; out.liveMono = s.style === 'mono';
+    out.liveWm = s.wm === 'on' && s.style !== 'quran';
+    out.modeCls = MOTION_CLS[s.motion] || '';
+    out.liveLabel = STYLE[s.style]; out.liveSub = liveSubs[s.style];
+    out.isSnow = s.atmo === 'snow'; out.isDust = s.atmo === 'dust'; out.isBokeh = s.atmo === 'bokeh';
+    out.motions = [['word', 'Word'], ['phrase', 'Phrase'], ['cards', 'Cards'], ['stack', 'Stack'], ['fill', 'Fill']].map(function (m) { return { label: m[1], cls: on('', s.motion === m[0]), pick: set({ motion: m[0] }) }; });
+    out.wms = [['on', 'Shown'], ['off', 'Hidden']].map(function (w) { return { label: w[1], cls: on('', s.wm === w[0]), pick: set({ wm: w[0] }) }; });
+    out.darks = [0, 20, 40, 60].map(function (d) { return { label: d === 0 ? 'Off' : d + '%', cls: on('', s.dark === d), pick: set({ dark: d }) }; });
+    out.scopeNote = s.scope === 'once' ? 'Only this lecture uses these. Your defaults on Templates stay exactly as they are.' : 'These become your defaults for every lecture from now on. You can change them again on Templates.';
     return out;
   }
 }
