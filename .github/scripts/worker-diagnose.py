@@ -54,6 +54,10 @@ AUDIO = float(PARAMS.get("audio") or 0)
 # Which cached source: the one whose length is nearest this many seconds, or
 # the newest when 0.
 DURATION_HINT = float(PARAMS.get("duration") or 0)
+# Where in the source to start the audio probe. A 32-minute English lecture
+# holds its Arabic in quotations scattered through it, so the first two
+# minutes are usually all English and prove nothing about the Arabic.
+FROM_SEC = float(PARAMS.get("from") or 0)
 DATA = Path(os.getenv("WORKER_DATA_DIR", "/var/lib/deenclipped")).resolve()
 # The container keeps the code under /app/worker; a local dry run points this
 # at a checkout instead.
@@ -368,6 +372,12 @@ def analyse(path: Path, cw, replays: list[tuple[str, dict]]) -> None:
         f"  largest gap={max(gaps) if gaps else 0:.1f}s  gaps over 5s={sum(1 for g in gaps if g > 5)}")
     out(f"  arabic={arabic}/{count} punctuation-ending={bounded}/{count} english-lines={english}/{count}"
         f" chars/segment median={statistics.median(chars):.0f}")
+    # WHERE the Arabic is, so an audio probe can be aimed at it rather than at
+    # the opening two minutes of an English lecture. Times only, never a word:
+    # a run log is public and the transcript is the customer's.
+    at = [round(float(s.get("start") or 0), 1) for s in segments if cw.contains_arabic(s.get("text"))]
+    if at:
+        out(f"  arabic at (s): {at[:24]}" + (f" ... and {len(at) - 24} more" if len(at) > 24 else ""))
     for label, rows in (("first", segments[:4]), ("last", segments[-4:])):
         out("  " + label + ": " + ", ".join(
             f"[{float(s.get('start') or 0):.1f}-{float(s.get('end') or 0):.1f}s {len(str(s.get('text') or ''))}ch {len(s.get('words') or [])}w]"
@@ -442,10 +452,10 @@ def probe_audio(cw, settings: dict) -> None:
         path, meta = min(probed, key=lambda item: abs(item[1]["duration"] - DURATION_HINT))
     else:
         path, meta = probed[0]
-    out(f"  probing {path.name[:16]}... ({meta['duration']:.1f}s), first {AUDIO:g}s")
+    out(f"  probing {path.name[:16]}... ({meta['duration']:.1f}s), {AUDIO:g}s from {FROM_SEC:g}s")
     wav = Path("/tmp/dc-probe-audio.wav")
     try:
-        code, _, err = run(["ffmpeg", "-y", "-v", "error", "-i", str(path), "-t", str(AUDIO),
+        code, _, err = run(["ffmpeg", "-y", "-v", "error", "-ss", str(FROM_SEC), "-i", str(path), "-t", str(AUDIO),
                             "-vn", "-ac", "1", "-ar", "16000", str(wav)], timeout=300)
         if code != 0:
             out("  ffmpeg could not extract the audio: " + redact(err)[-300:])
@@ -470,8 +480,15 @@ def probe_audio(cw, settings: dict) -> None:
             ("vad on, no-speech gate off", {**base, **lang, "vad_filter": True, "vad_parameters": {"min_silence_duration_ms": 450}, "no_speech_threshold": None}),
             ("vad off, no-speech gate off", {**base, **lang, "vad_filter": False, "no_speech_threshold": None}),
         ]
-        if language:
-            variants.append(("language auto, multilingual, vad on", {**base, "multilingual": True, "vad_filter": True, "vad_parameters": {"min_silence_duration_ms": 450}}))
+        vad = {"vad_filter": True, "vad_parameters": {"min_silence_duration_ms": 450}}
+        # THE THREE THAT DECIDE THE ARABIC-SCRIPT FIX, always run: what the job
+        # asked for, what per-segment detection gives, and what Arabic forced
+        # gives. Comparing their arabic= counts on ONE window is the whole
+        # experiment -- a count that only moves under "ar forced" means
+        # detection is not reaching short quotations.
+        variants.append(("language auto, multilingual", {**base, "multilingual": True, **vad}))
+        variants.append(("no language at all", {**base, **vad}))
+        variants.append(("ar forced", {**base, "language": "ar", **vad}))
         for label, options in variants:
             started = time.time()
             try:
@@ -484,6 +501,14 @@ def probe_audio(cw, settings: dict) -> None:
                 out(f"  variant [{label}] failed: {type(exc).__name__}: {redact(str(exc))[:160]}")
                 continue
             spoken = [r for r in rows if str(r.text or "").strip()]
+            arabic = sum(1 for r in spoken if cw.contains_arabic(r.text))
+            latin = sum(1 for r in spoken if re.search(r"[A-Za-z]", str(r.text or "")))
+            # Does faster-whisper hand back a language PER SEGMENT here? If it
+            # does, a transliterated segment is provable (language ar, no Arabic
+            # letters) and can be re-read forced to Arabic. If it does not, the
+            # repair has to be found another way. Never the text itself.
+            per_seg = [str(getattr(r, "language", "") or "") for r in spoken]
+            langs = {k: per_seg.count(k) for k in sorted(set(per_seg)) if k}
             speech = sum(float(r.end) - float(r.start) for r in spoken)
             nsp = [float(getattr(r, "no_speech_prob", 0) or 0) for r in spoken]
             lp = [float(getattr(r, "avg_logprob", 0) or 0) for r in spoken]
@@ -494,6 +519,8 @@ def probe_audio(cw, settings: dict) -> None:
                 + (f" (after vad {float(after_vad):.1f}s)" if after_vad is not None else "")
                 + f" lang={getattr(info, 'language', '?')}@{float(getattr(info, 'language_probability', 0) or 0):.2f}"
                 + (f" no_speech mean/max={statistics.mean(nsp):.2f}/{max(nsp):.2f} logprob mean={statistics.mean(lp):.2f}" if nsp else "")
+                + f" arabic={arabic}/{len(spoken)} latin={latin}/{len(spoken)}"
+                + (f" per-segment-langs={json.dumps(langs)}" if langs else " per-segment-langs=none")
                 + f" took {time.time() - started:.0f}s")
     finally:
         try:

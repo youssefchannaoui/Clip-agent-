@@ -121,6 +121,10 @@ on:
         description: 'Diagnose: seconds of the newest cached source to run Whisper over (0 = skip; loads the model, so only when the box is idle)'
         required: false
         default: '0'
+      diagnose_from:
+        description: 'Diagnose: seconds into the source to start the audio probe (a long English lecture holds its Arabic well past the opening)'
+        required: false
+        default: '0'
       diagnose_duration:
         description: 'Diagnose: pick the cached source whose length is nearest this many seconds (0 = newest)'
         required: false
@@ -512,6 +516,7 @@ jobs:
           DIAG_HOURS: ${{ inputs.diagnose_hours }}
           DIAG_AUDIO: ${{ inputs.diagnose_audio }}
           DIAG_DURATION: ${{ inputs.diagnose_duration }}
+          DIAG_FROM: ${{ inputs.diagnose_from }}
         run: |
           set -euo pipefail
           export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
@@ -523,7 +528,7 @@ jobs:
             const src = fs.readFileSync(".github/scripts/worker-diagnose.py", "utf8");
             if (!src.includes("PARAMS = {}")) throw new Error("the diagnostics script lost its PARAMS seam");
             const num = (name, fallback) => { const v = Number.parseFloat(process.env[name] || ""); return Number.isFinite(v) && v >= 0 ? v : fallback; };
-            const params = { hours: num("DIAG_HOURS", 12) || 12, jobs: 4, audio: Math.min(600, num("DIAG_AUDIO", 0)), duration: num("DIAG_DURATION", 0) };
+            const params = { hours: num("DIAG_HOURS", 12) || 12, jobs: 4, audio: Math.min(600, num("DIAG_AUDIO", 0)), duration: num("DIAG_DURATION", 0), from: num("DIAG_FROM", 0) };
             fs.writeFileSync(process.env.RUNNER_TEMP + "/worker-diagnose.py",
               src.replace("PARAMS = {}", "PARAMS = " + JSON.stringify(params)));
           '
