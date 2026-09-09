@@ -315,9 +315,13 @@ def scripture_look(cw, work: str, arabic: str) -> None:
         ("hard outline (today)", border_min, 0.0),
         ("soft shadow", border_glow, 6.0),
     ]
-    # Bright, because that is where these clips live. On black a missing halo
-    # is invisible and every variant looks identical.
-    for ground, name in (("0xB4AFA6", "bright"), ("black", "black")):
+    # BRIGHT ONLY, and that is a limit of the measurement rather than a
+    # preference. The halo is the one thing DARKER than its ground, so on a
+    # near-black ground there is nothing for it to be darker than: the walk
+    # reported an identical 12px for both variants there, which is not a
+    # finding, it is the test not applying. A bright frame is also where a thin
+    # outline actually stops separating the text from the picture.
+    for ground, name in (("0xB4AFA6", "bright"),):
         out(f"  -- on a {name} ground --")
         for label, border, blur in variants:
             tag = f"{{\\blur{blur:g}}}" if blur else ""
@@ -328,13 +332,13 @@ def scripture_look(cw, work: str, arabic: str) -> None:
             if not render(ass, png, ground=ground):
                 out(f"     {label}: render failed")
                 continue
-            reach = halo_width(png, 175 if ground == "bright" else 16)
+            reach = halo_width(png, 175 if name == "bright" else 16)
             if reach < 0:
                 out(f"     {label:22s} NO INK RENDERED -- the face or the size is wrong")
                 continue
             out(f"     {label:22s} border {border:4.1f}  blur {blur:3.1f}  "
                 f"halo reaches {reach:2d}px from the ink")
-            if ground == "bright":
+            if name == "bright":
                 band = os.path.join(work, f"band-{blur:g}.png")
                 rows, _ = gray_rows(png)
                 if not rows:
