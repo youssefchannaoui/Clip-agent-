@@ -138,11 +138,22 @@ def analyse(cw, cv2, source: Path) -> dict:
     # a genuine second person from the same person drifting, and the median box
     # height is what separates a real face from the small false positives the
     # cascades throw on patterned backgrounds.
-    people: dict[int, list[int]] = {}
-    for row in per_frame:
-        for x, h in row:
-            people.setdefault(round(x / 4) * 4, []).append(h)
-    real = {pos: hs for pos, hs in people.items() if len(hs) >= max(2, len(per_frame) // 4)}
+    # MERGED BY FACE SIZE, not into fixed buckets. The first version bucketed at
+    # 4% of the width and reported one person as two -- a 346px face on a 1920px
+    # frame is 18% of the width wide, so its centre wobbling 4% between frames
+    # is the SAME person, and the probe called that a "tight two-shot" and was
+    # wrong. Two detections closer together than the face is wide cannot be two
+    # people; the size is the merge distance and it scales with the shot.
+    flat = sorted(((x, h) for row in per_frame for x, h in row), key=lambda item: item[0])
+    groups: list[list[tuple[float, int]]] = []
+    for x, h in flat:
+        span = max(h, groups[-1][-1][1] if groups else 0) / src_w * 100 * 0.9
+        if groups and x - groups[-1][-1][0] <= span:
+            groups[-1].append((x, h))
+        else:
+            groups.append([(x, h)])
+    real = {int(statistics.median([g[0] for g in group])): [g[1] for g in group]
+            for group in groups if len(group) >= max(2, len(per_frame) // 4)}
     multi = sum(1 for row in per_frame if len(row) > 1)
     out(f"   frames with more than one face: {multi} of {len(per_frame)}")
     for pos in sorted(real):
@@ -154,11 +165,11 @@ def analyse(cw, cv2, source: Path) -> dict:
                              reasons=[], quote_risk=False)
     crop = cw.detect_main_face_crop(source, "ffprobe", candidate, 1080, 1920)
     if not crop:
-        out("   the shipped crop returned nothing (already narrow, or nothing found)")
+        out("   the crop returned nothing (already narrow, or nothing found)")
         return {}
     centre = (crop["x"] + crop["w"] / 2) / src_w * 100
     left_edge, right_edge = crop["x"] / src_w * 100, (crop["x"] + crop["w"]) / src_w * 100
-    out(f"   SHIPPED crop: {crop.get('method')}, centre {centre:.1f}%, keeps "
+    out(f"   crop: {crop.get('method')}, centre {centre:.1f}%, keeps "
         f"{left_edge:.1f}%..{right_edge:.1f}%")
 
     # THE TWO SHAPES YOUSSEF DESCRIBED, told apart by the numbers. A TIGHT

@@ -5308,6 +5308,58 @@ def crop_origin_from_center(
     return x, y
 
 
+def dominant_subject(boxes: list[tuple[float, float, float]]) -> tuple[float, float] | None:
+    """Which person the crop should be built around, from every face seen.
+
+    `boxes` is (centre_x, centre_y, size) for every detection across every
+    sampled frame, in source pixels. Returns the chosen (x, y) or None.
+
+    WHY THIS IS NOT "the biggest face in each frame, then the median of those".
+    That was the shipped rule and it has two failure modes, both measured on the
+    box's own footage on 9 Sept 2026 rather than argued about:
+
+    * The cascades throw SMALL SPURIOUS BOXES on patterned backgrounds -- a
+      1920x1080 lecture reported faces 58 to 66 pixels tall beside a real one of
+      238. In a frame where the real face is missed, the largest box IS the
+      spurious one, so it votes; the median across frames then sits between the
+      real person and the noise. On one source that left the only real face
+      **1.1% of the width from the edge of the crop** -- which is what "the
+      framing is not doing well" looks like from the outside.
+    * A single face's detected centre WOBBLES a few per cent between frames, so
+      a per-frame vote scatters one person across several positions and gives
+      the noise more relative weight.
+
+    So detections are grouped into PEOPLE across the whole sample instead, and
+    each group is scored by how often it was seen times how big it is. Both
+    halves are needed: size alone picks a one-frame false positive that happened
+    to be large, and persistence alone picks a small background face that the
+    cascades find reliably.
+    """
+    if not boxes:
+        return None
+    # Two detections belong to the same person when they are closer than the
+    # face is wide. A Haar face box is about as wide as it is tall, so the size
+    # IS the merge distance -- and it scales with the shot, which a fixed
+    # threshold in pixels or per cent could not.
+    ordered = sorted(boxes, key=lambda item: item[0])
+    groups: list[list[tuple[float, float, float]]] = [[ordered[0]]]
+    for box in ordered[1:]:
+        spread = max(box[2], groups[-1][-1][2]) * 0.9
+        if box[0] - groups[-1][-1][0] <= spread:
+            groups[-1].append(box)
+        else:
+            groups.append([box])
+
+    def score(group: list[tuple[float, float, float]]) -> float:
+        sizes = sorted(item[2] for item in group)
+        return len(group) * sizes[len(sizes) // 2]
+
+    best = max(groups, key=score)
+    xs = sorted(item[0] for item in best)
+    ys = sorted(item[1] for item in best)
+    return xs[len(xs) // 2], ys[len(ys) // 2]
+
+
 def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_width: int, out_height: int, bias: str = "auto", padding: float = 0.18, zoom: float = 1.0, subject_bias: float = 0.0) -> dict[str, Any] | None:
     """Choose one stable crop that keeps the main speaker visible.
 
@@ -5352,8 +5404,8 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     if not cap.isOpened():
         return None
     sample_points = [0.10, 0.25, 0.40, 0.55, 0.70, 0.85]
-    face_centers: list[float] = []
-    face_centers_y: list[float] = []
+    # (centre x, centre y, size) for every detection across every sample.
+    face_boxes: list[tuple[float, float, float]] = []
     body_centers: list[float] = []
     body_centers_y: list[float] = []
     min_face = max(28, min(src_w, src_h) // 24)
@@ -5384,9 +5436,13 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
             for x, y, w, h in mirrored:
                 found.append((src_w - int(x) - int(w), int(y), int(w), int(h)))
         if found:
-            x, y, w, h = max(found, key=lambda item: item[2] * item[3])
-            face_centers.append(float(x + w / 2))
-            face_centers_y.append(float(y + h / 2))
+            # EVERY face in the frame, not just the biggest one. The biggest is
+            # the right answer only when the detector found the real person at
+            # all; in a frame where it did not, the biggest box is a spurious
+            # one and voting for it is how the crop drifts off the speaker.
+            # dominant_subject() weighs them all together instead.
+            for x, y, w, h in found:
+                face_boxes.append((float(x + w / 2), float(y + h / 2), float(max(w, h))))
             continue
         if not upper_body.empty():
             bodies = upper_body.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=3, minSize=(min_body, min_body))
@@ -5398,8 +5454,9 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
                 # so bias toward its top edge, closer to where the head is.
                 body_centers_y.append(float(y + h * 0.22))
     cap.release()
-    centers = face_centers if face_centers else body_centers
-    centers_y = face_centers_y if face_centers else body_centers_y
+    subject = dominant_subject(face_boxes)
+    centers = [subject[0]] if subject else body_centers
+    centers_y = [subject[1]] if subject else body_centers_y
     if not centers:
         # Fallback: find the horizontal area with the strongest foreground/edge detail.
         # This gives no vertical information at all.
@@ -5433,7 +5490,7 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     # heads off when a video's framing didn't match that one assumption.
     x, y = crop_origin_from_center(center, center_y, src_w, src_h, crop_w, crop_h, padding,
                                    subject_bias=subject_bias)
-    method = "face" if face_centers else ("upper-body" if body_centers else "foreground")
+    method = "face" if subject else ("upper-body" if body_centers else "foreground")
     return {"x": x, "y": y, "w": crop_w, "h": crop_h, "method": method}
 
 # ── The graded looks ─────────────────────────────────────────────────────

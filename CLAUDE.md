@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1986 JS + 874 Python**
+- `npm test` and `npm run check` must pass. Currently **1995 JS + 882 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -17528,6 +17528,68 @@ this version already exists there (anywhere in its recent history, not only at
 its tip -- another session may have pushed past it), and what the next free
 number is. It writes nothing and never fails a build; it is a question, so it
 exits 0 whatever the answer. Its first real run found 3.177.1 already taken.
+
+## The crop was built on the biggest box in each frame, noise included (v3.178.0, 9 Sept 2026)
+
+Youssef, with a two-person podcast clip on screen: "see if its 2 people in one
+frame the framing is not doing well, but once theres 2 people on oppisite sides
+it does well so who ever talks its must be central."
+
+**ASKED THE BOX RATHER THAN REASONED ABOUT IT.** That container is the only
+place with OpenCV, the Haar cascades and real lectures at the same time, so
+`.github/scripts/framing-probe.py` runs there -- dispatch-only and deploy-free
+like diagnose, printing geometry only (face positions as percentages of the
+frame width, box heights in pixels; no frame ever leaves the box). Six cached
+sources, twelve frames each. cv2 4.14.0, so the detector genuinely runs.
+
+### What it found, and it was not the shape I expected
+
+    a real face   24% of the width, seen 3x, 238px tall
+    spurious      40% of the width, seen 3x,  64px tall
+    spurious      68% of the width, seen 3x,  66px tall
+    the crop kept 22.9%..54.6%  ->  the ONLY real face 1.1% from its edge
+
+`detect_main_face_crop` took **the biggest face in each sampled frame** and then
+the median of those centres. In a frame where the cascades miss the real person
+-- which happens constantly, the detector is noisy -- the biggest box IS a
+spurious one, so it votes, and the median across frames lands between the person
+and the noise. A single face's centre also WOBBLES a few per cent between
+frames, which scatters one person across positions and gives the noise more
+relative weight still.
+
+`dominant_subject()` groups every detection across every sample into PEOPLE and
+scores each group by **how often it was seen times how big it is**. Both halves
+are load-bearing and each has its own test: size alone picks a one-frame false
+positive that happened to be large, persistence alone picks a small background
+face the cascades find reliably. **Two detections closer together than the face
+is WIDE cannot be two people**, so the face's own size is the merge distance --
+which scales with the shot, where a threshold in pixels or per cent could not.
+
+### The probe was wrong before the app was, and that is worth keeping
+
+Its first version bucketed detections at a fixed 4% of the width and reported
+one person as two -- so it called a source a "TIGHT two-shot" when a 346px face
+on a 1920px frame is 18% of the width wide and its centre moving 4% between
+frames is the same person. **A measurement that classifies has to be read as
+sceptically as the code it is measuring.** It merges by face size now, the same
+rule the fix uses.
+
+### What is NOT done, with the measurement now behind it
+
+`track_speaker_keyframes` -- mouth-movement active-speaker tracking -- has been
+written, unit-tested and **wired to nothing** since it was built: the render
+calls `detect_main_face_crop`, and the tracker is reachable only from a
+`--framing` CLI flag. Asked about the same source it produced 90 keyframes and
+travelled 13.4% of the width, sitting 2.7% from the static centre on average --
+so on this footage it is a gentle drift around the same person rather than a
+swing between two. Youssef's "whoever talks must be central" is that feature,
+and it needs the crop filter to take an expression in `t` rather than four
+fixed integers. `crop=w:h:x:y` accepts one; nothing has been built on it.
+
+**This release does NOT make the crop move.** It makes the static one land on a
+person instead of between a person and the detector's noise, which is the half
+that could be measured and fixed in one step. A moving crop is a bigger change
+and the honest order is this first.
 
 ### TWO SESSIONS WERE IN THIS WORKING TREE AT ONCE, and it nearly cost work
 
