@@ -9649,8 +9649,10 @@ The proxy field on that page is empty and that is also fine -- the pool lives
 in `VIDEO_IMPORT_PROXIES` on the box (19 addresses, measured), and the page's
 field is an override that wins when set.
 
-So the strongest defence was never missing. What is genuinely still unproven is
-below: a live 403 rescued by the new rounds.
+So the strongest defence was never missing. The rounds themselves are proven
+on the box as of the same day -- see *THE RETRY ROUNDS ARE PROVEN ON THE BOX*
+below, where an injected 403 was rescued after twelve refusals, a real 20.1s
+backoff and nine distinct proxy exits.
 
 ### THE BOX CAN BE ASKED WHETHER IT CAN FETCH A VIDEO RIGHT NOW
 
@@ -9712,6 +9714,74 @@ The next real refusal is what closes the last of it, and it should now clear
 itself twice over -- three rounds on the box, then the app's five-minute retry
 -- before anybody is told to download anything.
 
+## THE RETRY ROUNDS ARE PROVEN ON THE BOX (9 Sept 2026)
+
+The one thing v3.174.x could not claim. There was no live 403 left to rescue
+by the time the rounds shipped, so every statement about them rested on a test
+with a fake `yt_dlp` -- and waiting for YouTube to refuse again is not a plan
+for the path a customer meets at two in the morning.
+
+**So the refusal was injected, in the PROBE and nowhere near production code.**
+`deploy-worker.yml` dispatched with `probe_url_block_first` fetches once as a
+control, then again with the first N attempts refused by a 403-shaped
+`DownloadError` raised from the real `YoutubeDL`'s own `extract_info` -- the
+real options, the real proxy, the real rounds. Run 34298594268, on
+`vrZOeod3jdE`, `block_first=12` (a round is 10 attempts, so 12 forces a second
+one):
+
+    control: IMPORTED in 14.6s        1,542,979 bytes, windowed True
+
+    == does the retry rescue a refusal ==
+    attempts       15 (12 refused, then the real download)
+    longest pause  20.1s between attempts -- the backoff ran
+    exits used     9 distinct proxy address(es) across the attempts
+    RESCUED in 254.6s -- 631,334,279 bytes after 12 refusal(s)
+
+**Three claims that had only ever been made against a fake are now measured on
+the box**: the loop crosses a round boundary, the 20s backoff genuinely runs
+(20.1s), and the pool genuinely rotates -- **nine distinct exits across fifteen
+attempts**, which is the property that makes a burned IP survivable and which
+nothing had ever watched happen.
+
+- **The CONTROL is what makes it readable, and it is the reason this can fail
+  the run at all.** A refusal the rounds cannot recover from is only a
+  statement about the rounds once the video is known fetchable this minute;
+  without it the red run would be ambiguous with "YouTube is refusing today",
+  which is the exact ambiguity this probe was built to end. A control that
+  cannot fetch reports and exits clean.
+- **It refuses at `extract_info`, never at construction.** Refusing earlier is
+  simpler and skips the options being built -- which is half of what is under
+  test.
+- **The injected message must be one `_looks_blocked` recognises**, or the
+  provider takes the "gone for ever" branch, raises on the first attempt, and
+  the probe reports a pass having exercised the opposite path. A test compares
+  the injected string against the worker's OWN `_BLOCK_SIGNS` rather than a
+  copy of the list.
+- Five red probes proven, including the construction-time refusal and the
+  unrecognised message.
+
+### AND IT FOUND SOMETHING: A RESCUE CAN COST THE WHOLE FILE
+
+**1.5 MB on the control against 631 MB on the rescue, for the same 6-second
+window.** The section plan (`download_ranges`) is tried first and the full
+download is its fallback -- deliberately, because "saving bandwidth must never
+cost an import" -- so once the refusals had spent the section attempts, the
+one that got through was on the full plan.
+
+That is the designed behaviour and it is still a real cost nobody had a number
+for: on a 250GB/month pool, a lecture rescued this way pays ~1.5GB instead of
+the few MB its window would have cost. **NOT fixed here, and deliberately not
+guessed at**: the honest fix needs to know why the surviving section attempt
+did not hold its range (the rescued run's log shows a fragmented DASH format,
+348 fragments, which is a different client's format set), and that is a
+measurement rather than a patch. It is named in the open items.
+
+**What is still not proven:** a refusal that YouTube itself produced. The
+message here is ours, so what is measured is the loop, the wait and the
+rotation -- not YouTube's behaviour under a real block. That last step cannot
+be commanded, and the app's own five-minute retry sits behind these rounds
+either way.
+
 ## Open items
 
 ### Google verification: branding VERIFIED and PUBLISHED (4 Sept 2026)
@@ -9772,6 +9842,39 @@ refuses everybody else.
 The Google **100-user cap is the one that cannot be undone** — it applies over
 the project's lifetime. Verification is the only way past it, and it is worth
 starting before the count climbs rather than after.
+
+### The Google data-access verification was REJECTED (read 9 Sept 2026)
+
+CLAUDE.md has said since 4 Sept that "branding is VERIFIED and PUBLISHED" and
+that the only blocker was a demo video. **The branding half is still true and
+the other half was worse than recorded.** Read off the console rather than
+recalled:
+
+    Branding status     "Your branding has been verified and is being shown
+                         to users."
+    Data access status  "You previously submitted this app for verification,
+                         but it was NOT APPROVED."
+
+So the half that lifts the **100-user lifetime cap** was submitted and refused,
+and nothing in this file said so. Youssef asked "i dont think we got verified"
+and he was right.
+
+**Two fields are missing, not one**, and the submit page names both:
+*"Missing the following fields for one or more requested scopes: scope
+justification, demo video."*
+
+- **The scope justification box is EMPTY** -- `0 / 1000` on Data access, under
+  "How will the scopes be used?". This file claimed it was written; it is not
+  there. Draft it, paste it, save it.
+- **The demo video is Not provided.** Google wants a link showing the consent
+  screen and each scope in use, and the TikTok recording does not qualify --
+  it demonstrates TikTok.
+
+**One thing is BETTER than this file implied.** Both scopes
+(`youtube.readonly`, `youtube.upload`) sit under **Your sensitive scopes**;
+**Your restricted scopes is EMPTY**. Sensitive scopes need verification and
+NOT the third-party security assessment restricted scopes drag in -- which is
+the expensive, months-long path. Nothing here is on that path.
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
 
