@@ -5246,9 +5246,18 @@
         var done = Math.max(0, Number(pr.currentClip || 1) - 1) + Math.max(0, Math.min(100, Number(pr.clipPercent || 0))) / 100;
         return Math.max(0, Math.min(1, done / Number(pr.totalClips)));
       }
-      var band = bandFraction(pr, name);
-      if (band > 0) return band;
-      return elapsedFraction(pr, name);
+      // THE GREATER OF THE TWO, because both are lower bounds on the same
+      // quantity and neither can see what the other does. The band is what the
+      // worker's coarse global percentage implies; the clock is how long the
+      // phase has been running against what it is expected to cost.
+      //
+      // Taking the band alone left SCORING frozen for its whole length, which
+      // is the import's bug in a quieter place: the worker emits one progress
+      // line at 69% and then runs Ollama over the shortlist for around five
+      // minutes -- 23% of a job -- without emitting another, so the band sat at
+      // exactly 0.4 the entire time. Taking the clock alone would throw away a
+      // real measurement whenever the worker does report one.
+      return Math.max(bandFraction(pr, name), elapsedFraction(pr, name));
     }
     // The floor: how long this phase has been running, over what it is expected
     // to cost.

@@ -141,3 +141,26 @@ test('the ETA is quoted at the pace the payload reports', () => {
 test('no known source length still means no invented countdown', () => {
   assert.equal(importing({ durationSec: 0 }).eta, '');
 });
+
+test('SCORING no longer sits frozen for its whole length', () => {
+  // The import's bug in a quieter place. The worker emits one progress line at
+  // 69% and then runs Ollama over the shortlist for around five minutes -- 23%
+  // of a job -- without emitting another, so the band it implies sat at exactly
+  // 40% the entire time. Two identical scoring phases, one four minutes older.
+  const at = Date.now();
+  const scoring = since => rowFor({ stage: 'Finding and scoring clips', phase: 'score', progress: 69, phaseStartedAt: since });
+  const early = scoring(at - 20_000);
+  const later = scoring(at - 240_000);
+  const pct = text => Number((/(\d+)% of this step/.exec(text) || [0, 0])[1]);
+  assert.equal(pct(early.meta), 40, 'it starts from what the worker did say');
+  assert.ok(pct(later.meta) > pct(early.meta), 'and the clock carries it forward from there');
+  assert.ok(pct(later.meta) <= 90, 'without ever claiming to be finished');
+});
+
+test('a real measurement is never thrown away for the clock', () => {
+  // max() of two lower bounds, so a worker that DOES report keeps its answer
+  // wherever the clock has not yet overtaken it.
+  const measured = rowFor({ stage: 'Transcribing speech', phase: 'transcribe', progress: 30,
+    stageFraction: 0.8, phaseStartedAt: Date.now() - 5_000 });
+  assert.match(measured.meta, /80% of this step/);
+});

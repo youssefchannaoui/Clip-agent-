@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1981 JS + 874 Python**
+- `npm test` and `npm run check` must pass. Currently **1983 JS + 874 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -17427,6 +17427,16 @@ import: the row should show a total, a moving percentage, a speed, and an ETA
 that falls. The pace model starts on its shipped figures and begins learning at
 the third finished lecture (`pace.learned` on `/api/state`, and Owner -> Health
 carries the self-checks beside it).
+
+### And scoring had the same bug, quieter (v3.177.1)
+
+The band and the clock are combined with `max()` now, because both are lower
+bounds on the same quantity and neither can see what the other does. Taking the
+band alone left SCORING frozen for its whole length: the worker emits one
+progress line at 69% and then runs Ollama over the shortlist for around five
+minutes -- 23% of a job -- without emitting another, so the fraction the band
+implies sat at exactly 0.4 the entire time. Taking the clock alone would throw
+away a real measurement whenever the worker does report one.
 
 ### TWO SESSIONS WERE IN THIS WORKING TREE AT ONCE, and it nearly cost work
 
