@@ -474,18 +474,31 @@ def probe_audio(cw, settings: dict) -> None:
         language = str(settings.get("language") or "").strip() or None
         base = {"beam_size": 1, "word_timestamps": True, "condition_on_previous_text": False, "task": "transcribe"}
         lang = {"language": language} if language else {"multilingual": True}
+        # THE SHIPPED VARIANT IS ASKED OF THE CODE, NEVER TYPED HERE. It read
+        # "as shipped (vad on)" for a day after v3.180.0 turned the filter off
+        # -- a monitor reporting on options no job asks for, which is worse
+        # than no monitor (v3.173.0 paid for exactly that on the model names).
+        try:
+            shipped = cw.first_pass_options({"settings": settings})
+        except Exception:  # noqa: BLE001
+            shipped = {**base, **lang, "vad_filter": True,
+                       "vad_parameters": {"min_silence_duration_ms": 450}}
+        shipped_label = "as shipped (vad " + ("on" if shipped.get("vad_filter") else "off") + ")"
         variants = [
-            ("as shipped (vad on, min_silence 450)", {**base, **lang, "vad_filter": True, "vad_parameters": {"min_silence_duration_ms": 450}}),
+            (shipped_label, dict(shipped)),
+            ("vad on", {**base, **lang, "vad_filter": True, "vad_parameters": {"min_silence_duration_ms": 450}}),
             ("vad off", {**base, **lang, "vad_filter": False}),
-            ("vad on, no-speech gate off", {**base, **lang, "vad_filter": True, "vad_parameters": {"min_silence_duration_ms": 450}, "no_speech_threshold": None}),
             ("vad off, no-speech gate off", {**base, **lang, "vad_filter": False, "no_speech_threshold": None}),
         ]
-        vad = {"vad_filter": True, "vad_parameters": {"min_silence_duration_ms": 450}}
+        vad = {"vad_filter": False}
         # THE THREE THAT DECIDE THE ARABIC-SCRIPT FIX, always run: what the job
         # asked for, what per-segment detection gives, and what Arabic forced
         # gives. Comparing their arabic= counts on ONE window is the whole
         # experiment -- a count that only moves under "ar forced" means
         # detection is not reaching short quotations.
+        # (with the filter OFF, which is the shipped base since v3.180.0 --
+        # comparing detection variants under a filter no job uses would answer
+        # a question nobody is asking.)
         variants.append(("language auto, multilingual", {**base, "multilingual": True, **vad}))
         variants.append(("no language at all", {**base, **vad}))
         variants.append(("ar forced", {**base, "language": "ar", **vad}))
