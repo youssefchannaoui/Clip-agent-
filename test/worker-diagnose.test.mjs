@@ -164,6 +164,31 @@ test('the payload beating the box IS the alarm, and the monitor catches it', () 
  *
  * Never an address: a proxy URL carries its credentials in its userinfo.
  */
+test('a finished job reports where its seconds went', () => {
+  // project.timings has been on every result since v3.77.0 for exactly one
+  // reason -- the rescale and the render-lane count are decisions about it --
+  // and nothing printed it for a fortnight, so both were settled by argument
+  // instead. Driven rather than grepped: what matters is the SHARE, because a
+  // phase at 5% of a job cannot be made to matter however well it is tuned.
+  const dir = fs.mkdtempSync('/tmp/deenclipped-timings-');
+  fs.mkdirSync(`${dir}/jobs/job_t`, { recursive: true });
+  fs.writeFileSync(`${dir}/jobs/job_t/status.json`, JSON.stringify({
+    status: 'completed', stage: 'completed', progress: 100,
+    result: {
+      clips: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }],
+      timings: { import: 10, transcribe: 300, score: 90, render: 600, total: 1000 },
+    },
+  }));
+  fs.writeFileSync(`${dir}/jobs/job_t/payload.json`, JSON.stringify({ title: 'A lecture' }));
+  const printed = diagnose(dir, new URL('../worker', import.meta.url).pathname);
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+  assert.match(printed, /timings: total 1000s/, 'the total is reported');
+  assert.match(printed, /render 600s \(60%\)/, 'and each phase as a share of the job');
+  assert.match(printed, /transcribe 300s \(30%\)/);
+  assert.match(printed, /4 clip\(s\), so 150s a clip rendered/,
+    'the render is divided by the clips it produced');
+});
+
 test('the import posture is reported, and never an address', () => {
   const body = script.replace(/#[^\n]*/g, '');
   assert.match(body, /def import_posture\(\)/);

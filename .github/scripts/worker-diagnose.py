@@ -291,6 +291,25 @@ def describe_job(mtime: float, folder: Path, status: dict, decided: dict) -> dic
     out(f"  mode={payload.get('mode') or 'clips'} window={payload.get('sourceStartSec')}..{payload.get('sourceEndSec')}")
     out("  settings: " + json.dumps({k: settings.get(k) for k in SETTING_KEYS if k in settings}, ensure_ascii=False))
     out("  template: " + json.dumps({k: template.get(k) for k in TEMPLATE_KEYS if k in template}, ensure_ascii=False))
+    # WHERE EVERY PHASE'S SECONDS WENT. v3.77.0 put `timings` on every result
+    # for exactly one reason -- the rescale and the render-lane count are
+    # decisions about this and there was no number to make them with -- and
+    # then nothing ever printed it, so it sat unread for a fortnight. The share
+    # is what actually answers "which phase is worth attacking": a phase at 5%
+    # of the job cannot be made to matter however well it is optimised.
+    result = status.get("result") if isinstance(status.get("result"), dict) else {}
+    timings = result.get("timings") if isinstance(result.get("timings"), dict) else {}
+    if timings:
+        total = float(timings.get("total") or 0) or 1.0
+        parts = " ".join(
+            f"{name} {float(value):.0f}s ({float(value) / total * 100:.0f}%)"
+            for name, value in timings.items()
+            if name != "total" and isinstance(value, (int, float)) and float(value) > 0)
+        out(f"  timings: total {float(timings.get('total') or 0):.0f}s -- {parts}")
+        clips = result.get("clips")
+        if isinstance(clips, list) and clips and float(timings.get("render") or 0) > 0:
+            out(f"           {len(clips)} clip(s), so"
+                f" {float(timings['render']) / len(clips):.0f}s a clip rendered")
     mismatched = compare_to_box(folder.name, settings, decided)
     return {"settings": settings, "template": template, "status": status, "mismatches": mismatched}
 
