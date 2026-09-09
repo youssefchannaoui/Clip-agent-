@@ -16,6 +16,7 @@
   "captionHighlight": "#FFFFFF",
   "captionOutline": "#000000",
   "captionOutlineWidth": 1,
+  "captionScriptureGlow": 6,
   "captionShadow": 2,
   "captionBackground": "#000000",
   "captionBackgroundOpacity": 0,

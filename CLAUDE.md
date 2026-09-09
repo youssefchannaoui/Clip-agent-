@@ -233,9 +233,8 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2018 JS + 941 Python**
-  (13 Python skipped) — the skips are where ffmpeg or OpenCV is absent, which
-  is CI.
+- `npm test` and `npm run check` must pass. Currently **2020 JS + 973 Python**
+  (17 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -251,22 +250,29 @@ These were each a real bug and each has a test named after it.
   for a file CI has never seen. Before writing a count, check nothing under
   `scratchpad/` matches node's test patterns (`*.test.*`, `*-test.*`,
   `*_test.*`, `test-*.*`, or anything inside a directory called `test`).
-- **The 13 skips are `SpeakerTrackingTests` (7), `TrackerRunsTests` (4),
-  `AtmosphereFrameTests` (1) and `RenderPlateTests` (1), and they skip ONLY
-  where ffmpeg -- or, for the fourth, OpenCV -- is absent** (v3.101.2, v3.118.0,
-  v3.140.0, v3.179.1). They build their own fixture with ffmpeg and run wherever
-  it exists, but the CI runner has neither, so there they skip, counted with the
-  reason in each. The crop ARITHMETIC is therefore exercised by anyone running
-  the suite with ffmpeg installed, and NOT by CI.
-  **`opencv-python-headless<5.0.0` is what makes the four run** -- pinned below
-  5 for the reason CLAUDE.md already records: OpenCV 5 removed
-  `CascadeClassifier`, and installing it here silently turns every framing test
-  into a skip while looking installed. It is a LOCAL probe dependency and must
-  never enter requirements.txt for CI: the no-dependency property is what lets a
-  phone session run this suite at all.
+- **The 17 skips are `SpeakerTrackingTests` (7), `TrackerRunsTests` (5),
+  `AudioEnvelopeTests` (3), `AtmosphereFrameTests` (1) and `RenderPlateTests`
+  (1), and every one of them skips ONLY WHERE FFMPEG IS ABSENT** (v3.101.2,
+  v3.118.0, v3.140.0, v3.179.1, v3.186.0). They build their own fixture with
+  ffmpeg and run wherever it exists; the CI runner has none, so there they skip,
+  counted with the reason in each. **Each raises SkipTest per TEST, never in
+  `setUpClass`** -- a skip raised there counts as ONE and the rest of the class
+  VANISHES from the total, which `check-handover` rightly reports as tests
+  having disappeared. So the crop arithmetic, the rendered-frame proof that a
+  cut is a cut, and the audio envelope are exercised by anyone running the suite
+  with ffmpeg installed, and NOT by CI.
+  **None of them needs OpenCV any more** (v3.186.0): the speaker tracker's
+  detector is MediaPipe, and `TrackerRunsTests` was gated on `cv2` only for as
+  long as the Haar tracker existed. `opencv-python-headless<5.0.0` still matters
+  and is still pinned, because the STATIC fallback (`detect_main_face_crop`)
+  uses the cascades -- OpenCV 5 removed `CascadeClassifier`, and installing it
+  silently turns that fallback into "no face detector available" while looking
+  installed. It is a LOCAL probe dependency and must never enter
+  requirements.txt for CI: the no-dependency property is what lets a phone
+  session run this suite at all.
   Face DETECTION on a real face is still untested anywhere -- these prove the
-  tracker RUNS and that ffmpeg accepts the graph it builds, not that a face is
-  found. See the open items below.
+  tracker RUNS, that ffmpeg accepts the graph it builds, and that the graph
+  renders as a cut, not that a face is found. See the open items below.
 - **Test executed output, not source strings.** Several tests have failed only
   because code moved into a function, while real behaviour changes passed.
 - **A green suite is not verification for anything visual.** Every layout bug
@@ -18214,6 +18220,63 @@ the Premiere podcast plugins cheat by reading separate microphone tracks, which
 a single mixed YouTube track does not have. OpusClip's own reviews report the
 identical failure -- "wobbled on two-person crosstalk sections, cropping the
 wrong face twice".
+
+## Scripture is a soft shadow now, not an outline (v3.185.0, 10 Sept 2026)
+
+Youssef, with a reference clip on screen: "Quran recitation should be like this
+instead of ugly old fashion outlines of text, it should be like this, it has a
+light shadow thing in the back not 100% sure what it is but it looks SO MUCH
+NICER AND CLEANER."
+
+**The thing in the back is a blurred dark halo**, and libass already draws one --
+`\blur` has been spreading the word highlight's glow since v3.x. Putting the
+same tag behind the ayah is the whole mechanism.
+
+`captionScriptureGlow` (0-30, 0 = the hard outline everything had before) rides
+the SCRIPTURE line only. The ayah and its translation share one Dialogue event,
+so a single tag covers both exactly as the reference frame shows them. Spoken
+captions keep their outline: they sit on a different face at a different size,
+and this was a decision about how the Qur'an looks.
+
+**A BLUR AND A BORDER MOVE TOGETHER, and that pairing is most of the change.**
+libass makes a halo by blurring a border, so a blur with nothing behind it
+spreads nothing -- and `AYAH_OUTLINE_MIN` (2.0) is sized for a hard edge and all
+but vanishes once it is spread. `AYAH_GLOW_BORDER` is 9.0 and applies ONLY when
+the glow is on, as a floor: a template already asking for a heavier edge keeps
+it, and with no glow the border is byte-identical to what it always was.
+
+**Four call sites build ayah events** -- first render, re-render, the editor
+preview and the plate -- and one missed would render scripture with a hard
+outline on that path alone, which nobody would think to look for. A test counts
+them, so a fifth added later fails rather than quietly rendering the old look.
+
+### The probe was already built, by the other session
+
+`caption-frame.py` (theirs, committed) already renders a caption on the box with
+real libass and the real mushaf faces and hands back a PNG. **A second probe was
+written here and deleted before it was committed** -- two rigs answering one
+question is the duplication this file keeps punishing, and the right move was to
+add the missing dimension to theirs: an outline width, a ground colour, and a
+comparison section. Both defaults are unchanged, deliberately: every ink
+measurement in that file reads Y>=200 as ink, so a bright ground would read as
+all ink, and an outline adds ink and would move every height it reports.
+
+It measures **edge falloff** -- how many pixels the ink takes to reach its
+background. A hard outline steps in one or two; a blurred one ramps over
+several. That number is the difference being asked about, and it is the thing
+two similar-looking frames cannot be argued about. It renders on a BRIGHT ground
+because that is where these clips live and where a thin outline stops separating
+the text from the picture.
+
+### NOT YET SEEN
+
+The tag, the pairing and the template are covered by nine tests with five probes
+proven red, and the suite is green -- but **no frame has been rendered yet**.
+CLAUDE.md's oldest caption rule is that only a rendered frame settles a caption
+question, and this machine has neither libass nor an Arabic face. `caption_frame`
+on the deploy workflow is one dispatch and returns the picture; the value of 6
+is a starting point chosen from typesetting practice, not a measurement, and the
+render is what should decide it.
 
 ## Whoever is speaking is centred, and the crop follows them (v3.179.0, 9 Sept 2026)
 

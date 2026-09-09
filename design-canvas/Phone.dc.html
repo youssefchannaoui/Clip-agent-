@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Outfit, Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #D9B478; } a:hover { color: #F0D6A6; }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+    @keyframes mUp { from { transform: translateY(34px); opacity: 0; } }
+    @keyframes mIn { from { opacity: 0; transform: translateX(20px); } }
+    @keyframes mFill { from { transform: scaleX(0); } }
+
+    .stage { width: 390px; height: 844px; background: #09090A; position: relative; overflow: hidden;
+             display: flex; flex-direction: column; justify-content: flex-end; }
+    .behind { position: absolute; inset: 0; padding: 74px 18px 0; opacity: .3; filter: blur(1.5px); }
+    .bTitle { font-size: 22px; font-weight: 600; color: #F2F2F4; }
+    .bCard { height: 74px; border-radius: 14px; background: #17171A; border: 1px solid #26262A; margin-top: 14px; }
+    .scrim { position: absolute; inset: 0; background: rgba(6,6,8,.66); }
+
+    /* The sheet. No fake status bar, no fake keyboard -- the real ones draw on top. */
+    .sheet { position: relative; background: #121214; border: 1px solid #26262A; border-bottom: 0;
+             border-radius: 22px 22px 0 0; padding: 10px 18px 0; height: 690px;
+             display: flex; flex-direction: column;
+             box-shadow: 0 -20px 60px rgba(0,0,0,.6);
+             animation: mUp .46s cubic-bezier(.2,.8,.2,1) backwards; }
+    .grab { width: 38px; height: 4px; border-radius: 2px; background: #34343A; margin: 0 auto 16px; }
+
+    .prog { display: flex; gap: 4px; margin-bottom: 18px; }
+    .seg { flex: 1; height: 3px; border-radius: 2px; background: #1E1E22; overflow: hidden; }
+    .seg > i { display: block; height: 100%; background: #D9B478; transform-origin: left;
+               animation: mFill .5s cubic-bezier(.2,.8,.2,1) backwards; }
+
+    .eyebrow { font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: #85858E; font-weight: 500; }
+    h1 { font-size: 23px; line-height: 1.18; font-weight: 600; color: #F2F2F4; margin: 8px 0 8px; letter-spacing: -.01em; }
+    .hint { font-size: 13px; line-height: 1.5; color: #8B8B93; text-wrap: pretty; }
+
+    .flow { flex: 1; min-height: 0; overflow: hidden; padding-top: 20px;
+            animation: mIn .42s cubic-bezier(.2,.8,.2,1) backwards; }
+    .stack { display: flex; flex-direction: column; gap: 10px; }
+    .card { min-height: 44px; padding: 14px 15px; border-radius: 13px; border: 1px solid #26262A;
+            background: #17171A; text-align: left; position: relative; overflow: hidden;
+            transition: all .24s cubic-bezier(.2,.8,.2,1); }
+    .card.on { border-color: rgba(217,180,120,.6); background: rgba(217,180,120,.07); }
+    .card.on::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: #D9B478; }
+    .cardT { font-size: 14px; font-weight: 600; color: #F2F2F4; }
+    .cardS { font-size: 12px; color: #8B8B93; margin-top: 4px; line-height: 1.45; }
+
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .chip { min-height: 44px; display: flex; align-items: center; padding: 0 15px; border-radius: 999px;
+            border: 1px solid #26262A; background: #17171A; font-size: 12.5px; color: #BCBCC3; }
+    .chip.on { border-color: rgba(217,180,120,.6); background: rgba(217,180,120,.11); color: #F0D6A6; font-weight: 500; }
+
+    /* Cost sits above the button, not behind a final step. */
+    .foot { border-top: 1px solid #1E1E22; margin: 0 -18px; padding: 14px 18px 30px; }
+    .money { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+    .big { font-size: 24px; font-weight: 700; color: #F0D6A6; font-variant-numeric: tabular-nums; line-height: 1; }
+    .unit { font-size: 12px; color: #8B8B93; }
+    .eta { margin-left: auto; font-size: 12px; color: #85858E; }
+    .btnRow { display: flex; gap: 10px; }
+    .btn { min-height: 48px; padding: 0 18px; border-radius: 12px; font-size: 14px; font-weight: 500;
+           border: 1px solid #26262A; background: #17171A; color: #BCBCC3; display: flex;
+           align-items: center; justify-content: center; }
+    .btnGo { flex: 1; border-color: #D9B478; background: #D9B478; color: #0E0E11; font-weight: 600; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .sheet, .flow, .seg > i { animation: none; }
+      .card { transition: none; }
+    }
+  </style>
+</helmet>
+
+<div class="stage">
+  <div class="behind">
+    <div class="bTitle">Home</div>
+    <div class="bCard"></div>
+    <div class="bCard"></div>
+    <div class="bCard"></div>
+  </div>
+  <div class="scrim"></div>
+
+  <div class="sheet">
+    <div class="grab"></div>
+
+    <div class="prog">
+      <sc-for list="{{ segs }}" as="s" hint-placeholder-count="8">
+        <div class="seg"><i style="{{ s.style }}"></i></div>
+      </sc-for>
+    </div>
+
+    <div class="eyebrow">Step 4 of 8</div>
+    <h1>How many clips, and how long?</h1>
+    <div class="hint">For this lecture only — your account default stays where it is.</div>
+
+    <div class="flow">
+      <div class="stack">
+        <div class="card on">
+          <div class="cardT">6 clips</div>
+          <div class="cardS">Tap to change. Up to 20 from a lecture this length.</div>
+        </div>
+      </div>
+      <div class="chips">
+        <div class="chip">15–30s</div>
+        <div class="chip on">30–60s</div>
+        <div class="chip">45–75s</div>
+        <div class="chip">60–90s</div>
+      </div>
+      <div class="stack" style="margin-top: 18px">
+        <div class="card">
+          <div class="cardT">This lecture only</div>
+          <div class="cardS">Tap to save it as your default for every lecture instead.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <div class="money">
+        <div class="big">32</div>
+        <div class="unit">tokens</div>
+        <div class="eta">ready in 19–32 min</div>
+      </div>
+      <div class="btnRow">
+        <button class="btn">Back</button>
+        <button class="btn btnGo">Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var at = 4;
+    return {
+      segs: [1,2,3,4,5,6,7,8].map(function (n) {
+        var on = n <= at;
+        return { style: 'transform: scaleX(' + (on ? 1 : 0) + '); animation-delay: ' + (n * 0.04) + 's;' };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -74,7 +74,10 @@ def families() -> list[str]:
     return sorted(seen)
 
 
-def ass_file(path: str, body: str, *, font: str, size: int) -> None:
+def ass_file(path: str, body: str, *, font: str, size: int, outline: float = 0) -> None:
+    """`outline` is the border width the style draws. It defaults to 0, which is
+    what every existing caller measured with -- an outline adds ink and would
+    have changed every ink-height number in this file."""
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {WIDTH}
@@ -84,7 +87,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,60,60,0,1
+Style: Caption,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,{outline:g},0,5,60,60,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -94,10 +97,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         handle.write(header)
 
 
-def render(ass_path: str, png_path: str) -> bool:
+def render(ass_path: str, png_path: str, ground: str = "black") -> bool:
+    """`ground` defaults to black, which every ink measurement in this file
+    depends on -- gray_rows reads Y>=200 as ink and a bright ground is all
+    ink by that test. It is only for the LOOK comparison, where the whole
+    question is how the text separates from a busy picture."""
     cmd = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-        "-f", "lavfi", "-i", f"color=c=black:s={WIDTH}x{HEIGHT}:d=1",
+        "-f", "lavfi", "-i", f"color=c={ground}:s={WIDTH}x{HEIGHT}:d=1",
         "-vf", f"subtitles={ass_path}", "-frames:v", "1", png_path,
     ]
     try:
@@ -272,8 +279,123 @@ def main() -> int:
     else:
         out("  the box is on a build with no inline Arabic size; nothing to show")
     out("")
+
+    scripture_look(cw, work, arabic)
     out("== done ==")
     return 0
+
+
+def scripture_look(cw, work: str, arabic: str) -> None:
+    """The hard outline against the soft shadow, rendered and measured.
+
+    Youssef, 10 Sept 2026, with a reference clip: "Quran recitation should be
+    like this instead of ugly old fashion outlines of text ... it has a light
+    shadow thing in the back not 100% sure what it is but it looks SO MUCH
+    NICER AND CLEANER."
+
+    The thing in the back is a blurred dark halo. libass draws one by BLURRING A
+    BORDER, so the two move together -- a blur with nothing behind it spreads
+    nothing, and the 2px edge sized for a hard outline all but vanishes once it
+    is spread. This renders the pairs the product can actually ship and measures
+    the difference on a BRIGHT ground, which is where a thin outline stops
+    separating the text from the picture and where the whole question lives.
+    """
+    out("== the scripture caption: hard outline against soft shadow ==")
+    # The size the product actually renders scripture at, not a guess: libass
+    # sizes by the face's win cell rather than its em, so a mushaf face at a
+    # nominal size draws a fraction of what the Latin does -- ayah_nominal_scale
+    # is what compensates, and CLAUDE.md records the arithmetic being disproved
+    # by two separate frames before it was measured.
+    scale = cw.ayah_nominal_scale(arabic) if hasattr(cw, "ayah_nominal_scale") else 4.0
+    size = max(1, int(round(FONT_SIZE * scale)))
+    border_min = getattr(cw, "AYAH_OUTLINE_MIN", 2.0)
+    border_glow = getattr(cw, "AYAH_GLOW_BORDER", 9.0)
+    # (label, border, blur). The ladder is the point: "a LIGHT shadow thing in
+    # the back" is a look, and a look is settled by looking at it rather than by
+    # typesetting practice -- the 6 shipped in v3.185.0 was a guess and its own
+    # commit message said so. Each rung emits a band, so the value is chosen
+    # from rendered frames.
+    variants = [
+        ("hard outline (today)", border_min, 0.0),
+        ("soft shadow, blur 3", border_glow, 3.0),
+        ("soft shadow, blur 4.5", border_glow, 4.5),
+        ("soft shadow, blur 6", border_glow, 6.0),
+        ("soft shadow, blur 9", border_glow, 9.0),
+    ]
+    # BRIGHT ONLY, and that is a limit of the measurement rather than a
+    # preference. The halo is the one thing DARKER than its ground, so on a
+    # near-black ground there is nothing for it to be darker than: the walk
+    # reported an identical 12px for both variants there, which is not a
+    # finding, it is the test not applying. A bright frame is also where a thin
+    # outline actually stops separating the text from the picture.
+    for ground, name in (("0xB4AFA6", "bright"),):
+        out(f"  -- on a {name} ground --")
+        for label, border, blur in variants:
+            tag = f"{{\\blur{blur:g}}}" if blur else ""
+            ass = os.path.join(work, f"look-{name}-{blur:g}.ass")
+            png = os.path.join(work, f"look-{name}-{blur:g}.png")
+            ass_file(ass, f"Dialogue: 0,0:00:00.00,0:00:02.00,Caption,,0,0,0,,{tag}{{\\q0}}{SAMPLE_ARABIC}",
+                     font=arabic, size=int(size), outline=border)
+            if not render(ass, png, ground=ground):
+                out(f"     {label}: render failed")
+                continue
+            reach = halo_width(png, 175 if name == "bright" else 16)
+            if reach < 0:
+                out(f"     {label:22s} NO INK RENDERED -- the face or the size is wrong")
+                continue
+            out(f"     {label:22s} border {border:4.1f}  blur {blur:3.1f}  "
+                f"halo reaches {reach:2d}px from the ink")
+            if name == "bright":
+                band = os.path.join(work, f"band-{blur:g}.png")
+                rows, _ = gray_rows(png)
+                if not rows:
+                    out("       (no ink rows, so no picture)")
+                elif not crop_band(png, band, rows[0], rows[-1]):
+                    out("       (crop failed, so no picture)")
+                else:
+                    stem = f"blur{blur:g}".replace(".", "-") if blur else "outline"
+                    emit_png(f"scripture-{stem}.png", band)
+    out("")
+
+
+def halo_width(png_path: str, ground: int) -> int:
+    """How far the dark halo reaches out from the ink, in pixels.
+
+    THE FIRST VERSION OF THIS MEASURED NOTHING AND SAID SO CONFIDENTLY. It
+    walked right from the brightest pixel until two neighbours were equal --
+    and the pixel next to the peak is the glyph's own flat white interior, so
+    it stopped immediately and reported 0px for every variant, hard outline and
+    soft shadow alike. That is the third probe in two days to report a number
+    it had not taken; a measurement that cannot tell two obviously different
+    things apart is broken, not a finding.
+
+    This asks the question directly instead. On a bright ground the halo is the
+    only thing DARKER than the background, so: step off the glyph's edge and
+    count how far the darkening reaches. A hard 2px outline is a thin rim; a
+    blurred one is a wide soft cloud, and the two cannot come out the same.
+    """
+    raw = os.path.join(tempfile.gettempdir(), "dc-halo.gray")
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", png_path,
+                    "-pix_fmt", "gray", "-f", "rawvideo", raw],
+                   capture_output=True, timeout=120, check=True)
+    data = open(raw, "rb").read()
+    os.unlink(raw)
+    rows = [y for y in range(HEIGHT) if max(data[y * WIDTH:(y + 1) * WIDTH]) >= 200]
+    if not rows:
+        return -1  # no ink at all: the caller must say so rather than print 0
+    widest = 0
+    for y in rows[::5]:
+        line = data[y * WIDTH:(y + 1) * WIDTH]
+        peak = max(range(WIDTH), key=lambda x: line[x])
+        x = peak
+        while x < WIDTH - 1 and line[x] >= 200:   # off the ink
+            x += 1
+        reach = 0
+        while x < WIDTH - 1 and line[x] < ground - 8 and reach < 80:
+            reach += 1
+            x += 1
+        widest = max(widest, reach)
+    return widest
 
 
 if __name__ == "__main__":
