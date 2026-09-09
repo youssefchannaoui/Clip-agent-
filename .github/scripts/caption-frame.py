@@ -384,3 +384,7 @@ def halo_width(png_path: str, ground: int) -> int:
             x += 1
         widest = max(widest, reach)
     return widest
+
+
+if __name__ == "__main__":
+    sys.exit(main())

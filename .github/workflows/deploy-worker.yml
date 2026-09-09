@@ -685,6 +685,15 @@ jobs:
           printf '%s' "$CAPTION_B64" | base64 -d > /tmp/dc-caption-frame.py
           docker exec -i worker-deenclipped-worker-1 python3 - < /tmp/dc-caption-frame.py
           REMOTE
+          # A PROBE THAT PRINTS NOTHING MUST NOT REPORT SUCCESS. Run 34378396672
+          # went green in 2.5 seconds having produced not one line: an edit had
+          # deleted the script's `if __name__` block, so python defined every
+          # function, ran none of them and exited 0. The step passed, the artifact
+          # was empty, and nothing anywhere said the probe had not run.
+          grep -q '== done ==' "$RUNNER_TEMP/caption-frame.out" || {
+            echo "::error::the caption probe produced no output -- it did not run"
+            exit 1
+          }
           mkdir -p "$RUNNER_TEMP/frames"
           node -e '
             const fs = require("fs");
