@@ -91,7 +91,13 @@ test('resubmitting with the same idempotency key does not create a second projec
     // every account now holds the nine DeenClipped starter nasheeds from boot
     // (v3.149.0). Left in the pattern deliberately, so this reads as a list of
     // environment reasons rather than as a claim that music is still a blocker.
-    assert.match(first.error, /nasheed|template|Sign in|not configured/i);
+    //
+    // "Connect the YouTube channel" is the reason it lands here NOW: a pasted
+    // link must be a video on a connected channel (src/youtube-ownership.js),
+    // and this fixture connects nothing. The guard under test still runs
+    // before that one -- submitVideo checks the idempotency key first of all --
+    // so the shape assertion is what it always was.
+    assert.match(first.error, /nasheed|template|Sign in|not configured|Connect the YouTube channel/i);
     return;
   }
   const second = await engine.submitVideo('https://www.youtube.com/watch?v=aaaaaaaaaaa', 'A', 'user_admin', { idempotencyKey: key });

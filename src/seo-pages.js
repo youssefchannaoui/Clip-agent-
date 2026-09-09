@@ -144,7 +144,7 @@ export const SEO_PAGES = [
     kind: KIND.TOOL,
     title: 'YouTube to Shorts — Long Video to Shorts | DeenClipped',
     description:
-      'Paste a YouTube link, pick the stretch worth clipping, and get vertical captioned Shorts you can review and publish back to your own channel.',
+      'Paste a link to a video on your own channel, pick the stretch worth clipping, and get vertical captioned Shorts you can review and publish back to that channel.',
     intent: 'youtube to shorts',
     cluster: 'platforms',
     lastmod: '2026-08-30',

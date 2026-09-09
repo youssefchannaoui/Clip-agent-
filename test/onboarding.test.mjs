@@ -62,7 +62,11 @@ test('a brand new account is on Step 1 Create', () => {
   assert.equal(j.progress, 'Step 1 of 3');
   assert.deepEqual(j.steps.map(s => s.state), ['now', 'todo', 'todo']);
   assert.deepEqual(j.steps.map(s => s.label), ['Create', 'Review', 'Publish']);
-  assert.match(j.hint, /Paste a YouTube link/);
+  // The PROPERTY, not the sentence: the Create step names both ways a lecture
+  // gets in. Pinning the wording is how this went red when links became
+  // channel-gated (src/youtube-ownership.js) without the step changing at all.
+  assert.match(j.hint, /paste/i);
+  assert.match(j.hint, /upload/i);
   assert.equal(j.action, 'paste');
 });
 
@@ -79,7 +83,11 @@ test('the nasheed prerequisite is spoken before the lecture is asked for', () =>
   assert.equal(without.at, 'create', 'it changes the copy, never the step');
 
   const with_ = onboarding.journey(state, id, { nasheeds: 2 });
-  assert.match(with_.hint, /Paste a YouTube link/);
+  // The property again: with the prerequisite met the hint stops naming it and
+  // asks for the lecture instead. Pinned by the ACTION and by the absence of
+  // the nasheed sentence, not by the wording of the ask.
+  assert.doesNotMatch(with_.hint, /nasheed/i);
+  assert.match(with_.hint, /paste/i);
   assert.equal(with_.action, 'paste');
 });
 

@@ -223,7 +223,7 @@
     return [
       h('label', { class: 'dcm-field' }, [
         h('span', { class: 'dcm-field-l' }, 'Lecture link'),
-        h('input', { type: 'url', inputmode: 'url', enterkeyhint: 'go', autocomplete: 'off', placeholder: 'Paste a YouTube link',
+        h('input', { type: 'url', inputmode: 'url', enterkeyhint: 'go', autocomplete: 'off', placeholder: 'Paste a link from your channel',
           value: b('jobUrlVal'), 'data-tour': inSheet ? false : 'paste', class: 'dcm-input', on: { input: 'setJobUrl', keydown: 'm.jobKey' } }),
       ]),
       h('div', { class: 'dcm-create-a' }, [

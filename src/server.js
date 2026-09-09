@@ -26,6 +26,7 @@ import * as pace from './pace.js';
 import * as ownerFeed from './owner-feed.js';
 import { fallbackThumb } from './local-engine.js';
 import * as social from './social.js';
+import * as youtubeOwnership from './youtube-ownership.js';
 import { formatLocal, normaliseTime } from './slots.js';
 import { checkFfmpeg } from './ffmpeg.js';
 import * as auth from './auth.js';
@@ -2350,6 +2351,13 @@ async function route(req, res, url) {
     }
     const sources = [];
     for (const source of urls.slice(0, 8)) {
+      // Ownership is a question about THIS ACCOUNT, so it is asked outside the
+      // per-URL cache below -- that cache is shared across every account, and
+      // a verdict stored in it would hand one person's answer to another.
+      // Asked here rather than only at submit, or a link that cannot be
+      // imported would preview happily and be refused seven steps later.
+      try { if (youtubeOwnership.isYouTubeLink(source)) await youtubeOwnership.assertOwnsVideo(currentUser, source); }
+      catch (error) { sources.push({ url: source, title: source, durationSec: null, thumbnail: '', error: error.message }); continue; }
       const cached = sourceInfoCache.get(source);
       if (cached && cached.until > Date.now()) { sources.push(cached.value); continue; }
       try {

@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1995 JS + 900 Python**
+- `npm test` and `npm run check` must pass. Currently **2007 JS + 900 Python**
   (13 Python skipped) — the skips are where ffmpeg or OpenCV is absent, which
   is CI.
   These numbers were once wrong by more than a factor of
@@ -10051,6 +10051,142 @@ now asks for -- not of a rendered frame with Arabic script on it. The next
 import of a lecture holding a quotation is the confirmation, and the frame is
 what settles it.
 
+## A pasted YouTube link must be YOUR OWN video (v3.181.0, 9 Sept 2026)
+
+On **8 September 2026 Google REFUSED the OAuth data-access verification** --
+the half that lifts the 100-user lifetime cap. The branding half is still
+verified and published; this is the other one, and this file said for days that
+a demo video was the only thing outstanding. It was not.
+
+    "It appears that your application is in violation of the Google APIs Terms
+     of Service and the Google Workspace & Cloud Identity Acceptable Use
+     Policy... Google APIs Terms of Service: Section 5a Content Accessible
+     Through our APIs. Furthermore, the feature that allows users to ingest,
+     download, and create derivative clips from ARBITRARY YouTube videos
+     facilitates the UNAUTHORIZED downloading and modification of THIRD-PARTY
+     intellectual property."
+
+Youssef did not see it, resubmitted against an unchanged product, and asked for
+it fixed before the re-review lands -- and, when told the honest first read was
+"remove link import", answered: *"i NEED URL pasting, how does other ai clippers
+get authorized and allow it, it doesnt make sense. FIGURE OUT A WAY."*
+
+### The research, because the answer is not what it looks like
+
+- **Most AI clippers are not authorized. They never ask Google for anything.**
+  Choppity, quso.ai, HiClip, Revid and Vmaker all take any URL and hand back a
+  file to DOWNLOAD. They do not post to YouTube, so they never request
+  `youtube.upload`, so they never enter OAuth verification and nobody reviews
+  them. DeenClipped is in review PRECISELY BECAUSE IT POSTS. That asymmetry is
+  the whole of "it doesnt make sense".
+- **The one big verified competitor no longer does arbitrary link import.**
+  OpusClip's status page on the day: *"We're currently experiencing issues with
+  importing YouTube links. Please use local uploads, Google Drive, or other
+  video links instead."* Their help doc tells people to download from YouTube
+  Studio and upload. What they built and market instead is **Auto Import**:
+  connect your channel with OAuth, and it pulls *"only your own public YouTube
+  videos"*, **"verified through the permission authorization process"**.
+- **There is no official API download, for anybody.** The Data API has
+  `captions.download` (owner only) and no video-file endpoint. Checked, not
+  assumed.
+
+So the model that survives review is: **the video is yours, and OAuth proves
+it.** That keeps the paste box, which is what was asked for.
+
+### THE CITED CLAUSE IS THE WAY THROUGH, and the fix is shaped by its wording
+
+Section 5a: *"you may not use it unless you are **LICENSED TO DO SO BY THE
+OWNER** of that content."* If the owner IS the signed-in user and they granted
+access through OAuth, we are licensed by the owner. Neither word in Google's
+sentence survives it -- the video is not *arbitrary* and not *third-party*.
+
+`src/youtube-ownership.js` is that one comparison, and **both halves already
+existed**: `channels.list?mine=true` has stored the connected channel as the
+connection's `accountId` since v3.41.0 (social.js:388), and `videos.list?part=
+snippet` has been called on every pasted link since long before that
+(local-engine.js:542) -- its response carries `snippet.channelId` and nothing
+read it. One comparison, one extra quota unit.
+
+- **It is PROOF, never an attestation.** A "I own this" checkbox leaves the
+  facilitation exactly where Google found it. OAuth is the only thing here that
+  cannot be typed by the person making the claim.
+- **IT FAILS CLOSED, EVERY WAY** -- no API key, a refused lookup, a quota
+  error, a deleted or private video, a response with no channel on it. An
+  ownership claim that cannot be checked has not been proven. Same posture and
+  the same sentence as the Turnstile gate: a challenge that cannot be checked
+  has not been passed.
+- **A blank `accountId` is NOT a wildcard.** The PUBLISH path honours one as
+  "the only connection" (v3.56.0) because a record written before multi-channel
+  has one. Honoured here it would match every video on YouTube, which is the
+  whole hole being closed. Its own test.
+- **Asked at the PREFLIGHT as well as at submit**, so a link that cannot be
+  imported says so at the paste box rather than seven steps later -- and
+  deliberately OUTSIDE `sourceInfoCache`, which is keyed on the URL alone and
+  shared across every account. A verdict stored in it would hand one person's
+  answer to another.
+- **Refused before the billing hold and before the project record exists**, so
+  a refused import costs nothing and leaves nothing behind.
+- **A re-run asks again, synchronously and without the network.** The
+  authorising channel is stamped on the project (`sourceChannelId`), so
+  `retryProject` and `queueMoreClips` only have to ask whether it is STILL
+  connected -- disconnecting a channel withdraws the licence it granted, and a
+  lecture from it must stop being re-downloadable at that moment. A project
+  imported before this carries no channel, cannot be re-verified without asking
+  YouTube, and is refused with the one-paste way round it.
+- **Uploads are untouched.** A file the customer already holds does not come
+  through YouTube and raises none of this. That is also the answer for a talk
+  somebody has permission to clip but did not publish: get the file, Upload MP4.
+
+### The copy, and the privacy policy that told Google in the first place
+
+The submitted privacy policy is almost certainly how they found it -- it says,
+in the app's own words, *"Video title, duration and thumbnail image URL of a
+YouTube link you paste for clipping."* So the disclosure had to move with the
+behaviour, and now reads that the **owning channel identifier is compared
+against the channels you have connected** and the link refused otherwise. It
+also corrects a claim that had quietly stopped being true: the channel NAME is
+now shown back to the customer (in the refusal), so "reads them but does not
+store or display them" no longer covered it.
+
+Fifteen SEO claims, the public source bar, the Terms (three sections), the help
+centre, the phone shell, the onboarding hint, the invite email and the first-run
+copy all say **"a video on your own channel"** now. `test/youtube-compliance.test.mjs`
+gained a guard that the policy's claimed fields are ones the code actually asks
+for, so the list and the request cannot drift apart again.
+
+**Two design placeholders moved, and the re-import was proven byte-stable
+first**: all three generated stylesheets byte-identical, the hashed class set
+identical, two diff lines in the template being exactly the two placeholders.
+
+### WHAT THIS DOES NOT DO, said plainly
+
+**The bot-wall evasion is still there and is a SEPARATE question.**
+`import_providers.py:314` matches `"sign in to confirm"` and `"not a bot"`, and
+`:358`-`:401` rotate a random exit from a residential pool so a refused attempt
+lands on a fresh address. Google did not cite it -- their objection was
+third-party IP, which the gate answers -- but it is independently indefensible
+and it is written out in plain English in **CLAUDE.md:422-430 of a PUBLIC
+repo**. An earlier reply in this session said it "goes regardless"; that
+overstated, and the correction is the measurement: this file's own record says a
+single exit is bot-walled within the hour, so removing the pool does not degrade
+link import, it ENDS it. That is a business decision about somebody's product
+and a paid Webshare plan, not a call to make silently inside a compliance fix.
+It is Youssef's, and it is in the open items.
+
+**Every refusal is written to the NOTIFICATION DOCK's three-line clamp**, and
+that was found by looking at the render rather than by reading. The first
+version was 245 characters and the card cut it at *"...Connect that channel, or
+use Upload..."* -- the ACTIONABLE half, which is the exact fault v3.169.0 fixed
+for every other message. All eight are under 125 characters now, and the
+channel title is capped at 30 so somebody's long channel name cannot blow the
+budget. `test/youtube-ownership.test.mjs` pins the length, and the dock's own
+comment ("covers every message this app raises") stays true.
+
+**Nothing here has been through a real Google review.** The gate is proven by
+test and in a browser -- someone else's link refused with nothing created and
+no tokens held, a link on the connected channel straight into the wizard with
+its title and duration read back -- but whether it satisfies the reviewer is
+one resubmission.
 
 ## Open items
 
@@ -10119,6 +10255,15 @@ starting before the count climbs rather than after.
 *"Your app's data access is under review."* The rejection below is history and
 is kept because the two gaps it names are the ones that will be checked again.
 
+**AND IT IS UNDER REVIEW AGAINST A PRODUCT THAT HAS SINCE CHANGED.**
+The 8 Sept email refuses on a **Terms of Service and Acceptable Use
+Policy violation** -- arbitrary-video ingestion -- which no demo video and
+no scope justification can answer. **v3.181.0 is the product change that
+does** (see *A pasted YouTube link must be YOUR OWN video* above). If the
+review lands before that deploy, expect the same refusal again.
+
+
+
     Branding status     verified and being shown to users
     Data access status  under review (was: "submitted ... but it was NOT
                          APPROVED")
@@ -10158,6 +10303,24 @@ note on that page says must appear -- is Youssef's check, and it is the
 likeliest reason for a second rejection if one comes.
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
+
+0. **THE BOT-WALL EVASION — a decision only you can make, and the most urgent
+   one after the resubmission.** `worker/import_providers.py` detects YouTube's
+   "Sign in to confirm you're not a bot" wall and retries from a fresh random
+   residential exit. Google did NOT cite it (v3.181.0 answers what they did
+   cite), but it is independently indefensible, and CLAUDE.md:422-430 describes
+   it in plain English in a **public** repository.
+   * **Make the repo private.** One click, costs nothing, and it is the single
+     highest-value minute available. Git history keeps the record either way;
+     this stops it being readable and indexed.
+   * **Then choose.** Removing the pool does not degrade link import, it ENDS
+     it — this file's own measurement is that one exit is bot-walled within the
+     hour. Keeping it keeps imports working and keeps the exposure. Either is a
+     defensible business call; leaving it undecided is not. Say which and it is
+     an afternoon's work.
+   * Whichever way it goes, the customer-facing failure already points at the
+     right answer (download from YouTube Studio, Upload MP4), so nobody is left
+     stuck.
 
 1. ~~**Send the YouTube compliance reply.**~~ **SENT, AND THE REVIEW IS
    CLOSED.** Verified in Gmail on 31 Aug 2026 by reading the thread rather

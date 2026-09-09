@@ -139,7 +139,7 @@ export function nextStep(state, userId) {
   const a = activationOf(state, userId);
   if (!a.imported) {
     return { key: 'import', title: 'Start with one lecture',
-      body: 'Paste a YouTube link or upload a file, and mark the minutes worth clipping.', action: 'Import a video' };
+      body: 'Paste a link from your own channel, or upload a file, and mark the minutes worth clipping.', action: 'Import a video' };
   }
   if (!a.processed) {
     return { key: 'processing', title: 'Your lecture is being processed',

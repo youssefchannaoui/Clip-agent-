@@ -128,7 +128,7 @@ export function journey(state, userId, ctx = {}) {
     create: working ? say('Your lecture is being processed. Nothing to do while it runs.', '', '')
       : a.imported && !created ? say('That import came back with no clips. Try a different stretch of the lecture.', 'paste', 'Try another range')
       : nasheeds === 0 ? say('Start with a nasheed — every clip mixes one in, so nothing finishes without it.', 'nasheed', 'Add a nasheed')
-      : say('Paste a YouTube link or upload a file, and choose the minutes worth clipping.', 'paste', 'Paste a lecture'),
+      : say('Paste a link from your own channel, or upload a file, and choose the minutes worth clipping.', 'paste', 'Paste a lecture'),
     review: waiting === 1 ? say('One clip is waiting. Keep the ones worth posting — nothing publishes until you approve it.', 'review', 'Open the review queue')
       : waiting > 1 ? say(`${waiting} clips are waiting. Keep the ones worth posting — nothing publishes until you approve it.`, 'review', 'Open the review queue')
       : say('Watch your clips and keep the ones worth posting.', 'review', 'Open the review queue'),

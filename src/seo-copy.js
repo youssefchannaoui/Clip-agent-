@@ -22,7 +22,7 @@
 export const SEO_COPY = {
   "/tools/ai-video-clipper": {
     h1: "AI video clipper that cuts on complete moments, not fixed intervals",
-    lede: "Give it a YouTube link or an MP4, and mark the stretch worth clipping. You get back vertical clips with burned-in captions, each one waiting in a review queue for you to approve or reject.",
+    lede: "Give it a link to a video on your own YouTube channel, or an MP4, and mark the stretch worth clipping. You get back vertical clips with burned-in captions, each one waiting in a review queue for you to approve or reject.",
     sections: [
       { heading: "It cuts where the point ends",
         body: "Most of the quality in a clip comes down to where the cuts land. DeenClipped transcribes your selection with Whisper, word by word, then a self-hosted model reads that transcript, scores the candidate moments and says why it picked each one. The reasons are short and checkable: complete ending, question hook, stands alone. So a clip starts where the thought starts and ends where it lands, rather than at whatever second a fixed interval happened to fall on. The score and the reason travel with the clip, so you can judge the judgement." },
@@ -41,7 +41,7 @@ export const SEO_COPY = {
       { q: "Does it post clips automatically?",
         a: "No. Every clip waits in a review queue for a human decision. You watch the rendered file, then approve, reject or send it back. Approved clips drop into posting windows and go out to the accounts you have connected. Clips containing scripture are pushed through review no matter what automation is switched on, and that gate cannot be turned off." },
       { q: "Do I have to process the whole video?",
-        a: "No, and it would be a waste to. Paste a YouTube URL or upload an MP4 or MOV, then set a start and end time. Only that stretch is downloaded and processed, and only those minutes are charged, at one token per source minute. Thirty seconds is the shortest range. Picking three minutes out of a long lecture costs three minutes, not ninety." },
+        a: "No, and it would be a waste to. Paste a link to a video on a YouTube channel you have connected, or upload an MP4 or MOV, then set a start and end time. Only that stretch is downloaded and processed, and only those minutes are charged, at one token per source minute. Thirty seconds is the shortest range. Picking three minutes out of a long lecture costs three minutes, not ninety." },
       { q: "Can it handle Arabic, or a talk that switches languages?",
         a: "Yes. Language can be pinned to English, Arabic or Urdu, or left on auto-detect, which switches per segment instead of deciding once from the opening seconds. Arabic speech that is not scripture is captioned in Arabic with an English line beneath it. Recited Quran is matched against a 6,236-ayah corpus and rendered as the ayah with its translation, set in Amiri." },
     ],
@@ -51,7 +51,7 @@ export const SEO_COPY = {
 
   "/tools/podcast-clip-generator": {
     h1: "Podcast clip generator for two-hour conversations",
-    lede: "Give it an episode — a YouTube link or an MP4 — and the stretch worth clipping. You get back captioned vertical clips, cut on complete moments, each one waiting in a review queue for your decision.",
+    lede: "Give it an episode — a link to a video on your own YouTube channel, or an MP4 — and the stretch worth clipping. You get back captioned vertical clips, cut on complete moments, each one waiting in a review queue for your decision.",
     sections: [
       { heading: "Two hours of talking, nine minutes worth posting",
         body: "DeenClipped transcribes the episode with Whisper, keeping word-level timings, then a self-hosted model reads that transcript and scores candidate moments. It cuts on complete moments rather than fixed intervals, so a clip starts where the thought starts and ends where it lands. Each candidate comes back with short reasons like 'complete ending', 'question hook' or 'stands alone', so you can see why it was picked before watching it. That last one carries the most weight in a long conversation. A good answer that depends on a question asked forty minutes earlier is not a clip." },
@@ -66,7 +66,7 @@ export const SEO_COPY = {
     ],
     faqs: [
       { q: "Can I use a YouTube link, or do I have to upload the file?",
-        a: "Both work. Paste a YouTube URL or upload an MP4 or MOV. Either way you choose a start and an end time first, and only that stretch is downloaded and processed — the rest of the episode is never fetched. The minimum selectable range is thirty seconds." },
+        a: "Both work, with one rule on links: the video has to be on a YouTube channel you have connected to DeenClipped. Connecting the channel is what proves the video is yours, so DeenClipped is never the thing that downloads somebody else’s video. For anything you did not publish yourself — a talk you have permission to clip, a recording someone sent you — upload the MP4 or MOV instead. Either way you choose a start and an end time first, and only that stretch is downloaded and processed. The minimum selectable range is thirty seconds." },
       { q: "Does it add captions automatically?",
         a: "Yes, and they are burned into the video, not handed to you as a subtitle file to upload separately. Transcription produces word-level timings and libass renders against them, so the words land with the speech. You choose between word-by-word, karaoke, phrase and stacked-line modes, and one of five templates. Arabic renders in Amiri with an English line beneath it." },
       { q: "Will it post clips to TikTok and YouTube for me?",
@@ -107,7 +107,7 @@ export const SEO_COPY = {
 
   "/tools/ai-caption-generator": {
     h1: "An AI caption generator that burns captions into the clip",
-    lede: "Paste a YouTube link or upload an MP4. You get back vertical clips with the captions rendered into the video itself, timed to each word as it was spoken.",
+    lede: "Paste a link to a video on your own YouTube channel, or upload an MP4. You get back vertical clips with the captions rendered into the video itself, timed to each word as it was spoken.",
     sections: [
       { heading: "The words go into the picture, not into a sidecar file",
         body: "Ask most tools for subtitles and you get a transcript file back, with the job of putting it on the video still yours. DeenClipped renders the words into the picture itself with libass, on the same pass that cuts and frames the clip. What you approve in review is the exact file that posts — same words, same timing, same place in the frame. Clips come out vertical 9:16, cropped from a 16:9 source by face detection rather than a fixed centre crop." },
@@ -128,7 +128,7 @@ export const SEO_COPY = {
       { q: "How much does the AI caption generator cost?",
         a: "One token is one source minute, and you are charged for the stretch you select rather than the whole video — pick three minutes of a ninety-minute lecture and you pay three. Basic is free: 40 tokens over a seven-day trial. Pro and Studio are paid, billed weekly, monthly or yearly. Re-rendering a clip in a different caption style costs nothing further, and a failed render is never charged." },
       { q: "Do I have to cut the clip first, or can I give it a full lecture?",
-        a: "Give it the full thing. Paste a YouTube URL or upload an MP4 or MOV, then set a start and end time — thirty seconds is the shortest range you can select. Only that stretch is downloaded and processed. Inside it, moments are scored and cut where a point actually finishes rather than at fixed intervals, then framed vertically and captioned." },
+        a: "Give it the full thing. Paste a link to a video on a channel you have connected, or upload an MP4 or MOV, then set a start and end time — thirty seconds is the shortest range you can select. Only that stretch is downloaded and processed. Inside it, moments are scored and cut where a point actually finishes rather than at fixed intervals, then framed vertically and captioned." },
     ],
     ctaLabel: "Caption a clip free",
   },
@@ -140,7 +140,7 @@ export const SEO_COPY = {
       { heading: "A Short is a format, not a setting",
         body: "YouTube decides something is a Short from the file itself: vertical or square, and under three minutes. There is no checkbox. Upload a 9:16 video under that length to your channel and it enters the Shorts shelf; upload the same content at 16:9 and it is an ordinary video that nobody swipes past. This is why the crop matters more here than the caption style — get the aspect ratio wrong and the clip is not in the format at all, however good it is." },
       { heading: "Clipping your own channel is the cleanest rights position there is",
-        body: "Most short-form workflows raise an awkward question about whose footage it is. Taking Shorts from a long video on your own channel does not. You own both, the Short points back at the source, and YouTube actively rewards channels that do this — a Short that sends people to the full video is doing what the platform wants. If you are clipping someone ELSE’S talk, that is a different conversation and the answer is to ask them first." },
+        body: "Most short-form workflows raise an awkward question about whose footage it is. Taking Shorts from a long video on your own channel does not. You own both, the Short points back at the source, and YouTube actively rewards channels that do this — a Short that sends people to the full video is doing what the platform wants. It is also the only thing DeenClipped will import from a link: paste one and it checks, through your connected channel, that the video is yours. If you are clipping someone ELSE’S talk, ask them first — and then upload the file, because DeenClipped will not fetch it from YouTube on your behalf." },
       { heading: "One thing to know before connecting: a clip can arrive private",
         body: "DeenClipped uploads to YouTube ask for public, and the code names `privacyStatus: public` explicitly. Google can still override that and file the video as private, in which case you flip it to public in YouTube Studio — one extra click per clip. The compliance review that was causing this closed in August with no further action required, so it should no longer happen, but we would rather you read the possibility here than meet it unannounced after paying." },
       { heading: "What the clip looks like when it arrives",
@@ -219,7 +219,7 @@ export const SEO_COPY = {
 
   "/islamic-video-clipper": {
     h1: "An Islamic video clipper that knows what it is captioning",
-    lede: "Give it a lecture — a YouTube link or an MP4 — and the minutes of it worth clipping. You get back vertical clips with burned-in captions, recited ayat matched to the Quran and set with their translation, and a review queue where nothing leaves until you say so.",
+    lede: "Give it a lecture — a link to a video on your own YouTube channel, or an MP4 — and the minutes of it worth clipping. You get back vertical clips with burned-in captions, recited ayat matched to the Quran and set with their translation, and a review queue where nothing leaves until you say so.",
     sections: [
       { heading: "Recited ayat are matched, not just transcribed",
         body: "The hard part of an Islamic video clipper is not the clipping. Whisper hears sound, and for recitation that is not enough — a phonetic transcript of an ayah is not the ayah. Recited Quran is matched against a corpus of all 6,236 ayat, and the clip carries the verse itself, set in the Amiri typeface, with its translation on the line beneath. Captions are burned in with libass and timed to the words as spoken, so the text keeps pace with the reciter. The Quran Recitation template goes further and captions scripture and nothing else, so no half-heard aside sits under a verse." },
@@ -228,7 +228,7 @@ export const SEO_COPY = {
       { heading: "Scripture cannot leave without a person seeing it",
         body: "Every clip lands in a review queue and waits for a human decision. Nothing publishes on its own. Clips containing scripture carry an extra flag, QUOTE_RISK, that forces review and never bypasses — not even under automatic approval. The reviewer watches the rendered clip, the same file that would post, with its score and the model's short reasons beside it: complete ending, question hook, stands alone. Approve, reject or send it back, with keyboard shortcuts for a long queue. A clip that needs a trim or a section cut out of the middle opens in the editor from the same queue, and Save renders the cut." },
       { heading: "What happens between the link and the first clip",
-        body: "Give it a YouTube URL or an MP4, then pick the start and end of the stretch worth clipping — thirty seconds minimum. Only that stretch is downloaded and processed, so a three-minute selection from a ninety-minute lecture costs three minutes. Whisper transcribes it with word-level timings. A self-hosted Ollama model scores candidate moments and returns its reasons, and cuts land on complete moments rather than fixed intervals. Face detection crops 16:9 to vertical 9:16, a nasheed is mixed under the speech and ducked beneath it, and captions burn in word-by-word, karaoke, phrase or stacked, across five templates." },
+        body: "Give it a link to a video on a channel you have connected, or an MP4, then pick the start and end of the stretch worth clipping — thirty seconds minimum. Only that stretch is downloaded and processed, so a three-minute selection from a ninety-minute lecture costs three minutes. Whisper transcribes it with word-level timings. A self-hosted Ollama model scores candidate moments and returns its reasons, and cuts land on complete moments rather than fixed intervals. Face detection crops 16:9 to vertical 9:16, a nasheed is mixed under the speech and ducked beneath it, and captions burn in word-by-word, karaoke, phrase or stacked, across five templates." },
       { heading: "Approved clips go out on your own channels",
         body: "An approved clip is scheduled into posting windows — four a day, eight on Studio — and published to the YouTube, TikTok, Instagram and Facebook accounts you have connected. Each destination reports its own state, so a clip that went live on YouTube is not filed as a failure because TikTok refused it. What you will not find here are view counts or watch time: no connected platform sends that data back, and there is no dashboard here inventing it." },
     ],
@@ -247,7 +247,7 @@ export const SEO_COPY = {
 
   "/islamic-lecture-clipper": {
     h1: "An Islamic lecture clipper that never cuts a point in half",
-    lede: "Give it a YouTube link or an MP4 and the minutes of the talk worth clipping. You get back vertical clips with burned-in captions, each cut on a complete moment, waiting in a review queue for your decision.",
+    lede: "Give it a link to a video on your own YouTube channel, or an MP4, and the minutes of the talk worth clipping. You get back vertical clips with burned-in captions, each cut on a complete moment, waiting in a review queue for your decision.",
     sections: [
       { heading: "Why a khutbah breaks when you cut it by the clock",
         body: "Most clippers slice on a timer: sixty seconds, then the next sixty. A reminder does not work that way. The condition arrives before the ruling and the exception after it, so a cut in the wrong place leaves a half-sentence saying something the speaker never said. DeenClipped transcribes the talk with Whisper at word level, then a self-hosted model scores candidate moments and gives its reason — complete ending, question hook, stands alone. Clips are cut on those moments. Nothing is cut to fill an interval." },
@@ -266,7 +266,7 @@ export const SEO_COPY = {
       { q: "What happens when the speaker recites Quran?",
         a: "The recitation is matched against the full corpus of 6,236 ayat and rendered as the ayah with its translation, set in Amiri, rather than as a phonetic guess at the Arabic. The clip is then flagged QUOTE_RISK and forced into human review, so you read the verse on the finished frame before it can go anywhere. The Quran Recitation template captions the scripture and nothing else." },
       { q: "How much of the lecture am I charged for?",
-        a: "Only the stretch you select. Paste a YouTube URL or upload an MP4 or MOV, choose a start and end time, and just those minutes are downloaded, processed and billed, at one token per source minute. Thirty seconds is the minimum. Cutting more clips from the same lecture later costs nothing extra, and clips you reject before export, like failed renders, are never charged. Basic is free: forty tokens over a seven-day trial." },
+        a: "Only the stretch you select. Paste a link to a video on a channel you have connected, or upload an MP4 or MOV, choose a start and end time, and just those minutes are downloaded, processed and billed, at one token per source minute. Thirty seconds is the minimum. Cutting more clips from the same lecture later costs nothing extra, and clips you reject before export, like failed renders, are never charged. Basic is free: forty tokens over a seven-day trial." },
       { q: "Does it post the clips automatically?",
         a: "No. Nothing publishes without a human approval — that is the point of the review queue. Once you approve a clip it takes a posting window, four a day and eight on Studio, and goes to your connected YouTube, TikTok, Instagram or Facebook account. Clips containing scripture carry a further gate that automation cannot skip, whatever else is switched on." },
     ],
@@ -307,7 +307,7 @@ export const SEO_COPY = {
     lede: "You give it a lecture and the minutes you want out of it; you get back vertical clips with captions burnt in, each one waiting for your decision. This is how DeenClipped works, in the order it actually happens.",
     sections: [
       { heading: "You pick the source, and the exact minutes",
-        body: "Paste a YouTube link or upload an MP4 or MOV. Then set a start and an end time; the shortest range you can select is 30 seconds. Only that stretch is downloaded and processed, so taking three minutes out of a ninety-minute lecture costs three minutes of work rather than ninety. Billing follows the same line. One token is one source minute, and you are charged for the range you picked, not for the length of the video you picked it from." },
+        body: "Paste a link to a video on your own YouTube channel, or upload an MP4 or MOV. Then set a start and an end time; the shortest range you can select is 30 seconds. Only that stretch is downloaded and processed, so taking three minutes out of a ninety-minute lecture costs three minutes of work rather than ninety. Billing follows the same line. One token is one source minute, and you are charged for the range you picked, not for the length of the video you picked it from." },
       { heading: "Transcription first, then a search for complete moments",
         body: "Whisper transcribes the selected audio with word-level timings. You can pin the language to English, Arabic or Urdu, or leave it on auto-detect, which is multilingual and switches per segment, so an English talk containing Arabic recitation is handled rather than flattened into one language. A self-hosted Ollama model then reads the transcript and scores candidate moments, returning short reasons: complete ending, question hook, stands alone. Clips are cut on those complete moments, not at fixed intervals, so a point finishes before the clip does." },
       { heading: "Framing, burnt-in captions and a nasheed underneath",
@@ -360,10 +360,10 @@ export const SEO_COPY = {
 
   "/about": {
     h1: "About DeenClipped, and why nothing posts without you",
-    lede: "DeenClipped turns long Islamic lectures into short vertical clips with captions burned in. You give it a YouTube link or an MP4 and the stretch worth using; it gives you finished clips waiting in a review queue, where nothing leaves until you approve it.",
+    lede: "DeenClipped turns long Islamic lectures into short vertical clips with captions burned in. You give it a link to a video on your own YouTube channel, or an MP4, and the stretch worth using; it gives you finished clips waiting in a review queue, where nothing leaves until you approve it.",
     sections: [
       { heading: "What DeenClipped actually does",
-        body: "You import a lecture from a YouTube URL or upload an MP4, then pick the start and end of the stretch worth clipping. Only that stretch is downloaded and processed. Whisper transcribes it with word-level timings. A self-hosted model reads the transcript and scores candidate moments, returning short reasons such as complete ending, question hook or stands alone, so clips land on finished thoughts rather than fixed intervals. Each one is cropped from 16:9 to vertical using face detection, given a nasheed ducked under the speech, and captioned with the words burned into the picture." },
+        body: "You import a lecture from a link to a video on a channel you have connected, or upload an MP4, then pick the start and end of the stretch worth clipping. Only that stretch is downloaded and processed. Whisper transcribes it with word-level timings. A self-hosted model reads the transcript and scores candidate moments, returning short reasons such as complete ending, question hook or stands alone, so clips land on finished thoughts rather than fixed intervals. Each one is cropped from 16:9 to vertical using face detection, given a nasheed ducked under the speech, and captioned with the words burned into the picture." },
       { heading: "Who it is for, and who it is not",
         body: "It is built for people who publish Islamic talks: khutbahs, reminders, halaqas, tafsir series and recitation. If you already have hours recorded and no time to sit through them hunting for the parts that stand alone, that is the problem this solves. It assumes you care what goes out under your name, so it is a poor fit for anyone who wants a queue filled and never looked at. Clips reach the review queue, not your channel, and a clip carrying scripture waits for you whatever else is switched on." },
       { heading: "Why every clip waits for a human",
@@ -375,7 +375,7 @@ export const SEO_COPY = {
     ],
     faqs: [
       { q: "What is DeenClipped?",
-        a: "DeenClipped turns long Islamic lectures into short vertical clips with captions burned in, then holds every clip in a review queue until a person approves it. You import from a YouTube URL or upload an MP4, choose the stretch to process, and get finished clips you can approve, reject, schedule and publish to accounts you have connected yourself." },
+        a: "DeenClipped turns long Islamic lectures into short vertical clips with captions burned in, then holds every clip in a review queue until a person approves it. You import from a link to a video on a channel you have connected, or upload an MP4, choose the stretch to process, and get finished clips you can approve, reject, schedule and publish to accounts you have connected yourself." },
       { q: "Does DeenClipped post to social media automatically?",
         a: "No. Every clip lands in a review queue and waits for a decision first. Once approved it can be scheduled into posting windows, four a day or eight on Studio, and sent to YouTube, TikTok, Instagram and Facebook accounts you connect yourself. Each destination reports its own state, so one platform refusing a post does not mark the whole clip failed." },
       { q: "How does DeenClipped handle Quran recitation in a clip?",

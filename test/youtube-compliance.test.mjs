@@ -19,6 +19,7 @@ const retention = await import('../src/youtube-retention.js');
 const store = await import('../src/store.js');
 const marketing = fs.readFileSync(path.join(process.cwd(), 'src/marketing.js'), 'utf8');
 const engine = fs.readFileSync(path.join(process.cwd(), 'src/local-engine.js'), 'utf8');
+const ownership = fs.readFileSync(path.join(process.cwd(), 'src/youtube-ownership.js'), 'utf8');
 
 test.after(() => {
   // Guarded: a leftover temp directory on a CI runner is harmless; a red
@@ -93,13 +94,32 @@ test('III.A.2d: the privacy policy lists the API Data actually accessed', () => 
   // including API Data, the client accesses, collects, stores and uses.
   for (const item of [
     'Channel identifier, channel name and channel profile image',
-    'Video title, duration and thumbnail image URL',
+    // The owning channel id joined this list when link import became gated on
+    // it (src/youtube-ownership.js). It is API Data the client now reads AND
+    // acts on, so III.A.2d requires the policy to say so.
+    'Video title, duration, thumbnail image URL and owning channel identifier',
     'video identifier of a clip DeenClipped uploaded',
     'youtube.upload',
     'youtube.readonly',
   ]) {
     assert.ok(marketing.includes(item), `the policy must state: ${item}`);
   }
+  // ...and to say what it is USED for, which is the half a bare list omits.
+  assert.match(marketing, /compared against the channels you have connected/);
+});
+
+test('III.A.2d: every field the policy claims is read is one the code asks for', () => {
+  // The list above is only honest while videos.list actually returns it. parts
+  // snippet + contentDetails carry the title, duration, thumbnail AND
+  // snippet.channelId, so the claim and the request cannot drift apart.
+  const parts = (engine.match(/youtube\/v3\/videos\?part=([^&`]*)/g) || [])
+    .concat(ownership.match(/youtube\/v3\/videos\?part=([^&`]*)/g) || []);
+  assert.ok(parts.length, 'no videos.list request found to check the claim against');
+  for (const request of parts) {
+    assert.match(request, /snippet/, `videos.list must read snippet: ${request}`);
+  }
+  // And the gate reads the channel off that snippet rather than anywhere else.
+  assert.match(ownership, /snippet\?\.channelId/);
 });
 
 test('III.A.2d: the policy states the retention period and the statistics position', () => {

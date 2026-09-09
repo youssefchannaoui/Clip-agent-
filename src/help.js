@@ -42,7 +42,7 @@ export const CATEGORIES = Object.freeze([
         image: 'home.webp',
         imageAlt: 'The DeenClipped home screen',
         steps: [
-          'You give it a lecture — a YouTube link, or an MP4 you upload.',
+          'You give it a lecture — a link to a video on your own YouTube channel, or an MP4 you upload.',
           'It transcribes the speech, finds the moments worth clipping, and renders each one as a 9:16 vertical video with burned-in captions.',
           'You review every clip and approve the ones you want. Nothing is published without you.',
           'Approved clips are scheduled into your posting times and sent to your connected accounts.',
@@ -59,7 +59,7 @@ export const CATEGORIES = Object.freeze([
         image: 'library.webp',
         imageAlt: 'The lecture library, where imports start',
         steps: [
-          'Open **Library** and paste a YouTube link, or upload an MP4.',
+          'Open **Library** and paste a link to a video on your own channel, or upload an MP4.',
           'Pick how much of the lecture to use. Only the part you select is downloaded and charged for.',
           'Wait for it to render. You will see the stage it is at — transcribing, scoring, rendering.',
           'Open **Review** and watch each clip. Press A to approve, X to reject.',
@@ -79,12 +79,13 @@ export const CATEGORIES = Object.freeze([
     articles: [
       {
         id: 'paste-a-link',
-        title: 'Import from a YouTube link',
-        summary: 'Paste the URL, choose the stretch you want, and only that stretch is fetched.',
+        title: 'Import a link from your own channel',
+        summary: 'Paste a link to one of your own videos, choose the stretch you want, and only that stretch is fetched.',
         image: 'library.webp',
         imageAlt: 'Pasting a lecture link into the library',
         steps: [
           'Open **Library**.',
+          'Connect the YouTube channel the video is on first, under **Connections**. A link is only accepted for a channel you have connected — that is how DeenClipped confirms the video is yours.',
           'Paste the full YouTube URL into the import box.',
           'The length and title are read back to you so you can check it is the right lecture.',
           'Set the start and end of the part you want. Leave it alone to use the whole thing.',
@@ -92,6 +93,7 @@ export const CATEGORIES = Object.freeze([
         ],
         notes: [
           'Choosing three minutes of a ninety-minute lecture downloads three minutes, not the whole file.',
+          'A link to somebody else\u2019s video is refused, and the message says whose channel it is on. To clip a talk you have permission to use but did not publish, get the file and use Upload MP4 instead.',
           'You are charged by SOURCE minutes — the length of what you selected, not the number of clips it produces.',
         ],
       },

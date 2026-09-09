@@ -212,7 +212,11 @@ test('Home carries the create form, the setup list, review, schedule, lectures, 
   // The phone printed it a second time as a section label until v3.156.0, and
   // the property this line protects -- the live-work slot is on Home -- is
   // asserted by the slot's own id.
-  for (const needle of ['Paste a YouTube link', 'Start job', 'Upload MP4', 'Posting to', 'id="dcmLiveSlot"',
+  // NOT the paste field's placeholder either, for the same reason: the wording
+  // moved when link import became channel-gated (src/youtube-ownership.js), and
+  // the property this line protects -- the paste field is on Home -- is
+  // asserted by data-tour="paste" below.
+  for (const needle of ['Start job', 'Upload MP4', 'Posting to', 'id="dcmLiveSlot"',
     'Needs your review', 'Scheduled next', 'Continue working', 'This week', 'clips posted', 'held for review', 'median score', 'worker time', 'Recent activity',
     'data-tour="paste"', 'data-tour="start"', 'data-tour="rail"']) {
     assert.ok(r.html.includes(needle), 'home is missing: ' + needle);

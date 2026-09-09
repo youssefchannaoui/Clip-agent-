@@ -17,6 +17,7 @@ import * as billing from './billing.js';
 import * as vizard from './vizard.js';
 import * as workerClient from './worker-client.js';
 import { parseYouTubeUrl, assertStorageObjectKey } from './video-import.js';
+import * as youtubeOwnership from './youtube-ownership.js';
 import * as objectStorage from './object-storage.js';
 import * as backgroundsLib from './backgrounds.js';
 
@@ -752,6 +753,12 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   }
 
   const { value, template, tracks, backgroundMode, background, introSeconds } = validateSubmission(url, user, options);
+  // A pasted YouTube link must be a video on a channel this account has
+  // connected. See src/youtube-ownership.js for why -- it is the whole answer
+  // to Google's 8 Sept 2026 verification refusal, and it is checked HERE,
+  // before the billing hold and before the project record exists, so a refused
+  // import costs nothing and leaves nothing behind. Uploads never reach it.
+  const ownedChannel = youtubeOwnership.isYouTubeLink(value) ? await youtubeOwnership.assertOwnsVideo(user, value) : null;
   billing.assertCanStartProject(user);
   const sourceRange = cleanSourceRange(options);
   const sourceMeta = Array.isArray(options?.sourceMeta) ? options.sourceMeta.find(item => String(item?.url || '') === value) || options.sourceMeta[0] : (options?.sourceMeta || {});
@@ -799,6 +806,10 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     // ever NARROWS the account's settings -- see enabledTargetsForClip.
     publishTo: Array.isArray(options.publishTo) ? options.publishTo.map(String) : null,
     sourceKind: options.sourceKind || 'link', originalFileName: options.originalFileName || null,
+    // The channel that authorised this import, so a later re-run can ask
+    // whether it is still connected without another API call. Null for an
+    // upload, which needs no authorisation from anybody.
+    sourceChannelId: ownedChannel?.channelId || null,
     uploadedInputFile: options.uploadedInputFile || null, sourceObjectKey: options.sourceKind === 'object_storage' ? value : null,
   }, user.id);
   state.projects.unshift(project);
@@ -2014,6 +2025,9 @@ export function queueMoreClips(projectId, requestedCount = 8) {
   if (project.moreJob && ['queued', 'processing'].includes(project.moreJob.status)) {
     throw new Error('This lecture is already generating more clips.');
   }
+  // A more-clips run can re-fetch the source, so it asks the same question a
+  // retry does: is the channel that authorised this import still connected?
+  youtubeOwnership.assertStillOwns(ownerOfRecord(project), project);
   // A remote lecture with a link can be fetched again; only one with neither an
   // upload nor a link is genuinely stuck.
   if ((!project.sourceFile || !fs.existsSync(project.sourceFile))
@@ -2516,6 +2530,9 @@ export function retryProject(projectId) {
   // The same condition the dashboard uses to offer Retry. Without it a finished
   // project could be re-run: every clip imported a second time and charged again.
   if (!['failed', 'cancelled'].includes(project.status) && !project.error) throw new Error('Only a failed project can be retried.');
+  // A retry re-downloads the source, so the licence has to still hold. See
+  // src/youtube-ownership.js -- disconnecting a channel withdraws it.
+  youtubeOwnership.assertStillOwns(ownerOfRecord(project), project);
   // The hold was released when the project failed; a rerun needs a new one, or
   // the work runs with nothing held against the account.
   const retryEstimate = project.sourceEndSec ? project.sourceEndSec - (project.sourceStartSec || 0) : Number(project.sourceDurationSec || 0);
