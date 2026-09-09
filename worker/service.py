@@ -83,6 +83,21 @@ MIN_FREE_BYTES = max(1, int(os.getenv("WORKER_MIN_FREE_GB", "10"))) * 1024**3
 # The app treats five minutes of an unchanged status signature as a hung job, so
 # the import has to prove liveness well inside that window.
 IMPORT_HEARTBEAT_SECONDS = 15
+# How often a running import may rewrite its status. The heartbeat above proves
+# liveness and 15s is plenty for that; a PROGRESS BAR is a different job. The
+# app polls the worker every 5s and the browser repaints every 2s while work is
+# in flight, so at 15s the megabyte count moved once per three or four polls and
+# every number on screen sat still in between -- which is what "I think it's
+# stuck" was. The write is one small JSON file under a lock; at 2s with three
+# concurrent jobs that is 1.5 writes a second.
+IMPORT_PROGRESS_SECONDS = 2.0
+# The time constant of the download's smoothed speed, in seconds. A whole-run
+# average is stable and wrong -- it cannot notice the proxy pool handing over to
+# a faster exit, so the ETA it feeds keeps quoting the first minute's speed for
+# the whole import. A short window is right and jumps about. 30s reacts inside
+# half a minute and does not lurch on one slow chunk, which is the "it can move
+# up and down, just not crazily" this is aiming at.
+DOWNLOAD_RATE_TAU_SECONDS = 30.0
 
 JOB_TTL_SECONDS = max(3600, int(os.getenv("WORKER_TEMP_TTL_HOURS", "24")) * 3600)
 # A restart is a RESUME (JobStore.recover), and this is how many restarts one
@@ -1458,16 +1473,37 @@ class Processor:
         last = None
         last_note = ""
         started = time.monotonic()
+        # The smoothed download speed, and the sample it was last updated from.
+        # See DOWNLOAD_RATE_TAU_SECONDS for why this is not a whole-run average.
+        rate: float | None = None
+        sampled_at = started
+        sampled_bytes = 0
 
         def pulse(done_bytes: int = 0, total_bytes: int = 0, note: str = "") -> bool:
-            nonlocal last, last_note
+            nonlocal last, last_note, rate, sampled_at, sampled_bytes
             now = time.monotonic()
+            # Sampled on EVERY call, not only the ones that pass the throttle:
+            # the speed is a measurement and throwing four fifths of the
+            # measurements away makes it noisier, not cheaper.
+            if done_bytes and now - sampled_at >= 1.0:
+                moved = max(0, int(done_bytes) - sampled_bytes)
+                gap = now - sampled_at
+                instant = moved / gap
+                if rate is None:
+                    rate = instant
+                else:
+                    # Time-weighted, so the smoothing does not depend on how
+                    # often this happens to be called.
+                    weight = 1.0 - math.exp(-gap / DOWNLOAD_RATE_TAU_SECONDS)
+                    rate = rate + weight * (instant - rate)
+                sampled_at = now
+                sampled_bytes = int(done_bytes)
             # A changed phase is written immediately rather than waiting for the
             # next beat. The throttle exists to stop a fast download rewriting
             # the status file hundreds of times a second -- not to withhold the
             # one line that tells the customer what the wait is actually for.
-            moved = note and note != last_note
-            if last is None or now - last >= IMPORT_HEARTBEAT_SECONDS or moved:
+            changed_phase = note and note != last_note
+            if last is None or now - last >= IMPORT_PROGRESS_SECONDS or changed_phase:
                 last = now
                 # Turn bytes into something the customer can read. The import
                 # occupies 3-8% of the job, so the download maps onto that band
@@ -1489,12 +1525,39 @@ class Processor:
                     fields["bytesDone"] = int(done_bytes)
                     if total_bytes:
                         fields["bytesTotal"] = int(total_bytes)
+                # The measured speed goes out whether or not a total is known.
+                # It is the ONLY number that is always available, and on a
+                # download with no denominator it is the whole of the proof
+                # that something is still happening.
+                if rate is not None and rate > 0:
+                    fields["bytesPerSec"] = int(rate)
+                elapsed = now - started
                 if total_bytes and done_bytes:
                     fraction = max(0.0, min(1.0, done_bytes / total_bytes))
+                    # THE FRACTION TRAVELS, rather than being reverse-engineered
+                    # from the percentage. The import owns five points of the
+                    # global bar, so a band-derived fraction has five steps in
+                    # it -- a quarter-hour download would advance the step
+                    # percentage five times. This is exact.
+                    fields["stageFraction"] = round(fraction, 4)
                     fields["progress"] = int(round(3 + fraction * 5))
-                    elapsed = now - started
-                    if fraction > 0.02 and elapsed > 2:
+                    # From the CURRENT speed over what is left, not from the
+                    # whole run's average: a download that has just sped up
+                    # should stop quoting the minute it spent slow.
+                    if rate and rate > 0 and elapsed > 3:
+                        fields["etaSec"] = round(max(0.0, (total_bytes - done_bytes) / rate), 1)
+                    elif fraction > 0.02 and elapsed > 2:
                         fields["etaSec"] = round((elapsed / fraction) - elapsed, 1)
+                elif done_bytes:
+                    # NO TOTAL, AND THIS IS THE CASE THAT WAS BROKEN. Every one
+                    # of these fields used to be gated on knowing the total, so
+                    # a download with no Content-Length reported bytes climbing
+                    # beside a percentage pinned at zero and an ETA that never
+                    # moved -- the app had nothing to move them WITH. There is
+                    # no honest byte ETA without a denominator, so none is sent
+                    # and the app's own pipeline model owns the estimate; what
+                    # is sent is the speed, so the wait is visibly alive.
+                    fields["etaSec"] = None
                 # A vanished job must still cancel cleanly rather than raise.
                 try:
                     self.store.update(job_id, **fields)

@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1960 JS + 857 Python**
+- `npm test` and `npm run check` must pass. Currently **1960 JS + 859 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9781,6 +9781,100 @@ message here is ours, so what is measured is the loop, the wait and the
 rotation -- not YouTube's behaviour under a real block. That last step cannot
 be commanded, and the app's own five-minute retry sits behind these rounds
 either way.
+
+## A CLIENT THAT COULD NOT SERVE THE FORMAT KILLED FETCHABLE IMPORTS (v3.175.0, 9 Sept 2026)
+
+**Found on the box by the injected-refusal probe, on its second run**, which
+is the whole reason that probe exists. Run 34299748962: the control fetched
+the video in 12.7s, the injected run rotated on, reached a client that
+answered
+
+    ERROR: [youtube] vrZOeod3jdE: Requested format is not available.
+
+and the provider RAISED **"YouTube would not release this video"** -- throwing
+away the remaining rounds on a lecture it had downloaded thirty seconds
+earlier.
+
+- **`_looks_blocked` is False for that message**, so the loop took the
+  not-a-block branch, and on the full plan that branch RAISES. Every client
+  offers a different format set and the selector is
+  `bv*[ext=mp4][height<=1080]+ba[ext=m4a]`, so it simply does not resolve on
+  some of them. **That is a fact about the client, not about the video** --
+  and the rotation exists precisely so the next one gets its turn.
+- **THE WORDING MADE IT WORSE THAN THE CONTROL FLOW.** "YouTube would not
+  release this video" is the sentence v3.174.0 introduced so the app could
+  tell a permanent refusal from a transient one -- `transientImport` does NOT
+  match it. So a format fault killed the rounds AND switched off the app's
+  five-minute auto-retry behind them. Both layers of the fortnight's retry
+  work, defeated by one client's format list.
+- **It is reachable without any injection.** The rotation runs whenever an
+  earlier client is blocked, which is the ordinary state of a walled pool
+  address -- so client one blocked plus client two short of the format is a
+  dead import on a perfectly fetchable lecture.
+- **`_CLIENT_FAULT_SIGNS` is deliberately its own category, not an addition to
+  `_BLOCK_SIGNS`.** A block is a claim about the address the request came
+  from, and it is what `_download_failure` tells the customer; a format one
+  client does not carry is neither. Folding them together would have fixed the
+  control flow by making the refusal message wrong.
+- The cost of being wrong in the new direction is bounded and worth it: if
+  every client genuinely cannot serve a format, the import now spends its
+  rounds before failing rather than failing at once -- against the old
+  behaviour, which failed permanently on a video that was fine.
+
+Two tests drive it against the fake yt-dlp -- a rotation carrying on past a
+format fault and importing, and every client failing that way never producing
+the permanent wording -- and both were proven red against the shipped code.
+
+### The FOURTEENTH source-string test, and it broke on this fix
+
+`rerender-source` pinned the literal `if not _looks_blocked(message):`. The
+guard gained one exclusion and the test went red against a change that
+strictly improves behaviour -- exactly as its own comment records happening to
+it once already ("thirteenth time in this repo"). It pins the SHAPE now: a
+raise guarded by the block check, and an exhausted rotation as its own branch,
+with the exclusions free to grow. Re-proven red by removing the guard.
+
+## THE RENDER LANES ARE MEASURED NOW, AND THE PHASE THAT MATTERS MOVED (v3.175.0)
+
+`project.timings` shipped in v3.77.0 for exactly this decision and **nothing
+ever printed it**, so the box rescale and the lane count were both settled by
+argument while the measurement sat unread on the box. Diagnose prints it now,
+and the first finished lecture answered:
+
+    total 1269s -- import 0s (0%)  audio 2s (0%)
+                   transcribe 531s (42%)  score 286s (23%)  render 450s (35%)
+    12 clips, so 38s a clip rendered
+
+against the pre-lane reading v3.173.0 was built from:
+
+    total 1113s -- transcribe 331.9  score 203.0  render 577.3
+    9 clips, so 64s a clip rendered
+
+- **38s a clip against 64s -- the lanes are running.** A serial fallback would
+  show no change at all, so this is the one number that proves the pool is
+  really parallel on the box rather than in a test.
+- **NOT a controlled A/B, and saying so matters.** Different lecture,
+  different clip count, and the box now runs `medium` and `qwen3:4b` where it
+  ran `small` and `qwen3:1.7b`. The per-clip render figure is the half that is
+  roughly comparable; the totals are not.
+- **`RENDER_THREADS_PER_LANE = 3` is settled at 2 lanes on this box, and the
+  arithmetic is why.** v3.173.0 measured one ffmpeg at 2.8 of 8 cores, so two
+  lanes is ~5.6 and a third would ask for ~8.4 of 8 -- over the machine, into
+  context switching. Leave it.
+- **The phase worth attacking is no longer the render.** Transcribe is 42% and
+  Whisper does not scale past ~3.5 cores, so it is bounded by the model rather
+  than by the code; score is 23% on a single Ollama slot. Neither is a lane
+  count. The next real lever on total time is the same one this file already
+  names -- hardware -- not more render parallelism.
+
+**The diagnose reader had the WRONG NESTING and its test had the same wrong
+shape.** `upload_result` returns `{"project": ..., "clips": ...}` with the
+clock hung off the project -- which is why this file has always called it
+`project.timings` -- and the first cut read `result["timings"]`, printing
+nothing while the job looked perfectly healthy. The test passed because the
+FIXTURE was seeded the same wrong way. **A fixture that does not match what
+production writes tests the reader against itself**; it is seeded from
+`upload_result`'s real shape now, and the old reader turns it red.
 
 ## Open items
 

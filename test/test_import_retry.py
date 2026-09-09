@@ -67,6 +67,9 @@ def fake_yt_dlp():
 BLOCKED = "ERROR: unable to download video data: HTTP Error 403: Forbidden"
 # A video that is genuinely gone answers the same way on every client, for ever.
 GONE = "ERROR: [youtube] abc: Private video. Sign in if you've been granted access"
+# What a client whose format set does not carry the selector answers. Verbatim
+# from the box, run 34299748962, where it killed a fetchable import outright.
+FORMAT = "ERROR: [youtube] abc: Requested format is not available. Use --list-formats for a list of available formats"
 
 
 class RetryTests(unittest.TestCase):
@@ -109,6 +112,35 @@ class RetryTests(unittest.TestCase):
         self.assertTrue(result.file.is_file())
         self.assertGreater(len(FakeYoutubeDL.attempts), clients,
                            "it must try again after the first rotation is spent")
+
+    def test_a_client_that_cannot_serve_the_format_does_not_kill_the_import(self):
+        """FOUND ON THE BOX, 9 Sept 2026, by the injected-refusal probe.
+
+        A rotation reached a client whose format set does not carry the
+        selector, yt-dlp said "Requested format is not available", and the
+        provider RAISED -- abandoning two whole rounds on a video the probe's
+        own control had downloaded thirty seconds earlier. It is not a fact
+        about the video, so the next client must get its turn.
+        """
+        result = self.run_import([BLOCKED, FORMAT, FORMAT, None])
+        self.assertTrue(result.file.is_file())
+        self.assertGreaterEqual(len(FakeYoutubeDL.attempts), 4,
+                                "the rotation carries on past a format fault")
+
+    def test_a_format_fault_is_never_dressed_as_a_verdict_on_the_video(self):
+        """The wording matters as much as the control flow.
+
+        "YouTube would not release this video" is what the app reads as
+        permanent -- transientImport does not match it -- so a format fault
+        wearing that sentence stops the five-minute auto-retry as well as the
+        rounds. Every client failing this way must still read as a refusal
+        that was tried and tried again.
+        """
+        with self.assertRaises(ip.ImportProviderError) as caught:
+            self.run_import([FORMAT] * 200)
+        self.assertNotIn("would not release this video", str(caught.exception))
+        self.assertGreater(len(FakeYoutubeDL.attempts), len(ip.YOUTUBE_CLIENTS),
+                           "it spends its rounds rather than failing at once")
 
     def test_it_gives_up_eventually_rather_than_retrying_for_ever(self):
         with self.assertRaises(ip.ImportProviderError) as caught:

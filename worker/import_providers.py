@@ -106,6 +106,169 @@ def _hook_progress(status: dict) -> tuple[int, int]:
     return max(0, downloaded), max(0, total)
 
 
+def _hook_fragments(status: dict) -> tuple[int, int]:
+    """Which fragment a fragmented download is on, and how many there are.
+
+    A DASH or HLS download frequently carries NO byte total at all -- yt-dlp
+    cannot know the whole size until it has asked for every fragment -- but it
+    always knows how many fragments it is working through. On those formats the
+    fragment count is the ONLY honest progress signal, and production hits them:
+    the rescue download recorded in CLAUDE.md came back as 348 fragments. Without
+    this, such an import reports bytes climbing beside a percentage that never
+    leaves zero, which is exactly what "it looks stuck" means.
+    """
+    def whole(key: str) -> int:
+        try:
+            return max(0, int(status.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
+    return whole("fragment_index"), whole("fragment_count")
+
+
+def _info_expected_bytes(info: dict, seconds: float | None) -> int:
+    """How large this download is expected to be, from what the extractor knows.
+
+    The section path is the one production takes for every ranged import, and it
+    downloads through ffmpeg -- a black box that fires no per-byte hooks and
+    therefore offers no total, ever. The extractor's own metadata is the only
+    place a denominator can come from there, and it has two: a size for the whole
+    video (scaled to the stretch actually being fetched), or a bitrate.
+
+    It is an ESTIMATE and is treated as one everywhere downstream -- it only ever
+    seeds a denominator that the real byte count is then allowed to correct
+    upwards. A wrong estimate makes a percentage move at the wrong speed; NO
+    estimate makes it sit at zero for a quarter of an hour, which is worse.
+    """
+    if not isinstance(info, dict):
+        return 0
+
+    def number(*keys: str) -> float:
+        for key in keys:
+            try:
+                value = float(info.get(key) or 0)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                return value
+        return 0.0
+
+    whole_seconds = number("duration")
+    want = float(seconds or 0) or whole_seconds
+    size = number("filesize", "filesize_approx")
+    if size > 0:
+        # Scaled to the requested stretch when both lengths are known: the
+        # metadata describes the WHOLE video and a section fetches part of it.
+        if whole_seconds > 0 and want > 0 and want < whole_seconds:
+            return int(size * (want / whole_seconds))
+        return int(size)
+    # tbr is the total bitrate in kbit/s. 1000/8 turns it into bytes a second.
+    rate = number("tbr")
+    if rate > 0 and want > 0:
+        return int(rate * 125.0 * want)
+    return 0
+
+
+class DownloadProgress:
+    """The one answer to "how far through is this download".
+
+    Every downloader yt-dlp can pick reports something different, and reading
+    only one of them is what left an import showing "0% of this step" beside a
+    byte count that was plainly climbing:
+
+    * a plain HTTP download carries exact `downloaded_bytes` and `total_bytes`;
+    * a fragmented DASH one often carries no total but counts its fragments;
+    * the ffmpeg downloader a SECTION uses carries nothing at all, and is the
+      path every ranged import takes -- there the growing file on disk is the
+      only measurement and `_info_expected_bytes` is the only denominator.
+
+    Three properties this holds that the raw hook does not:
+
+    1. **The count never goes backwards.** A merged download (`bv*+ba`) fetches
+       video and audio as separate files, and `downloaded_bytes` RESTARTS at
+       zero for the second one -- so the customer watched the megabytes climb to
+       400 and then drop to 30. Finished files are banked and added.
+    2. **A retry starts over.** The import makes up to three rounds of ten
+       attempts, and `overwrites` means each begins from an empty file. Carrying
+       a failed attempt's bytes forward would report 900 MB of a 400 MB video.
+    3. **The denominator only ever grows.** An estimate the real bytes overtake
+       is corrected upward rather than pinning the bar at 100% while the file is
+       still arriving.
+    """
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        # Set before reset() and deliberately not cleared by it: it describes
+        # the video, which a retry does not change.
+        self.expected = 0
+        self.reset()
+
+    def reset(self) -> None:
+        """Start this attempt from nothing. See property 2 above."""
+        with self.lock:
+            self.banked_done = 0
+            self.banked_total = 0
+            self.current_done = 0
+            self.current_total = 0
+            self.fragment_fraction: float | None = None
+
+    def expect(self, total: int) -> None:
+        with self.lock:
+            if total > 0:
+                self.expected = max(self.expected, int(total))
+
+    def note_hook(self, status: dict) -> tuple[int, int]:
+        """Take in one yt-dlp progress hook call. Returns (done, total)."""
+        downloaded, total = _hook_progress(status)
+        index, count = _hook_fragments(status)
+        with self.lock:
+            if str(status.get("status") or "") == "finished":
+                # Bank it and clear the live counters: the next file in a merge
+                # starts its own `downloaded_bytes` at zero.
+                self.banked_done += max(downloaded, self.current_done)
+                self.banked_total += max(total, downloaded, self.current_total)
+                self.current_done = 0
+                self.current_total = 0
+            else:
+                self.current_done = downloaded
+                self.current_total = total
+            if count > 0:
+                # index is 1-based and names the fragment IN FLIGHT, so it is
+                # one less that are actually finished.
+                self.fragment_fraction = max(0.0, min(1.0, (index - 1) / count)) if index else 0.0
+            return self._snapshot()
+
+    def note_disk(self, size: int) -> tuple[int, int]:
+        """Take in the on-disk sum the watcher measured. Returns (done, total)."""
+        with self.lock:
+            # The sum already covers every intermediate this attempt has
+            # written, so it replaces the running counters rather than adding
+            # to them -- and it may not go backwards while a merge is being
+            # cleaned up mid-download.
+            self.banked_done = 0
+            self.current_total = 0
+            self.current_done = max(self.current_done, int(size))
+            return self._snapshot()
+
+    def snapshot(self) -> tuple[int, int]:
+        with self.lock:
+            return self._snapshot()
+
+    def _snapshot(self) -> tuple[int, int]:
+        done = self.banked_done + self.current_done
+        total = 0
+        if self.expected > 0:
+            total = self.expected
+        elif self.banked_total or self.current_total:
+            total = self.banked_total + self.current_total
+        if not total and self.fragment_fraction and done > 0:
+            # No total anywhere, but the fragments know the fraction -- so the
+            # total they imply is a better denominator than none at all.
+            total = int(done / max(self.fragment_fraction, 0.01))
+        # The denominator may never be smaller than what has already landed, or
+        # the bar sticks at 100% while the file is still arriving.
+        return done, max(total, done) if total else 0
+
+
 def _download_bytes_on_disk(destination: Path) -> int:
     """How much the downloader has actually written for this destination.
 
@@ -131,15 +294,21 @@ def _download_bytes_on_disk(destination: Path) -> int:
 
 
 def _watch_download_bytes(destination: Path, poll, stop: threading.Event,
-                          hook_spoke: dict, interval: float = 2.0) -> None:
+                          hook_spoke: dict, interval: float = 2.0,
+                          progress: "DownloadProgress | None" = None) -> None:
     """Report the growing file while ffmpeg downloads it silently.
 
     Defers to the progress hook whenever it has spoken recently -- the hook's
-    numbers are exact and carry a total; this thread's on-disk sum has no total
-    and exists for the downloader that says nothing. The pulse it calls is
+    numbers are exact; this thread's on-disk sum exists for the downloader that
+    says nothing, which is every SECTION download. The pulse it calls is
     throttled by the service, so a 2s interval here does not thrash the status
     file. Cancellation is deliberately NOT acted on from this thread: the main
     thread owns raising out of yt-dlp, and two owners of one cancel is a race.
+
+    It reports through DownloadProgress rather than passing a bare zero for the
+    total, so a section download gets the extractor's estimated size as its
+    denominator instead of no denominator at all. Without one the app can only
+    print a climbing megabyte count beside a percentage pinned to zero.
     """
     while not stop.wait(interval):
         if time.monotonic() - float(hook_spoke.get("at") or 0.0) < 6:
@@ -147,7 +316,8 @@ def _watch_download_bytes(destination: Path, poll, stop: threading.Event,
         size = _download_bytes_on_disk(destination)
         if size:
             try:
-                _poll(poll, size, 0)
+                done, total = progress.note_disk(size) if progress else (size, 0)
+                _poll(poll, done, total)
             except Exception:  # noqa: BLE001 - reporting must never kill a download
                 pass
 
@@ -338,6 +508,38 @@ _FINAL_SIGNS = (
     "account associated with this video has been terminated",
     "members-only", "age-restricted", "sign in to confirm your age",
 )
+
+
+# A FAILURE OF THIS ATTEMPT, NOT A FACT ABOUT THE VIDEO.
+#
+# Found on the box, 9 Sept 2026, by the injected-refusal probe: a rotation
+# reached the `tv` client, yt-dlp answered "Requested format is not available",
+# and the provider RAISED "YouTube would not release this video" -- abandoning
+# two whole rounds on a video the probe's own control had downloaded thirty
+# seconds earlier. Every client offers a different format set, so the selector
+# (bv*[ext=mp4][height<=1080]+ba[ext=m4a]) simply does not resolve on some of
+# them. That says nothing about whether the file can be fetched, and the
+# rotation exists precisely so the next client gets its turn.
+#
+# It is deliberately NOT folded into _BLOCK_SIGNS. A block is a claim about the
+# address the request came from and it is what `_download_failure` tells the
+# customer; a format that one client does not carry is neither. Keeping them
+# apart is what stops the refusal message going wrong to fix the control flow.
+#
+# The cost of being wrong here is bounded and worth it either way: if every
+# client really cannot serve a format, the import now spends its rounds before
+# failing instead of failing at once -- against the old behaviour, which killed
+# a perfectly fetchable lecture permanently AND wore the wording the app reads
+# as "do not retry this".
+_CLIENT_FAULT_SIGNS = (
+    "requested format is not available",
+    "no video formats found",
+)
+
+
+def _looks_client_fault(message: str) -> bool:
+    lowered = str(message).lower()
+    return any(sign in lowered for sign in _CLIENT_FAULT_SIGNS)
 
 
 def _looks_blocked(message: str) -> bool:
@@ -562,18 +764,22 @@ class YtDlpImportProvider(ManagedImportProvider):
         # pulse; alternating between the hook's per-file figure and the
         # watcher's on-disk sum would make the number jump around.
         hook_spoke = {"at": 0.0}
+        # Every downloader's numbers go through one tracker, so a merge cannot
+        # make the count fall back to zero and a fragmented format still has a
+        # denominator. See DownloadProgress.
+        tracker = DownloadProgress()
 
         def progress_hook(status: dict) -> None:
             # The service's pulse takes byte counts and turns them into the
             # "412 MB / 806 MB" the customer sees beside the ETA. This hook had
             # them all along and never passed them on, which is why every
             # import sat at "0% of this step" however well it was going.
-            downloaded, total = _hook_progress(status)
-            if downloaded:
+            done, total = tracker.note_hook(status)
+            if done:
                 hook_spoke["at"] = time.monotonic()
-            if _poll(cancelled, downloaded, total):
+            if _poll(cancelled, done, total):
                 raise yt_dlp.utils.DownloadError("Job cancelled.")
-            if downloaded and downloaded > self.max_bytes:
+            if done and done > self.max_bytes:
                 raise yt_dlp.utils.DownloadError("The imported video exceeds the configured download limit.")
 
         ydl_opts = {
@@ -627,6 +833,12 @@ class YtDlpImportProvider(ManagedImportProvider):
             # video's length is still on the table. The app shows that number.
             learned["durationSec"] = _float_or(info_dict.get("duration"), None)
             end = want_end if want_end is not None else learned.get("durationSec")
+            # The only chance to learn how big this is going to be. A section
+            # downloads through ffmpeg, which reports nothing at all, so without
+            # a figure taken here that import has no denominator for its whole
+            # length -- a climbing megabyte count beside a frozen 0%.
+            tracker.expect(_info_expected_bytes(
+                info_dict, (float(end) - want_start) if end and end > want_start else None))
             if not end or end <= want_start:
                 return [{}]  # yt-dlp's own "the whole video"
             # That this callback ran AND returned a real range is the only
@@ -657,7 +869,7 @@ class YtDlpImportProvider(ManagedImportProvider):
         watch_stop = threading.Event()
         threading.Thread(
             target=_watch_download_bytes,
-            args=(destination, cancelled, watch_stop, hook_spoke),
+            args=(destination, cancelled, watch_stop, hook_spoke, 2.0, tracker),
             daemon=True,
         ).start()
         last_exc: Exception | None = None
@@ -676,6 +888,11 @@ class YtDlpImportProvider(ManagedImportProvider):
                     for attempt, client in enumerate(YOUTUBE_CLIENTS):
                         if cancelled():
                             raise ImportProviderError("Job cancelled.")
+                        # `overwrites` means every attempt starts from an empty
+                        # file, so the counters must too: carrying a failed
+                        # attempt's bytes forward reported 900 MB of a 400 MB
+                        # video and put the percentage past 100.
+                        tracker.reset()
                         options = dict(ydl_opts)
                         options.update(plan)
                         options.update(job_network_options(source, destination.parent))
@@ -716,7 +933,11 @@ class YtDlpImportProvider(ManagedImportProvider):
                             # every client, in every round, for ever -- so it refuses
                             # NOW rather than making somebody watch three rounds of
                             # backoff arrive at the answer it already had.
-                            if not _looks_blocked(message):
+                            # A CLIENT THAT CANNOT SERVE THE FORMAT IS NOT A
+                            # VERDICT. It falls through to the next client the
+                            # way a block does, rather than raising -- see
+                            # _CLIENT_FAULT_SIGNS for what that cost the box.
+                            if not _looks_blocked(message) and not _looks_client_fault(message):
                                 if section_pass:
                                     break  # give the plain full download its turn
                                 # ITS OWN WORDS, not the block message. A private,
