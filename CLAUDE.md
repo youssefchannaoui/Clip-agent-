@@ -234,7 +234,8 @@ These were each a real bug and each has a test named after it.
 ## Verification standard
 
 - `npm test` and `npm run check` must pass. Currently **1995 JS + 896 Python**
-  (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
+  (13 Python skipped) — the skips are where ffmpeg or OpenCV is absent, which
+  is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
   **CI now enforces them** (`scripts/check-handover.mjs`, fed the real test
@@ -250,13 +251,22 @@ These were each a real bug and each has a test named after it.
   for a file CI has never seen. Before writing a count, check nothing under
   `scratchpad/` matches node's test patterns (`*.test.*`, `*-test.*`,
   `*_test.*`, `test-*.*`, or anything inside a directory called `test`).
-- **The 9 skips are `SpeakerTrackingTests` (7), `AtmosphereFrameTests` (1) and
-  `RenderPlateTests` (1, v3.140.0), and they skip ONLY where ffmpeg is absent** (v3.101.2, v3.118.0). They build their own fixture with ffmpeg and run
-  wherever it exists -- all seven pass here in 0.9s -- but the CI runner has
-  no working ffmpeg, so there they skip, counted as seven skips with the
+- **The 13 skips are `SpeakerTrackingTests` (7), `TrackerRunsTests` (4),
+  `AtmosphereFrameTests` (1) and `RenderPlateTests` (1), and they skip ONLY
+  where ffmpeg -- or, for the fourth, OpenCV -- is absent** (v3.101.2, v3.118.0,
+  v3.140.0, v3.179.1). They build their own fixture with ffmpeg and run wherever
+  it exists, but the CI runner has neither, so there they skip, counted with the
   reason in each. The crop ARITHMETIC is therefore exercised by anyone running
-  the suite with ffmpeg installed, and NOT by CI; face DETECTION on a real
-  face is still untested anywhere -- see the open items below.
+  the suite with ffmpeg installed, and NOT by CI.
+  **`opencv-python-headless<5.0.0` is what makes the four run** -- pinned below
+  5 for the reason CLAUDE.md already records: OpenCV 5 removed
+  `CascadeClassifier`, and installing it here silently turns every framing test
+  into a skip while looking installed. It is a LOCAL probe dependency and must
+  never enter requirements.txt for CI: the no-dependency property is what lets a
+  phone session run this suite at all.
+  Face DETECTION on a real face is still untested anywhere -- these prove the
+  tracker RUNS and that ffmpeg accepts the graph it builds, not that a face is
+  found. See the open items below.
 - **Test executed output, not source strings.** Several tests have failed only
   because code moved into a function, while real behaviour changes passed.
 - **A green suite is not verification for anything visual.** Every layout bug
