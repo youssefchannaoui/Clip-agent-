@@ -102,18 +102,49 @@ test('THE RENDER FOLLOWS THE SPEAKER, and the probe measures both paths', () => 
   // This guard was written the other way round -- "the render calls
   // detect_main_face_crop, so if it ever starts calling the tracker this
   // comparison has to be re-read" -- and it fired within the hour, which is
-  // exactly what it was for. The render calls the tracker now; the static
-  // detector remains only as the fallback for a box with no OpenCV, a source
-  // that will not open, or a clip with no face in it.
+  // exactly what it was for. It fired a second time when the Haar tracker was
+  // retired for the lip-aperture one. The render calls speaker_crop_plan now;
+  // the static detector remains only as the fallback for a box with no
+  // MediaPipe, a source that will not open, or a clip with no face in it.
   const worker = fs.readFileSync(path.join(ROOT, 'worker/clip_worker.py'), 'utf8');
   const render = worker.slice(worker.indexOf('    crop_plan = None\n    if bg_visual is None'));
   const body = render.slice(0, render.indexOf('bg_prelude'));
-  assert.match(body, /track_speaker_keyframes\(/, 'the render asks who is speaking');
+  assert.match(body, /speaker_crop_plan\(/, 'the render asks who is speaking');
   assert.match(body, /detect_main_face_crop\(/, 'and still has a fallback');
-  assert.ok(body.indexOf('track_speaker_keyframes(') < body.indexOf('detect_main_face_crop('),
+  assert.ok(body.indexOf('speaker_crop_plan(') < body.indexOf('detect_main_face_crop('),
     'the tracker is tried FIRST, the static crop is what it falls back to');
   // The probe reports both, so a run says what the render did and what the
   // other method would have done with the same frames.
   assert.match(script, /detect_main_face_crop/);
-  assert.match(script, /track_speaker_keyframes/);
+  assert.match(script, /speaker_crop_plan/);
+  // And the Haar tracker is GONE rather than kept behind the new one. Youssef
+  // called its behaviour horrible; keeping it as a fallback would mean that
+  // behaviour still shipping, sometimes, silently.
+  // Comments stripped first. This repo has been caught a dozen times by an
+  // assertion failing on the note that EXPLAINS the change rather than on the
+  // code -- and the fix for that is to strip, never to reword the note.
+  const code = worker.replace(/^\s*#.*$/gm, '');
+  assert.ok(!/track_speaker_keyframes|def speaker_positions|def simplify_keyframes/.test(code),
+    'the retired tracker is deleted, not left as a second answer');
+});
+
+test('the probe asks the SHIPPED functions, not copies of them', () => {
+  // A probe that reimplements the measurement answers a question nobody asked.
+  // Every number it prints about the speaker comes from speaker.py itself.
+  for (const call of ['speaker.measure(', 'speaker.assign_subjects(', 'speaker.audio_envelope(']) {
+    assert.ok(script.includes(call), `${call} is the shipped function`);
+  }
+  assert.ok(!/UPPER_LIP\s*=|LOWER_LIP\s*=|def _face_from_landmarks/.test(script),
+    'and it defines no lip landmarks of its own');
+});
+
+test('the render and the probe read the same lip landmarks', () => {
+  // 13 and 14 are the INNER lip centres. The outer pair moves with the jaw as
+  // well as the mouth, so it reads a chewing listener as loudly as a talker --
+  // and a probe measuring one pair while the render used the other would
+  // report confidently on a signal nothing ships.
+  const speaker = fs.readFileSync(path.join(ROOT, 'worker/speaker.py'), 'utf8');
+  assert.match(speaker, /^UPPER_LIP, LOWER_LIP = 13, 14$/m);
+  assert.match(speaker, /gap \/ face_h/,
+    'the aperture is divided by the face\'s own height, or the nearest face wins');
 });

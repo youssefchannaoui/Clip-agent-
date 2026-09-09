@@ -1,38 +1,30 @@
 """Where the crop actually lands on this box's own footage, and why.
 
-Youssef, 9 Sept 2026, with a two-person podcast clip on screen: "see if its 2
-people in one frame the framing is not doing well, but once theres 2 people on
-oppisite sides it does well so who ever talks its must be central."
+Youssef, 9 Sept 2026, on a two-person podcast: "it doesn't even know who's
+speaking ... it was framing the opposite guy. Second off, it's not stable. It
+moves while they speak ... It should be CUTTING to the person who's speaking."
 
-That pair of observations is a fingerprint, and reading the code gives a
-candidate cause: `detect_main_face_crop` takes the LARGEST face in each sampled
-frame and then the MEDIAN of those centres across the clip. With two faces of
-similar size the largest alternates between them from sample to sample, so the
-median of a two-humped set lands in the VALLEY -- between the heads -- and the
-person talking ends up at the edge of the crop. Two people far apart at
-different sizes have one that dominates every sample, so the median lands on
-them and it looks right.
+Both halves can only be measured where MediaPipe, real lectures and the shipped
+code are in one place, which is here. So this reports, on a real source:
 
-That is a hypothesis until something measures it, and it cannot be measured
-anywhere but here: this container is the only place with OpenCV, the Haar
-cascades and real lectures at the same time. So this probe reports, per sampled
-frame of a real source:
+* what the LANDMARKER sees -- how many faces, where, and how far each mouth
+  actually opens, which is the signal the whole rebuild rests on;
+* what the tracker CHOOSES -- the shots, who holds each one, where it frames
+  them and why it ended;
+* what the static fallback would have chosen over the same window, so a run
+  says what the render did and what the other method would have done.
 
-* how many faces the shipped detector finds, and where;
-* what the shipped static crop chooses, and whether that centre sits between
-  two clusters of faces rather than on one;
-* what `track_speaker_keyframes` -- the active-speaker tracker the render now
-  calls -- chooses over the same window, and whether it moves.
-
-It changes nothing and renders nothing. CLAUDE.md carried "wiring active speaker
-framing in unseen is the failure this file exists to prevent" as an open item
-for weeks; this is how it stopped being unseen.
+It changes nothing, renders nothing, and prints geometry only: positions as
+percentages of the frame, box heights in pixels, apertures as fractions of a
+face. A run log is public, and a frame would be somebody's lecture and a face
+in it.
 """
 import json
 import math
 import os
 import statistics
 import sys
+import time
 from pathlib import Path
 
 # Substituted by the workflow. NUMBERS AND STRINGS ONLY -- this literal is
@@ -205,6 +197,73 @@ def analyse(cw, cv2, source: Path) -> dict:
             "source": source, "people": len(real)}
 
 
+def speaker_view(cw, speaker, r: dict) -> None:
+    """What the landmarker sees, and what the tracker does with it.
+
+    Every number here is measured on this box's own footage by the SHIPPED
+    functions -- not a copy of them with its own thresholds, which would answer
+    a question nobody asked.
+    """
+    source, duration = r["source"], min(60.0, max(10.0, float(r.get("duration") or 30.0)))
+    out()
+    out(f"== who is speaking, and where it cuts: {source.name[:38]} ==")
+
+    info = cw.ffprobe_json("ffprobe", source)
+    stream = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), {})
+    src_w, src_h = int(stream.get("width") or 0), int(stream.get("height") or 0)
+    if not src_w:
+        out("   dimensions unreadable")
+        return
+
+    started = time.monotonic()
+    samples = speaker.measure(ffmpeg="ffmpeg", source=source, start=0.0, duration=duration,
+                              src_w=src_w, src_h=src_h)
+    took = time.monotonic() - started
+    seen = [len(faces) for _t, faces in samples]
+    if not samples:
+        out("   the landmarker produced no samples at all")
+        return
+    out(f"   {len(samples)} samples over {duration:.0f}s in {took:.0f}s "
+        f"({sum(seen) / len(seen):.1f} faces a frame, most {max(seen)}, "
+        f"{sum(1 for n in seen if n == 0)} with none)")
+
+    rows = speaker.assign_subjects(samples)
+    series = speaker.subject_series(rows)
+    where: dict[int, list[float]] = {}
+    for row in rows:
+        for cx, _cy, _size, _aperture, sid in row:
+            where.setdefault(sid, []).append(cx)
+    # A subject seen a handful of times is a false positive, not a person.
+    people = {sid: xs for sid, xs in where.items() if len(xs) >= max(3, len(samples) // 10)}
+    out(f"   {len(people)} person(s) of {len(where)} detected cluster(s):")
+    for sid in sorted(people, key=lambda s: statistics.median(where[s])):
+        values = [v for v in series.get(sid, []) if v is not None]
+        moves = [abs(b - a) for a, b in zip(values, values[1:])]
+        out(f"     #{sid} near {statistics.median(where[sid]) / src_w * 100:5.1f}% of the width, "
+            f"seen {len(where[sid]):3d}x, mouth open {statistics.median(values or [0]):.3f} "
+            f"of a face, moving {statistics.fmean(moves or [0]):.4f} a sample")
+
+    envelope = speaker.audio_envelope(ffmpeg="ffmpeg", source=source, start=0.0,
+                                      duration=duration, count=len(samples))
+    out(f"   audio: {'read' if envelope else 'NOT READ -- the lips have nothing to agree with'}"
+        + (f", loud on {sum(1 for v in envelope if v > 0.25)} of {len(envelope)} samples"
+           if envelope else ""))
+
+    plan = cw.speaker_crop_plan(source, "ffmpeg", "ffprobe", 0.0, duration, 1080, 1920)
+    if not plan.get("available"):
+        out(f"   the tracker declined: {plan.get('reason')}")
+        return
+    keys = plan.get("keyframes") or []
+    out(f"   {plan.get('shots')} shot(s) across {len(keys)} keyframe(s), motion "
+        f"{plan.get('motion')}")
+    for key in keys:
+        centre = (key["x"] + key["w"] / 2) / src_w * 100
+        out(f"     from {key['t']:6.2f}s  centre {centre:5.1f}% of the width")
+    if r.get("centre") is not None and keys:
+        drift = statistics.fmean([(k["x"] + k["w"] / 2) / src_w * 100 for k in keys]) - r["centre"]
+        out(f"   against the static crop's {r['centre']:.1f}%: {drift:+.1f}% on average")
+
+
 def main() -> int:
     sys.path.insert(0, "/app/worker")
     try:
@@ -213,17 +272,30 @@ def main() -> int:
         out(f"clip_worker did not import: {type(exc).__name__}: {exc}")
         return 1
 
+    try:
+        import speaker
+    except Exception as exc:  # noqa: BLE001
+        out(f"the speaker module did not import: {type(exc).__name__}: {exc}")
+        return 1
+
+    out("== the detectors ==")
+    # TWO OF THEM, and they answer different questions. MediaPipe is what the
+    # render uses to decide who is speaking; OpenCV is what the STATIC fallback
+    # uses when it cannot. Either being unusable is an answer rather than a
+    # failed run -- and a far bigger finding than any number below.
+    missing = speaker.available()
+    out(f"  active speaker: {missing or 'MediaPipe and the landmark model are here'}")
+    if missing:
+        out("  !! Every clip on this box is therefore framed by the static crop.")
     problem = cw.cv2_problem()
-    out("== the detector ==")
     if problem:
-        # Not a failed run: it is the answer, and the honest one. A box with no
-        # working OpenCV falls back to a centre crop for every job, which is a
-        # far bigger finding than any number below.
-        out(f"  !! OpenCV is unusable here: {problem}")
-        out("  Every auto-framed clip on this box is therefore a centre crop.")
-        return 0
-    import cv2
-    out(f"  cv2 {cv2.__version__}")
+        out(f"  static fallback: !! OpenCV is unusable here: {problem}")
+        if missing:
+            out("  With neither, every auto-framed clip is a plain centre crop.")
+            return 0
+    else:
+        import cv2
+        out(f"  static fallback: cv2 {cv2.__version__}")
 
     sources = pick_sources()
     if not sources:
@@ -232,8 +304,10 @@ def main() -> int:
     out(f"  sweeping {len(sources)} cached source(s), {FRAMES} frames each over {SECONDS:g}s")
 
     out()
-    out("== where the faces are, and what the shipped crop keeps ==")
-    results = [r for r in (analyse(cw, cv2, path) for path in sources) if r]
+    out("== where the faces are, and what the STATIC fallback keeps ==")
+    results = [r for r in (analyse(cw, cv2, path) for path in sources) if r] if not problem else []
+    if problem:
+        out("  skipped -- no usable OpenCV, which is what this section measures")
 
     tight = [r for r in results if r.get("verdict") == "TIGHT two-shot"]
     out()
@@ -244,28 +318,14 @@ def main() -> int:
         out("  No tight two-shot among these. The reported clip is a different lecture;")
         out("  re-run with framing_duration set to its length to reach it.")
 
-    # The tracker is slow -- around thirty seconds a source -- so it is asked
-    # about the case that matters rather than about all of them.
-    target = (tight or results)[:1]
+    # The measurement is slow -- MediaPipe at 12.5Hz over a minute of video --
+    # so it is asked about the case that matters rather than about all of them.
+    if missing:
+        return 0
+    target = (tight or results)[:1] or [{"source": sources[0], "duration": 60.0,
+                                         "src_w": 0, "centre": None}]
     for r in target:
-        out()
-        out(f"== what the ACTIVE-SPEAKER tracker chooses for {r['source'].name[:28]} ==")
-        out("   (this is what the render now uses; the static crop above is its")
-        out("    fallback for a box with no OpenCV or a clip with no face)")
-        plan = cw.track_speaker_keyframes(r["source"], "ffprobe", 0.0, r["duration"], 1080, 1920)
-        if not plan.get("available"):
-            out(f"   unavailable: {plan.get('reason')}")
-            continue
-        keys = plan.get("keyframes") or []
-        xs = [(k["x"] + k["w"] / 2) / r["src_w"] * 100 for k in keys]
-        out(f"   method {plan.get('method')}  {len(keys)} keyframe(s)")
-        if xs:
-            step = max((abs(b - a) for a, b in zip(xs, xs[1:])), default=0.0)
-            out(f"   centre: first {xs[0]:.1f}%  last {xs[-1]:.1f}%  "
-                f"range {min(xs):.1f}%..{max(xs):.1f}%  travel {max(xs) - min(xs):.1f}%")
-            out(f"   largest step between keyframes: {step:.1f}% of width")
-            out(f"   against the shipped static centre of {r['centre']:.1f}%: "
-                f"{statistics.fmean(xs) - r['centre']:+.1f}% on average")
+        speaker_view(cw, speaker, r)
     return 0
 
 

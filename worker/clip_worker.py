@@ -54,6 +54,11 @@ except ImportError:  # pragma: no cover - the module ships beside this one
     MATTE_FPS = 30
 
 try:
+    import speaker as active_speaker
+except ImportError:  # pragma: no cover - the module ships beside this one
+    active_speaker = None
+
+try:
     from import_providers import proxy_pool, youtube_network_options
 except Exception:  # pragma: no cover - clip_worker must still run standalone
     def youtube_network_options() -> dict[str, Any]:
@@ -5805,7 +5810,7 @@ def detect_main_face_crop(source: Path, ffprobe: str, candidate: Candidate, out_
     if crop_w >= src_w:
         return None
 
-    # Below the OpenCV guard for the same reason as track_speaker_keyframes:
+    # Below the OpenCV guard for the same reason as speaker_crop_plan:
     # a chosen bias is arithmetic, and a broken detector must not take it away.
     if bias in {"left", "center", "right"}:
         center = {"left": crop_w * 0.5, "center": src_w * 0.5, "right": src_w - crop_w * 0.5}[bias]
@@ -6183,8 +6188,13 @@ def build_video_filter(template: dict[str, Any], ass_file: Path, crop_plan: dict
                     plan_h = int(crop_plan.get("srcH") or 0)
                     max_x = max(0, (plan_w or crop_x + crop_w) - crop_w)
                     max_y = max(0, (plan_h or crop_y + crop_h) - crop_h)
-                    expr_x = crop_expression(keys, "x")
-                    expr_y = crop_expression(keys, "y")
+                    # A change of framing is a CUT, so each keyframe's value
+                    # holds until the next replaces it. The interpolating form
+                    # is what a genuine travelling shot would need, and is not
+                    # what the tracker produces.
+                    hold = str(crop_plan.get("motion") or "cut") == "cut"
+                    expr_x = crop_expression(keys, "x", hold=hold)
+                    expr_y = crop_expression(keys, "y", hold=hold)
                     return (
                         f"[{label}]{lead}crop={crop_w}:{crop_h}:"
                         f"'max(0\\,min({max_x}\\,{expr_x}))':'max(0\\,min({max_y}\\,{expr_y}))',"
@@ -6774,14 +6784,12 @@ def render_clip(
         subject = max(-50.0, min(50.0, float(template.get("framingSubjectBias", 0) or 0))) / 100.0
         # THE ACTIVE SPEAKER, not the most prominent face. Youssef, 9 Sept 2026,
         # on a three-person podcast: "whenever someone's speaking, it should be
-        # there centered in the frame". The tracker has existed, unit-tested,
-        # since it was written and the render never called it -- it was reachable
-        # only from a --framing CLI flag nobody runs. A static crop cannot follow
-        # a conversation, and on two people sitting together it framed the gap
+        # there centered in the frame". A static crop cannot follow a
+        # conversation, and on two people sitting together it framed the gap
         # between them.
         try:
-            plan = track_speaker_keyframes(
-                source, ffprobe, candidate.start, candidate.duration, width, height,
+            plan = speaker_crop_plan(
+                source, ffmpeg, ffprobe, candidate.start, candidate.duration, width, height,
                 bias, padding, zoom,
                 speech_spans=clip_speech_spans(candidate),
                 subject_bias=subject,
@@ -6789,10 +6797,11 @@ def render_clip(
         except Exception:
             plan = {"available": False}
         if plan.get("available") and plan.get("keyframes"):
-            keys = simplify_keyframes(plan["keyframes"])
+            keys = plan["keyframes"]
             crop_plan = {"x": keys[0]["x"], "y": keys[0]["y"], "w": plan["w"], "h": plan["h"],
                          "srcW": plan.get("srcW"), "srcH": plan.get("srcH"),
                          "method": plan.get("method", "active-speaker"),
+                         "motion": plan.get("motion"),
                          "keyframes": keys if len(keys) > 1 else None}
         else:
             # The static detector remains the fallback for everything the
@@ -8061,187 +8070,21 @@ def process(job_file: Path) -> None:
     emit("result", resultPath=str(result_file))
 
 
-# ── Who is speaking, and where the crop goes ─────────────────────────────
+# ── Who is speaking, and where the crop goes ────────────────────────
 #
-# Youssef, 9 Sept 2026, describing the shot exactly: "two people are sitting
-# with each other, then on the other side, there's another person ... with the
-# person who's alone, it's framing him perfectly, and then it's confused to what
-# to do on the other end because there's two people sitting next to each other,
-# so then it hits it in the middle. So it should be whenever someone's speaking,
-# it should be there centered in the frame."
+# WHO is speaking, and WHERE the crop goes, live in speaker.py -- the lip
+# aperture measured against the audio, and the shots that come out of it. What
+# is left here is the geometry: turning a shot's centre into a crop box, and
+# turning the shots into an ffmpeg expression.
 #
-# THREE THINGS STOPPED THAT WORKING, and they are separate faults:
-#
-# 1. The crop was the EXPONENTIAL AVERAGE of every sample. Two people sitting
-#    together make detection alternate between them, and the average of A and B
-#    is the gap between A and B -- so the crop framed neither. That is the "hits
-#    it in the middle" precisely, and it is why the lone person on the other
-#    side was framed perfectly: with one face there is nothing to average with.
-# 2. Mouth movement was a small BONUS on top of face size and a continuity term
-#    worth up to 0.42, where a 346px face on a 1920x1080 frame scores 0.058 for
-#    size and a talking mouth adds perhaps 0.03. Continuity outweighed speech by
-#    an order of magnitude, so once the crop settled it stayed whoever talked.
-# 3. `dominant_subject_track` collapsed a two-subject track onto ONE subject for
-#    the whole clip. It was written to stop the averaging above, and it does --
-#    by refusing to ever follow the other person, which is the opposite of what
-#    is wanted.
-#
-# The replacement is three pure functions, deliberately separate from the
-# detector so they can be tested without OpenCV, a camera or a face: which
-# subject each detection belongs to, which subject is speaking at each sample,
-# and where the crop is at each moment. The detector's job is reduced to
-# reporting boxes and how much each mouth moved.
-
-# A challenger must beat the held speaker by this much...
-SPEAKER_SWITCH_MARGIN = 1.35
-# ...for this many consecutive samples before the crop moves to them. Both
-# exist because a single frame of noise must never swing the camera: at 2Hz
-# this is a little over a second of someone genuinely talking.
-SPEAKER_SWITCH_SAMPLES = 3
-# How long the crop takes to travel between two people, in seconds. A cut is
-# jarring and an exponential glide spends its whole life in the gap between
-# them -- which is the fault being fixed. A short linear move is a camera pan.
-SPEAKER_MOVE_SECONDS = 0.45
+# The tracker that used to live here is gone rather than kept as a fallback.
+# Youssef, 9 Sept 2026: "this new framing system is horrible ... it was framing
+# the opposite guy ... it's not stable, it moves while they speak". Keeping it
+# behind the new one would mean that behaviour still shipping, sometimes,
+# silently. speaker.py's own docstring records what each of its faults was.
 
 
-def assign_subjects(samples: list[tuple[float, list[tuple[float, float, float, float]]]],
-                    ) -> list[list[tuple[float, float, float, float, int]]]:
-    """Give every detection the id of the PERSON it belongs to.
-
-    `samples` is (time, [(cx, cy, size, movement), ...]) per sampled frame.
-    Returns the same detections with a subject id appended.
-
-    Two detections are the same person when they are closer than the face is
-    wide -- a Haar face box is about as wide as it is tall, so the size is the
-    merge distance and it scales with the shot where a fixed threshold could
-    not. This is what makes "the same person, one sample later" and "the other
-    person" different things, and everything below depends on it.
-    """
-    subjects: list[tuple[float, float, float]] = []  # last x, last y, size
-    out: list[list[tuple[float, float, float, float, int]]] = []
-    for _t, faces in samples:
-        row: list[tuple[float, float, float, float, int]] = []
-        for cx, cy, size, movement in faces:
-            best, best_distance = -1, None
-            for index, (sx, _sy, ssize) in enumerate(subjects):
-                distance = abs(cx - sx)
-                if distance <= max(size, ssize) * 0.9 and (best_distance is None or distance < best_distance):
-                    best, best_distance = index, distance
-            if best < 0:
-                subjects.append((cx, cy, size))
-                best = len(subjects) - 1
-            else:
-                subjects[best] = (cx, cy, size)
-            row.append((cx, cy, size, movement, best))
-        out.append(row)
-    return out
-
-
-def speaking_subject(rows: list[list[tuple[float, float, float, float, int]]]) -> list[int | None]:
-    """Which subject is speaking at each sample.
-
-    MOUTH MOVEMENT DECIDES, and it is compared WITHIN the frame rather than
-    against an absolute. Lighting, grain and codec noise move every face's
-    pixels by an amount that has nothing to do with speech, so "moved 0.04" is
-    meaningless on its own -- "moved four times more than the other face in the
-    same frame" is not. Size breaks ties only, because with two people sitting
-    together it is nearly equal and cannot say who is talking.
-
-    A speaker is HELD until a challenger beats them by SPEAKER_SWITCH_MARGIN for
-    SPEAKER_SWITCH_SAMPLES in a row. Without that the crop swings on one frame
-    of noise; with it, a person who actually starts talking takes the frame in
-    about a second.
-    """
-    held: int | None = None
-    lead: dict[int, int] = {}
-    chosen: list[int | None] = []
-    for row in rows:
-        if not row:
-            chosen.append(held)
-            continue
-        movement = {face[4]: face[3] for face in row}
-        sizes = {face[4]: face[2] for face in row}
-        if held is None or held not in movement:
-            # Nobody held, or they left the frame: take the most active face,
-            # and the largest of those if nothing is moving at all.
-            held = max(movement, key=lambda sid: (movement[sid], sizes[sid]))
-            lead.clear()
-            chosen.append(held)
-            continue
-        best = max(movement, key=lambda sid: (movement[sid], sizes[sid]))
-        if best != held and movement[best] >= max(movement[held], 1e-9) * SPEAKER_SWITCH_MARGIN:
-            lead[best] = lead.get(best, 0) + 1
-            for other in list(lead):
-                if other != best:
-                    del lead[other]
-            if lead[best] >= SPEAKER_SWITCH_SAMPLES:
-                held = best
-                lead.clear()
-        else:
-            lead.clear()
-        chosen.append(held)
-    return chosen
-
-
-def speaker_positions(samples: list[tuple[float, list[tuple[float, float, float, float]]]],
-                      ) -> list[tuple[float, float, float]]:
-    """Where the crop should be centred at each sample: (t, x, y).
-
-    THE POSITION IS ALWAYS A REAL FACE'S, never a blend of two. Between two
-    speakers it travels linearly over SPEAKER_MOVE_SECONDS; within one speaker
-    it is lightly smoothed so a wobbling detection does not jitter the frame.
-    An exponential average over everything -- the shipped behaviour -- settles
-    at the midpoint of two people and frames neither.
-    """
-    rows = assign_subjects(samples)
-    chosen = speaking_subject(rows)
-    # Where each chosen subject actually was in that sample, holding the last
-    # known position through a frame the detector missed.
-    anchors: list[tuple[float, float, float, int | None]] = []
-    last: dict[int, tuple[float, float]] = {}
-    for (t, _faces), row, sid in zip(samples, rows, chosen):
-        for cx, cy, _size, _movement, rid in row:
-            last[rid] = (cx, cy)
-        if sid is not None and sid in last:
-            anchors.append((t, last[sid][0], last[sid][1], sid))
-        elif anchors:
-            anchors.append((t, anchors[-1][1], anchors[-1][2], anchors[-1][3]))
-    if not anchors:
-        return []
-
-    # A SWITCH IS EMITTED AS ITS OWN PAIR OF POINTS, not sampled into one.
-    # These become ffmpeg keyframes and the crop filter interpolates between
-    # them once per RENDERED FRAME, so the pan is smooth whatever rate the
-    # detector happened to run at. Computing the travel at the sample rate
-    # instead made a 0.45s move land inside a single 0.5s gap -- a cut wearing
-    # a pan's name.
-    out: list[tuple[float, float, float]] = []
-    smooth_x, smooth_y = anchors[0][1], anchors[0][2]
-    current = anchors[0][3]
-    out.append((anchors[0][0], smooth_x, smooth_y))
-    for t, cx, cy, sid in anchors[1:]:
-        if sid != current:
-            # Hold where it is until the switch instant, then travel.
-            if t > out[-1][0]:
-                out.append((t, smooth_x, smooth_y))
-            arrive = t + SPEAKER_MOVE_SECONDS
-            if arrive > out[-1][0]:
-                out.append((arrive, cx, cy))
-            smooth_x, smooth_y = cx, cy
-            current = sid
-            continue
-        # Within one speaker: light smoothing only, so a wobbling box does not
-        # jitter the frame. This can never reach another person, because cx is
-        # always this speaker's own position -- which is the whole difference
-        # from the average that used to settle in the gap between two of them.
-        smooth_x += (cx - smooth_x) * 0.35
-        smooth_y += (cy - smooth_y) * 0.35
-        if t > out[-1][0]:
-            out.append((t, smooth_x, smooth_y))
-    return out
-
-
-def crop_expression(keyframes: list[dict[str, Any]], key: str) -> str:
+def crop_expression(keyframes: list[dict[str, Any]], key: str, hold: bool = False) -> str:
     """An ffmpeg `crop` x/y expression that walks the keyframes in time.
 
     ffmpeg's crop filter takes expressions for x and y and evaluates them per
@@ -8253,6 +8096,14 @@ def crop_expression(keyframes: list[dict[str, Any]], key: str) -> str:
     to exactly one active segment. `gte*lt` rather than `between`, because
     `between` is inclusive at both ends and adjacent segments would both fire on
     the boundary frame and sum to double the value.
+
+    `hold` IS WHAT A CUT IS: each keyframe's value stands until the next one
+    replaces it, so the expression is a row of constants with no arithmetic in
+    it at all. That is what the tracker emits now, and it is a great deal less
+    for ffmpeg to swallow -- the expression it refused on a real lecture on
+    9 Sept 2026, taking the whole job with it, was a chain of the ramps below.
+    The interpolating form is kept because a framing that genuinely travels is
+    a different thing from a change of shot, and it is tested on its own.
     """
     if not keyframes:
         return "0"
@@ -8262,7 +8113,7 @@ def crop_expression(keyframes: list[dict[str, Any]], key: str) -> str:
     terms = [rf"{int(round(points[0][1]))}*lt(t\,{points[0][0]:.3f})"]
     for (t0, v0), (t1, v1) in zip(points, points[1:]):
         span = max(1e-6, t1 - t0)
-        if abs(v1 - v0) < 0.5:
+        if hold or abs(v1 - v0) < 0.5:
             terms.append(rf"{int(round(v0))}*gte(t\,{t0:.3f})*lt(t\,{t1:.3f})")
         else:
             terms.append(
@@ -8270,38 +8121,6 @@ def crop_expression(keyframes: list[dict[str, Any]], key: str) -> str:
                 f"({v0:.1f}+({v1 - v0:.1f})*(t-{t0:.3f})/{span:.3f})")
     terms.append(rf"{int(round(points[-1][1]))}*gte(t\,{points[-1][0]:.3f})")
     return "+".join(terms)
-
-
-def simplify_keyframes(keyframes: list[dict[str, Any]], tolerance: float = 2.0) -> list[dict[str, Any]]:
-    """Drop keyframes a straight line through their neighbours already covers.
-
-    The tracker samples twice a second, so a minute of video is 120 keyframes
-    and almost all of them say the same thing as the one before. The expression
-    is evaluated once per rendered frame, so shortening it is worth doing --
-    and a plan that survives as ONE keyframe becomes a plain static crop, which
-    is exactly the behaviour every render had before this existed.
-    """
-    if len(keyframes) < 3:
-        return keyframes
-    kept = [keyframes[0]]
-    for previous, current, following in zip(keyframes, keyframes[1:], keyframes[2:]):
-        span = following["t"] - kept[-1]["t"]
-        if span <= 0:
-            continue
-        share = (current["t"] - kept[-1]["t"]) / span
-        moved = max(
-            abs(current["x"] - (kept[-1]["x"] + (following["x"] - kept[-1]["x"]) * share)),
-            abs(current["y"] - (kept[-1]["y"] + (following["y"] - kept[-1]["y"]) * share)),
-        )
-        if moved > tolerance:
-            kept.append(current)
-    kept.append(keyframes[-1])
-    # A crop that never really moves is a static crop, and saying so lets the
-    # renderer emit four integers instead of an expression.
-    if max(abs(k["x"] - kept[0]["x"]) for k in kept) <= tolerance and \
-            max(abs(k["y"] - kept[0]["y"]) for k in kept) <= tolerance:
-        return [kept[0]]
-    return kept
 
 
 def clip_speech_spans(candidate: "Candidate") -> list[tuple[float, float]] | None:
@@ -8328,8 +8147,9 @@ def clip_speech_spans(candidate: "Candidate") -> list[tuple[float, float]] | Non
     return spans or None
 
 
-def track_speaker_keyframes(
+def speaker_crop_plan(
     source: Path,
+    ffmpeg: str,
     ffprobe: str,
     start: float,
     duration: float,
@@ -8338,29 +8158,21 @@ def track_speaker_keyframes(
     bias: str = "auto",
     padding: float = 0.18,
     zoom: float = 1.0,
-    sample_hz: float = 2.0,
     speech_spans: list[tuple[float, float]] | None = None,
     subject_bias: float = 0.0,
 ) -> dict[str, Any]:
-    """Follow the active speaker across a clip and return smoothed keyframes.
+    """A crop that CUTS to whoever is speaking, or the reason it could not.
 
-    Unlike `detect_main_face_crop`, which picks one static box for the whole
-    clip, this samples repeatedly over time so the crop can move as the
-    speaker moves or as conversation passes between people.
+    The geometry only. Who is talking, and where each shot should sit, is
+    speaker.py's answer -- measured from the lip aperture against the audio,
+    which is the one signal that does not simply reward the nearest face.
+    What happens here is the part that needs the source's own dimensions: how
+    wide a 9:16 window is on this footage, and where its top-left corner goes
+    for a subject at a given centre.
 
-    Choosing who is speaking uses three signals together:
-
-    * **Face position** — Haar cascades locate candidate faces per sample.
-    * **Mouth movement** — the lower half of each face box is compared with
-      the same region in the previous sample. A talking face changes far
-      more than a listening one, which is what separates the speaker from
-      other people in frame.
-    * **Speech activity** — `speech_spans` carries the Whisper word timings.
-      During silence nobody is speaking, so the crop holds its previous
-      position instead of chasing noise in the detector.
-
-    The raw per-sample choice is then run through an exponential smoother so
-    the crop glides rather than snapping between faces on a single bad frame.
+    Every keyframe is a HOLD. A shot's crop does not move until the shot ends,
+    which is what "it moves while they speak" was asking for, and it makes the
+    ffmpeg expression a row of constants rather than a chain of ramps.
     """
     try:
         info = ffprobe_json(ffprobe, source)
@@ -8380,115 +8192,43 @@ def track_speaker_keyframes(
     if crop_w >= src_w:
         return {"available": False, "reason": "The whole width is already used."}
 
-    # A fixed bias needs no detection at all -- and that is why the OpenCV
-    # guard sits BELOW it rather than at the top of the function. It used to
-    # run first, so a box whose OpenCV is missing or broken refused a bias the
-    # customer had explicitly chosen, with the reason "OpenCV is not installed
-    # on this server" for a calculation that is pure arithmetic on ffprobe's
-    # dimensions. That is not hypothetical: CLAUDE.md records OpenCV 5 removing
-    # the Haar cascade API and every job falling back to a centre crop -- which
-    # silently took `smartFramingBias: left` down with it, though nothing in
-    # this branch needs a detector.
+    # A fixed bias needs no detection at all, so it is answered before anything
+    # is asked of MediaPipe. This ordering is not tidiness: CLAUDE.md records
+    # OpenCV 5 removing the Haar API and every job falling back to a centre
+    # crop, which silently took `smartFramingBias: left` -- pure arithmetic on
+    # ffprobe's dimensions -- down with it.
     if bias in {"left", "center", "right"}:
         centre = {"left": crop_w * 0.5, "center": src_w * 0.5, "right": src_w - crop_w * 0.5}[bias]
         x, y = crop_origin_from_center(centre, None, src_w, src_h, crop_w, crop_h, padding)
         return {
-            "available": True, "method": f"bias-{bias}", "srcW": src_w, "srcH": src_h,
-            "w": crop_w, "h": crop_h,
+            "available": True, "method": f"bias-{bias}", "motion": "cut",
+            "srcW": src_w, "srcH": src_h, "w": crop_w, "h": crop_h,
             "keyframes": [{"t": 0.0, "x": x, "y": y, "w": crop_w, "h": crop_h}],
         }
 
-    problem = cv2_problem()
-    if problem:
-        return {"available": False, "reason": problem}
+    if active_speaker is None:
+        return {"available": False, "reason": "The speaker module is not installed on this server."}
 
-    detectors = [
-        cv2.CascadeClassifier(cv2.data.haarcascades + name)
-        for name in (
-            "haarcascade_frontalface_alt2.xml",
-            "haarcascade_frontalface_default.xml",
-            "haarcascade_profileface.xml",
-        )
-    ]
-    if all(d.empty() for d in detectors):
-        return {"available": False, "reason": "No face detector is available on this server."}
-
-    cap = cv2.VideoCapture(str(source))
-    if not cap.isOpened():
-        return {"available": False, "reason": "The source video could not be opened."}
-
-    step = 1.0 / max(0.5, min(8.0, sample_hz))
-    # sample_count, not `samples`: the collected measurements are called
-    # `samples` below, and naming both the same made `range(samples + 1)` add an
-    # int to a list. Caught on the box rather than here, because this function
-    # needs OpenCV and a real video and the unit tests drive the pure functions
-    # underneath it. The render's try/except meant it fell back to the static
-    # crop rather than failing a job, which is exactly why it needed a probe to
-    # surface at all.
-    sample_count = max(2, int(duration / step))
-    min_face = max(28, min(src_w, src_h) // 24)
-
-    def speaking_at(t: float) -> bool:
-        if not speech_spans:
-            return True  # no timing info, so assume speech throughout
-        return any(s <= t <= e for s, e in speech_spans)
-
-    samples: list[tuple[float, list[tuple[float, float, float, float]]]] = []
-    previous_gray = None
-    for index in range(sample_count + 1):
-        offset = min(duration, index * step)
-        cap.set(cv2.CAP_PROP_POS_MSEC, (start + offset) * 1000.0)
-        ok, frame = cap.read()
-        if not ok or frame is None:
-            continue
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        faces: list[tuple[int, int, int, int]] = []
-        for i, detector in enumerate(detectors):
-            if detector.empty():
-                continue
-            found = detector.detectMultiScale(
-                gray, scaleFactor=1.08 if i == 0 else 1.10,
-                minNeighbors=3 if i == 0 else 4, minSize=(min_face, min_face),
-            )
-            faces.extend(tuple(map(int, f)) for f in found)
-
-        # THE DETECTOR ONLY MEASURES. Which face is talking, and where the crop
-        # therefore goes, is arithmetic and lives in speaker_positions() -- so
-        # it can be tested against a described shot without OpenCV, a camera or
-        # a face. This loop reports boxes and how much each mouth moved.
-        measured: list[tuple[float, float, float, float]] = []
-        for (fx, fy, fw, fh) in faces:
-            movement = 0.0
-            # Only while somebody is actually talking. In a pause every face's
-            # pixels still move a little -- grain, a listener nodding -- and
-            # scoring that is how the crop wanders off in silence.
-            if previous_gray is not None and speaking_at(offset):
-                my0, my1 = fy + fh // 2, min(src_h, fy + fh)
-                mx0, mx1 = max(0, fx), min(src_w, fx + fw)
-                if my1 > my0 and mx1 > mx0:
-                    now_mouth = gray[my0:my1, mx0:mx1].astype("float32")
-                    was_mouth = previous_gray[my0:my1, mx0:mx1].astype("float32")
-                    if now_mouth.shape == was_mouth.shape and now_mouth.size:
-                        movement = float(abs(now_mouth - was_mouth).mean()) / 255.0
-            measured.append((fx + fw / 2.0, fy + fh / 2.0, float(max(fw, fh)), movement))
-        samples.append((offset, measured))
-        previous_gray = gray
-    cap.release()
-
-    raw = speaker_positions(samples)
-    if not raw:
-        return {"available": False, "reason": "No face or speaker could be detected in this clip."}
+    found = active_speaker.plan(
+        ffmpeg=ffmpeg, source=source, start=start, duration=duration,
+        src_w=src_w, src_h=src_h, crop_width=crop_w, speech_spans=speech_spans,
+    )
+    if not found.get("available"):
+        return found
 
     keyframes: list[dict[str, Any]] = []
-    for (t, cx, cy) in raw:
+    for (t, cx, cy) in active_speaker.shot_keyframes(found["shots"]):
         x, y = crop_origin_from_center(cx, cy, src_w, src_h, crop_w, crop_h, padding,
                                        subject_bias=subject_bias)
         keyframes.append({"t": round(t, 3), "x": x, "y": y, "w": crop_w, "h": crop_h})
+    if not keyframes:
+        return {"available": False, "reason": "No shot could be framed in this clip."}
 
     return {
-        "available": True, "method": "active-speaker", "srcW": src_w, "srcH": src_h,
-        "w": crop_w, "h": crop_h, "keyframes": keyframes,
+        "available": True, "method": "active-speaker", "motion": "cut",
+        "srcW": src_w, "srcH": src_h, "w": crop_w, "h": crop_h,
+        "keyframes": keyframes, "shots": len(found["shots"]),
+        "subjects": found.get("subjects"), "audio": found.get("audio"),
     }
 
 
@@ -8503,8 +8243,9 @@ def main() -> int:
     if args.framing:
         request = json.loads(args.framing.read_text(encoding="utf-8"))
         spans = [(float(a), float(b)) for a, b in (request.get("speechSpans") or [])]
-        plan = track_speaker_keyframes(
+        plan = speaker_crop_plan(
             Path(request["source"]),
+            request.get("ffmpeg") or "ffmpeg",
             request.get("ffprobe") or "ffprobe",
             float(request.get("start") or 0.0),
             float(request.get("duration") or 0.0),

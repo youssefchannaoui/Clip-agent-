@@ -101,6 +101,21 @@ done
 
 echo
 
+# ── the models the image carries ──────────────────────────────────────────────
+# COPY takes the whole of worker/, so a model is in the image or the build is
+# broken -- but a MISSING model fails soft by design: the captions render in
+# front of the speaker instead of behind, and the framing falls back to a
+# static crop. Both are what the product looked like before those features
+# existed, so nothing anywhere reports it and nobody notices for weeks. That
+# is precisely the shape this script exists for.
+for model in selfie_segmenter.tflite face_landmarker.task; do
+  if docker exec "$CONTAINER" test -s "/app/worker/models/$model"; then
+    ok "model: $model"
+  else
+    bad "model: $model" "the feature that needs it degrades silently"
+  fi
+done
+
 # ── what ffmpeg in the image can actually do ──────────────────────────────────
 # The filters are built as strings, so a missing one fails at render time, on a
 # real customer job, not here.

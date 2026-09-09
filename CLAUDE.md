@@ -17972,6 +17972,184 @@ its tip -- another session may have pushed past it), and what the next free
 number is. It writes nothing and never fails a build; it is a question, so it
 exits 0 whatever the answer. Its first real run found 3.177.1 already taken.
 
+## The framing knows who is speaking, and it CUTS (v3.186.0, 9 Sept 2026)
+
+Youssef, on a two-person podcast: "it doesn't even know who's speaking. So it
+was ... going to the opposite guy who wasn't even speaking. It was framing the
+opposite guy. Second off, it's not stable. It moves while they speak. It
+shouldn't be doing that. And it's, like, smoothly moving right and left. It
+should be cutting to the person who's speaking ... I feel like this shouldn't
+be this hard."
+
+Three complaints, three separate faults, three separate mechanisms. All of it
+is `worker/speaker.py`; the Haar tracker is DELETED rather than kept behind the
+new one, because keeping it would mean that behaviour still shipping,
+sometimes, silently.
+
+### 1. IT DID NOT KNOW WHO WAS SPEAKING, and the reason was arithmetic
+
+The shipped "mouth movement" was the mean absolute PIXEL DIFFERENCE of the
+lower half of a Haar box against the same region half a second earlier. A Haar
+box jitters between frames, and **its jitter scales with the box**, so that
+number measured face SIZE far more than it measured speech -- the nearest face
+won whether or not its mouth was open. "It was framing the opposite guy" is
+that, exactly.
+
+- **The signal is the LIP APERTURE**: the gap between MediaPipe's inner upper
+  and lower lip centres (landmarks 13 and 14), **divided by the face's own
+  height**. That one division is the whole fix, and it has its own test: the
+  same face rendered twice the size scores identically. The OUTER pair (0 and
+  17) moves with the jaw as well as the mouth and reads a chewing listener as
+  loudly as a talker.
+- **And it is correlated against the AUDIO.** A mouth that opens and closes in
+  time with the sound is the one making it. That is the cheap half of SyncNet,
+  which is what every serious active-speaker detector is built on (TalkNet-ASD,
+  Light-ASD, Sieve's fast-asd); the expensive half is a learned embedding, and
+  this needs no weights. Movement is the base and correlation a multiplier
+  between 0.55 and 1.0, never the other way round: correlation is noisy over a
+  short window and a confident wrong sign must not outvote a mouth that is
+  plainly working.
+- **The premise of the field is worth knowing before anyone "simplifies" this:**
+  the Premiere podcast plugins that do this perfectly are reading SEPARATE
+  MICROPHONE TRACKS. A single mixed YouTube track does not have them, which is
+  why OpusClip's own reviews report the identical failure -- "wobbled on
+  two-person crosstalk sections, cropping the wrong face twice".
+- **Silence holds the frame outright.** Whisper's own boundaries say when
+  somebody is talking, so nothing new is measured for it. In a pause every
+  face's mouth twitches, and a pause is not a reason to move the camera.
+
+### 2. IT MOVED WHILE THEY SPOKE
+
+`smooth_x += (cx - smooth_x) * 0.35`, on every sample. A box wobbling by twenty
+pixels dragged the frame about for the whole clip.
+
+**A shot's crop is ONE number -- the median of where that person was over the
+shot -- and it does not move until the shot ends.** A median over twenty samples
+cannot be dragged by a wobbling detection, by construction, and it is always a
+real position of one real person, so it can never land in the gap between two
+of them.
+
+Two rules protect that and each has a probe:
+
+- **Only the same person's positions build a shot's framing.** A brief run
+  absorbed from somebody ELSE used to bring its positions with it, and under
+  crosstalk those can outnumber the held speaker's inside one shot -- which
+  puts the median on the wrong person. That is the averaged crop this module
+  exists to remove, arriving through the merge.
+- **The merge distance is the SMALLER of the two faces, not the larger.**
+  Measured: a 320px face at x=1500 and a 140px face at x=1250 merged into ONE
+  subject under `max`, whose position then alternated between two people --
+  the same fault again, this time through the assignment.
+
+### 3. IT PANNED WHERE AN EDITOR WOULD CUT
+
+Every change of framing is a step now: one value up to the instant, another
+after it. `crop_expression(..., hold=True)` emits a row of constants **with no
+arithmetic in it at all**, where the interpolating form emits a chain of ramps
+-- and a chain of ramps is exactly what ffmpeg refused on a real lecture the
+same day, taking the whole job with it (v3.184.1).
+
+**PROVEN ON RENDERED FRAMES, not on the expression.** Two people told apart by
+BRIGHTNESS rather than position, because both are framed dead centre when
+chosen and a probe that only reads where the ink is cannot say which of them is
+on screen. The whole clip rendered through the real `build_video_filter`, then
+read back frame by frame:
+
+    n=87 t=2.900  A  centre 539.5 (-0.5)      cut
+    n=88 t=2.933  A  centre 539.5 (-0.5)
+    n=89 t=2.967  A  centre 539.5 (-0.5)
+    n=90 t=3.000  B  centre 539.5 (-0.5)   <- one frame, both dead centre
+    n=91 t=3.033  B  centre 539.5 (-0.5)
+
+    n=84 t=2.800  B  centre 632.0 (+92.0)     pan, the shipped behaviour
+    n=85 t=2.833  B  centre 614.0 (+74.0)
+    n=86 t=2.867  B  centre 600.0 (+60.0)
+    n=87 t=2.900  B  centre 585.5 (+45.5)     six frames off to one side
+
+**`-ss` BEFORE `-i` RESTARTS THE OUTPUT TIMESTAMPS AT ZERO**, so extracting a
+frame at t=3 with a seek asks the crop expression about t=0 -- and the first
+reading of this reported a cut that never happened, on a cut that happens
+exactly on time. Render the whole clip and read frames out of the OUTPUT. (That
+the seek resets `t` is also why the keyframes are clip-local: the export seeks
+to the clip's start the same way.)
+
+### The two other rules that make it watchable
+
+- **No shot is shorter than `MIN_SHOT_SECONDS` (1.6).** A sentence traded back
+  and forth would otherwise cut every half second, which is worse to watch than
+  the fault being fixed. A brief opening run is DROPPED rather than absorbed --
+  there is nothing behind it to absorb it, so the clip opens on whoever takes
+  over rather than cutting a second in.
+- **A REFRAME is exempt from that minimum**, and is the one thing that ends a
+  shot without the speaker changing: when the person being framed drifts more
+  than 22% of the crop's width from where the shot framed them. On a seated
+  podcast it never fires; on somebody walking across a stage it fires a handful
+  of times, which is how a locked camera follows a walker -- by cutting. The
+  alternative is letting them walk out of the picture, and
+  `test_someone_walking_across_the_stage_is_FOLLOWED` has protected that
+  property since v3.179.0.
+
+### THE MEASUREMENT AND THE DECISION ARE SEPARATE, and that is load-bearing
+
+Measuring needs MediaPipe, a decoder and a real face, so it can only run on the
+box. WHO IS TALKING and WHERE THE CROP GOES are arithmetic, and arithmetic is
+tested against the shot Youssef described -- on a machine with **no MediaPipe,
+no OpenCV and no numpy installed**, which is what this container is. v3.179.0
+established that split after a rebuild that could not be tested at all; this
+keeps it, and `_face_from_landmarks` and `audio_envelope` are deliberately on
+the testable side of the line (the first takes objects with `.x`/`.y`, the
+second is numpy-free and is driven with real ffmpeg).
+
+**18 red probes proven** -- 13 against the decision, 5 against the probe and the
+render's wiring -- and **two came back GREEN first**, which is the failure this
+file records more often than any other:
+
+- the speaker margin had no test at all, because the 1.2s correlation window
+  and the 1.6s minimum shot already absorbed every case the tests contained. It
+  has one now: a challenger 16% louder is inside the margin, and the answer to
+  "we cannot tell which of these two it is" is not to move the camera.
+- the median-vs-mean probe passed because the outlier it planted was a
+  ONE-SAMPLE ghost, and `speech_scores` discards a subject with fewer than two
+  present samples in the window before it can ever be chosen. The replacement
+  is a speaker who leans out of position for half a second, which is a real
+  thing and which a mean is dragged by.
+
+### The model, and what it costs
+
+`face_landmarker.task`, 3.76MB, vendored in `worker/models/` beside the selfie
+segmenter for the reason that file already gives: a render must not depend on
+Google's CDN, and a render that quietly loses its framing because a request
+timed out is exactly the kind of failure nothing anywhere reports. **MediaPipe
+itself was already in the image** -- it draws the captions-behind-speaker matte
+-- so this adds a file and no dependency. `worker/Dockerfile` copies the whole
+of `worker/`, so no build change; `verify-deploy.sh` now checks BOTH models are
+present in the running container, because a missing model fails soft by design
+and nobody would notice for weeks.
+
+Sampling is 12.5Hz (80ms), because a mouth opens and closes several times a
+second and the 2Hz the old tracker ran at cannot see a syllable at all. Frames
+are decoded at 960px wide -- the landmarker's own detector works small, and a
+200px face in a 1920 source is still 100px here. `MEASURE_BUDGET_SECONDS` caps
+it at three minutes a clip: it runs once per clip on a box rendering three at a
+time, so a pathological source must cost a partial answer rather than the job's
+whole budget. A partial answer is safe, because the last shot simply holds.
+
+**`export_with_framing_fallback` stays exactly as it is** (v3.184.1). Cuts make
+the expression far simpler and far less likely to be refused, but nothing about
+a nicer crop is ever worth a lecture.
+
+### What is NOT proven
+
+**No lecture has been imported since this landed, and no frame from the BOX has
+been seen.** Everything above is measured on the real functions, on real
+rendered frames from this machine, and on a described shot -- not on a face.
+Whether MediaPipe finds those two men in that lighting, and whether their
+apertures actually separate, is the next measurement: the source is still in
+the box's cache, `.github/scripts/framing-probe.py` was rewritten to ask the
+shipped functions about it, and `deploy-worker.yml` dispatched with
+`framing: true` is how. **Worker change, so `deploy-worker.yml` deploys it on
+push.**
+
 ## Automatic framing killed a whole lecture (v3.184.1, 9 Sept 2026)
 
 Youssef, on the two-person podcast: "this new framing system is horrible ... it
@@ -18024,17 +18202,11 @@ measured at 13/30/60/90/114/150/200/300 keyframes) and NOT a division by zero
 reproducible synthetically, which is itself the finding: it needs the real
 footage. The valve is deliberately indifferent to the reason.
 
-**THE FRAMING ITSELF IS STILL WRONG AND THIS DOES NOT FIX IT.** It stops
-lectures dying. The three complaints stand and their causes are named in the
-entry below: the "who is speaking" signal is a raw pixel difference of the
-lower half of a jittering Haar box, sampled 0.5s apart, so it measures box
-jitter (which scales with face size, so the nearest face wins) rather than
-speech; `smooth_x += (cx - smooth_x) * 0.35` drifts the crop every sample; and
-`SPEAKER_MOVE_SECONDS` pans where an editor would cut. The rebuild is
-MediaPipe lip landmarks correlated against the audio envelope -- the cheap
-SyncNet -- cutting rather than panning. **MediaPipe is already in the worker
-image** (it draws the captions-behind-speaker matte), and the Face Landmarker
-model is a 3.8MB vendored file like `selfie_segmenter.tflite`.
+**THE FRAMING ITSELF WAS STILL WRONG AND THIS DID NOT FIX IT.** It stopped
+lectures dying. The three complaints and their causes are in the section above
+(v3.186.0), which is the rebuild; this valve is kept underneath it, because
+cuts make the expression far less likely to be refused and "far less likely" is
+not "never", and nothing about a nicer crop is worth a lecture.
 
 **Researched first, and the field says this is the hard case.** Audio-visual
 active-speaker detection is the technique (SyncNet, TalkNet-ASD, Light-ASD);

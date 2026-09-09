@@ -177,8 +177,8 @@ class SpeakerTrackingTests(unittest.TestCase):
 
     def test_manual_bias_produces_a_usable_plan(self):
         for bias in ["left", "center", "right"]:
-            plan = worker.track_speaker_keyframes(
-                self.VIDEO, "ffprobe", 0, 6, 1080, 1920, bias=bias,
+            plan = worker.speaker_crop_plan(
+                self.VIDEO, "ffmpeg", "ffprobe", 0, 6, 1080, 1920, bias=bias,
             )
             self.assertTrue(plan["available"], f"{bias} should always be available")
             self.assertEqual(plan["method"], f"bias-{bias}")
@@ -187,8 +187,8 @@ class SpeakerTrackingTests(unittest.TestCase):
     def test_bias_positions_are_ordered_left_to_right(self):
         xs = {}
         for bias in ["left", "center", "right"]:
-            plan = worker.track_speaker_keyframes(
-                self.VIDEO, "ffprobe", 0, 6, 1080, 1920, bias=bias,
+            plan = worker.speaker_crop_plan(
+                self.VIDEO, "ffmpeg", "ffprobe", 0, 6, 1080, 1920, bias=bias,
             )
             xs[bias] = plan["keyframes"][0]["x"]
         self.assertLess(xs["left"], xs["center"], "left must sit left of centre")
@@ -196,16 +196,16 @@ class SpeakerTrackingTests(unittest.TestCase):
 
     def test_keyframes_keep_the_output_aspect_ratio(self):
         target = 1080 / 1920
-        plan = worker.track_speaker_keyframes(
-            self.VIDEO, "ffprobe", 0, 6, 1080, 1920, bias="center",
+        plan = worker.speaker_crop_plan(
+            self.VIDEO, "ffmpeg", "ffprobe", 0, 6, 1080, 1920, bias="center",
         )
         for frame in plan["keyframes"]:
             ratio = frame["w"] / frame["h"]
             self.assertLess(abs(ratio - target) / target, 0.01, "crop must not distort")
 
     def test_keyframes_stay_inside_the_source(self):
-        plan = worker.track_speaker_keyframes(
-            self.VIDEO, "ffprobe", 0, 6, 1080, 1920, bias="right",
+        plan = worker.speaker_crop_plan(
+            self.VIDEO, "ffmpeg", "ffprobe", 0, 6, 1080, 1920, bias="right",
         )
         for frame in plan["keyframes"]:
             self.assertGreaterEqual(frame["x"], 0)
@@ -216,16 +216,16 @@ class SpeakerTrackingTests(unittest.TestCase):
     def test_failure_is_reported_cleanly_rather_than_crashing(self):
         # Synthetic footage has no real faces, so auto detection must fail
         # with a readable reason instead of raising.
-        plan = worker.track_speaker_keyframes(
-            self.VIDEO, "ffprobe", 0, 6, 1080, 1920, bias="auto",
+        plan = worker.speaker_crop_plan(
+            self.VIDEO, "ffmpeg", "ffprobe", 0, 6, 1080, 1920, bias="auto",
         )
         self.assertIn("available", plan)
         if not plan["available"]:
             self.assertTrue(plan.get("reason"), "a failure must explain itself")
 
     def test_a_missing_file_does_not_raise(self):
-        plan = worker.track_speaker_keyframes(
-            pathlib.Path("/tmp/definitely-not-here.mp4"), "ffprobe", 0, 5, 1080, 1920,
+        plan = worker.speaker_crop_plan(
+            pathlib.Path("/tmp/definitely-not-here.mp4"), "ffmpeg", "ffprobe", 0, 5, 1080, 1920,
         )
         self.assertFalse(plan["available"])
         self.assertTrue(plan.get("reason"))
@@ -233,8 +233,8 @@ class SpeakerTrackingTests(unittest.TestCase):
     def test_portrait_source_needs_no_crop(self):
         # A source already narrower than the target should decline rather
         # than invent a crop.
-        plan = worker.track_speaker_keyframes(
-            self.VIDEO, "ffprobe", 0, 6, 1920, 1080, bias="auto",
+        plan = worker.speaker_crop_plan(
+            self.VIDEO, "ffmpeg", "ffprobe", 0, 6, 1920, 1080, bias="auto",
         )
         self.assertFalse(plan["available"])
 
