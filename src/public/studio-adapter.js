@@ -5176,40 +5176,114 @@
       var p = Number(pr.progress || 0);
       return Math.max(0, Math.min(1, (p - band[0]) / (band[1] - band[0])));
     }
+    // The pace this deployment's worker actually runs at, learned from the
+    // lectures it has already finished (src/pace.js) and sent with the state.
+    // An older payload, or a deployment that has finished nothing, falls back
+    // to the figures measured on the box -- never to a missing model.
+    var SHIPPED_PACE = { importPerSourceSec: 0.03, transcribePerSourceSec: 0.27, scorePerSourceSec: 0.15, scoreFloorSec: 60, renderPerClipSec: 40, tailSec: 20 };
+    function paceOf() {
+      var sent = (LAST_DATA && LAST_DATA.pace) || null;
+      if (!sent) return SHIPPED_PACE;
+      var out = {};
+      for (var key in SHIPPED_PACE) {
+        var value = Number(sent[key]);
+        out[key] = isFinite(value) && value > 0 ? value : SHIPPED_PACE[key];
+      }
+      return out;
+    }
     function pipelineEta(pr) {
       var srcSec = pr.sourceEndSec
         ? Math.max(0, Number(pr.sourceEndSec) - Number(pr.sourceStartSec || 0))
         : Number(pr.durationSec || pr.sourceDurationSec || 0);
       if (!srcSec) return { etaSec: null, stagePct: null };
       var clipsPlanned = Number(pr.clipsRequested || pr.totalClips || 0) || Math.max(3, Math.min(10, Math.round(srcSec / 480)));
+      var pace = paceOf();
       var cost = {
-        import: Math.max(30, srcSec * 0.03),
-        transcribe: Math.max(20, srcSec * 0.16),
-        score: 75,
-        render: clipsPlanned * 110,
+        import: Math.max(30, srcSec * pace.importPerSourceSec),
+        transcribe: Math.max(20, srcSec * pace.transcribePerSourceSec),
+        score: Math.max(pace.scoreFloorSec, srcSec * pace.scorePerSourceSec),
+        render: clipsPlanned * pace.renderPerClipSec,
       };
       var order = ['import', 'transcribe', 'score', 'render'];
       var name = phaseOf(pr);
       if (!name) return { etaSec: null, stagePct: null };
-      var frac;
-      if (name === 'import' && pr.bytesTotal && pr.bytesDone) {
-        frac = Math.max(0, Math.min(1, Number(pr.bytesDone) / Number(pr.bytesTotal)));
-      } else if (name === 'render' && Number(pr.totalClips) > 0) {
-        // Clips render in order; only the running one has a measured percent.
-        var done = Math.max(0, Number(pr.currentClip || 1) - 1) + Math.max(0, Math.min(100, Number(pr.clipPercent || 0))) / 100;
-        frac = Math.max(0, Math.min(1, done / Number(pr.totalClips)));
-      } else {
-        frac = bandFraction(pr, name);
-      }
+      var frac = stageFraction(pr, name);
       var remaining = cost[name] * (1 - frac);
-      // The worker measures the import's own remaining time from bytes; when it
-      // says so, believe it over the model -- for that stage only.
-      if (name === 'import' && pr.etaSec !== null && pr.etaSec !== undefined && isFinite(pr.etaSec)) {
+      // THE WORKER'S OWN ETA WINS, FOR WHATEVER STAGE REPORTED IT. It is a
+      // measurement -- the download's smoothed speed over the bytes left, or
+      // the transcriber's own seconds-of-audio-per-second over the audio left
+      // -- where everything above is a model. This used to be read for the
+      // import ALONE, so the best number in the system was thrown away for the
+      // transcription, which is 42% of a job and the longest wait in it.
+      if (pr.etaSec !== null && pr.etaSec !== undefined && isFinite(pr.etaSec) && Number(pr.etaSec) >= 0) {
         remaining = Number(pr.etaSec);
       }
       for (var i = order.indexOf(name) + 1; i < order.length; i++) remaining += cost[order[i]];
-      remaining += 20; // upload + finalise tail
+      remaining += pace.tailSec;
       return { etaSec: Math.max(10, remaining), stagePct: Math.round(frac * 100) };
+    }
+    // How far through the CURRENT phase, from the best evidence available.
+    //
+    // The order is deliberate and each step exists because the one after it was
+    // not enough. The worker's own fraction is exact; bytes are exact while a
+    // total is known; the clip count is exact while rendering. The LAST resort
+    // is elapsed time against what this phase is expected to cost -- and it is
+    // there because the alternative was worse than a rough number. Reading the
+    // fraction back off the global percentage, which the import owns five
+    // points of, produced a step percentage that could only ever show 0, 20,
+    // 40, 60, 80 or 100 -- and on a download with no Content-Length the
+    // percentage never moved off 3 at all, so it read 0% for a quarter of an
+    // hour while the megabytes plainly climbed. Nothing here can do that: a
+    // clock always moves.
+    function stageFraction(pr, name) {
+      var sent = Number(pr.stageFraction);
+      if (isFinite(sent) && sent >= 0 && sent <= 1) return sent;
+      if (name === 'import' && pr.bytesTotal && pr.bytesDone) {
+        return Math.max(0, Math.min(1, Number(pr.bytesDone) / Number(pr.bytesTotal)));
+      }
+      if (name === 'render' && Number(pr.totalClips) > 0) {
+        // Clips render in order; only the running one has a measured percent.
+        var done = Math.max(0, Number(pr.currentClip || 1) - 1) + Math.max(0, Math.min(100, Number(pr.clipPercent || 0))) / 100;
+        return Math.max(0, Math.min(1, done / Number(pr.totalClips)));
+      }
+      var band = bandFraction(pr, name);
+      if (band > 0) return band;
+      return elapsedFraction(pr, name);
+    }
+    // The floor: how long this phase has been running, over what it is expected
+    // to cost.
+    //
+    // THIS IS THE ONE PLACE A CLOCK REACHES THE ESTIMATE, and the bug it could
+    // re-create is on record: the estimator this model replaced extrapolated
+    // the whole job from how fast the global percentage moved, so a bar that
+    // held still drove the ETA from "5 min left" to "2h left" on a perfectly
+    // healthy job. Two properties stop that happening here, and both are
+    // tested. It can only ever make the remaining time SHRINK, because the
+    // caller spends it as `cost * (1 - fraction)` -- so it cannot balloon by
+    // construction, whatever the clock does. And a phase that OUTRUNS its
+    // estimate does not go on approaching 100%: the denominator grows with the
+    // elapsed time instead, so the fraction settles near 0.87 and the answer
+    // stops at "a little longer" rather than counting down to a finish that is
+    // not coming. That is the honest limit of estimating a phase that can
+    // report nothing about itself, and it is the last resort -- every phase
+    // that can measure itself is read before this is reached.
+    function elapsedFraction(pr, name) {
+      var since = Number(pr.phaseStartedAt || 0);
+      if (!since) return 0;
+      var srcSec = pr.sourceEndSec
+        ? Math.max(0, Number(pr.sourceEndSec) - Number(pr.sourceStartSec || 0))
+        : Number(pr.durationSec || pr.sourceDurationSec || 0);
+      if (!srcSec) return 0;
+      var pace = paceOf();
+      var expected = name === 'import' ? Math.max(30, srcSec * pace.importPerSourceSec)
+        : name === 'transcribe' ? Math.max(20, srcSec * pace.transcribePerSourceSec)
+        : name === 'score' ? Math.max(pace.scoreFloorSec, srcSec * pace.scorePerSourceSec)
+        : Math.max(60, Number(pr.totalClips || 1) * pace.renderPerClipSec);
+      var elapsed = Math.max(0, (Date.now() - since) / 1000);
+      // 1.15 leaves an eighth of the phase always outstanding once it has
+      // overrun, so the number stops falling rather than reaching zero and
+      // sitting there while the work plainly continues.
+      return Math.max(0, Math.min(0.9, elapsed / Math.max(expected, elapsed * 1.15, 1)));
     }
     // For jobs with no known source length (edits, more-clips), a flat model of
     // their own remaining stages -- still never a trend line.
@@ -5228,7 +5302,7 @@
           : pr.status === 'queued' && pr.queueAhead === 0
             ? 'Next in line'
             : null;
-        jobsLive.push({ kind: 'project', id: pr.id, queued: pr.status === 'queued', boosted: pr.priority === 0, title: projectTitle[pr.id], stage: queuedStage || pr.stage || pr.status, progress: Number(pr.progress || 0), eta: pipelineEta(pr), bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, at: pr.startedAt || pr.submittedAt, project: pr });
+        jobsLive.push({ kind: 'project', id: pr.id, queued: pr.status === 'queued', boosted: pr.priority === 0, title: projectTitle[pr.id], stage: queuedStage || pr.stage || pr.status, progress: Number(pr.progress || 0), eta: pipelineEta(pr), bytesDone: pr.bytesDone, bytesTotal: pr.bytesTotal, bytesPerSec: pr.bytesPerSec, at: pr.startedAt || pr.submittedAt, project: pr });
       }
       if (pr.moreJob && ['queued', 'processing'].indexOf(pr.moreJob.status) > -1) {
         jobsLive.push({ kind: 'more', id: pr.id, queued: pr.moreJob.status === 'queued', boosted: pr.moreJob.priority === 0, title: 'More clips · ' + projectTitle[pr.id], stage: pr.moreJob.stage || pr.moreJob.status, progress: Number(pr.moreJob.progress || 0), etaSec: flatEta(480, pr.moreJob.progress), at: pr.moreJob.startedAt || pr.moreJob.createdAt });
@@ -5272,27 +5346,50 @@
 
     // Binary units, matching what a download manager and the OS both report, so
     // the number does not disagree with the file on disk.
-    function sizeLabel(bytes) {
+    function sizeLabel(bytes, decimals) {
       var n = Number(bytes);
       if (!isFinite(n) || n <= 0) return '';
       if (n < 1024) return n + ' B';
       if (n < 1048576) return Math.round(n / 1024) + ' KB';
-      if (n < 1073741824) return Math.round(n / 1048576) + ' MB';
-      return (n / 1073741824).toFixed(1) + ' GB';
+      if (n < 1073741824) return (n / 1048576).toFixed(decimals ? 1 : 0) + ' MB';
+      return (n / 1073741824).toFixed(decimals ? 2 : 1) + ' GB';
     }
-    // "142 MB / 380 MB" while the total is known, "142 MB" while it is not --
-    // a server that sends no Content-Length is common and must not print "of 0".
+    // "214.7 MB / 806 MB" while the total is known, "214.7 MB" while it is not
+    // -- a download with no length is common and must not print "of 0".
+    //
+    // THE DECIMAL IS ON THE MOVING HALF ONLY, and it is there to be watched. A
+    // slow exit from the proxy pool moves half a megabyte a second, so a whole
+    // number sat still for two seconds at a time and read as a stalled import;
+    // a tenth always moves. The total is a fixed quantity and a decimal on it
+    // would be noise beside the one number that is meant to be changing.
     function transferLabel(done, total) {
-      var a = sizeLabel(done);
+      var a = sizeLabel(done, true);
       if (!a) return '';
-      var b = sizeLabel(total);
+      var b = sizeLabel(total, false);
       return b ? a + ' / ' + b : a;
+    }
+    // The download's own speed. It is the only figure that is available on
+    // EVERY download -- a fragmented format may report no total and a section
+    // reports nothing at all -- so on the imports that can show no percentage
+    // of their own it is the whole of the proof that something is happening.
+    function speedLabel(bytesPerSec) {
+      var n = Number(bytesPerSec);
+      if (!isFinite(n) || n <= 0) return '';
+      if (n < 1048576) return Math.round(n / 1024) + ' KB/s';
+      return (n / 1048576).toFixed(1) + ' MB/s';
     }
 
     function etaLabel(seconds) {
       if (seconds === null || seconds === undefined || !isFinite(seconds)) return '';
       var s = Math.max(0, Math.round(seconds));
-      if (s < 45) return 'about a minute left';
+      // Under a minute the wait is nearly over and a countdown is what says so.
+      // Rounded to five seconds rather than one: a number that ticks every
+      // second is a stopwatch, and this is an estimate.
+      if (s < 10) return 'seconds left';
+      if (s < 60) return (Math.round(s / 5) * 5) + ' sec left';
+      // Between one and three minutes, minutes alone would show the same word
+      // for a minute and a half at a time.
+      if (s < 180) return Math.floor(s / 60) + ' min ' + (Math.round((s % 60) / 10) * 10) + ' sec left';
       if (s < 3600) return Math.round(s / 60) + ' min left';
       var h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
       return m ? h + 'h ' + m + 'm left' : h + 'h left';
@@ -5354,12 +5451,19 @@
       // How far through THIS step, so a stage that holds the global bar still
       // for minutes -- the import, a long transcription -- still visibly moves.
       var stepPct = (model.stagePct === null || model.stagePct === undefined) ? '' : model.stagePct + '% of this step';
-      // Only the import moves bytes, so this is absent for the rest of the
-      // pipeline rather than showing a frozen figure from an earlier phase.
-      var transfer = transferLabel(j.bytesDone, j.bytesTotal);
-      // Stage, then size, then time remaining: what it is doing, how far in, how
-      // much longer.
-      var detail = j.stage + (stepPct ? ' · ' + stepPct : '') + (transfer ? ' · ' + transfer : '') + (eta ? ' · ' + eta : '');
+      // ONLY WHILE THE IMPORT IS THE PHASE THAT IS RUNNING. Nothing clears the
+      // byte counters when a download ends -- they stay on the job record for
+      // the rest of its life -- so this comment used to claim they were absent
+      // afterwards while the row went on showing "806 MB / 806 MB" through the
+      // whole transcription. With a speed beside them that reads as a download
+      // still running an hour after it finished.
+      var importing = phaseOf(j.project || {}) === 'import';
+      var transfer = importing ? transferLabel(j.bytesDone, j.bytesTotal) : '';
+      var speed = importing ? speedLabel(j.bytesPerSec) : '';
+      // Stage, then how far in, then size and speed, then time remaining: what
+      // it is doing, how far through it is, how fast, how much longer.
+      var detail = j.stage + (stepPct ? ' · ' + stepPct : '') + (transfer ? ' · ' + transfer : '')
+        + (speed ? ' · ' + speed : '') + (eta ? ' · ' + eta : '');
       var clips = clipBreakdown(j.project, j.stage);
       return {
         label: j.title,

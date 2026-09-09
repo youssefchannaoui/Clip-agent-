@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import os
 import pathlib
 import queue
@@ -1744,12 +1745,21 @@ class Processor:
                 # rail appeared to run backwards.
                 stage = str(event.get("stage") or "processing")
                 eta = event.get("etaSec")
+                fraction = event.get("stageFraction")
                 fields: dict[str, Any] = {
                     "status": stage,
                     "stage": stage,
                     "phase": str(event.get("phase") or ""),
                     "progress": int(event.get("progress") or 0),
                     "etaSec": None if eta is None else int(round(float(eta))),
+                    # SENT EVEN WHEN IT IS NONE, unlike the clip fields below.
+                    # These two are stage-scoped and the worker clears them the
+                    # moment a stage ends (STAGE_SCOPED_KEYS in clip_worker.py);
+                    # forwarding them only when present would put that back --
+                    # the app would hold the transcription's last fraction and
+                    # ETA all the way through the scorer and count down to a
+                    # moment that had already gone.
+                    "stageFraction": None if fraction is None else max(0.0, min(1.0, float(fraction))),
                 }
                 # The per-clip breakdown behind "Rendering clip 2 of 4". Only
                 # forwarded when the worker sends it, so the fields are not

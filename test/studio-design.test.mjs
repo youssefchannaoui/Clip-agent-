@@ -1018,11 +1018,16 @@ test('the import reports how much has actually downloaded', () => {
     projects: [{ id: 'p', title: 'Talk', status: 'processing', stage: 'Importing', progress: 5, bytesDone, bytesTotal, submittedAt: Date.now() }],
     clips: [], tracks: [],
   }).liveAll[0];
-  assert.equal(row(149_000_000, 398_000_000).transfer, '142 MB / 380 MB');
-  assert.match(row(149_000_000, 398_000_000).meta, /Importing · 142 MB \/ 380 MB/);
+  // THE DECIMAL IS ON THE MOVING HALF ONLY, and it is deliberate: a slow exit
+  // from the proxy pool moves half a megabyte a second, so a whole number sat
+  // still for seconds at a time and read as a stalled import. The total is a
+  // fixed quantity and a decimal on it would be noise beside the one number
+  // that is meant to be changing.
+  assert.equal(row(149_000_000, 398_000_000).transfer, '142.1 MB / 380 MB');
+  assert.match(row(149_000_000, 398_000_000).meta, /Importing · 142\.1 MB \/ 380 MB/);
   // A server that sends no Content-Length is common; it must not print "of 0".
-  assert.equal(row(149_000_000, null).transfer, '142 MB');
-  assert.equal(row(149_000_000, 0).transfer, '142 MB');
+  assert.equal(row(149_000_000, null).transfer, '142.1 MB');
+  assert.equal(row(149_000_000, 0).transfer, '142.1 MB');
   // Absent entirely outside the import, rather than a frozen figure.
   assert.equal(row(null, null).transfer, '');
   assert.equal(row(undefined, undefined).meta, 'Importing');
@@ -1035,8 +1040,8 @@ test('download sizes are reported in units that match the file on disk', () => {
   }).liveAll[0].transfer;
   assert.equal(row(900), '900 B');
   assert.equal(row(2048), '2 KB');
-  assert.equal(row(5_242_880), '5 MB');
-  assert.equal(row(3_221_225_472), '3.0 GB', 'a long import is the case this exists for');
+  assert.equal(row(5_242_880), '5.0 MB');
+  assert.equal(row(3_221_225_472), '3.00 GB', 'a long import is the case this exists for');
 });
 
 test('an ETA is rendered in human units, and absent when unknown', () => {
@@ -1051,9 +1056,11 @@ test('an ETA is rendered in human units, and absent when unknown', () => {
   // Hours: a three-hour lecture with a big clip order, honestly.
   assert.match(etaFor({ stage: 'importing', phase: 'importing', progress: 3, durationSec: 10800, clipsRequested: 10 }),
     /^\d+ min left$|^\dh( \d+m)? left$/);
-  // About a minute: the last clip nearly done.
-  assert.equal(etaFor({ stage: 'Rendering clip 3 of 3', phase: 'render', progress: 97, durationSec: 3600,
-    clipsRequested: 3, currentClip: 3, totalClips: 3, clipPercent: 95 }), 'about a minute left');
+  // Seconds: the last clip nearly done. Under a minute the wait is nearly over
+  // and a countdown is what says so -- "about a minute left" was the same
+  // sentence for anything from ten seconds to three quarters of a minute.
+  assert.match(etaFor({ stage: 'Rendering clip 3 of 3', phase: 'render', progress: 97, durationSec: 3600,
+    clipsRequested: 3, currentClip: 3, totalClips: 3, clipPercent: 95 }), /^(seconds|\d+ sec) left$/);
   // Unknown length: nothing rather than "NaN" or a fiction.
   assert.equal(etaFor({ stage: 'importing', phase: 'importing', progress: 3, durationSec: 0 }), '');
 });
@@ -1265,7 +1272,9 @@ test('the ETA is a stage model, and cannot balloon while the bar holds still', (
   const rendering = rowFor({ stage: 'Rendering clip 2 of 3', phase: 'render', progress: 85,
     currentClip: 2, totalClips: 3, clipPercent: 50 });
   assert.match(rendering.text, /50% of this step/, 'the step percentage is visible');
-  assert.match(rendering.text, /[1-5] min left/, 'minutes, not a guess');
+  // Bounded and specific: half of one clip plus the tail, not an extrapolation.
+  assert.match(rendering.text, /\d+ (min|sec)( \d+ sec)? left/, 'a short, bounded answer');
+  assert.doesNotMatch(rendering.text, /h left|h \d+m left/, 'never hours for half a clip');
 
   // Transcribing mid-band shows movement inside the step.
   const transcribing = rowFor({ stage: 'Transcribing', phase: 'transcribe', progress: 36 });

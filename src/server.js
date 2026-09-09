@@ -22,6 +22,7 @@ import * as agent from './agent.js';
 import * as backup from './backup.js';
 import * as alerts from './alerts.js';
 import * as selfcheck from './selfcheck.js';
+import * as pace from './pace.js';
 import * as ownerFeed from './owner-feed.js';
 import { fallbackThumb } from './local-engine.js';
 import * as social from './social.js';
@@ -922,6 +923,12 @@ function appState(user = null) {
       id: project.id, title: project.title, url: project.url, engine: project.engine, status: project.status,
       stage: project.stage, phase: project.phase || '', progress: project.progress || 0, etaSec: project.etaSec ?? null, error: project.error || null, errorCode: project.errorCode || null,
       bytesDone: project.bytesDone ?? null, bytesTotal: project.bytesTotal ?? null,
+      // The download's measured speed, the worker's own exact fraction of the
+      // phase it is on, and when that phase began. Between them these are what
+      // let the row show a number that MOVES: without them the import reported
+      // megabytes climbing beside a percentage and an ETA that both sat still.
+      bytesPerSec: project.bytesPerSec ?? null, stageFraction: project.stageFraction ?? null,
+      phaseStartedAt: project.phaseStartedAt ?? null,
       currentClip: project.currentClip ?? null, totalClips: project.totalClips ?? null,
       clipPercent: project.clipPercent ?? null, clipPlan: project.clipPlan || null,
       submittedAt: project.submittedAt, completedAt: project.completedAt || null, clipCount: project.clipCount || 0,
@@ -966,9 +973,28 @@ function appState(user = null) {
       return { postTimes: windows.times, postWindows: windows.rows, postWindowAllowance: windows.allowance };
     })(),
     timezone: config.timezone, activeJobs: agent.engine.activeJobCount(),
+    // How fast this worker actually is, learned from the lectures it has
+    // already finished, so the dashboard's ETA is quoted at THIS box's pace
+    // rather than at constants measured against hardware that has since been
+    // replaced twice. See src/pace.js.
+    pace: cachedPace(),
     log: logFor(user, 60), directPublishingEnabled: config.socialPublishEnabled,
     publishingSettings: publishingSettings(user), social: social.connectionStatus(user), billing: billing.publicBilling(user),
   };
+}
+
+// /api/state is the hottest route in the product -- every open tab polls it
+// every two seconds while a job runs -- and the pace is a rolling median over
+// finished lectures that cannot meaningfully change between two of those polls.
+// Recomputed at most once a minute, and immediately whenever a lecture has
+// finished since the last answer, so a customer's very first completed job
+// improves the next estimate they are shown rather than the one after that.
+let paceCache = { at: 0, lectures: -1, value: null };
+function cachedPace() {
+  const done = state.projects.filter(project => project.status === 'done').length;
+  if (paceCache.value && paceCache.lectures === done && Date.now() - paceCache.at < 60_000) return paceCache.value;
+  paceCache = { at: Date.now(), lectures: done, value: pace.measurePace(state.projects) };
+  return paceCache.value;
 }
 
 function runDoctor() {

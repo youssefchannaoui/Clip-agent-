@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1960 JS + 860 Python**
+- `npm test` and `npm run check` must pass. Currently **1981 JS + 874 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -17226,3 +17226,217 @@ opaque 92px box planted over the same band is reported on every screen.
 Five probes proven red -- the reservation restored, each clearance rule deleted,
 the token hardcoded twice, and the body class no longer stamped -- each
 asserting it had edited exactly one occurrence before the run.
+
+## The ETA was three constants and a gate, and every one of them was wrong (v3.177.0, 9 Sept 2026)
+
+Youssef, watching an import: "it could stay on fifteen minutes for longer than
+fifteen minutes ... it says it's on zero percent, but you can clearly see the
+MB has went up ... now it's four hundred MB, still fifteen minutes left, and
+zero percent of the step done. So, yeah, nothing really adds up."
+
+### THE THREE COMPLAINTS WERE ONE FAULT, and it was a missing denominator
+
+yt-dlp had reported no byte TOTAL for that download, and the whole import model
+was gated on having one. `pulse()` in service.py opened `if total_bytes and
+done_bytes:` -- so with no total it wrote no `progress` and no `etaSec`, and the
+dashboard's `pipelineEta` fell through to `bandFraction`, which reads the
+fraction back off a global bar the worker had therefore never moved. The
+arithmetic of that is `cost.import * (1 - 0)` -- **a constant**. Fifteen minutes
+stayed fifteen minutes because it was the same multiplication every time. The
+step percentage read 0 for the same reason, and the megabytes climbed because
+they were the ONE figure not behind the gate.
+
+**Reproduced rather than remembered**, by serving the shipped adapter against
+the payload production sent, and reading the row five times over a minute:
+
+    BEFORE  importing · 0% of this step · 477 MB · 30 min left
+            importing · 0% of this step · 477 MB · 30 min left
+            importing · 0% of this step · 506 MB · 30 min left
+            importing · 0% of this step · 531 MB · 30 min left
+            importing · 0% of this step · 559 MB · 30 min left
+
+    AFTER   importing · 79% of this step · 498.1 MB / 631 MB · 1.8 MB/s · 23 min left
+            importing · 82% of this step · 516.0 MB / 631 MB · 1.8 MB/s · 23 min left
+            importing · 86% of this step · 544.5 MB / 631 MB · 1.8 MB/s · 23 min left
+            importing · 86% of this step · 544.5 MB / 631 MB · 1.8 MB/s · 23 min left
+            importing · 90% of this step · 569.5 MB / 631 MB · 1.8 MB/s · 22 min left
+
+### Where a denominator comes from, in order
+
+`DownloadProgress` in import_providers.py is the one answer, because every
+downloader yt-dlp can pick reports something different and reading only one of
+them is what produced the zero:
+
+* a plain HTTP download carries exact `downloaded_bytes` and `total_bytes`;
+* a **fragmented DASH** one often carries no total but counts its fragments --
+  the rescue download this file already records came back as **348 fragments**,
+  and a fragment count plus a byte count IS a denominator;
+* the **ffmpeg** downloader a SECTION uses carries nothing whatsoever, and that
+  is the path every ranged import takes. There the growing file on disk is the
+  only measurement, and the extractor's own metadata (`filesize_approx` scaled
+  to the window, or `tbr`) is the only denominator. It is an ESTIMATE and only
+  ever seeds a figure the real bytes then correct upward.
+
+Three properties it holds that the raw hook does not, each of them a way the
+number could otherwise lie:
+
+1. **The count never goes backwards.** `bv*+ba` fetches video and audio as
+   separate files and `downloaded_bytes` RESTARTS at zero for the second, so the
+   megabytes climbed to 400 and dropped to 30. Finished files are banked.
+2. **A retry starts over.** Up to three rounds of ten attempts, each beginning
+   from an empty file under `overwrites` -- carrying a failed attempt forward
+   reported 900 MB of a 400 MB video.
+3. **The denominator only ever grows.** `max(total, done)`, so an estimate the
+   real bytes overtake cannot pin the bar at 100% while the file is arriving.
+
+**The downloader's own totals are preferred over the estimate, and they are
+SUMMED** rather than read one at a time: during a merge the denominator is short
+by the audio track -- five to ten per cent -- until the audio begins, and exact
+after. A bar slightly ahead of itself that corrects is worth having; one pinned
+to zero is not.
+
+### The pulse reports without one, and the cadence was half the feeling
+
+Everything is off the gate now. The **speed** goes out whether or not a total is
+known -- it is the only figure that is always available, and on a download with
+no denominator it is the whole of the proof that anything is happening. The
+**fraction travels exactly** as `stageFraction` rather than being reverse-
+engineered from a five-point band, where a quarter-hour download could appear to
+advance five times. And the ETA is computed from a **time-weighted EWMA of the
+recent speed** (`DOWNLOAD_RATE_TAU_SECONDS`, 30s) over the bytes left, not from
+the whole run's average -- an average cannot notice the proxy pool handing over
+to a faster exit, so it quotes the first slow minute for the whole import. That
+is the "it can move up and down, just not crazily" this was aiming at.
+
+**`IMPORT_PROGRESS_SECONDS` is 2.0, split out from the 15s heartbeat.** The beat
+proves liveness and 15s is plenty for that; a PROGRESS BAR is a different job.
+The app polls the worker every 5s and the browser repaints every 2s, so at 15s
+the megabyte count moved once per three or four polls and everything on screen
+sat still in between -- which is most of what "I think it's stuck" was.
+
+### The stage costs were measured on hardware that no longer exists
+
+The dashboard's four constants were measured on 26 Aug 2026 against a two-core
+box. It has since been rescaled to eight cores, moved toward whisper `medium`,
+and taught to render in parallel lanes. **`project.timings` has been stamped on
+every result since v3.77.0 and nothing had ever read it** -- so the box was asked
+(`deploy-worker.yml` diagnose) and it answered, for the very lecture in the
+screenshot: `total 1269s -- import 0s transcribe 531s score 286s render 450s`,
+window 0..1936, 12 clips.
+
+    phase        the constants said   it actually took   error
+    transcribe   310s                 531s               -42%
+    score         75s                 286s               -74%
+    render      1320s                 450s              +193%
+    whole job   1783s (29.7 min)     1269s (21.2 min)    +40%
+
+**Wrong by 40% overall while each part was wrong by up to 193%** -- which cannot
+be fixed by picking better constants, because the next hardware change
+invalidates them and this one has changed twice in a fortnight. `src/pace.js`
+LEARNS the rates from the deployment's own finished lectures and `/api/state`
+carries them. Its shipped fallback is the figures above rather than the retired
+ones, so a deployment with no history starts from what this hardware does today:
+predicted 1313s against the real 1269s, **3.5% out, from 40%**.
+
+Three properties, each a way it could otherwise mislead:
+
+- **The median, never the mean.** One pathological lecture must not move the
+  estimate every other customer is shown; a single outlier cannot shift a median
+  at all, which is the whole reason for choosing it.
+- **Recent lectures only** (25). The rates describe the HARDWARE, and a rate
+  averaged over every job ever run would be dominated by the two-core box for
+  months after it was retired.
+- **A CACHE HIT IS NOT A FAST IMPORT.** The worker's source cache makes a re-run
+  report 0s, and learning from those teaches the model that downloads are free
+  and quotes an ETA that omits the longest phase of all. Excluded.
+
+Nothing here is per-account: the worker is one box shared by everyone, so how
+fast it runs is a property of the deployment.
+
+### The best number in the system was being thrown away
+
+`pipelineEta` read the worker's own `etaSec` for the IMPORT ALONE. Transcription
+measures its own throughput -- seconds of audio per second of work -- and sends
+the remaining time with every progress line; **that is 42% of a job and the
+longest single wait in it**, and its measurement was discarded for a model.
+Rendering likewise computes a real per-clip average across its lanes. The
+condition now trusts whichever phase reports one, which is a one-line change
+worth more than the rest of the model.
+
+**That made a latent bug load-bearing, so it was fixed at the source.**
+`_progress_state` in clip_worker.py is a running dictionary every `progress()`
+call merges into, so a figure nobody clears is still in it stages later -- the
+transcription's ETA sat there while the scorer ran. Believed, it would count
+down to a moment that had already passed and then stick. `STAGE_SCOPED_KEYS` is
+cleared on every stage change, and service.py forwards `stageFraction` **even
+when it is None**, unlike the clip fields beside it, or the app would hold the
+last phase's answer through the next one.
+
+### Two smaller things that were plainly wrong once looked at
+
+- **Nothing clears the byte counters when a download ends** -- they stay on the
+  job record for the rest of its life -- so the row went on showing
+  "806 MB / 806 MB" through the whole transcription, and the adapter's comment
+  claiming they were "absent for the rest of the pipeline" was a stale claim.
+  With a speed beside them that reads as a download still running an hour after
+  it finished. Gated on the live phase.
+- **The decimal is on the moving half only.** A slow exit from the pool moves
+  half a megabyte a second, so a whole number sat still for seconds at a time.
+  The total is a fixed quantity and a decimal on it would be noise beside the
+  one number meant to be changing.
+
+### The elapsed floor, and the bug it could have re-created
+
+The last resort, when a phase can report nothing about itself, is elapsed time
+over what the phase is expected to cost. **The estimator this model replaced
+extrapolated the whole job from how fast the global percentage moved, so a still
+bar drove the ETA from "5 min left" to "2h left" on a healthy job**, and that
+test is still in the suite. Two properties stop it happening here and both are
+tested: it can only ever make the answer SHRINK, because the caller spends it as
+`cost * (1 - fraction)`; and a phase that OUTRUNS its estimate does not go on
+approaching 100% -- the denominator grows with the elapsed time, so the fraction
+settles near 0.87 and the answer stops at "a little longer" rather than counting
+down to a finish that is not coming. That is the honest limit of estimating a
+phase that cannot measure itself.
+
+### What "N min left" means, stated because it looks like a contradiction
+
+It is the whole job -- time until the clips are ready -- not the current phase.
+So "90% of this step · 22 min left" is correct rather than inconsistent: the
+download is nearly done and the transcription, scoring and rendering behind it
+are not. That is the number somebody actually wants, and it is why the pace
+model has to be right for every phase rather than only the visible one.
+
+### Verified
+
+Eleven probes proven red (five Python, six JS), each asserting it had edited the
+file before the run. 1981 JS + 874 Python. Driven in a real browser at 1440x950
+in both themes -- width and body class READ BACK rather than assumed, both traps
+this file already records -- and the before state reproduced by serving the
+shipped adapter against the payload production sent.
+
+**A trap worth writing down: `migrate()` in store.js returns a BLANK state for
+anything that does not name an `engineVersion` it recognises.** A seeded
+`state.json` without one is discarded silently and the server then saves its
+empty state over the file, which reads exactly like the seed being ignored. Cost
+three restarts.
+
+**Not proven on the box.** Everything here is driven against the real functions
+and a real browser; no lecture has been imported since. The confirmation is one
+import: the row should show a total, a moving percentage, a speed, and an ETA
+that falls. The pace model starts on its shipped figures and begins learning at
+the third finished lecture (`pace.learned` on `/api/state`, and Owner -> Health
+carries the self-checks beside it).
+
+### TWO SESSIONS WERE IN THIS WORKING TREE AT ONCE, and it nearly cost work
+
+Not two branches -- the same checkout, both writing. `git log` moved under this
+session four times while it ran, and a whole-file read-modify-write on
+`import_providers.py` sat between one session's read and the other's write. It
+came out intact and green, and the tracker built here was committed inside the
+other session's `v3.176.1` commit, whose message does not mention it. **Check
+`git log --oneline -1` and the file's mtime before a multi-file edit if another
+session may be live, and prefer anchored replacements over rewriting a file
+whole.** The rule this file already carries -- two agents must never edit the
+same file at once -- applies to two sessions sharing one directory, and there it
+has no branch to protect it.

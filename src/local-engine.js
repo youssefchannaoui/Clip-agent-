@@ -894,6 +894,23 @@ export function applyClipBreakdown(record, payload) {
   }
 }
 
+// A worker's own report of how long each phase took, in seconds. Bounded and
+// coerced on the way in: it is read back to estimate other people's jobs, so a
+// junk figure would not be one wrong number on one screen but a wrong ETA on
+// every lecture after it.
+const TIMING_PHASES = ['import', 'audio', 'transcribe', 'score', 'render', 'total'];
+export function sanitiseTimings(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const out = {};
+  for (const phase of TIMING_PHASES) {
+    const value = Number(raw[phase]);
+    // A day is longer than any job this product will ever run and is what
+    // separates a real measurement from a clock that jumped.
+    if (Number.isFinite(value) && value >= 0 && value < 86400) out[phase] = Math.round(value * 10) / 10;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 function parseWorkerLine(record, line) {
   let payload;
   try { payload = JSON.parse(line); } catch { return; }
@@ -906,7 +923,11 @@ function parseWorkerLine(record, line) {
     else record.etaSec = Math.max(0, Math.round(Number(payload.etaSec)));
     // A stable identifier from the worker, so the UI never has to guess which
     // step it is on by matching words.
-    if (payload.phase) record.phase = String(payload.phase);
+    if (payload.phase) {
+      // Same stamp on the self-hosted path. See acceptRemoteUpdate.
+      if (String(payload.phase) !== record.phase) record.phaseStartedAt = Date.now();
+      record.phase = String(payload.phase);
+    }
     record.progress = Math.max(0, Math.min(100, Number(payload.progress) || 0));
     record.status = 'processing';
     record.updatedAt = Date.now();
@@ -1001,6 +1022,12 @@ function importResultObject(project, result, engine = 'self-hosted') {
   project.clipCount = state.clips.filter(clip => clip.projectId === project.id).length;
   // Kept so the UI can explain a shortfall rather than leaving it unexplained.
   project.clipsRequested = Number(result.project?.clipsRequested || project.clipsRequested || 0);
+  // WHERE THIS LECTURE'S SECONDS ACTUALLY WENT. worker/clip_worker.py has put
+  // `timings` on every result since v3.77.0 and nothing has ever read it, so
+  // every ETA in the product was quoted from constants measured on a two-core
+  // box that no longer exists. Kept on the project, and pace.js turns the
+  // finished ones into the rates the next lecture is estimated with.
+  project.timings = sanitiseTimings(result.project?.timings) || project.timings || null;
   project.status = 'done'; project.stage = 'Clips are ready for review'; project.progress = 100;
   project.completedAt = Date.now(); project.error = null;
   try {
@@ -1131,14 +1158,33 @@ export function acceptRemoteUpdate(projectId, update) {
   // The stable stage identifier. The local worker path carried it and this one
   // dropped it, so the dashboard's stage model had words to parse instead of a
   // name to switch on -- and production is this path.
-  if (update.phase !== undefined) project.phase = String(update.phase || '');
+  if (update.phase !== undefined) {
+    const phase = String(update.phase || '');
+    // WHEN THIS PHASE STARTED, stamped here rather than taken from the worker.
+    // It is the app's own clock, so it covers the import too -- which runs
+    // before clip_worker.py launches and therefore has no worker-side stage
+    // clock at all, and which is the phase that most needed one. The dashboard
+    // falls back to elapsed-over-expected when a phase can report no fraction
+    // of its own, and without this that fallback has nothing to measure from.
+    if (phase && phase !== project.phase) project.phaseStartedAt = Date.now();
+    project.phase = phase;
+  }
   applyClipBreakdown(project, update);
   // Download size, so the import can say how much of the file has landed rather
   // than only a percentage of a band the customer cannot see.
-  for (const key of ['bytesDone', 'bytesTotal']) {
+  for (const key of ['bytesDone', 'bytesTotal', 'bytesPerSec']) {
     if (update[key] === undefined) continue;
     const value = Number(update[key]);
     project[key] = Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+  }
+  // How far through the CURRENT phase, measured by the worker rather than
+  // inferred from the global percentage. The import owns five points of that
+  // bar, so a fraction read back off it has five steps in it and a quarter-hour
+  // download appeared to advance five times; this is exact and it is what the
+  // "N% of this step" line reads.
+  if (update.stageFraction !== undefined) {
+    const fraction = Number(update.stageFraction);
+    project.stageFraction = Number.isFinite(fraction) ? Math.max(0, Math.min(1, fraction)) : null;
   }
   if (update.lastWarning && update.lastWarning !== project.lastWarning) {
     project.lastWarning = String(update.lastWarning);

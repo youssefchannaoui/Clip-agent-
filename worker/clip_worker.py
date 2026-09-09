@@ -276,12 +276,25 @@ def phase_for(stage: str) -> str:
     return "import"
 
 
+# Measurements that belong to ONE stage and must not outlive it. _progress_state
+# is a running dictionary that every progress() call merges into, so a figure
+# nobody clears is still in it stages later: the transcription's ETA sat there
+# while the scorer ran, and the dashboard now believes the worker's own ETA for
+# whichever phase reports one -- so it would have counted down to a moment that
+# had already passed and then stuck at "seconds left" for minutes. Cleared on
+# every stage change, so a stage that measures nothing reports nothing rather
+# than reporting the last stage's answer.
+STAGE_SCOPED_KEYS = ("etaSec", "stageFraction", "processedSec", "transcriptionSpeed")
+
+
 def progress(stage: str, percent: int, **details: Any) -> None:
     now = time.time()
     bounded = max(0, min(100, int(percent)))
     with _progress_lock:
         if stage != _progress_state.get("stage"):
             _progress_state["stageStartedAt"] = now
+            for key in STAGE_SCOPED_KEYS:
+                _progress_state.pop(key, None)
         _progress_state.update({"stage": stage, "phase": phase_for(stage), "progress": bounded, **details})
         payload = dict(_progress_state)
     payload["elapsedSec"] = round(now - float(payload.get("startedAt", now)), 1)
@@ -874,6 +887,11 @@ def _transcribe_with_faster_whisper(job: dict[str, Any], audio_file: Path, durat
                     model=model_name, device=device, computeType=compute_type,
                     sourceDurationSec=round(duration_sec, 2),
                     processedSec=round(processed_sec, 2),
+                    # Exact, and the reason the dashboard can show a step
+                    # percentage that moves smoothly through a nine-minute
+                    # transcription: the global bar gives this phase 57 points
+                    # and reading the fraction back off that is far coarser.
+                    stageFraction=round(fraction, 4),
                     transcriptionSpeed=round(speed, 3),
                     etaSec=round(eta, 1) if eta is not None else None,
                     lastDetailAt=time.time(),
@@ -7363,6 +7381,10 @@ def process(job_file: Path) -> None:
             currentClip=current, totalClips=total, clipPlan=clip_plan,
             clipPercent=int(round(min(1.0, inflight / lanes) * 100)),
             clipElapsedSec=round(time.time() - render_started, 1),
+            # How far through the RENDER as a whole, which is what the "N% of
+            # this step" line means -- clipPercent beside it is how far through
+            # the one clip in flight.
+            stageFraction=round(max(0.0, min(1.0, done)), 4),
             etaSec=eta,
         )
 
