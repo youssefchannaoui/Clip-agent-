@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2018 JS + 931 Python**
+- `npm test` and `npm run check` must pass. Currently **2018 JS + 941 Python**
   (13 Python skipped) — the skips are where ffmpeg or OpenCV is absent, which
   is CI.
   These numbers were once wrong by more than a factor of
@@ -17971,6 +17971,77 @@ this version already exists there (anywhere in its recent history, not only at
 its tip -- another session may have pushed past it), and what the next free
 number is. It writes nothing and never fails a build; it is a question, so it
 exits 0 whatever the answer. Its first real run found 3.177.1 already taken.
+
+## Automatic framing killed a whole lecture (v3.184.1, 9 Sept 2026)
+
+Youssef, on the two-person podcast: "this new framing system is horrible ... it
+was framing the opposite guy ... it's not stable, it moves while they speak ...
+it should be CUTTING to the person who's speaking." Then, minutes later, with a
+screenshot of the same lecture: **"how are things still failing and not
+finishing"**.
+
+**They are the same fault, and the box's own job record says so:**
+
+    job project_mtttu0hd_bac41caa   status='failed'  progress=85
+    error: Command failed (1): ffmpeg ...
+           *(587.0+(-57.0)*(t-44.500)/0.500)+530*gte(t,45.000)*lt(t,45.500)
+           +(gte(t,45.500)*lt(t,45.950))*(530.0+(74.0)*(t-45.500)/0.450)
+    title: MOST Muslims Don't Realize This About Allah | Sheikh Abu Bakr Zoud ...
+
+Read those numbers as motion: the crop lurches **57px off one man, holds half a
+second, then swings 74px back** -- the wobble and the wrong-person complaint,
+written out as arithmetic. `command[:4]` is only `ffmpeg -y -nostats
+-progress`, so everything after it is ffmpeg's OWN stderr, and its last 1800
+characters end inside the crop expression. A 19-minute lecture, six clips, an
+hour of work and a customer's tokens, lost at the render stage to a FRAMING
+PREFERENCE.
+
+- **`export_with_framing_fallback` is the valve, and its rule is one sentence:
+  nothing about a nicer crop is worth a lecture.** A refused MOVING crop is
+  retried once with the movement dropped, so the clip ships framed on its first
+  keyframe -- exactly the static crop every render produced before the tracker
+  existed.
+- **Only a `RuntimeError`, which is what `run` raises on a non-zero exit.** A
+  `TimeoutExpired` is a different animal: the render was too SLOW, and spending
+  the hour again would take the job's whole budget rather than save it. A test
+  drives a timeout and asserts it is never retried.
+- **A plan that was already still is NOT retried.** There is no framing left to
+  give up, so a second identical attempt costs another hour and fails the same
+  way.
+- **The caller's plan is copied, never mutated** -- `render_clip` reads
+  `crop_plan` again for the result metadata, and a dict quietly emptied here
+  would misreport how the clip was framed.
+- **The reason is reported, never swallowed.** Falling back silently is how a
+  feature goes quietly dead for months.
+- The graph moved into `graph_for(plan)` because everything downstream of the
+  crop -- the audio mix, the draft rescale, the promo bar -- has to be rebuilt
+  around the new video graph.
+
+**WHAT WAS RULED OUT, so the next person does not chase it:** it is NOT
+expression length (19KB expressions pass through real ffmpeg on a bare graph,
+measured at 13/30/60/90/114/150/200/300 keyframes) and NOT a division by zero
+(300 fuzzed two-person tracks, zero `/0.000`). The exact refusal was NOT
+reproducible synthetically, which is itself the finding: it needs the real
+footage. The valve is deliberately indifferent to the reason.
+
+**THE FRAMING ITSELF IS STILL WRONG AND THIS DOES NOT FIX IT.** It stops
+lectures dying. The three complaints stand and their causes are named in the
+entry below: the "who is speaking" signal is a raw pixel difference of the
+lower half of a jittering Haar box, sampled 0.5s apart, so it measures box
+jitter (which scales with face size, so the nearest face wins) rather than
+speech; `smooth_x += (cx - smooth_x) * 0.35` drifts the crop every sample; and
+`SPEAKER_MOVE_SECONDS` pans where an editor would cut. The rebuild is
+MediaPipe lip landmarks correlated against the audio envelope -- the cheap
+SyncNet -- cutting rather than panning. **MediaPipe is already in the worker
+image** (it draws the captions-behind-speaker matte), and the Face Landmarker
+model is a 3.8MB vendored file like `selfie_segmenter.tflite`.
+
+**Researched first, and the field says this is the hard case.** Audio-visual
+active-speaker detection is the technique (SyncNet, TalkNet-ASD, Light-ASD);
+the Premiere podcast plugins cheat by reading separate microphone tracks, which
+a single mixed YouTube track does not have. OpusClip's own reviews report the
+identical failure -- "wobbled on two-person crosstalk sections, cropping the
+wrong face twice".
 
 ## Whoever is speaking is centred, and the crop follows them (v3.179.0, 9 Sept 2026)
 

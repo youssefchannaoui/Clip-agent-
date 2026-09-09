@@ -57,10 +57,18 @@ test('the render drops the music input rather than mixing silence', () => {
   const worker = fs.readFileSync(new URL('../worker/clip_worker.py', import.meta.url), 'utf8');
   // No second input, and no sidechain against a track that is not there.
   assert.match(worker, /if track is None else \["-stream_loop"/);
-  assert.match(worker, /if track is None:\n\s+filter_complex = \(/);
+  // The graph variable is NOT named here on purpose. This assertion used to
+  // pin `filter_complex = (` and went red on 9 Sept 2026 against a refactor
+  // that renamed it while changing no behaviour at all -- the graph moved into
+  // a `graph_for(plan)` function so the export could be retried without the
+  // moving crop. That is the thirteenth time a test in this repo has failed on
+  // a spelling rather than a property. What matters is the SHAPE: a branch on
+  // whether there is a track, assigning a graph.
+  assert.match(worker, /if track is None:\n\s+\w+ = \(/);
   // The voice is still levelled: a bare export is far quieter than a mixed one.
   // The music-free branch levels the voice but has nothing to duck against.
-  const solo = /if track is None:\n([\s\S]*?)\n    else:/.exec(worker)[1];
+  // `\s*else:` rather than a fixed indent, for the same reason.
+  const solo = /if track is None:\n([\s\S]*?)\n\s*else:/.exec(worker)[1];
   assert.match(solo, /loudnorm=I=-16/, 'a bare export is far quieter than a mixed one');
   assert.doesNotMatch(solo, /sidechaincompress/);
   assert.doesNotMatch(solo, /\[1:a\]/, 'there is no second input to reference');

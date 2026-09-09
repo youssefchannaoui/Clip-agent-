@@ -6681,6 +6681,48 @@ def promo_bar_graph(plan: dict, index: int, width: int, height: int,
     )
 
 
+def export_with_framing_fallback(*, attempt, plan, on_refusal):
+    """Run the export, and if a MOVING crop is refused, run it again still.
+
+    AUTOMATIC FRAMING MUST NEVER COST A LECTURE.
+
+    A moving crop is an ffmpeg EXPRESSION -- one gated term per keyframe,
+    evaluated per frame -- and on a two-person shot the tracker emits a long
+    one. Measured on the box 9 Sept 2026: a 19-minute lecture died at the
+    render stage with ffmpeg's stderr ending inside that expression. Six clips,
+    an hour of work and a customer's tokens, lost to a FRAMING preference.
+    Nothing about a nicer crop is worth a lecture.
+
+    So the crop gives way and the clip still ships, framed on its first
+    keyframe -- which is exactly the static crop every render produced before
+    the tracker existed. Returns the plan that actually rendered.
+
+    Two things it deliberately does NOT do:
+
+    * It does not retry a plan that was already still. There is no framing left
+      to give up, so a second identical attempt would just cost another hour
+      and fail the same way.
+    * It does not catch TimeoutExpired, only RuntimeError -- which is what
+      `run` raises on a non-zero exit. A timeout means the render was too SLOW,
+      and spending the budget again would take the job down rather than save
+      it.
+
+    `on_refusal` is called with the failure before the retry: falling back
+    silently is how a feature goes quietly dead for months.
+    """
+    try:
+        attempt(plan)
+        return plan
+    except RuntimeError as refusal:
+        if not (plan and plan.get("keyframes")):
+            raise
+        on_refusal(refusal)
+        still = dict(plan)
+        still["keyframes"] = None
+        attempt(still)
+        return still
+
+
 def render_clip(
     job: dict[str, Any], candidate: Candidate, index: int, source: Path,
     track: dict[str, Any] | None, output_dir: Path,
@@ -6797,31 +6839,6 @@ def render_clip(
     if matte_file is not None:
         matte_index = 1 + (0 if track is None else 1) + (0 if bg_visual is None else 1)
         matte_input = f"{matte_index}:v"
-    video_graph = build_video_filter(template, ass_file, crop_plan=crop_plan,
-                                     src=bg_visual[1] if bg_visual else "0:v",
-                                     pre_sized=bool(bg_visual),
-                                     matte_src=matte_input, source_size=source_size)
-    if track is None:
-        filter_complex = (
-            bg_prelude
-            + video_graph
-            + ";"
-            + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,"
-            + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
-        )
-    else:
-        filter_complex = (
-            bg_prelude
-            + video_graph
-            + ";"
-            + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,asplit=2[voice_mix][voice_sidechain];"
-            + f"[1:a]volume={volume:.3f}[music];"
-            + "[music][voice_sidechain]sidechaincompress="
-              "threshold=0.025:ratio=10:attack=15:release=650[ducked];"
-            + "[voice_mix][ducked]amix=inputs=2:duration=first:dropout_transition=2,"
-            + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
-        )
-
     # A draft is the review queue's copy: quarter-resolution, ultrafast, made
     # to be judged and thrown away. Everything about the AUDIO chain -- the
     # nasheed mix, the ducking, the loudness -- is identical to a final render,
@@ -6840,10 +6857,6 @@ def render_clip(
     d_scale = 1280.0 / max(t_width, t_height)
     draft_width = max(2, int(t_width * d_scale / 2) * 2)
     draft_height = max(2, int(t_height * d_scale / 2) * 2)
-    if draft:
-        filter_complex = filter_complex.replace("[vout]", "[vfull]", 1)
-        filter_complex += f";[vfull]scale={draft_width}:{draft_height}:flags=fast_bilinear[vout]"
-
     # The promo bar goes on LAST, after the draft rescale, so it is composited
     # at the size it will actually be seen at rather than being scaled down
     # with the frame -- a bar that reads on a final would be unreadable on a
@@ -6852,52 +6865,103 @@ def render_clip(
     promo = promo_bar_plan(template, candidate.duration)
     promo_index = (1 + (0 if track is None else 1) + (0 if bg_visual is None else 1)
                    + (0 if matte_file is None else 1))
-    if promo is not None:
-        out_w = draft_width if draft else t_width
-        out_h = draft_height if draft else t_height
-        # Rename the LAST [vout] -- on a draft that is the rescale's output, on
-        # a final it is the video graph's. Either way the bar hangs off
-        # whatever was about to be mapped.
-        cut = filter_complex.rfind("[vout]")
-        filter_complex = filter_complex[:cut] + "[vpre]" + filter_complex[cut + len("[vout]"):]
-        filter_complex += ";" + promo_bar_graph(promo, promo_index, out_w, out_h)
 
-    export = [
-        ffmpeg, "-y", *(PROGRESS_FLAGS if on_fraction is not None else []),
-        "-ss", f"{candidate.start:.3f}", "-t", f"{candidate.duration:.3f}",
-        "-i", str(source),
-        *([] if track is None else ["-stream_loop", "-1", "-i", str(track["path"])]),
-        *([] if not bg_visual else ["-stream_loop", "-1", "-t", f"{candidate.duration + 2:.3f}", "-i", str(background["path"])]),
-        *([] if matte_file is None else ["-i", str(matte_file)]),
-        # `-loop 1` is load-bearing and its absence is SILENT: a bare PNG input
-        # is one frame at t=0, so `fade=in:st=3` only ever sees a frame before
-        # its start and holds alpha 0 -- overlay then repeats that transparent
-        # frame for the whole clip and the bar never appears. Measured: a flat
-        # background, zero lit pixels at every timestamp, exit code 0.
-        # `-t` bounds the loop, or the input never ends.
-        *([] if promo is None else
-          ["-loop", "1", "-t", f"{candidate.duration:.3f}", "-i", str(PROMO_BAR_FILE)]),
-        "-filter_complex", filter_complex,
-        "-map", "[vout]", "-map", "[aout]",
-        "-c:v", "libx264", "-threads", ffmpeg_threads,
-        "-preset", "ultrafast" if draft else "veryfast", "-crf", "24" if draft else "19",
-        # A hard bitrate ceiling, because CRF alone has none: on grainy
-        # monochrome footage crf19 produced a 453MB, 68 Mbit/s file for a
-        # 52-second clip -- too large for the publishing relay, so every
-        # final render of a grainy clip silently failed to post. 8 Mbit/s is
-        # YouTube's own 1080p30 recommendation; the longest allowed clip
-        # (180s) lands near 180MB, comfortably under the relay's 256MB cap.
-        "-maxrate", "4M" if draft else "8M", "-bufsize", "8M" if draft else "16M",
-        "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "192k",
-        "-movflags", "+faststart", "-shortest", str(clip_file),
-    ]
-    # This is the long call of the two; the thumbnail after it is near-instant,
-    # so the export's own progress is the clip's progress.
-    try:
-        if on_fraction is not None:
-            run_with_progress(export, candidate.duration, on_fraction, timeout=60 * 60)
+    def graph_for(plan: dict[str, Any] | None) -> str:
+        """The whole filtergraph for ONE crop plan.
+
+        A function rather than a straight line because the export is retried
+        with the moving crop removed when ffmpeg refuses it, and everything
+        downstream of the crop -- the audio mix, the draft rescale, the promo
+        bar -- has to be rebuilt around the new video graph. Nothing in here
+        depends on which attempt it is; only `plan` changes.
+        """
+        video_graph = build_video_filter(template, ass_file, crop_plan=plan,
+                                         src=bg_visual[1] if bg_visual else "0:v",
+                                         pre_sized=bool(bg_visual),
+                                         matte_src=matte_input, source_size=source_size)
+        if track is None:
+            graph = (
+                bg_prelude
+                + video_graph
+                + ";"
+                + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,"
+                + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
+            )
         else:
-            run(export, timeout=60 * 60)
+            graph = (
+                bg_prelude
+                + video_graph
+                + ";"
+                + f"[0:a]{voice_chain}asetpts=PTS-STARTPTS,asplit=2[voice_mix][voice_sidechain];"
+                + f"[1:a]volume={volume:.3f}[music];"
+                + "[music][voice_sidechain]sidechaincompress="
+                  "threshold=0.025:ratio=10:attack=15:release=650[ducked];"
+                + "[voice_mix][ducked]amix=inputs=2:duration=first:dropout_transition=2,"
+                + "loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
+            )
+        if draft:
+            graph = graph.replace("[vout]", "[vfull]", 1)
+            graph += f";[vfull]scale={draft_width}:{draft_height}:flags=fast_bilinear[vout]"
+        if promo is not None:
+            out_w = draft_width if draft else t_width
+            out_h = draft_height if draft else t_height
+            # Rename the LAST [vout] -- on a draft that is the rescale's output,
+            # on a final it is the video graph's. Either way the bar hangs off
+            # whatever was about to be mapped.
+            cut = graph.rfind("[vout]")
+            graph = graph[:cut] + "[vpre]" + graph[cut + len("[vout]"):]
+            graph += ";" + promo_bar_graph(promo, promo_index, out_w, out_h)
+        return graph
+
+    def export_command(graph: str) -> list[str]:
+        return [
+            ffmpeg, "-y", *(PROGRESS_FLAGS if on_fraction is not None else []),
+            "-ss", f"{candidate.start:.3f}", "-t", f"{candidate.duration:.3f}",
+            "-i", str(source),
+            *([] if track is None else ["-stream_loop", "-1", "-i", str(track["path"])]),
+            *([] if not bg_visual else ["-stream_loop", "-1", "-t", f"{candidate.duration + 2:.3f}", "-i", str(background["path"])]),
+            *([] if matte_file is None else ["-i", str(matte_file)]),
+            # `-loop 1` is load-bearing and its absence is SILENT: a bare PNG input
+            # is one frame at t=0, so `fade=in:st=3` only ever sees a frame before
+            # its start and holds alpha 0 -- overlay then repeats that transparent
+            # frame for the whole clip and the bar never appears. Measured: a flat
+            # background, zero lit pixels at every timestamp, exit code 0.
+            # `-t` bounds the loop, or the input never ends.
+            *([] if promo is None else
+              ["-loop", "1", "-t", f"{candidate.duration:.3f}", "-i", str(PROMO_BAR_FILE)]),
+            "-filter_complex", graph,
+            "-map", "[vout]", "-map", "[aout]",
+            "-c:v", "libx264", "-threads", ffmpeg_threads,
+            "-preset", "ultrafast" if draft else "veryfast", "-crf", "24" if draft else "19",
+            # A hard bitrate ceiling, because CRF alone has none: on grainy
+            # monochrome footage crf19 produced a 453MB, 68 Mbit/s file for a
+            # 52-second clip -- too large for the publishing relay, so every
+            # final render of a grainy clip silently failed to post. 8 Mbit/s is
+            # YouTube's own 1080p30 recommendation; the longest allowed clip
+            # (180s) lands near 180MB, comfortably under the relay's 256MB cap.
+            "-maxrate", "4M" if draft else "8M", "-bufsize", "8M" if draft else "16M",
+            "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart", "-shortest", str(clip_file),
+        ]
+
+    def run_export(command: list[str]) -> None:
+        # This is the long call of the two; the thumbnail after it is
+        # near-instant, so the export's own progress is the clip's progress.
+        if on_fraction is not None:
+            run_with_progress(command, candidate.duration, on_fraction, timeout=60 * 60)
+        else:
+            run(command, timeout=60 * 60)
+
+    def report_refusal(refusal: Exception) -> None:
+        emit("progress", stage="Speaker framing refused, rendering a still frame",
+             progress=88, detail=str(refusal)[:400])
+
+    try:
+        export_with_framing_fallback(
+            attempt=lambda plan: run_export(export_command(graph_for(plan))),
+            plan=crop_plan,
+            on_refusal=report_refusal,
+        )
     finally:
         # The matte is scratch: it is the size of the clip again and means
         # nothing once the alpha has been baked in.
