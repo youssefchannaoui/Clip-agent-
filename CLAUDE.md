@@ -9782,6 +9782,28 @@ rotation -- not YouTube's behaviour under a real block. That last step cannot
 be commanded, and the app's own five-minute retry sits behind these rounds
 either way.
 
+## THE PROBE COSTS REAL BANDWIDTH AND REAL PROXY REPUTATION (9 Sept 2026)
+
+Learned by overdoing it in one sitting, and worth reading before dispatching
+`probe_url_block_first` again.
+
+**The injected run does not respect the window.** Once the refusals have spent
+the section attempts, the attempt that gets through is on the full-download
+plan -- so a probe asking for six seconds pulled **631 MB** on one run and the
+whole file on another. Four runs against the same video in an hour, and the
+box went from fetching it in **12.7s** to 404s-and-not-windowed to *"Sign in
+to confirm you're not a bot"* and an ffmpeg failure.
+
+**That is our own pool being walled by our own probing**, not a new fault in
+the video, and it is the same burned-exit shape this file records from 26 Aug.
+On a 250GB month it is also real money.
+
+So: **run the injected probe sparingly, and on a SHORT video where possible.**
+The plain `probe_url` fetch (no `block_first`) genuinely costs its window and
+can be run freely; it is the injected one that pays full price. And when a
+control that fetched in seconds starts taking minutes, stop -- the next
+reading will be about the pool rather than about the code.
+
 ## ONLY A FINAL FAILURE MAY END THE ROTATION (v3.176.1, 9 Sept 2026)
 
 **The rule was inverted, and the box is what inverted it.** The first fix
