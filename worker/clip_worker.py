@@ -7931,7 +7931,13 @@ def track_speaker_keyframes(
         return {"available": False, "reason": "The source video could not be opened."}
 
     step = 1.0 / max(0.5, min(8.0, sample_hz))
-    samples = max(2, int(duration / step))
+    # sample_count, not `samples`: the collected measurements are called
+    # `samples` below, and naming both the same made `range(samples + 1)` add an
+    # int to a list -- so the tracker raised TypeError on its first real frame
+    # and every render silently fell back to the static crop. Caught by the box,
+    # because this function needs OpenCV and a real video and the unit tests
+    # drive the pure functions underneath it.
+    sample_count = max(2, int(duration / step))
     min_face = max(28, min(src_w, src_h) // 24)
 
     def speaking_at(t: float) -> bool:
@@ -7941,7 +7947,7 @@ def track_speaker_keyframes(
 
     samples: list[tuple[float, list[tuple[float, float, float, float]]]] = []
     previous_gray = None
-    for index in range(samples + 1):
+    for index in range(sample_count + 1):
         offset = min(duration, index * step)
         cap.set(cv2.CAP_PROP_POS_MSEC, (start + offset) * 1000.0)
         ok, frame = cap.read()
