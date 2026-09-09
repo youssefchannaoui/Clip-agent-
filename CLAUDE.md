@@ -10224,13 +10224,30 @@ and nothing else -- **which was INCOMPLETE before and is now the whole surface**
 while the privacy policy was separately disclosing the `videos.list` read.
 That mismatch is the likeliest thing the reviewer noticed.
 
-**What Youssef should do once v3.182.0 is live on deenclipped.online** (the
-gate is a merge to `deenclipped-v2-2`, which needs his say-so):
+**v3.182.0 IS LIVE ON deenclipped.online AS OF 9 SEPT 2026, 06:22 UTC.** Merged
+to `deenclipped-v2-2` at Youssef's word (`040f4d7`, resolving to 3.182.0 -- his
+side already held the higher number and the merge's first parent was the other
+session's 3.180.1, so it moved without a further bump). Render deploy live in
+60s; `deploy-worker.yml` run 143 verified **v3.182.0 in the running container**,
+so the box carries `/source-info`; CI run 739 green; `watch-live.yml` run 35
+answered "Every check passed" against production. `/privacy` on the merged tree
+renders the new heading and holds **zero** occurrences of `videos.list`.
+
+**So the only thing left is the reply**, and it is Youssef's to send:
 
 1. Reply on the verification thread saying the product has changed, in one
    paragraph -- the draft is below.
 2. Nothing else. The scope justification, the demo video and the privacy policy
    are all correct as they now stand.
+
+**RESUBMITTING BEFORE THIS LANDED WAS NOT A MISTAKE, and the reason is worth
+stating rather than reassuring about.** A verification is reviewed against the
+site as it stands WHEN A HUMAN OPENS IT, not against a snapshot taken when the
+form was submitted -- so a resubmission that sat in the queue for a day now
+points at a product that no longer makes the `videos.list` call the refusal was
+about. The risk was only ever a reviewer looking in the hours before the deploy,
+and that window is closed. What the reply adds is that the reviewer does not
+have to notice the change on their own.
 
 **The reply to send:**
 
@@ -18092,6 +18109,20 @@ Terms say the same in two places, and the "YouTube URL processing" section
 (which goes to Google as part of a ToS response) now opens **"No YouTube API is
 used to import a video."** Three assertions pin those sentences, so the claim
 and the code move together or the branch goes red.
+
+### Shipped, and the one thing not yet proven
+
+Merged and live 9 Sept 2026 06:22 UTC (see the Google open item for the deploy
+evidence). **`POST /source-info` has never been called by the real app against
+the real box**, and the first pasted link is what settles it: the app-side chain
+is driven by 6 JS tests against a fake worker and the worker side by 8 Python
+tests against a fake yt-dlp, but nothing has yet gone end to end. Watch for it
+in one paste -- a title, a length and a range picker mean it answered.
+
+**It cannot break the paste box if it misbehaves**, which is why it was safe to
+ship unproven: `sourceInfoViaWorker` returns null on any failure and the tail
+behind it is unchanged (the public watch page, then validated-only). The worst
+case is the behaviour of the release before this one.
 
 ### The lesson, written down because it cost a release
 
