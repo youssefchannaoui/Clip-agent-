@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1960 JS + 859 Python**
+- `npm test` and `npm run check` must pass. Currently **1960 JS + 860 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -9781,6 +9781,50 @@ message here is ours, so what is measured is the loop, the wait and the
 rotation -- not YouTube's behaviour under a real block. That last step cannot
 be commanded, and the app's own five-minute retry sits behind these rounds
 either way.
+
+## ONLY A FINAL FAILURE MAY END THE ROTATION (v3.176.1, 9 Sept 2026)
+
+**The rule was inverted, and the box is what inverted it.** The first fix
+below excused one transient by name; the very next probe run produced a
+different one and killed a fetchable import in exactly the same way. Naming
+them one at a time lost twice in one evening.
+
+    run 34299748962   "Requested format is not available."   -> import dead
+    run 34300…        "The page needs to be reloaded."       -> import dead
+
+Both are facts about ONE ATTEMPT. Both wore *"YouTube would not release this
+video"*, the sentence v3.174.0 added so the app could tell permanent from
+transient -- so each one killed the rounds AND disarmed the five-minute retry
+behind them.
+
+**So the default changed rather than the list growing.** Everything gets the
+rest of the rotation unless `_looks_final` recognises it, and `_FINAL_SIGNS`
+already described exactly the failures that cannot change -- private, removed,
+deleted, terminated, members-only, age-restricted. `_CLIENT_FAULT_SIGNS` was
+deleted with the same commit: two mechanisms answering one question is how
+they drift, and the inversion subsumes it.
+
+- **The trade, stated.** A video gone in some way `_FINAL_SIGNS` does not name
+  now costs three rounds instead of failing at once. Against that, the old
+  default killed fetchable lectures permanently. Eighty wasted seconds is the
+  cheaper mistake by a wide margin.
+- **A final failure ends it on EITHER plan now.** The video's availability has
+  nothing to do with the range being asked for, so handing a private video to
+  the full-download plan spends an attempt to be told the same thing.
+- **A non-block on the section pass still hands over to the full download** --
+  that behaviour predates all of this and is unrelated to availability.
+- `test_only_a_FINAL_failure_ends_the_rotation_early` drives an invented
+  message nobody has ever seen and asserts the rotation carries on. That is
+  the rule stated as a rule; the two named transients are regression tests
+  underneath it. Both directions proven red.
+
+**AND THE SAME SOURCE-STRING TEST BROKE A THIRD TIME.** `rerender-source`
+pinned `if not _looks_blocked(message):`, went red on the exclusion, then red
+again on the inversion -- and the third time its PREMISE was genuinely gone,
+not just its bytes. It pins the new rule now (`if _looks_final(message):`, an
+exhausted rotation as its own branch, and "private video" among the final
+signs), with the behaviour driven in Python beside it. **Fifteenth in this
+file.**
 
 ## A CLIENT THAT COULD NOT SERVE THE FORMAT KILLED FETCHABLE IMPORTS (v3.175.0, 9 Sept 2026)
 

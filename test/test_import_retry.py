@@ -70,6 +70,9 @@ GONE = "ERROR: [youtube] abc: Private video. Sign in if you've been granted acce
 # What a client whose format set does not carry the selector answers. Verbatim
 # from the box, run 34299748962, where it killed a fetchable import outright.
 FORMAT = "ERROR: [youtube] abc: Requested format is not available. Use --list-formats for a list of available formats"
+# The SECOND transient the box produced once the first was excused by name --
+# which is what turned the rule from a list of exceptions into an inversion.
+RELOAD = "ERROR: [youtube] abc: The page needs to be reloaded."
 
 
 class RetryTests(unittest.TestCase):
@@ -113,6 +116,18 @@ class RetryTests(unittest.TestCase):
         self.assertGreater(len(FakeYoutubeDL.attempts), clients,
                            "it must try again after the first rotation is spent")
 
+    def test_only_a_FINAL_failure_ends_the_rotation_early(self):
+        """The rule, stated as the rule rather than as a list of exceptions.
+
+        Naming transients one at a time lost twice in one evening -- a format
+        fault, then "The page needs to be reloaded" -- so anything yt-dlp says
+        that _looks_final does not recognise gets the rest of the rotation. An
+        unknown message must never be read as a verdict on the video.
+        """
+        result = self.run_import(["ERROR: something nobody has seen before", None])
+        self.assertTrue(result.file.is_file(),
+                        "an unrecognised failure is not a verdict")
+
     def test_a_client_that_cannot_serve_the_format_does_not_kill_the_import(self):
         """FOUND ON THE BOX, 9 Sept 2026, by the injected-refusal probe.
 
@@ -122,7 +137,7 @@ class RetryTests(unittest.TestCase):
         own control had downloaded thirty seconds earlier. It is not a fact
         about the video, so the next client must get its turn.
         """
-        result = self.run_import([BLOCKED, FORMAT, FORMAT, None])
+        result = self.run_import([BLOCKED, FORMAT, RELOAD, FORMAT, None])
         self.assertTrue(result.file.is_file())
         self.assertGreaterEqual(len(FakeYoutubeDL.attempts), 4,
                                 "the rotation carries on past a format fault")
@@ -137,7 +152,7 @@ class RetryTests(unittest.TestCase):
         that was tried and tried again.
         """
         with self.assertRaises(ip.ImportProviderError) as caught:
-            self.run_import([FORMAT] * 200)
+            self.run_import([FORMAT, RELOAD] * 100)
         self.assertNotIn("would not release this video", str(caught.exception))
         self.assertGreater(len(FakeYoutubeDL.attempts), len(ip.YOUTUBE_CLIENTS),
                            "it spends its rounds rather than failing at once")

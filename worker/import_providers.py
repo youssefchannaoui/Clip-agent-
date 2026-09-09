@@ -231,6 +231,11 @@ class DownloadProgress:
             else:
                 self.current_done = downloaded
                 self.current_total = total
+            if not self.expected:
+                # yt-dlp hands the format's own metadata to the hook. It is the
+                # only denominator a fragmented download will ever offer, and
+                # those carry no byte total of their own.
+                self.expected = _info_expected_bytes(status.get("info_dict") or {}, None)
             if count > 0:
                 # index is 1-based and names the fragment IN FLIGHT, so it is
                 # one less that are actually finished.
@@ -256,10 +261,20 @@ class DownloadProgress:
     def _snapshot(self) -> tuple[int, int]:
         done = self.banked_done + self.current_done
         total = 0
-        if self.expected > 0:
-            total = self.expected
-        elif self.banked_total or self.current_total:
+        if self.banked_total or self.current_total:
+            # THE DOWNLOADER'S OWN TOTALS COME FIRST, and they are summed rather
+            # than taken one at a time: a merged download reports the video's
+            # size while it fetches the video and the audio's while it fetches
+            # the audio, so reading only the live one made the denominator
+            # SHRINK when the second file started. Summed, the denominator is
+            # short by the audio track -- five to ten per cent -- until the
+            # audio begins, and then exact. A bar that is slightly ahead of
+            # itself and corrects is worth having; one pinned to zero is not.
             total = self.banked_total + self.current_total
+        elif self.expected > 0:
+            # The estimate, for the downloader that reports nothing at all --
+            # which is every SECTION download, because those go through ffmpeg.
+            total = self.expected
         if not total and self.fragment_fraction and done > 0:
             # No total anywhere, but the fragments know the fraction -- so the
             # total they imply is a better denominator than none at all.
@@ -510,36 +525,30 @@ _FINAL_SIGNS = (
 )
 
 
-# A FAILURE OF THIS ATTEMPT, NOT A FACT ABOUT THE VIDEO.
+# ONLY A FINAL FAILURE MAY END THE ROTATION EARLY.
 #
-# Found on the box, 9 Sept 2026, by the injected-refusal probe: a rotation
-# reached the `tv` client, yt-dlp answered "Requested format is not available",
-# and the provider RAISED "YouTube would not release this video" -- abandoning
-# two whole rounds on a video the probe's own control had downloaded thirty
-# seconds earlier. Every client offers a different format set, so the selector
-# (bv*[ext=mp4][height<=1080]+ba[ext=m4a]) simply does not resolve on some of
-# them. That says nothing about whether the file can be fetched, and the
-# rotation exists precisely so the next client gets its turn.
+# This was the other way round and the box disproved it twice in three runs of
+# the injected-refusal probe. The rule was "anything that is not a block is a
+# verdict on the video" -- so the rotation reached a client that answered
+# "Requested format is not available" (run 34299748962) and, once that was
+# excused by name, one that answered "The page needs to be reloaded"
+# (run 34300…). Both are transient facts about one attempt; both killed a
+# lecture the probe's own control had just downloaded, and both wore the
+# sentence "YouTube would not release this video" -- which the app reads as
+# permanent, so `transientImport` does not match it and the five-minute retry
+# behind the rounds does not fire either.
 #
-# It is deliberately NOT folded into _BLOCK_SIGNS. A block is a claim about the
-# address the request came from and it is what `_download_failure` tells the
-# customer; a format that one client does not carry is neither. Keeping them
-# apart is what stops the refusal message going wrong to fix the control flow.
+# Naming the transients one at a time is a losing game: two appeared in one
+# evening and yt-dlp's vocabulary is not ours to enumerate. So the default is
+# INVERTED. Everything gets the rest of the rotation unless `_looks_final`
+# recognises it, and _FINAL_SIGNS already describes exactly the failures that
+# cannot change -- private, removed, deleted, terminated, members-only,
+# age-restricted.
 #
-# The cost of being wrong here is bounded and worth it either way: if every
-# client really cannot serve a format, the import now spends its rounds before
-# failing instead of failing at once -- against the old behaviour, which killed
-# a perfectly fetchable lecture permanently AND wore the wording the app reads
-# as "do not retry this".
-_CLIENT_FAULT_SIGNS = (
-    "requested format is not available",
-    "no video formats found",
-)
-
-
-def _looks_client_fault(message: str) -> bool:
-    lowered = str(message).lower()
-    return any(sign in lowered for sign in _CLIENT_FAULT_SIGNS)
+# The trade, stated: a video that is gone in some way _FINAL_SIGNS does not
+# name now costs three rounds instead of failing at once. Against that, the
+# old default killed fetchable imports permanently AND disarmed the retry. A
+# wasted eighty seconds is the cheaper mistake by a wide margin.
 
 
 def _looks_blocked(message: str) -> bool:
@@ -933,13 +942,12 @@ class YtDlpImportProvider(ManagedImportProvider):
                             # every client, in every round, for ever -- so it refuses
                             # NOW rather than making somebody watch three rounds of
                             # backoff arrive at the answer it already had.
-                            # A CLIENT THAT CANNOT SERVE THE FORMAT IS NOT A
-                            # VERDICT. It falls through to the next client the
-                            # way a block does, rather than raising -- see
-                            # _CLIENT_FAULT_SIGNS for what that cost the box.
-                            if not _looks_blocked(message) and not _looks_client_fault(message):
-                                if section_pass:
-                                    break  # give the plain full download its turn
+                            # A FINAL FAILURE ENDS IT NOW, on either plan: the
+                            # video's availability has nothing to do with the
+                            # range being asked for, so giving the full plan a
+                            # turn would spend an attempt to be told the same
+                            # thing.
+                            if _looks_final(message):
                                 # ITS OWN WORDS, not the block message. A private,
                                 # deleted or members-only video was NOT "refused
                                 # from every client tried" -- it failed on the
@@ -951,6 +959,11 @@ class YtDlpImportProvider(ManagedImportProvider):
                                 raise ImportProviderError(
                                     f"YouTube would not release this video: {_clean_ytdlp(message)}"
                                 ) from exc
+                            # A NON-BLOCK ON THE SECTION PASS hands over to the
+                            # plain full download rather than walking the rest
+                            # of the clients with a range none of them took.
+                            if section_pass and not _looks_blocked(message):
+                                break
                             if attempt == len(YOUTUBE_CLIENTS) - 1:
                                 # This plan is spent for this round. The full pass
                                 # follows; when that is spent too the round ends and

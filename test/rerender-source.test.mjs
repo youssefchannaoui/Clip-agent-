@@ -55,33 +55,31 @@ test('a 403 is retried against other clients rather than surfaced', () => {
   }
 });
 
-test('only a block is retried, not a video that is simply gone', () => {
+test('only a FINAL failure is decided on its own, never an unknown one', () => {
   // A private or deleted video fails the same way on every client, in every
   // round; walking the list just makes the user wait longer for the same
   // answer -- and once the rotation gained a backoff, waiting through it too.
   //
-  // THIS PINNED THE EXPRESSION, NOT THE PROPERTY, and went red against a
-  // refactor that changed no behaviour: the one condition
-  // `not _looks_blocked(message) or attempt == last` became two branches when
-  // rounds were added, because a block and an exhausted rotation now do
-  // different things. Thirteenth time in this repo. What it protects is
-  // DRIVEN in test/test_import_retry.py, which asserts a gone video costs
-  // exactly one attempt and no wait at all; this keeps the cheap structural
-  // half CI can see without a fake yt-dlp.
+  // THIS PINNED THE EXPRESSION, NOT THE PROPERTY, TWICE. It first went red on
+  // a refactor that changed no behaviour (the thirteenth in this repo), and
+  // again on 9 Sept 2026 when the guard was INVERTED -- the box had shown two
+  // separate transients ("Requested format is not available", "The page needs
+  // to be reloaded") being read as verdicts and killing fetchable imports, so
+  // the rule became "only _looks_final ends the rotation early" rather than
+  // "anything that is not a block does".
   //
-  // AND IT WENT RED A SECOND TIME, 9 Sept 2026, on the fix for a bug the box
-  // found: the guard gained `and not _looks_client_fault(message)`, because a
-  // client whose format set cannot serve the selector was killing fetchable
-  // imports outright. Same shape, same lesson -- so this now pins the SHAPE
-  // (a raise guarded by the block check, decided apart from the rotation
-  // ending) and lets the exclusions grow.
-  assert.match(providers, /if not _looks_blocked\(message\)[^:]*:/,
-    'a non-block is decided on its own, separately from the rotation ending');
+  // What it guards is DRIVEN in test/test_import_retry.py, which asserts a
+  // gone video costs exactly one attempt and no wait, and that an unknown
+  // message still gets the rest of the rotation. This keeps the cheap
+  // structural half CI can see without a fake yt-dlp: the early raise is
+  // guarded by the FINAL check, and an exhausted rotation is its own branch.
+  assert.match(providers, /if _looks_final\(message\):/,
+    'only a final failure ends the rotation early');
   assert.match(providers, /if attempt == len\(YOUTUBE_CLIENTS\) - 1:/,
     'and an exhausted rotation is its own branch');
-  assert.match(providers, /"http error 403", "forbidden"/);
+  assert.match(providers, /_FINAL_SIGNS = \([\s\S]*?"private video"/,
+    'and a private video is one of the failures that cannot change');
 });
-
 test('the failure names what was tried and what to do about it', () => {
   // "HTTP Error 403" alone reads as a broken product. Every client failing is
   // the signature of a blocked IP, so the advice is a proxy, cookies, or
