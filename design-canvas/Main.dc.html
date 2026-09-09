@@ -10,127 +10,124 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap">
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: Outfit, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    body { margin: 0; font-family: Outfit, Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     a { color: #D9B478; text-decoration: none; } a:hover { color: #F0D6A6; }
     button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; text-align: left; padding: 0; }
     img { display: block; }
 
-    /* ── motion ─────────────────────────────────────────────────────── */
-    @keyframes rise   { from { opacity: 0; transform: translateY(22px) scale(.985); } }
-    @keyframes inA    { from { opacity: 0; transform: translateX(28px); } }
-    @keyframes inB    { from { opacity: 0; transform: translateX(28px); } }
-    @keyframes backA  { from { opacity: 0; transform: translateX(-28px); } }
-    @keyframes backB  { from { opacity: 0; transform: translateX(-28px); } }
-    @keyframes fan    { from { opacity: 0; transform: translateY(30px) rotate(0deg) scale(.9); } }
-    @keyframes sheen  { from { transform: translateX(-140%); } to { transform: translateX(240%); } }
-    @keyframes drift  { from { background-position: 0 0; } to { background-position: -560px 0; } }
-    @keyframes breathe{ 0%,100% { opacity: .45; transform: scale(1); } 50% { opacity: .75; transform: scale(1.05); } }
+    @keyframes rise   { from { opacity: 0; transform: translateY(18px) scale(.99); } }
+    @keyframes inA    { from { opacity: 0; transform: translateX(24px); } }
+    @keyframes inB    { from { opacity: 0; transform: translateX(24px); } }
+    @keyframes backA  { from { opacity: 0; transform: translateX(-24px); } }
+    @keyframes backB  { from { opacity: 0; transform: translateX(-24px); } }
+    @keyframes fan    { from { opacity: 0; transform: translateY(30px) scale(.9); } }
     @keyframes ring   { 0% { box-shadow: 0 0 0 0 rgba(217,180,120,.5); } 100% { box-shadow: 0 0 0 12px rgba(217,180,120,0); } }
-    @keyframes kw     { 0%,4% { color: #FFFFFF; transform: scale(1); } 7%,17% { color: #D9B478; transform: scale(1.08); } 21%,100% { color: #FFFFFF; transform: scale(1); } }
-    @keyframes stack  { 0%,8% { opacity: 0; transform: translateY(8px); } 12%,86% { opacity: 1; transform: translateY(0); } 92%,100% { opacity: 0; } }
-    @keyframes promo  { 0%,30% { transform: translateY(120%); opacity: 0; } 36%,64% { transform: translateY(0); opacity: 1; } 70%,100% { transform: translateY(120%); opacity: 0; } }
+    @keyframes kb     { from { transform: scale(1.02); } to { transform: scale(1.12) translate(-1.5%, -1%); } }
+    @keyframes kw     { 0%,4% { color: #FFFFFF; transform: scale(1); } 7%,17% { color: #D9B478; transform: scale(1.1); } 21%,100% { color: #FFFFFF; transform: scale(1); } }
+    @keyframes stack  { 0%,8% { opacity: 0; transform: translateY(10px); } 12%,86% { opacity: 1; transform: translateY(0); } 92%,100% { opacity: 0; } }
+    @keyframes headpop{ 0%,6% { opacity: 0; transform: scale(.86); } 12%,86% { opacity: 1; transform: scale(1); } 92%,100% { opacity: 0; } }
+    @keyframes type   { 0%,5% { width: 0; } 45%,85% { width: 100%; } 92%,100% { width: 0; } }
     @keyframes bar    { 0%,100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
     @keyframes scan   { 0% { left: 0; } 100% { left: 100%; } }
-    @keyframes glowIn { from { opacity: 0; } }
     @keyframes foundA { 0%,15% { background-size: 0% 100%; } 40%,100% { background-size: 100% 100%; } }
     @keyframes foundB { 0%,40% { background-size: 0% 100%; } 65%,100% { background-size: 100% 100%; } }
     @keyframes foundC { 0%,60% { background-size: 0% 100%; } 85%,100% { background-size: 100% 100%; } }
+    @keyframes blurb  { 0%,100% { filter: blur(10px) brightness(.55); } 50% { filter: blur(14px) brightness(.5); } }
+    @keyframes sheen  { from { transform: translateX(-140%); } to { transform: translateX(240%); } }
+    @keyframes tick   { from { transform: scale(.5); opacity: 0; } }
 
-    /* ── the stage: the dashboard, dimmed, and the panel over it ───── */
     .stage { width: 1440px; height: 900px; background: #09090A; position: relative; overflow: hidden;
              display: flex; align-items: center; justify-content: center; }
-    .backdrop { position: absolute; inset: -4%; background: url(./hero-hall.webp) center / cover no-repeat;
-                filter: blur(6px) brightness(.42) saturate(.9); opacity: .55; }
-    .scrim { position: absolute; inset: 0; background: radial-gradient(70% 60% at 50% 40%, rgba(9,9,10,.35), rgba(9,9,10,.92)); }
-    .aurora { position: absolute; left: 50%; top: -260px; width: 980px; height: 820px; margin-left: -490px;
-              background: radial-gradient(closest-side, rgba(217,180,120,.14), transparent 70%);
-              animation: breathe 10s ease-in-out infinite; pointer-events: none; }
+    .dash { position: absolute; inset: 0; opacity: .5; }
+    .dash i { position: absolute; border-radius: 14px; background: #121214; border: 1px solid #1E1E22; }
+    .scrim { position: absolute; inset: 0; background: rgba(9,9,10,.72); backdrop-filter: blur(3px); }
 
-    .panel { position: relative; width: 1320px; height: 816px; display: flex; flex-direction: column;
-             background: #121214; border: 1px solid #26262A; border-radius: 22px; overflow: hidden;
-             box-shadow: 0 50px 140px rgba(0,0,0,.72), 0 0 0 1px rgba(217,180,120,.06);
-             animation: rise .6s cubic-bezier(.2,.8,.2,1) backwards; }
-    .panel::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; z-index: 2;
-             background: linear-gradient(90deg, transparent 8%, rgba(217,180,120,.55), transparent 92%); }
+    .panel { position: relative; width: 1120px; min-height: 780px; background: #101013; border: 1px solid #2C2C33;
+             border-radius: 20px; padding: 26px 28px 24px; display: flex; flex-direction: column;
+             box-shadow: 0 44px 120px rgba(0,0,0,.7); animation: rise .5s cubic-bezier(.2,.8,.2,1); }
 
-    /* header */
-    .head { display: flex; align-items: center; gap: 14px; padding: 16px 22px 14px; border-bottom: 1px solid #1E1E22; }
-    .poster { width: 42px; height: 42px; border-radius: 9px; overflow: hidden; border: 1px solid #26262A; flex: none; }
-    .poster img { width: 100%; height: 100%; object-fit: cover; }
-    .title { font-size: 14px; font-weight: 600; color: #F2F2F4; }
-    .meta { font-size: 11px; color: #85858E; letter-spacing: .06em; margin-top: 2px; }
-    .prog { margin-left: auto; display: flex; align-items: center; gap: 14px; }
-    .segs { display: flex; gap: 5px; }
-    .seg { width: 30px; height: 3px; border-radius: 2px; background: #1E1E22; overflow: hidden; }
-    .seg > i { display: block; height: 100%; width: 100%; background: #D9B478; transform-origin: left;
-               transition: transform .55s cubic-bezier(.2,.8,.2,1); box-shadow: 0 0 8px rgba(217,180,120,.5); }
-    .progT { font-size: 11px; color: #85858E; letter-spacing: .08em; font-variant-numeric: tabular-nums; }
-    .x { width: 34px; height: 34px; border-radius: 9px; border: 1px solid #26262A; color: #85858E;
-         display: flex; align-items: center; justify-content: center; transition: all .2s ease; }
+    .head { display: flex; gap: 20px; align-items: flex-start; }
+    .poster { width: 236px; height: 120px; border-radius: 11px; overflow: hidden; position: relative; flex: none;
+              border: 1px solid #26262A; background: #17171A; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+    .poster img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+    .rangeTag { position: absolute; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px;
+                background: rgba(6,6,8,.72); font-size: 10.5px; font-weight: 600; color: #F2F2F4; font-variant-numeric: tabular-nums; }
+    .rangeTag i { width: 6px; height: 6px; border-radius: 50%; background: #D9B478; }
+    .title { font-size: 15px; font-weight: 600; color: #F2F2F4; line-height: 1.35; }
+    .sub { font-size: 11.5px; color: #8B8B93; margin-top: 4px; }
+    .x { margin-left: auto; width: 30px; height: 30px; border-radius: 8px; border: 1px solid #26262A; color: #8B8B93;
+         display: flex; align-items: center; justify-content: center; flex: none; }
     .x:hover { color: #F2F2F4; border-color: #34343A; }
 
-    /* body */
-    .body { flex: 1; min-height: 0; display: flex; }
-    .main { flex: 1; min-width: 0; padding: 26px 30px 0; display: flex; flex-direction: column; }
-    .kicker { font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: #D9B478; font-weight: 600; }
-    h1 { font-size: 30px; line-height: 1.12; font-weight: 700; color: #F2F2F4; letter-spacing: -.02em; margin: 8px 0 6px; }
-    .hint { font-size: 13px; line-height: 1.55; color: #8B8B93; max-width: 60ch; text-wrap: pretty; }
-    .work { flex: 1; min-height: 0; padding-top: 22px; overflow: hidden; }
-    .in { animation-duration: .5s; animation-timing-function: cubic-bezier(.2,.8,.2,1); animation-fill-mode: backwards; }
+    .rule { display: flex; align-items: center; gap: 14px; margin-top: 22px; }
+    .ruleBar { flex: 1; height: 1px; background: #1E1E22; position: relative; }
+    .ruleBar > i { position: absolute; left: 0; top: -1px; height: 3px; border-radius: 2px; background: #D9B478;
+                   box-shadow: 0 0 10px rgba(217,180,120,.5); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+    .ruleT { font-size: 11px; color: #8B8B93; font-variant-numeric: tabular-nums; }
+
+    h1 { font-size: 27px; font-weight: 600; color: #F2F2F4; letter-spacing: -.015em; margin: 22px 0 6px; line-height: 1.15; }
+    .hint { font-size: 13px; line-height: 1.55; color: #8B8B93; max-width: 66ch; text-wrap: pretty; }
+
+    .work { flex: 1; min-height: 0; padding-top: 22px; }
+    .in { animation-duration: .5s; animation-timing-function: cubic-bezier(.2,.8,.2,1); }
     .nextA .in { animation-name: inA; } .nextB .in { animation-name: inB; }
     .prevA .in { animation-name: backA; } .prevB .in { animation-name: backB; }
     .in:nth-child(2) { animation-delay: .06s; } .in:nth-child(3) { animation-delay: .12s; }
 
-    /* frames: every preview is a 9:16 frame */
-    .frames { display: flex; gap: 14px; }
-    .frame { position: relative; aspect-ratio: 9 / 16; border-radius: 12px; overflow: hidden; background: #0E0E11;
-             border: 1px solid #26262A; flex: none; transition: transform .32s cubic-bezier(.2,.8,.2,1), box-shadow .32s ease, border-color .32s ease; }
-    .frame img { width: 100%; height: 100%; object-fit: cover; }
-    .frame:hover { transform: translateY(-6px); box-shadow: 0 18px 44px rgba(0,0,0,.5); border-color: #34343A; }
-    .frame.on { border-color: #D9B478; box-shadow: 0 0 0 2px rgba(217,180,120,.35), 0 18px 44px rgba(0,0,0,.5); animation: ring 1.4s ease-out 1; }
-    .frameL { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 10px 10px;
-              background: linear-gradient(transparent, rgba(6,6,8,.85)); font-size: 12px; font-weight: 600; color: #F2F2F4; }
-    .frameS { display: block; font-size: 10px; font-weight: 400; color: #BCBCC3; margin-top: 2px; }
-    .tag { position: absolute; top: 9px; left: 9px; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase;
-           padding: 4px 7px; border-radius: 5px; background: #D9B478; color: #0E0E11; font-weight: 700;
-           animation: glowIn .3s ease backwards; }
+    .kicker { font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: #85858E; font-weight: 600; }
 
-    /* brief */
-    .write { font: inherit; font-size: 15px; width: 100%; min-height: 96px; padding: 14px 16px; border-radius: 12px; resize: none;
-             background: #0E0E11; border: 1px solid #26262A; color: #E9E9ED; font-size: 15px; line-height: 1.55;
-             transition: border-color .25s ease, box-shadow .25s ease; }
+    .frames { display: flex; gap: 14px; align-items: flex-start; }
+    .frame { position: relative; border-radius: 12px; overflow: hidden; background: #0E0E11; border: 1px solid #26262A; flex: none;
+             transition: transform .32s cubic-bezier(.2,.8,.2,1), box-shadow .32s ease, border-color .32s ease; }
+    .frame img { width: 100%; height: 100%; object-fit: cover; }
+    .frame:hover { transform: translateY(-5px); box-shadow: 0 18px 40px rgba(0,0,0,.5); border-color: #34343A; }
+    .frame.on { border-color: #D9B478; box-shadow: 0 0 0 2px rgba(217,180,120,.35), 0 18px 40px rgba(0,0,0,.5); animation: ring 1.3s ease-out 1; }
+    .frame.on .kbimg, .frame:hover .kbimg { animation: kb 9s ease-in-out infinite alternate; }
+    .frameL { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 10px 10px;
+              background: linear-gradient(transparent, rgba(6,6,8,.9)); font-size: 12px; font-weight: 600; color: #F2F2F4; }
+    .frameS { display: block; font-size: 10px; font-weight: 400; color: #BCBCC3; margin-top: 2px; line-height: 1.35; }
+    .tag { position: absolute; top: 9px; left: 9px; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; padding: 4px 7px;
+           border-radius: 5px; background: #D9B478; color: #0E0E11; font-weight: 700; animation: tick .3s cubic-bezier(.2,1.5,.4,1); }
+    .wm { position: absolute; left: 0; right: 0; top: 9px; text-align: center; font-size: 7px; letter-spacing: .22em; font-weight: 700; color: rgba(255,255,255,.7); }
+
+    .cap { position: absolute; left: 12px; right: 12px; text-align: center; color: #FFFFFF; font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,.85); pointer-events: none; }
+    .cap span { display: inline-block; margin: 0 2px; }
+    .cap.clean { bottom: 24%; font-size: 14px; line-height: 1.2; }  .cap.clean span { animation: kw 4.2s ease-in-out infinite; }
+    .cap.bold { bottom: 8%; left: 14px; text-align: left; font-size: 24px; line-height: .98; text-transform: uppercase; letter-spacing: -.03em; }
+    .cap.bold span { display: block; animation: stack 4.2s ease-in-out infinite; }
+    .cap.headline { top: 8%; font-size: 19px; line-height: 1.02; text-transform: uppercase; letter-spacing: -.03em; color: #0E0E11; text-shadow: none; }
+    .cap.headline span { animation: headpop 4.2s ease-in-out infinite; }
+    .cap.mono { bottom: 22%; font-size: 10.5px; font-weight: 500; font-family: ui-monospace, Menlo, monospace; letter-spacing: .02em; }
+    .cap.mono .tw { display: inline-block; overflow: hidden; white-space: nowrap; vertical-align: bottom; animation: type 4.2s steps(28) infinite; }
+
+    .write { font: inherit; width: 100%; min-height: 92px; padding: 14px 16px; border-radius: 12px; resize: none; font-size: 15px; line-height: 1.55;
+             background: #0B0B0D; border: 1px solid #26262A; color: #E9E9ED; transition: border-color .25s, box-shadow .25s; }
     .write::placeholder { color: #4A4A52; }
     .write:focus { outline: none; border-color: rgba(217,180,120,.6); box-shadow: 0 0 0 4px rgba(217,180,120,.08); }
     .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-    .chip { padding: 8px 13px; border-radius: 9px; border: 1px solid #26262A; background: #17171A; font-size: 12px;
-            color: #BCBCC3; transition: all .22s cubic-bezier(.2,.8,.2,1); }
+    .chip { padding: 8px 13px; border-radius: 9px; border: 1px solid #26262A; background: #17171A; font-size: 12px; color: #BCBCC3;
+            transition: all .22s cubic-bezier(.2,.8,.2,1); }
     .chip:hover { border-color: #34343A; color: #F2F2F4; transform: translateY(-1px); }
     .chip.on { border-color: rgba(217,180,120,.6); background: rgba(217,180,120,.1); color: #F0D6A6; font-weight: 500; }
-    .transcript { margin-top: 18px; padding: 16px 18px; border-radius: 12px; background: #0E0E11; border: 1px solid #1E1E22; position: relative; overflow: hidden; }
-    .tLabel { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: #62626B; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+    .transcript { margin-top: 16px; padding: 16px 18px; border-radius: 12px; background: #0B0B0D; border: 1px solid #1E1E22; position: relative; overflow: hidden; }
+    .tLabel { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: #62626B; font-weight: 600; margin-bottom: 9px; display: flex; align-items: center; gap: 8px; }
     .tLabel i { width: 6px; height: 6px; border-radius: 50%; background: #D9B478; box-shadow: 0 0 8px #D9B478; }
     .tLine { font-size: 13.5px; line-height: 1.75; color: #62626B; }
-    .found { color: #F0D6A6; background-image: linear-gradient(rgba(217,180,120,.16), rgba(217,180,120,.16));
-             background-repeat: no-repeat; background-size: 0% 100%; border-radius: 3px; padding: 0 2px; }
+    .found { color: #F0D6A6; background-image: linear-gradient(rgba(217,180,120,.16), rgba(217,180,120,.16)); background-repeat: no-repeat; background-size: 0% 100%; border-radius: 3px; padding: 0 2px; }
     .fA { animation: foundA 5s ease-in-out infinite; } .fB { animation: foundB 5s ease-in-out infinite; } .fC { animation: foundC 5s ease-in-out infinite; }
-    .scan { position: absolute; top: 0; bottom: 0; width: 1px; background: linear-gradient(rgba(217,180,120,0), #D9B478, rgba(217,180,120,0)); animation: scan 5s linear infinite; opacity: .6; }
+    .scan { position: absolute; top: 0; bottom: 0; width: 1px; background: linear-gradient(transparent, #D9B478, transparent); animation: scan 5s linear infinite; opacity: .6; }
 
-    /* range */
-    .strip { display: flex; gap: 3px; height: 92px; border-radius: 12px; overflow: hidden; border: 1px solid #26262A; position: relative; background: #0E0E11; }
-    .cell { flex: 1; overflow: hidden; position: relative; }
-    .cell img { width: 100%; height: 100%; object-fit: cover; }
-    .band { position: absolute; top: 0; bottom: 0; border: 2px solid #D9B478; border-radius: 8px;
-            box-shadow: 0 0 0 999px rgba(9,9,10,.62), 0 0 24px rgba(217,180,120,.35);
+    .strip { display: flex; gap: 3px; height: 96px; border-radius: 12px; overflow: hidden; border: 1px solid #26262A; position: relative; background: #0B0B0D; }
+    .cell { flex: 1; overflow: hidden; } .cell img { width: 100%; height: 100%; object-fit: cover; }
+    .band { position: absolute; top: 0; bottom: 0; border: 2px solid #D9B478; border-radius: 8px; box-shadow: 0 0 0 999px rgba(9,9,10,.62), 0 0 24px rgba(217,180,120,.35);
             transition: left .6s cubic-bezier(.2,.8,.2,1), width .6s cubic-bezier(.2,.8,.2,1); }
-    .grip { position: absolute; top: 50%; width: 8px; height: 30px; margin-top: -15px; border-radius: 4px; background: #F0D6A6; box-shadow: 0 2px 8px rgba(0,0,0,.6); }
+    .grip { position: absolute; top: 50%; width: 8px; height: 30px; margin-top: -15px; border-radius: 4px; background: #F0D6A6; }
     .clock { display: flex; justify-content: space-between; margin-top: 10px; font-size: 11.5px; color: #62626B; font-variant-numeric: tabular-nums; }
     .clock b { color: #F0D6A6; font-weight: 600; font-size: 14px; }
 
-    /* clips */
-    .deck { position: relative; height: 250px; margin-top: 4px; }
-    .cardF { position: absolute; left: 0; top: 0; width: 132px; aspect-ratio: 9 / 16; border-radius: 10px; overflow: hidden;
-             border: 1px solid #34343A; box-shadow: 0 14px 34px rgba(0,0,0,.55); transform-origin: bottom center;
-             animation: fan .55s cubic-bezier(.2,.8,.2,1) backwards; }
+    .deck { position: relative; height: 236px; width: 340px; flex: none; }
+    .cardF { position: absolute; left: 0; top: 0; width: 124px; aspect-ratio: 9 / 16; border-radius: 10px; overflow: hidden; border: 1px solid #34343A;
+             box-shadow: 0 14px 34px rgba(0,0,0,.55); transform-origin: bottom center; animation: fan .55s cubic-bezier(.2,.8,.2,1); }
     .cardF img { width: 100%; height: 100%; object-fit: cover; }
     .cardN { position: absolute; left: 8px; bottom: 8px; font-size: 10px; font-weight: 700; color: #F2F2F4; padding: 3px 6px; border-radius: 4px; background: rgba(6,6,8,.7); }
     .stepper { display: inline-flex; align-items: center; border: 1px solid #26262A; border-radius: 11px; background: #17171A; overflow: hidden; }
@@ -141,341 +138,336 @@
     .lenChip:hover { border-color: #34343A; transform: translateY(-1px); }
     .lenChip.on { border-color: rgba(217,180,120,.6); background: rgba(217,180,120,.08); }
     .lenT { font-size: 12.5px; font-weight: 600; color: #F2F2F4; }
-    .lenBar { height: 3px; border-radius: 2px; background: #26262A; overflow: hidden; }
-    .lenBar > i { display: block; height: 100%; background: #D9B478; }
-    .scope { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 11px 14px; border-radius: 11px;
-             background: rgba(217,180,120,.06); border: 1px solid rgba(217,180,120,.22); }
+    .lenBar { height: 3px; border-radius: 2px; background: #26262A; overflow: hidden; } .lenBar > i { display: block; height: 100%; background: #D9B478; }
+    .scope { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 11px 14px; border-radius: 11px; background: rgba(217,180,120,.06); border: 1px solid rgba(217,180,120,.22); }
     .scopeT { flex: 1; font-size: 12px; color: #BCBCC3; }
-    .segc { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: #0E0E11; border: 1px solid #26262A; }
+    .segc { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: #0B0B0D; border: 1px solid #26262A; }
     .segb { padding: 6px 12px; border-radius: 7px; font-size: 11.5px; color: #8B8B93; transition: all .22s ease; }
     .segb.on { background: #26262A; color: #F0D6A6; font-weight: 600; }
 
-    /* sound */
-    .track { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 12px; border: 1px solid #26262A;
-             background: #17171A; width: 100%; transition: all .24s ease; }
+    .shape { position: relative; border-radius: 10px; overflow: hidden; background: #000; border: 1px solid #26262A; flex: none;
+             transition: transform .32s cubic-bezier(.2,.8,.2,1), box-shadow .32s, border-color .32s; }
+    .shape:hover { transform: translateY(-5px); box-shadow: 0 18px 40px rgba(0,0,0,.5); border-color: #34343A; }
+    .shape.on { border-color: #D9B478; box-shadow: 0 0 0 2px rgba(217,180,120,.35); animation: ring 1.3s ease-out 1; }
+    .shape .fill { position: absolute; inset: 0; } .shape .fill img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%; }
+    .shape.on .fill img, .shape:hover .fill img { animation: kb 9s ease-in-out infinite alternate; }
+    .shape .blurbg { position: absolute; inset: -12%; } .shape .blurbg img { width: 100%; height: 100%; object-fit: cover; animation: blurb 6s ease-in-out infinite; }
+    .shape .inset { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); aspect-ratio: 16 / 9; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,.6); }
+    .shape .inset img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%; }
+    .shape .bars { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); aspect-ratio: 16 / 9; overflow: hidden; }
+    .shape .bars img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%; }
+    .shapeL { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 9px 8px; background: linear-gradient(transparent, rgba(6,6,8,.9)); font-size: 11.5px; font-weight: 600; color: #F2F2F4; }
+    .shapeS { display: block; font-size: 9.5px; font-weight: 400; color: #BCBCC3; margin-top: 1px; }
+    .shapeCap { position: absolute; left: 8px; right: 8px; bottom: 18%; text-align: center; font-size: 8px; font-weight: 800; color: #FFF; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+    .safe { position: absolute; inset: 8% 12% 24% 6%; border: 1px dashed rgba(217,180,120,.35); border-radius: 3px; pointer-events: none; }
+
+    .track { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 12px; border: 1px solid #26262A; background: #17171A; width: 100%; transition: all .24s ease; }
     .track:hover { border-color: #34343A; transform: translateX(3px); }
     .track.on { border-color: rgba(217,180,120,.6); background: rgba(217,180,120,.07); }
     .play { width: 34px; height: 34px; border-radius: 50%; border: 1px solid #34343A; display: flex; align-items: center; justify-content: center; color: #BCBCC3; flex: none; }
     .track.on .play { background: #D9B478; border-color: #D9B478; color: #0E0E11; }
-    .trackT { font-size: 13px; font-weight: 600; color: #F2F2F4; min-width: 150px; }
-    .trackS { font-size: 11px; color: #85858E; margin-top: 2px; }
+    .trackT { font-size: 13px; font-weight: 600; color: #F2F2F4; min-width: 160px; } .trackS { font-size: 11px; color: #85858E; margin-top: 2px; }
     .wave { flex: 1; height: 26px; display: flex; align-items: center; gap: 2px; }
     .wave i { flex: 1; height: 100%; border-radius: 2px; background: #34343A; transform: scaleY(.25); transform-origin: center; }
     .track.on .wave i { background: #D9B478; animation: bar 1.1s ease-in-out infinite; }
     .trackD { font-size: 11px; color: #62626B; font-variant-numeric: tabular-nums; }
 
-    /* review */
-    .sentence { font-size: 19px; line-height: 1.65; color: #BCBCC3; max-width: 60ch; }
-    .sentence b { color: #F0D6A6; font-weight: 600; }
-    .dests { display: flex; gap: 8px; margin-top: 18px; }
-    .dest { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 9px; border-radius: 9px; border: 1px solid #26262A; background: #17171A; font-size: 12px; color: #BCBCC3; }
-    .dest.on { border-color: rgba(217,180,120,.5); background: rgba(217,180,120,.09); color: #F0D6A6; }
-    .dest.off { opacity: .5; }
+    .review { display: flex; gap: 32px; align-items: flex-start; }
+    .revL { flex: 1; min-width: 0; }
+    .secT { font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; color: #85858E; font-weight: 600; margin-bottom: 8px; }
+    .dests { display: flex; gap: 8px; margin-top: 10px; }
+    .dest { display: flex; align-items: center; gap: 7px; padding: 7px 11px 7px 9px; border-radius: 9px; border: 1px solid #26262A; background: #17171A; font-size: 12px; color: #BCBCC3; }
+    .dest.on { border-color: rgba(217,180,120,.5); background: rgba(217,180,120,.09); color: #F0D6A6; } .dest.off { opacity: .5; }
+    .what { display: flex; flex-direction: column; gap: 16px; margin-top: 26px; }
+    .whatRow { display: flex; gap: 14px; align-items: flex-start; }
+    .whatI { width: 26px; height: 26px; border-radius: 7px; border: 1px solid #26262A; background: #17171A; display: flex; align-items: center; justify-content: center; color: #8B8B93; flex: none; }
+    .whatT { font-size: 13px; font-weight: 600; color: #F2F2F4; } .whatS { font-size: 12px; color: #8B8B93; margin-top: 2px; line-height: 1.45; }
 
-    /* footer */
-    .foot { display: flex; align-items: center; gap: 16px; padding: 14px 30px 18px; border-top: 1px solid #1E1E22; margin: 0 -30px; }
-    .btn { padding: 12px 18px; border-radius: 11px; font-size: 13px; font-weight: 500; border: 1px solid #26262A; background: #17171A; color: #BCBCC3; transition: all .2s ease; }
-    .btn:hover { border-color: #34343A; color: #F2F2F4; }
-    .go { position: relative; overflow: hidden; margin-left: auto; display: flex; align-items: center; gap: 10px; padding: 13px 24px;
-          border-radius: 11px; background: #D9B478; color: #0E0E11; font-size: 14px; font-weight: 700;
-          transition: all .26s cubic-bezier(.2,.8,.2,1); }
-    .go:hover { background: #E4C48F; transform: translateY(-2px); box-shadow: 0 14px 34px rgba(217,180,120,.28); }
-    .go::after { content: ""; position: absolute; top: 0; bottom: 0; width: 36%; left: 0;
-                 background: linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent); animation: sheen 3.4s ease-in-out infinite; }
-    .go span, .go svg { position: relative; }
-    .go svg { transition: transform .26s ease; } .go:hover svg { transform: translateX(4px); }
+    .revR { width: 330px; flex: none; border: 1px solid #26262A; border-radius: 14px; background: #121214; padding: 20px 20px 18px; }
+    .costT { font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; color: #85858E; font-weight: 600; }
+    .costBig { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; }
+    .costBig b { font-size: 34px; font-weight: 600; color: #F0D6A6; line-height: 1; font-variant-numeric: tabular-nums; }
+    .costBig span { font-size: 12.5px; color: #BCBCC3; }
+    .costS { font-size: 11.5px; color: #8B8B93; margin-top: 6px; }
+    .rows { border-top: 1px solid #1E1E22; margin-top: 14px; padding-top: 4px; }
+    .row { display: flex; align-items: center; gap: 8px; padding: 9px 0; font-size: 12px; }
+    .rowK { color: #8B8B93; } .rowE { color: #62626B; font-size: 11px; transition: color .2s; } .rowE:hover { color: #F0D6A6; }
+    .rowV { margin-left: auto; color: #F2F2F4; font-weight: 600; text-align: right; max-width: 170px; }
+    .ready { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; padding: 12px 13px; border-radius: 10px; border: 1px solid #26262A; background: #0E0E11; }
+    .readyT { font-size: 12.5px; font-weight: 600; color: #F2F2F4; } .readyS { font-size: 11px; color: #8B8B93; margin-top: 2px; }
+    .gen { position: relative; overflow: hidden; margin-top: 14px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 18px; border-radius: 9px;
+           background: rgba(217,180,120,.1); border: 1px solid rgba(217,180,120,.5); color: #F0D6A6; font-size: 13.5px; font-weight: 600; transition: all .24s ease; }
+    .gen:hover { background: rgba(217,180,120,.18); transform: translateY(-1px); box-shadow: 0 10px 28px rgba(217,180,120,.16); }
+    .gen::after { content: ""; position: absolute; top: 0; bottom: 0; width: 34%; left: 0; background: linear-gradient(90deg, transparent, rgba(240,214,166,.22), transparent); animation: sheen 3.6s ease-in-out infinite; }
+    .genNote { font-size: 10.5px; line-height: 1.5; color: #62626B; text-align: center; margin-top: 12px; }
 
-    /* ── the live preview ───────────────────────────────────────────── */
-    .side { width: 372px; flex: none; border-left: 1px solid #1E1E22; background: #0E0E11; padding: 22px 26px 18px; display: flex; flex-direction: column; gap: 14px; }
-    .sideT { display: flex; align-items: center; gap: 8px; font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: #85858E; font-weight: 600; }
-    .live { width: 6px; height: 6px; border-radius: 50%; background: #D9B478; box-shadow: 0 0 10px #D9B478; }
-    .stageF { width: 288px; aspect-ratio: 9 / 16; margin: 0 auto; border-radius: 16px; position: relative; overflow: hidden;
-              background: #17171A; border: 1px solid #26262A; box-shadow: 0 24px 60px rgba(0,0,0,.6); }
-    .layer { position: absolute; inset: 0; transition: opacity .55s ease, filter .5s ease; }
-    .layer img { width: 100%; height: 100%; object-fit: cover; }
-    .wm { position: absolute; left: 0; right: 0; top: 12px; text-align: center; font-size: 8px; letter-spacing: .22em; font-weight: 700; color: rgba(255,255,255,.7); text-shadow: 0 1px 4px rgba(0,0,0,.6); transition: opacity .4s; }
-    .promo { position: absolute; left: 14px; right: 14px; bottom: 16px; padding: 8px 12px; border-radius: 8px; background: rgba(14,14,17,.82); border: 1px solid rgba(217,180,120,.4);
-             display: flex; align-items: center; gap: 8px; font-size: 8.5px; color: #F0D6A6; font-weight: 600; letter-spacing: .06em;
-             animation: promo 9s ease-in-out infinite; backdrop-filter: blur(6px); }
-    .promo i { width: 5px; height: 5px; border-radius: 50%; background: #D9B478; }
-
-    .cap { position: absolute; left: 14px; right: 14px; text-align: center; color: #FFFFFF; font-weight: 800; transition: all .4s ease; text-shadow: 0 2px 10px rgba(0,0,0,.8), 0 0 2px rgba(0,0,0,.9); }
-    .cap span { display: inline-block; margin: 0 2px; transform-origin: center; }
-    .cap.clean { bottom: 24%; font-size: 15px; line-height: 1.2; letter-spacing: -.01em; }
-    .cap.clean span { animation: kw 4.2s ease-in-out infinite; }
-    .cap.bold { bottom: 8%; left: 16px; text-align: left; font-size: 26px; line-height: .98; text-transform: uppercase; letter-spacing: -.03em; }
-    .cap.bold span { display: block; animation: stack 4.2s ease-in-out infinite; }
-    .cap.headline { top: 9%; font-size: 21px; line-height: 1.02; text-transform: uppercase; letter-spacing: -.03em; color: #0E0E11; text-shadow: none; font-weight: 800; }
-    .cap.headline span { animation: stack 4.2s ease-in-out infinite; }
-    .cap.mono { bottom: 22%; font-size: 10px; font-weight: 500; letter-spacing: .02em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .cap.mono span { animation: kw 4.2s ease-in-out infinite; }
-    .cap.big { font-size: 19px; } .cap.bold.big { font-size: 31px; } .cap.headline.big { font-size: 25px; }
-
-    .waveRow { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: #121214; border: 1px solid #1E1E22; }
-    .waveRow .wave { height: 18px; }
-    .waveRow .wave i { background: #D9B478; animation: bar 1.1s ease-in-out infinite; }
-    .waveT { font-size: 11px; color: #8B8B93; white-space: nowrap; }
-
-    .money { display: flex; align-items: flex-end; gap: 14px; padding-top: 4px; }
-    .big { font-size: 34px; font-weight: 800; color: #F0D6A6; line-height: 1; font-variant-numeric: tabular-nums; }
-    .unit { font-size: 12px; color: #8B8B93; padding-bottom: 5px; }
-    .eta { margin-left: auto; text-align: right; font-size: 11.5px; color: #85858E; line-height: 1.45; }
-    .eta b { color: #BCBCC3; font-weight: 600; display: block; font-size: 13px; }
+    .foot { display: flex; align-items: center; gap: 14px; margin-top: 22px; }
+    .back { display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-radius: 9px; border: 1px solid #26262A; background: #17171A; font-size: 13px; font-weight: 500; color: #BCBCC3; transition: all .2s; }
+    .back:hover { border-color: #34343A; color: #F2F2F4; }
+    .footNote { font-size: 12px; color: #62626B; }
+    .go { margin-left: auto; display: flex; align-items: center; gap: 9px; padding: 12px 20px; border-radius: 9px; background: rgba(217,180,120,.1); border: 1px solid rgba(217,180,120,.5);
+          color: #F0D6A6; font-size: 13.5px; font-weight: 600; transition: all .24s cubic-bezier(.2,.8,.2,1); }
+    .go:hover { background: rgba(217,180,120,.18); transform: translateY(-1px); box-shadow: 0 10px 28px rgba(217,180,120,.16); }
+    .go svg { transition: transform .24s; } .go:hover svg { transform: translateX(3px); }
 
     @media (prefers-reduced-motion: reduce) {
-      .panel, .in, .cardF, .frame.on, .aurora, .go::after, .promo, .wave i, .scan, .found, .cap span { animation: none; }
-      .frame, .chip, .lenChip, .track, .go, .band, .seg > i, .layer { transition: none; }
+      .panel, .in, .cardF, .frame.on, .shape.on, .tag, .kbimg, .fill img, .blurbg img, .cap span, .cap .tw, .wave i, .scan, .found, .gen::after { animation: none; }
+      .frame, .shape, .chip, .lenChip, .track, .go, .gen, .band, .ruleBar > i { transition: none; }
     }
   </style>
 </helmet>
 
 <div class="stage">
-  <div class="backdrop"></div>
+  <div class="dash">
+    <i style="left: 0; top: 0; width: 228px; height: 900px; border-radius: 0"></i>
+    <i style="left: 268px; top: 118px; width: 760px; height: 470px"></i>
+    <i style="left: 1060px; top: 118px; width: 350px; height: 300px"></i>
+    <i style="left: 268px; top: 620px; width: 1142px; height: 240px"></i>
+  </div>
   <div class="scrim"></div>
-  <div class="aurora"></div>
 
   <div class="panel">
-
     <div class="head">
-      <div class="poster"><img src="preview-sample.webp"></div>
-      <div>
-        <div class="title">MOST Muslims Don&#39;t Realize This About Allah</div>
-        <div class="meta">SHEIKH ABU BAKR ZOUD · 32:16 · 1080p</div>
+      <div class="poster"><img src="preview-sample.webp"><div class="rangeTag"><i></i><span>{{ rangeText }}</span></div></div>
+      <div style="min-width: 0; padding-top: 6px">
+        <div class="title">MOST Muslims Don&#39;t Realize This About Allah | Sheikh Abu Bakr Zoud &amp; Ustadh Hisham Abu Yusuf</div>
+        <div class="sub">{{ subline }}</div>
       </div>
-      <div class="prog">
-        <div class="segs">
-          <sc-for list="{{ segs }}" as="s" hint-placeholder-count="8"><div class="seg"><i style="{{ s.st }}"></i></div></sc-for>
-        </div>
-        <div class="progT">{{ progT }}</div>
-        <button class="x"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
-      </div>
+      <button class="x"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
     </div>
 
-    <div class="body">
-      <div class="main">
+    <div class="rule"><div class="ruleBar"><i style="{{ ruleSt }}"></i></div><div class="ruleT">{{ progT }}</div></div>
+
+    <h1>{{ title }}</h1>
+    <div class="hint">{{ hint }}</div>
+
+    <div class="work {{ dirCls }}">
+
+      <sc-if value="{{ isBrief }}" hint-placeholder-val="{{ true }}">
         <div>
-          <div class="kicker">{{ kicker }}</div>
-          <h1>{{ title }}</h1>
-          <div class="hint">{{ hint }}</div>
+          <div class="in"><textarea class="write" placeholder="e.g. the parts about repentance, or the story he tells about his mother"></textarea></div>
+          <div class="chips in"><sc-for list="{{ examples }}" as="e" hint-placeholder-count="4"><button class="{{ e.cls }}" onClick="{{ e.pick }}">{{ e.text }}</button></sc-for></div>
+          <div class="transcript in">
+            <div class="scan"></div>
+            <div class="tLabel"><i></i>What the clipper will look for</div>
+            <div class="tLine">…and that is the thing people forget. <span class="found fA">Allah does not close the door of repentance</span> because you walked through it yesterday. He is not waiting for you to run out of chances.</div>
+            <div class="tLine">My mother used to say — and I only understood this much later — <span class="found fB">His mercy reaches you before you reach Him</span>. That is the whole of it.</div>
+            <div class="tLine">So when someone says it is too late, ask them: <span class="found fC">too late for whom?</span> The door has never once been shut.</div>
+          </div>
         </div>
+      </sc-if>
 
-        <div class="work {{ dirCls }}">
-
-          <sc-if value="{{ isBrief }}" hint-placeholder-val="{{ true }}">
-            <div>
-              <div class="in"><textarea class="write" placeholder="e.g. the parts about repentance, or the story he tells about his mother"></textarea></div>
-              <div class="chips in">
-                <sc-for list="{{ examples }}" as="e" hint-placeholder-count="4"><button class="{{ e.cls }}" onClick="{{ e.pick }}">{{ e.text }}</button></sc-for>
-              </div>
-              <div class="transcript in">
-                <div class="scan"></div>
-                <div class="tLabel"><i></i>What the clipper will look for</div>
-                <div class="tLine">…and that is the thing people forget. <span class="found fA">Allah does not close the door of repentance</span> because you walked through it yesterday. He is not waiting for you to run out of chances.</div>
-                <div class="tLine">My mother used to say — and I only understood this much later — <span class="found fB">His mercy reaches you before you reach Him</span>. That is the whole of it.</div>
-                <div class="tLine">So when someone says it is too late, ask them: <span class="found fC">too late for whom?</span> The door has never once been shut.</div>
-              </div>
-            </div>
-          </sc-if>
-
-          <sc-if value="{{ isKind }}" hint-placeholder-val="{{ false }}">
-            <div class="frames in">
-              <button class="{{ kindLectureCls }}" onClick="{{ pickLecture }}" style="width: 214px">
-                <img src="preview-sample.webp">
-                <div class="cap clean" style="font-size: 13px; bottom: 26%"><span>He</span><span>never</span><span>stops</span><span>answering</span><span>you</span></div>
-                <sc-if value="{{ kindIsLecture }}" hint-placeholder-val="{{ true }}"><div class="tag">Selected</div></sc-if>
-                <div class="frameL">Islamic lecture<span class="frameS">Captions on the speech, nasheed underneath, your mark on the frame</span></div>
-              </button>
-              <button class="{{ kindQuranCls }}" onClick="{{ pickQuran }}" style="width: 214px">
-                <img src="reel-quran.webp">
-                <sc-if value="{{ kindIsQuran }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
-                <div class="frameL">Quran recitation<span class="frameS">The ayah and its translation only. No nasheed, nothing over scripture</span></div>
-              </button>
-            </div>
-          </sc-if>
-
-          <sc-if value="{{ isTrim }}" hint-placeholder-val="{{ false }}">
-            <div>
-              <div class="in">
-                <div class="strip">
-                  <sc-for list="{{ cells }}" as="c" hint-placeholder-count="12"><div class="cell" style="{{ c.st }}"><img src="preview-sample.webp" style="{{ c.img }}"></div></sc-for>
-                  <div class="band" style="{{ bandSt }}"><span class="grip" style="left: -5px"></span><span class="grip" style="right: -5px"></span></div>
-                </div>
-                <div class="clock"><span>0:00</span><b>{{ rangeText }}</b><span>32:16</span></div>
-              </div>
-              <div class="chips in" style="margin-top: 16px">
-                <sc-for list="{{ ranges }}" as="r" hint-placeholder-count="4"><button class="{{ r.cls }}" onClick="{{ r.pick }}">{{ r.label }}</button></sc-for>
-              </div>
-            </div>
-          </sc-if>
-
-          <sc-if value="{{ isClips }}" hint-placeholder-val="{{ false }}">
-            <div style="display: flex; gap: 30px">
-              <div class="deck in" style="width: 360px">
-
-                <div class="cardF" style="{{ deck1 }}"><img src="reel-halal.webp"><div class="cardN">1</div></div>
-                <div class="cardF" style="{{ deck2 }}"><img src="reel-dua.webp"><div class="cardN">2</div></div>
-                <div class="cardF" style="{{ deck3 }}"><img src="reel-beneficial.webp"><div class="cardN">3</div></div>
-                <div class="cardF" style="{{ deck4 }}"><img src="reel-dunya.webp"><div class="cardN">4</div></div>
-                <div class="cardF" style="{{ deck5 }}"><img src="reel-depart.webp"><div class="cardN">5</div></div>
-                <div class="cardF" style="{{ deck6 }}"><img src="reel-winter.webp"><div class="cardN">6</div></div>
-                <div class="cardF" style="{{ deck7 }}"><img src="reel-kaaba-a.webp"><div class="cardN">7</div></div>
-                <div class="cardF" style="{{ deck8 }}"><img src="reel-landscape.webp"><div class="cardN">8</div></div>
-              </div>
-              <div class="in" style="flex: 1">
-                <div style="display: flex; align-items: center; gap: 14px">
-                  <div class="stepper">
-                    <button onClick="{{ less }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"></path></svg></button>
-                    <div class="stepV">{{ count }}</div>
-                    <button onClick="{{ more }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button>
-                  </div>
-                  <div style="font-size: 13px; color: #8B8B93">clips from this lecture</div>
-                </div>
-                <div class="chips" style="margin-top: 18px">
-                  <sc-for list="{{ bands }}" as="b" hint-placeholder-count="4">
-                    <button class="{{ b.cls }}" onClick="{{ b.pick }}"><div class="lenT">{{ b.label }}</div><div class="lenBar"><i style="{{ b.w }}"></i></div></button>
-                  </sc-for>
-                </div>
-                <div class="scope">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D9B478" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5l3 2"></path></svg>
-                  <div class="scopeT">Just this lecture — your default stays as it is.</div>
-                  <div class="segc"><button class="{{ scopeOnceCls }}" onClick="{{ scopeOnce }}">This lecture</button><button class="{{ scopeAllCls }}" onClick="{{ scopeAll }}">Make it my default</button></div>
-                </div>
-              </div>
-            </div>
-          </sc-if>
-
-          <sc-if value="{{ isStyle }}" hint-placeholder-val="{{ false }}">
-            <div>
-              <div class="frames in">
-
-                <button class="{{ stCleanCls }}" onClick="{{ stCleanPick }}" style="width: 168px">
-                  <img src="reel-beneficial.webp">
-                  <sc-if value="{{ stCleanOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
-                  <div class="frameL">Clean Line<span class="frameS">One line, gold on the spoken word</span></div>
-                </button>
-                <button class="{{ stBoldCls }}" onClick="{{ stBoldPick }}" style="width: 168px">
-                  <img src="reel-halal.webp">
-                  <sc-if value="{{ stBoldOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
-                  <div class="frameL">Bold Stack<span class="frameS">Big words stacked low</span></div>
-                </button>
-                <button class="{{ stHeadCls }}" onClick="{{ stHeadPick }}" style="width: 168px">
-                  <img src="reel-dua.webp">
-                  <sc-if value="{{ stHeadOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
-                  <div class="frameL">Headline<span class="frameS">The line as a title, up top</span></div>
-                </button>
-                <button class="{{ stMonoCls }}" onClick="{{ stMonoPick }}" style="width: 168px">
-                  <img src="reel-dunya.webp">
-                  <sc-if value="{{ stMonoOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
-                  <div class="frameL">Mono Minimal<span class="frameS">Small, quiet, precise</span></div>
-                </button>
-              </div>
-              <div class="in" style="margin-top: 18px">
-                <div class="kicker" style="color: #85858E">For this lecture only</div>
-                <div class="chips" style="margin-top: 9px">
-                  <sc-for list="{{ tweaks }}" as="t" hint-placeholder-count="4"><button class="{{ t.cls }}" onClick="{{ t.pick }}">{{ t.label }}</button></sc-for>
-                </div>
-              </div>
-            </div>
-          </sc-if>
-
-          <sc-if value="{{ isPicture }}" hint-placeholder-val="{{ false }}">
-            <div class="frames in">
-
-                <button class="{{ pcOwnCls }}" onClick="{{ pcOwnPick }}" style="width: 150px">
-                  <img src="preview-sample.webp">
-                  <sc-if value="{{ pcOwnOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
-                  <div class="frameL">The lecture<span class="frameS">Following the speaker</span></div>
-                </button>
-                <button class="{{ pcHallCls }}" onClick="{{ pcHallPick }}" style="width: 150px">
-                  <img src="hero-hall.webp">
-                  <sc-if value="{{ pcHallOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
-                  <div class="frameL">Mosque hall<span class="frameS">Scenery, voice over it</span></div>
-                </button>
-                <button class="{{ pcKaabaCls }}" onClick="{{ pcKaabaPick }}" style="width: 150px">
-                  <img src="reel-kaaba-a.webp">
-                  <sc-if value="{{ pcKaabaOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
-                  <div class="frameL">Kaaba<span class="frameS">Scenery, voice over it</span></div>
-                </button>
-                <button class="{{ pcLandCls }}" onClick="{{ pcLandPick }}" style="width: 150px">
-                  <img src="reel-landscape.webp">
-                  <sc-if value="{{ pcLandOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
-                  <div class="frameL">Landscape<span class="frameS">Scenery, voice over it</span></div>
-                </button>
-                <button class="{{ pcWinterCls }}" onClick="{{ pcWinterPick }}" style="width: 150px">
-                  <img src="reel-winter.webp">
-                  <sc-if value="{{ pcWinterOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
-                  <div class="frameL">Winter<span class="frameS">Scenery, voice over it</span></div>
-                </button>
-            </div>
-          </sc-if>
-
-          <sc-if value="{{ isSound }}" hint-placeholder-val="{{ false }}">
-            <div style="display: flex; flex-direction: column; gap: 9px">
-              <sc-for list="{{ sounds }}" as="s" hint-placeholder-count="4">
-                <button class="{{ s.cls }} in" onClick="{{ s.pick }}">
-                  <div class="play"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l11-7z"></path></svg></div>
-                  <div><div class="trackT">{{ s.title }}</div><div class="trackS">{{ s.sub }}</div></div>
-                  <div class="wave"><i></i><i style="animation-delay:.1s"></i><i style="animation-delay:.2s"></i><i style="animation-delay:.05s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.15s"></i><i style="animation-delay:.25s"></i><i style="animation-delay:.02s"></i><i style="animation-delay:.35s"></i><i style="animation-delay:.12s"></i><i style="animation-delay:.22s"></i><i style="animation-delay:.08s"></i><i style="animation-delay:.28s"></i><i style="animation-delay:.18s"></i><i style="animation-delay:.04s"></i><i style="animation-delay:.32s"></i><i style="animation-delay:.14s"></i><i style="animation-delay:.24s"></i><i style="animation-delay:.06s"></i><i style="animation-delay:.3s"></i></div>
-                  <div class="trackD">{{ s.dur }}</div>
-                </button>
-              </sc-for>
-            </div>
-          </sc-if>
-
-          <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
-            <div style="display: flex; gap: 30px; align-items: flex-start">
-              <div class="deck in" style="width: 330px; height: 262px">
-
-                <div class="cardF" style="{{ rev1 }}"><img src="reel-halal.webp"></div>
-                <div class="cardF" style="{{ rev2 }}"><img src="reel-dua.webp"></div>
-                <div class="cardF" style="{{ rev3 }}"><img src="reel-beneficial.webp"></div>
-                <div class="cardF" style="{{ rev4 }}"><img src="reel-dunya.webp"></div>
-              </div>
-              <div class="in" style="flex: 1">
-                <div class="sentence">Look for <b>repentance and mercy</b>, cut <b>{{ sClips }}</b> in <b>{{ sStyle }}</b> on <b>{{ sPicture }}</b>, with <b>{{ sSound }}</b> underneath — then hold every one for your approval.</div>
-                <div class="dests">
-                  <div class="dest on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.8 1.8C5.8 19 12 19 12 19s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8zM10 15V9l5 3z"></path></svg>YouTube</div>
-                  <div class="dest on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle></svg>Instagram</div>
-                  <div class="dest on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 21v-7h2.3l.4-2.8h-2.7V9.4c0-.8.3-1.4 1.4-1.4h1.4V5.5c-.3 0-1.1-.1-2.1-.1-2.1 0-3.5 1.3-3.5 3.6v2.2H8.4V14h2.3v7z"></path></svg>Facebook</div>
-                  <div class="dest off"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M16 3v10.5a4 4 0 1 1-3.2-3.9"></path><path d="M16 3c.6 2.4 2.3 3.8 4.6 4"></path></svg>TikTok · reconnect</div>
-                </div>
-              </div>
-            </div>
-          </sc-if>
-
-        </div>
-
-        <div class="foot">
-          <button class="btn" onClick="{{ back }}">Back</button>
-          <div style="font-size: 12px; color: #62626B">{{ footNote }}</div>
-          <button class="go" onClick="{{ next }}"><span>{{ cta }}</span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"></path></svg></button>
-        </div>
-      </div>
-
-      <div class="side">
-        <div class="sideT"><span class="live"></span>Live preview · {{ liveT }}</div>
-        <div class="stageF">
-          <div class="layer" style="{{ lLecture }}"><img src="preview-sample.webp"></div>
-          <div class="layer" style="{{ lHall }}"><img src="hero-hall.webp" style="object-position: 62% 50%"></div>
-          <div class="layer" style="{{ lKaaba }}"><img src="reel-kaaba-a.webp"></div>
-          <div class="layer" style="{{ lLand }}"><img src="reel-landscape.webp"></div>
-          <div class="layer" style="{{ lWinter }}"><img src="reel-winter.webp"></div>
-          <div class="layer" style="{{ lQuran }}"><img src="reel-quran.webp"></div>
-          <sc-if value="{{ showCap }}" hint-placeholder-val="{{ true }}">
-            <div class="{{ capCls }}"><span>He</span><span>never</span><span>stops</span><span>answering</span><span>you</span></div>
+      <sc-if value="{{ isKind }}" hint-placeholder-val="{{ false }}">
+        <div class="frames in">
+          <button class="{{ kLecCls }}" onClick="{{ pickLecture }}" style="width: 214px; aspect-ratio: 9 / 16">
+            <img src="preview-sample.webp" class="kbimg">
             <div class="wm">DEENCLIPPED</div>
-            <div class="promo"><i></i>Clipped with DeenClipped · deenclipped.online</div>
-          </sc-if>
+            <div class="cap clean"><span>He</span><span>never</span><span>stops</span><span>answering</span><span>you</span></div>
+            <sc-if value="{{ kIsLec }}" hint-placeholder-val="{{ true }}"><div class="tag">Selected</div></sc-if>
+            <div class="frameL">Islamic lecture<span class="frameS">Captions on the speech, a nasheed underneath, your mark on the frame</span></div>
+          </button>
+          <button class="{{ kQurCls }}" onClick="{{ pickQuran }}" style="width: 214px; aspect-ratio: 9 / 16">
+            <img src="reel-quran.webp" class="kbimg">
+            <sc-if value="{{ kIsQur }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
+            <div class="frameL">Quran recitation<span class="frameS">The ayah and its translation only. No nasheed, nothing drawn over scripture</span></div>
+          </button>
+          <div style="flex: 1; padding: 6px 0 0 8px; font-size: 13px; line-height: 1.6; color: #8B8B93; max-width: 40ch">A recitation is captioned from the Qur&#39;an itself — the verse the reciter is on and its translation — never from what the microphone heard. That is why nothing else may be drawn over it.</div>
         </div>
-        <div class="waveRow">
-          <div class="wave" style="{{ waveSt }}"><i></i><i style="animation-delay:.1s"></i><i style="animation-delay:.2s"></i><i style="animation-delay:.05s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.15s"></i><i style="animation-delay:.25s"></i><i style="animation-delay:.02s"></i><i style="animation-delay:.35s"></i><i style="animation-delay:.12s"></i><i style="animation-delay:.22s"></i><i style="animation-delay:.08s"></i><i style="animation-delay:.28s"></i><i style="animation-delay:.18s"></i><i style="animation-delay:.04s"></i><i style="animation-delay:.32s"></i><i style="animation-delay:.14s"></i><i style="animation-delay:.24s"></i><i style="animation-delay:.06s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.1s"></i><i style="animation-delay:.2s"></i><i style="animation-delay:.16s"></i><i style="animation-delay:.26s"></i></div>
-          <div class="waveT">{{ waveT }}</div>
+      </sc-if>
+
+      <sc-if value="{{ isTrim }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div class="in">
+            <div class="strip">
+              <sc-for list="{{ cells }}" as="c" hint-placeholder-count="12"><div class="cell"><img src="preview-sample.webp" style="{{ c.img }}"></div></sc-for>
+              <div class="band" style="{{ bandSt }}"><span class="grip" style="left: -5px"></span><span class="grip" style="right: -5px"></span></div>
+            </div>
+            <div class="clock"><span>0:00</span><b>{{ rangeText }}</b><span>32:16</span></div>
+          </div>
+          <div class="chips in" style="margin-top: 16px"><sc-for list="{{ ranges }}" as="r" hint-placeholder-count="4"><button class="{{ r.cls }}" onClick="{{ r.pick }}">{{ r.label }}</button></sc-for></div>
+          <div class="in" style="margin-top: 14px; font-size: 12px; color: #62626B"><span>{{ costLine }}</span></div>
         </div>
-        <div class="money">
-          <div class="big">{{ tokens }}</div><div class="unit">tokens</div>
-          <div class="eta"><b>{{ eta }}</b>until the clips land</div>
+      </sc-if>
+
+      <sc-if value="{{ isClips }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; gap: 30px">
+          <div class="deck in">
+            <div class="cardF" style="{{ deck1 }}"><img src="reel-halal.webp"><div class="cardN">1</div></div>
+            <div class="cardF" style="{{ deck2 }}"><img src="reel-dua.webp"><div class="cardN">2</div></div>
+            <div class="cardF" style="{{ deck3 }}"><img src="reel-beneficial.webp"><div class="cardN">3</div></div>
+            <div class="cardF" style="{{ deck4 }}"><img src="reel-dunya.webp"><div class="cardN">4</div></div>
+            <div class="cardF" style="{{ deck5 }}"><img src="reel-depart.webp"><div class="cardN">5</div></div>
+            <div class="cardF" style="{{ deck6 }}"><img src="reel-winter.webp"><div class="cardN">6</div></div>
+            <div class="cardF" style="{{ deck7 }}"><img src="reel-kaaba-a.webp"><div class="cardN">7</div></div>
+            <div class="cardF" style="{{ deck8 }}"><img src="reel-landscape.webp"><div class="cardN">8</div></div>
+          </div>
+          <div class="in" style="flex: 1">
+            <div style="display: flex; align-items: center; gap: 14px">
+              <div class="stepper">
+                <button onClick="{{ less }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"></path></svg></button>
+                <div class="stepV">{{ count }}</div>
+                <button onClick="{{ more }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button>
+              </div>
+              <div style="font-size: 13px; color: #8B8B93">clips from this lecture</div>
+            </div>
+            <div class="chips" style="margin-top: 18px"><sc-for list="{{ bands }}" as="b" hint-placeholder-count="4"><button class="{{ b.cls }}" onClick="{{ b.pick }}"><div class="lenT">{{ b.label }}</div><div class="lenBar"><i style="{{ b.w }}"></i></div></button></sc-for></div>
+            <div class="scope">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D9B478" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5l3 2"></path></svg>
+              <div class="scopeT">Just this lecture — your account default stays as it is.</div>
+              <div class="segc"><button class="{{ scopeOnceCls }}" onClick="{{ scopeOnce }}">This lecture</button><button class="{{ scopeAllCls }}" onClick="{{ scopeAll }}">Make it my default</button></div>
+            </div>
+          </div>
         </div>
-      </div>
+      </sc-if>
+
+      <sc-if value="{{ isStyle }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div class="frames in">
+            <button class="{{ stCleanCls }}" onClick="{{ stCleanPick }}" style="width: 186px; aspect-ratio: 9 / 16">
+              <img src="preview-sample.webp" class="kbimg"><div class="wm">DEENCLIPPED</div>
+              <div class="cap clean"><span>He</span><span>never</span><span>stops</span><span>answering</span><span>you</span></div>
+              <sc-if value="{{ stCleanOn }}" hint-placeholder-val="{{ true }}"><div class="tag">Selected</div></sc-if>
+              <div class="frameL">Clean Line<span class="frameS">One line, the spoken word lit gold</span></div>
+            </button>
+            <button class="{{ stBoldCls }}" onClick="{{ stBoldPick }}" style="width: 186px; aspect-ratio: 9 / 16">
+              <img src="preview-sample.webp" class="kbimg"><div class="wm">DEENCLIPPED</div>
+              <div class="cap bold"><span>He never</span><span style="animation-delay: .4s">stops</span><span style="animation-delay: .8s">answering</span></div>
+              <sc-if value="{{ stBoldOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
+              <div class="frameL">Bold Stack<span class="frameS">Big words stacked low, one at a time</span></div>
+            </button>
+            <button class="{{ stHeadCls }}" onClick="{{ stHeadPick }}" style="width: 186px; aspect-ratio: 9 / 16">
+              <img src="preview-sample.webp" class="kbimg"><div class="wm" style="color: rgba(14,14,17,.6)">DEENCLIPPED</div>
+              <div class="cap headline"><span style="display: block">He never stops</span><span style="display: block; animation-delay: .25s; font-size: 24px">answering you</span></div>
+              <sc-if value="{{ stHeadOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
+              <div class="frameL">Headline<span class="frameS">The line as a title, up top</span></div>
+            </button>
+            <button class="{{ stMonoCls }}" onClick="{{ stMonoPick }}" style="width: 186px; aspect-ratio: 9 / 16">
+              <img src="preview-sample.webp" class="kbimg"><div class="wm">DEENCLIPPED</div>
+              <div class="cap mono"><span class="tw">he never stops answering you</span></div>
+              <sc-if value="{{ stMonoOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
+              <div class="frameL">Mono Minimal<span class="frameS">Small, quiet, typed in</span></div>
+            </button>
+          </div>
+          <div class="in" style="margin-top: 16px; display: flex; align-items: center; gap: 14px">
+            <div class="kicker">For this lecture only</div>
+            <div class="chips" style="margin-top: 0"><sc-for list="{{ tweaks }}" as="t" hint-placeholder-count="4"><button class="{{ t.cls }}" onClick="{{ t.pick }}">{{ t.label }}</button></sc-for></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div class="frames in" style="align-items: center">
+            <button class="{{ shPortFillCls }}" onClick="{{ shPortFillPick }}" style="width: 150px; aspect-ratio: 9 / 16">
+              <div class="fill"><img src="preview-sample.webp"></div><div class="safe"></div>
+              <div class="shapeCap">He never stops</div>
+              <sc-if value="{{ shPortFillOn }}" hint-placeholder-val="{{ true }}"><div class="tag">Selected</div></sc-if>
+              <div class="shapeL">Portrait · Fill<span class="shapeS">9:16, follows the speaker</span></div>
+            </button>
+            <button class="{{ shPortBlurCls }}" onClick="{{ shPortBlurPick }}" style="width: 150px; aspect-ratio: 9 / 16">
+              <div class="blurbg"><img src="preview-sample.webp"></div><div class="inset"><img src="preview-sample.webp"></div>
+              <div class="shapeCap" style="bottom: 14%">He never stops</div>
+              <sc-if value="{{ shPortBlurOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
+              <div class="shapeL">Portrait · Blur<span class="shapeS">Whole frame, blurred behind</span></div>
+            </button>
+            <button class="{{ shPortFitCls }}" onClick="{{ shPortFitPick }}" style="width: 150px; aspect-ratio: 9 / 16">
+              <div class="bars"><img src="preview-sample.webp"></div>
+              <div class="shapeCap" style="bottom: 14%">He never stops</div>
+              <sc-if value="{{ shPortFitOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
+              <div class="shapeL">Portrait · Fit<span class="shapeS">Whole frame on black</span></div>
+            </button>
+            <button class="{{ shSqFillCls }}" onClick="{{ shSqFillPick }}" style="width: 200px; aspect-ratio: 1 / 1">
+              <div class="fill"><img src="preview-sample.webp"></div>
+              <div class="shapeCap" style="bottom: 12%">He never stops</div>
+              <sc-if value="{{ shSqFillOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
+              <div class="shapeL">Square · Fill<span class="shapeS">1:1 for the feed</span></div>
+            </button>
+            <button class="{{ shSqBlurCls }}" onClick="{{ shSqBlurPick }}" style="width: 200px; aspect-ratio: 1 / 1">
+              <div class="blurbg"><img src="preview-sample.webp"></div><div class="inset"><img src="preview-sample.webp"></div>
+              <sc-if value="{{ shSqBlurOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
+              <div class="shapeL">Square · Blur<span class="shapeS">Letterboxed on a blur</span></div>
+            </button>
+            <button class="{{ shLandCls }}" onClick="{{ shLandPick }}" style="width: 236px; aspect-ratio: 16 / 9">
+              <div class="fill"><img src="preview-sample.webp" style="object-position: 50% 20%"></div>
+              <div class="shapeCap" style="bottom: 10%">He never stops answering you</div>
+              <sc-if value="{{ shLandOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if>
+              <div class="shapeL">Landscape · Full<span class="shapeS">16:9 for YouTube itself</span></div>
+            </button>
+          </div>
+          <div class="in" style="margin-top: 16px; font-size: 12px; color: #62626B">The dashed box is the safe area — captions stay inside it wherever the clip posts.</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isPicture }}" hint-placeholder-val="{{ false }}">
+        <div class="frames in">
+          <button class="{{ pcOwnCls }}" onClick="{{ pcOwnPick }}" style="width: 160px; aspect-ratio: 9 / 16"><img src="preview-sample.webp" class="kbimg"><sc-if value="{{ pcOwnOn }}" hint-placeholder-val="{{ true }}"><div class="tag">Selected</div></sc-if><div class="frameL">The lecture<span class="frameS">Following the speaker</span></div></button>
+          <button class="{{ pcHallCls }}" onClick="{{ pcHallPick }}" style="width: 160px; aspect-ratio: 9 / 16"><img src="hero-hall.webp" class="kbimg" style="object-position: 62% 50%"><sc-if value="{{ pcHallOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if><div class="frameL">Mosque hall<span class="frameS">Scenery, the voice over it</span></div></button>
+          <button class="{{ pcKaabaCls }}" onClick="{{ pcKaabaPick }}" style="width: 160px; aspect-ratio: 9 / 16"><img src="reel-kaaba-a.webp" class="kbimg"><sc-if value="{{ pcKaabaOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if><div class="frameL">Kaaba<span class="frameS">Scenery, the voice over it</span></div></button>
+          <button class="{{ pcLandCls }}" onClick="{{ pcLandPick }}" style="width: 160px; aspect-ratio: 9 / 16"><img src="reel-landscape.webp" class="kbimg"><sc-if value="{{ pcLandOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if><div class="frameL">Landscape<span class="frameS">Scenery, the voice over it</span></div></button>
+          <button class="{{ pcWinterCls }}" onClick="{{ pcWinterPick }}" style="width: 160px; aspect-ratio: 9 / 16"><img src="reel-winter.webp" class="kbimg"><sc-if value="{{ pcWinterOn }}" hint-placeholder-val="{{ false }}"><div class="tag">Selected</div></sc-if><div class="frameL">Winter<span class="frameS">Scenery, the voice over it</span></div></button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isSound }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 9px">
+          <sc-for list="{{ sounds }}" as="s" hint-placeholder-count="4">
+            <button class="{{ s.cls }} in" onClick="{{ s.pick }}">
+              <div class="play"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l11-7z"></path></svg></div>
+              <div><div class="trackT">{{ s.title }}</div><div class="trackS">{{ s.sub }}</div></div>
+              <div class="wave"><i></i><i style="animation-delay:.1s"></i><i style="animation-delay:.2s"></i><i style="animation-delay:.05s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.15s"></i><i style="animation-delay:.25s"></i><i style="animation-delay:.02s"></i><i style="animation-delay:.35s"></i><i style="animation-delay:.12s"></i><i style="animation-delay:.22s"></i><i style="animation-delay:.08s"></i><i style="animation-delay:.28s"></i><i style="animation-delay:.18s"></i><i style="animation-delay:.04s"></i><i style="animation-delay:.32s"></i><i style="animation-delay:.14s"></i><i style="animation-delay:.24s"></i><i style="animation-delay:.06s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.1s"></i><i style="animation-delay:.2s"></i><i style="animation-delay:.16s"></i><i style="animation-delay:.26s"></i></div>
+              <div class="trackD">{{ s.dur }}</div>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+        <div class="review">
+          <div class="revL in">
+            <div class="secT">Posting to</div>
+            <div class="dests">
+              <div class="dest on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.8 1.8C5.8 19 12 19 12 19s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8zM10 15V9l5 3z"></path></svg>YouTube</div>
+              <div class="dest on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle></svg>Instagram</div>
+              <div class="dest on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 21v-7h2.3l.4-2.8h-2.7V9.4c0-.8.3-1.4 1.4-1.4h1.4V5.5c-.3 0-1.1-.1-2.1-.1-2.1 0-3.5 1.3-3.5 3.6v2.2H8.4V14h2.3v7z"></path></svg>Facebook</div>
+              <div class="dest off"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M16 3v10.5a4 4 0 1 1-3.2-3.9"></path><path d="M16 3c.6 2.4 2.3 3.8 4.6 4"></path></svg>TikTok · reconnect</div>
+            </div>
+            <div class="what">
+              <div class="whatRow"><div class="whatI"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"></path></svg></div><div><div class="whatT">The lecture comes down and is transcribed</div><div class="whatS">Word timings come from this, which is what every caption is cut against.</div></div></div>
+              <div class="whatRow"><div class="whatI"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h10M4 17h13"></path></svg></div><div><div class="whatT">Moments are scored and cut</div><div class="whatS">Only within the part you selected, and only to the lengths you allowed.</div></div></div>
+              <div class="whatRow"><div class="whatI"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="3"></rect><path d="M8 15l3-3 2 2 3-4"></path></svg></div><div><div class="whatT">Each clip is rendered in your style</div><div class="whatS">Captions, framing, nasheed and watermark are burned in together.</div></div></div>
+              <div class="whatRow"><div class="whatI"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></div><div><div class="whatT">They land in the review queue</div><div class="whatS">Nothing is published until you approve it. Editing and re-rendering are free.</div></div></div>
+            </div>
+          </div>
+          <div class="revR in">
+            <div class="costT">This run costs</div>
+            <div class="costBig"><b>{{ tokens }}</b><span>tokens</span></div>
+            <div class="costS">{{ costS }}</div>
+            <div class="rows">
+              <div class="row"><span class="rowK">Looking for</span><button class="rowE" onClick="{{ goBrief }}">Edit</button><span class="rowV">repentance and mercy</span></div>
+              <div class="row"><span class="rowK">From the lecture</span><button class="rowE" onClick="{{ goTrim }}">Edit</button><span class="rowV">{{ fromLecture }}</span></div>
+              <div class="row"><span class="rowK">Clips</span><button class="rowE" onClick="{{ goClips }}">Edit</button><span class="rowV">{{ sClips }}</span></div>
+              <div class="row"><span class="rowK">Style</span><button class="rowE" onClick="{{ goStyle }}">Edit</button><span class="rowV">{{ sStyle }}</span></div>
+              <div class="row"><span class="rowK">Frame</span><button class="rowE" onClick="{{ goFrame }}">Edit</button><span class="rowV">{{ sFrame }}</span></div>
+              <div class="row"><span class="rowK">On screen</span><button class="rowE" onClick="{{ goPicture }}">Edit</button><span class="rowV">{{ sPicture }}</span></div>
+              <div class="row"><span class="rowK">Underneath</span><button class="rowE" onClick="{{ goSound }}">Edit</button><span class="rowV">{{ sSound }}</span></div>
+              <div class="row"><span class="rowK">Queue</span><span class="rowV">Next in line</span></div>
+            </div>
+            <div class="ready">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8B8B93" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5l3 2"></path></svg>
+              <div><div class="readyT">{{ readyLine }}</div><div class="readyS">measured on the worker, not a guess</div></div>
+            </div>
+            <button class="gen"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.2 6.3L21 10l-6.8 1.7L12 18l-2.2-6.3L3 10l6.8-1.7z"></path></svg>Generate clips</button>
+            <div class="genNote">Cutting more clips, re-rendering and editing never cost another token.</div>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+
+    <div class="foot">
+      <button class="back" onClick="{{ back }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H6M12 5l-7 7 7 7"></path></svg>Back</button>
+      <div class="footNote">{{ footNote }}</div>
+      <button class="go" style="{{ goSt }}" onClick="{{ next }}"><span>Continue</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"></path></svg></button>
     </div>
   </div>
 </div>
@@ -485,38 +477,22 @@
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { step: 1, dir: 'next', flip: false, brief: 0, kind: 'lecture', range: 'whole',
-                   count: 6, band: '30-60', scope: 'once', style: 'clean', tweak: 'as', picture: 'own', sound: 'rotate' };
+    this.state = { step: 1, dir: 'next', flip: false, brief: 0, kind: 'lecture', range: 'whole', count: 6, band: '30-60', scope: 'once',
+                   style: 'clean', tweak: 'as', shape: 'portFill', picture: 'own', sound: 'rotate' };
   }
-  go(n) { if (n < 1 || n > 8) return; this.setState({ step: n, dir: n > this.state.step ? 'next' : 'prev', flip: !this.state.flip }); }
+  go(n) { if (n < 1 || n > 9) return; this.setState({ step: n, dir: n > this.state.step ? 'next' : 'prev', flip: !this.state.flip }); }
   renderVals() {
     var self = this, s = this.state;
     var set = function (patch) { return function () { self.setState(patch); }; };
-
-    var RANGES = { whole: { label: 'Whole lecture', mins: 32, l: 0, w: 100, t: '0:00 – 32:16' },
-                   first: { label: 'First 20 minutes', mins: 20, l: 0, w: 62, t: '0:00 – 20:00' },
-                   middle: { label: 'The middle', mins: 16, l: 25, w: 50, t: '8:04 – 24:12' },
-                   last: { label: 'Last 15 minutes', mins: 15, l: 53, w: 47, t: '17:16 – 32:16' } };
+    var goTo = function (n) { return function () { self.go(n); }; };
+    var RANGES = { whole: { label: 'Whole lecture', mins: 32, l: 0, w: 100, t: '0:00 – 32:16' }, first: { label: 'First 20 minutes', mins: 20, l: 0, w: 62, t: '0:00 – 20:00' },
+                   middle: { label: 'The middle', mins: 16, l: 25, w: 50, t: '8:04 – 24:12' }, last: { label: 'Last 15 minutes', mins: 15, l: 53, w: 47, t: '17:16 – 32:16' } };
     var r = RANGES[s.range];
     var tokens = Math.max(1, Math.ceil(r.mins));
     var eta = Math.max(4, Math.round(r.mins * .6)) + '–' + Math.max(8, Math.round(r.mins)) + ' min';
-
-    var STYLES = [
-      { id: 'clean', title: 'Clean Line', sub: 'One line, gold on the spoken word', src: 'reel-beneficial.webp', cap: 'clean' },
-      { id: 'bold', title: 'Bold Stack', sub: 'Big words stacked low', src: 'reel-halal.webp', cap: 'bold' },
-      { id: 'headline', title: 'Headline', sub: 'The line as a title, up top', src: 'reel-dua.webp', cap: 'headline' },
-      { id: 'mono', title: 'Mono Minimal', sub: 'Small, quiet, precise', src: 'reel-dunya.webp', cap: 'mono' },
-    ];
-    var style = STYLES.filter(function (x) { return x.id === s.style; })[0];
-    var TWEAKS = [ { id: 'as', label: 'As the style is' }, { id: 'big', label: 'Bigger captions' }, { id: 'warm', label: 'Warm look' }, { id: 'bw', label: 'Black & white' } ];
-    var filt = s.tweak === 'warm' ? 'sepia(.32) saturate(1.3) contrast(1.04)' : s.tweak === 'bw' ? 'grayscale(1) contrast(1.1)' : 'none';
-    var PICS = [
-      { id: 'own', title: 'The lecture', sub: 'Following the speaker', src: 'preview-sample.webp' },
-      { id: 'hall', title: 'Mosque hall', sub: 'Scenery, voice over it', src: 'hero-hall.webp' },
-      { id: 'kaaba', title: 'Kaaba', sub: 'Scenery, voice over it', src: 'reel-kaaba-a.webp' },
-      { id: 'land', title: 'Landscape', sub: 'Scenery, voice over it', src: 'reel-landscape.webp' },
-      { id: 'winter', title: 'Winter', sub: 'Scenery, voice over it', src: 'reel-winter.webp' },
-    ];
+    var STYLE = { clean: 'Clean Line', bold: 'Bold Stack', headline: 'Headline', mono: 'Mono Minimal' };
+    var SHAPE = { portFill: 'Portrait · Fill', portBlur: 'Portrait · Blur', portFit: 'Portrait · Fit', sqFill: 'Square · Fill', sqBlur: 'Square · Blur', land: 'Landscape · Full' };
+    var PIC = { own: 'The lecture', hall: 'Mosque hall', kaaba: 'Kaaba', land: 'Landscape', winter: 'Winter' };
     var SOUNDS = [
       { id: 'rotate', title: 'Rotate the library', sub: 'A different nasheed under each clip', dur: '9 tracks' },
       { id: 'asma', title: 'Asma ul Husna', sub: 'Muffled · ducked under the voice', dur: '3:42' },
@@ -524,87 +500,63 @@ class Component extends DCLogic {
       { id: 'allah', title: 'Allah Allah', sub: 'Muffled · your own upload', dur: '2:58' },
     ];
     var COPY = [
-      ['Brief · optional', 'What would you like clipped?', 'Name a subject and the clipper goes looking for it in the transcript. Leave it empty and it takes the strongest moments on its own.'],
-      ['Kind', 'What are you clipping?', 'This decides how the captions are drawn and whether a nasheed belongs underneath.'],
-      ['Range', 'How much of the lecture?', 'Drag the frame, or take one of the usual cuts. This is the part you pay for — the cost on the right moves with it.'],
-      ['Clips', 'How many, and how long?', 'For this lecture only. Your account default stays exactly where it is unless you make this the new one.'],
-      ['Style', 'How should it look?', 'Every frame here is a real render from the style it names. Pick one, then adjust it for this lecture.'],
-      ['Picture', 'What plays on screen?', 'The lecture itself, or scenery from your library with the voice over it.'],
-      ['Sound', 'What plays underneath?', 'A nasheed sits under the voice, ducked so it never competes with it.'],
-      ['Ready', 'Here is what happens next', 'Anything can still be changed. Nothing posts until you approve each clip.'],
+      ['What would you like clipped?', 'Optional. Name a subject and the clipper looks for it in the transcript. Leave it empty and it takes the strongest moments on its own.'],
+      ['What are you clipping?', 'This decides how the captions are drawn and whether a nasheed belongs underneath.'],
+      ['How much of the lecture?', 'Drag either handle, or take one of the usual cuts. This is the part you pay for.'],
+      ['How many clips, and how long?', 'For this lecture only — your account default stays exactly where it is unless you make this the new one.'],
+      ['How should the captions look?', 'Every preview is the style the renderer actually produces. Pick one, then adjust it for this lecture.'],
+      ['What shape, and how is it framed?', 'Portrait for Shorts, Reels and TikTok; square for the feed; landscape for YouTube itself. Fill follows the speaker, Blur and Fit keep the whole frame.'],
+      ['What plays on screen?', 'The lecture itself, or scenery from your library with the voice over it.'],
+      ['What plays underneath?', 'A nasheed sits under the voice, ducked so it never competes with it.'],
+      ['Ready to go', 'Check it over. Anything here can be changed before you start.'],
     ];
     var c = COPY[s.step - 1];
-    var quran = s.kind === 'quran';
-    var lay = function (on) { return 'opacity: ' + (on ? 1 : 0) + '; filter: ' + filt + ';'; };
-    var shown = Math.min(s.count, 8);
     var fr = function (on) { return 'frame' + (on ? ' on' : ''); };
-    var deckAt = function (i) {
-      if (i >= shown) return 'display: none;';
-      var k = i - (shown - 1) / 2;
-      return 'transform: translateX(' + (150 + k * 26) + 'px) rotate(' + (k * 5) + 'deg); z-index: ' + i + '; animation-delay: ' + (i * .05) + 's;';
-    };
-    var revAt = function (i) { return 'transform: translateX(' + (100 + (i - 1.5) * 30) + 'px) rotate(' + ((i - 1.5) * 6) + 'deg); z-index: ' + i + '; animation-delay: ' + (i * .07) + 's;'; };
+    var sh = function (on) { return 'shape' + (on ? ' on' : ''); };
+    var shown = Math.min(s.count, 8);
+    var deckAt = function (i) { if (i >= shown) return 'display: none;'; var k = i - (shown - 1) / 2;
+      return 'transform: translateX(' + (150 + k * 24) + 'px) rotate(' + (k * 5) + 'deg); z-index: ' + i + '; animation-delay: ' + (i * .05) + 's;'; };
+    var quran = s.kind === 'quran';
 
     return {
-      segs: [1,2,3,4,5,6,7,8].map(function (n) { return { st: 'transform: scaleX(' + (n <= s.step ? 1 : 0) + ');' }; }),
-      progT: s.step + ' of 8',
-      kicker: c[0], title: c[1], hint: c[2],
-      dirCls: s.dir + (s.flip ? 'A' : 'B'),
-      isBrief: s.step === 1, isKind: s.step === 2, isTrim: s.step === 3, isClips: s.step === 4,
-      isStyle: s.step === 5, isPicture: s.step === 6, isSound: s.step === 7, isReview: s.step === 8,
-
+      goSt: s.step === 9 ? 'display: none;' : '', costLine: 'This is the part you pay for \u2014 ' + tokens + ' tokens for ' + r.mins + ' minutes, charged once.', costS: r.mins + 'm of source, charged once', fromLecture: r.mins + 'm of 32m', readyLine: 'Ready in roughly ' + eta,
+      rangeText: r.t, subline: r.mins + 'm selected · ready in roughly ' + eta,
+      ruleSt: 'width: ' + Math.round(s.step / 9 * 100) + '%;', progT: s.step + ' / 9',
+      title: c[0], hint: c[1], dirCls: s.dir + (s.flip ? 'A' : 'B'),
+      isBrief: s.step === 1, isKind: s.step === 2, isTrim: s.step === 3, isClips: s.step === 4, isStyle: s.step === 5,
+      isFrame: s.step === 6, isPicture: s.step === 7, isSound: s.step === 8, isReview: s.step === 9, notReview: s.step !== 9,
       examples: ['The parts about repentance and mercy', 'Any story he tells', 'Advice for young Muslims', 'Where he talks about the hereafter']
         .map(function (t, i) { return { text: t, cls: 'chip' + (s.brief === i + 1 ? ' on' : ''), pick: set({ brief: i + 1 }) }; }),
-
-      kindLectureCls: 'frame' + (quran ? '' : ' on'), kindQuranCls: 'frame' + (quran ? ' on' : ''),
-      kindIsLecture: !quran, kindIsQuran: quran, pickLecture: set({ kind: 'lecture' }), pickQuran: set({ kind: 'quran' }),
-
-      cells: [0,1,2,3,4,5,6,7,8,9,10,11].map(function (i) {
-        return { st: '', img: 'object-position: ' + (35 + (i * 37) % 40) + '% ' + (10 + (i * 23) % 30) + '%; filter: brightness(' + (.72 + (i % 4) * .08) + ');' };
-      }),
-      bandSt: 'left: ' + r.l + '%; width: ' + r.w + '%;',
-      rangeText: r.t,
+      kLecCls: fr(!quran), kQurCls: fr(quran), kIsLec: !quran, kIsQur: quran, pickLecture: set({ kind: 'lecture' }), pickQuran: set({ kind: 'quran' }),
+      cells: [0,1,2,3,4,5,6,7,8,9,10,11].map(function (i) { return { img: 'object-position: ' + (35 + (i * 37) % 40) + '% ' + (10 + (i * 23) % 30) + '%; filter: brightness(' + (.72 + (i % 4) * .08) + ');' }; }),
+      bandSt: 'left: ' + r.l + '%; width: ' + r.w + '%;', mins: String(r.mins), tokens: String(tokens), eta: eta,
       ranges: Object.keys(RANGES).map(function (id) { return { label: RANGES[id].label, cls: 'chip' + (s.range === id ? ' on' : ''), pick: set({ range: id }) }; }),
-
-      count: String(s.count),
-      more: set({ count: Math.min(20, s.count + 1) }), less: set({ count: Math.max(1, s.count - 1) }),
+      count: String(s.count), more: set({ count: Math.min(20, s.count + 1) }), less: set({ count: Math.max(1, s.count - 1) }),
       deck1: deckAt(0), deck2: deckAt(1), deck3: deckAt(2), deck4: deckAt(3), deck5: deckAt(4), deck6: deckAt(5), deck7: deckAt(6), deck8: deckAt(7),
-      bands: ['15-30', '30-60', '45-75', '60-90'].map(function (id) {
-        return { label: id.replace('-', '–') + 's', w: 'width: ' + (Number(id.split('-')[1]) / 90 * 100) + '%;', cls: 'lenChip' + (s.band === id ? ' on' : ''), pick: set({ band: id }) };
-      }),
-      scopeOnceCls: 'segb' + (s.scope === 'once' ? ' on' : ''), scopeAllCls: 'segb' + (s.scope === 'all' ? ' on' : ''),
-      scopeOnce: set({ scope: 'once' }), scopeAll: set({ scope: 'all' }),
-
+      bands: ['15-30', '30-60', '45-75', '60-90'].map(function (id) { return { label: id.replace('-', '–') + 's', w: 'width: ' + (Number(id.split('-')[1]) / 90 * 100) + '%;', cls: 'lenChip' + (s.band === id ? ' on' : ''), pick: set({ band: id }) }; }),
+      scopeOnceCls: 'segb' + (s.scope === 'once' ? ' on' : ''), scopeAllCls: 'segb' + (s.scope === 'all' ? ' on' : ''), scopeOnce: set({ scope: 'once' }), scopeAll: set({ scope: 'all' }),
       stCleanCls: fr(s.style === 'clean'), stCleanOn: s.style === 'clean', stCleanPick: set({ style: 'clean' }),
       stBoldCls: fr(s.style === 'bold'), stBoldOn: s.style === 'bold', stBoldPick: set({ style: 'bold' }),
       stHeadCls: fr(s.style === 'headline'), stHeadOn: s.style === 'headline', stHeadPick: set({ style: 'headline' }),
       stMonoCls: fr(s.style === 'mono'), stMonoOn: s.style === 'mono', stMonoPick: set({ style: 'mono' }),
-      tweaks: TWEAKS.map(function (t) { return { label: t.label, cls: 'chip' + (s.tweak === t.id ? ' on' : ''), pick: set({ tweak: t.id }) }; }),
+      tweaks: [['as', 'As the style is'], ['big', 'Bigger captions'], ['warm', 'Warm look'], ['bw', 'Black & white'], ['rain', 'Rain over it']].map(function (t) { return { label: t[1], cls: 'chip' + (s.tweak === t[0] ? ' on' : ''), pick: set({ tweak: t[0] }) }; }),
+      shPortFillCls: sh(s.shape === 'portFill'), shPortFillOn: s.shape === 'portFill', shPortFillPick: set({ shape: 'portFill' }),
+      shPortBlurCls: sh(s.shape === 'portBlur'), shPortBlurOn: s.shape === 'portBlur', shPortBlurPick: set({ shape: 'portBlur' }),
+      shPortFitCls: sh(s.shape === 'portFit'), shPortFitOn: s.shape === 'portFit', shPortFitPick: set({ shape: 'portFit' }),
+      shSqFillCls: sh(s.shape === 'sqFill'), shSqFillOn: s.shape === 'sqFill', shSqFillPick: set({ shape: 'sqFill' }),
+      shSqBlurCls: sh(s.shape === 'sqBlur'), shSqBlurOn: s.shape === 'sqBlur', shSqBlurPick: set({ shape: 'sqBlur' }),
+      shLandCls: sh(s.shape === 'land'), shLandOn: s.shape === 'land', shLandPick: set({ shape: 'land' }),
       pcOwnCls: fr(s.picture === 'own'), pcOwnOn: s.picture === 'own', pcOwnPick: set({ picture: 'own' }),
       pcHallCls: fr(s.picture === 'hall'), pcHallOn: s.picture === 'hall', pcHallPick: set({ picture: 'hall' }),
       pcKaabaCls: fr(s.picture === 'kaaba'), pcKaabaOn: s.picture === 'kaaba', pcKaabaPick: set({ picture: 'kaaba' }),
       pcLandCls: fr(s.picture === 'land'), pcLandOn: s.picture === 'land', pcLandPick: set({ picture: 'land' }),
       pcWinterCls: fr(s.picture === 'winter'), pcWinterOn: s.picture === 'winter', pcWinterPick: set({ picture: 'winter' }),
       sounds: SOUNDS.map(function (x) { return Object.assign({}, x, { cls: 'track' + (s.sound === x.id ? ' on' : ''), pick: set({ sound: x.id }) }); }),
-
-      rev1: revAt(0), rev2: revAt(1), rev3: revAt(2), rev4: revAt(3),
-      sClips: s.count + ' clips of ' + s.band.replace('-', '–') + 's',
-      sStyle: style.title,
-      sPicture: PICS.filter(function (p) { return p.id === s.picture; })[0].title.toLowerCase(),
-      sSound: s.sound === 'rotate' ? 'a rotating nasheed' : SOUNDS.filter(function (x) { return x.id === s.sound; })[0].title,
-
-      liveT: quran ? 'Quran Recitation' : style.title,
-      lLecture: lay(!quran && s.picture === 'own'), lHall: lay(!quran && s.picture === 'hall'), lKaaba: lay(!quran && s.picture === 'kaaba'),
-      lLand: lay(!quran && s.picture === 'land'), lWinter: lay(!quran && s.picture === 'winter'), lQuran: lay(quran),
-      showCap: !quran,
-      capCls: 'cap ' + style.cap + (s.tweak === 'big' ? ' big' : ''),
-      waveSt: quran ? 'opacity: .25' : '',
-      waveT: quran ? 'No nasheed under scripture' : (s.sound === 'rotate' ? 'Nasheed · rotating · ducked −18 dB' : SOUNDS.filter(function (x) { return x.id === s.sound; })[0].title + ' · ducked −18 dB'),
-      tokens: String(tokens), eta: eta,
-
-      footNote: s.step === 8 ? tokens + ' tokens, charged once · nothing posts without your approval' : 'Step ' + s.step + ' of 8',
-      cta: s.step === 8 ? 'Start clipping' : 'Continue',
-      next: function () { self.go(s.step + 1); }, back: function () { self.go(s.step - 1); },
+      sClips: s.count + ' × ' + s.band.replace('-', '–') + 's', sStyle: STYLE[s.style], sFrame: SHAPE[s.shape], sPicture: PIC[s.picture],
+      sSound: s.sound === 'rotate' ? 'Nasheed, rotating' : SOUNDS.filter(function (x) { return x.id === s.sound; })[0].title,
+      goBrief: goTo(1), goTrim: goTo(3), goClips: goTo(4), goStyle: goTo(5), goFrame: goTo(6), goPicture: goTo(7), goSound: goTo(8),
+      footNote: s.step === 9 ? 'Anything above can still be changed.' : 'Step ' + s.step + ' of 9',
+      next: goTo(s.step + 1), back: goTo(s.step - 1),
     };
   }
 }
