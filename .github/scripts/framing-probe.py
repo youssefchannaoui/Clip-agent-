@@ -39,6 +39,12 @@ FRAMES = int(PARAMS.get("frames") or 12)
 # How many cached sources to sweep. The fault is a property of the shot, so one
 # source answers almost nothing.
 SOURCES = max(1, min(8, int(PARAMS.get("sources") or 4)))
+# Where in the source to ask about who is speaking. The opening of a lecture is
+# a title card, a wide establishing shot and an introduction, so a measurement
+# taken from zero reports mostly empty frames and says very little about the
+# two people talking. The diagnose probe carries `diagnose_from` for exactly
+# this reason.
+FROM = max(0.0, float(PARAMS.get("start") or 0))
 
 
 def out(line: str = "") -> None:
@@ -194,7 +200,7 @@ def analyse(cw, cv2, source: Path) -> dict:
     for pos in cut_out:
         out(f"   a person near {pos}% is OUTSIDE the crop")
     return {"verdict": verdict, "centre": centre, "src_w": src_w, "duration": duration,
-            "source": source, "people": len(real)}
+            "window": min(60.0, SECONDS), "source": source, "people": len(real)}
 
 
 def speaker_view(cw, speaker, r: dict) -> None:
@@ -204,9 +210,11 @@ def speaker_view(cw, speaker, r: dict) -> None:
     functions -- not a copy of them with its own thresholds, which would answer
     a question nobody asked.
     """
-    source, duration = r["source"], min(60.0, max(10.0, float(r.get("duration") or 30.0)))
+    source = r["source"]
+    duration = min(60.0, max(10.0, float(r.get("window") or 30.0)))
     out()
     out(f"== who is speaking, and where it cuts: {source.name[:38]} ==")
+    out(f"   {duration:.0f}s from {FROM:.0f}s in")
 
     info = cw.ffprobe_json("ffprobe", source)
     stream = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), {})
@@ -216,7 +224,7 @@ def speaker_view(cw, speaker, r: dict) -> None:
         return
 
     started = time.monotonic()
-    samples = speaker.measure(ffmpeg="ffmpeg", source=source, start=0.0, duration=duration,
+    samples = speaker.measure(ffmpeg="ffmpeg", source=source, start=FROM, duration=duration,
                               src_w=src_w, src_h=src_h)
     took = time.monotonic() - started
     seen = [len(faces) for _t, faces in samples]
@@ -243,13 +251,13 @@ def speaker_view(cw, speaker, r: dict) -> None:
             f"seen {len(where[sid]):3d}x, mouth open {statistics.median(values or [0]):.3f} "
             f"of a face, moving {statistics.fmean(moves or [0]):.4f} a sample")
 
-    envelope = speaker.audio_envelope(ffmpeg="ffmpeg", source=source, start=0.0,
+    envelope = speaker.audio_envelope(ffmpeg="ffmpeg", source=source, start=FROM,
                                       duration=duration, count=len(samples))
     out(f"   audio: {'read' if envelope else 'NOT READ -- the lips have nothing to agree with'}"
         + (f", loud on {sum(1 for v in envelope if v > 0.25)} of {len(envelope)} samples"
            if envelope else ""))
 
-    plan = cw.speaker_crop_plan(source, "ffmpeg", "ffprobe", 0.0, duration, 1080, 1920)
+    plan = cw.speaker_crop_plan(source, "ffmpeg", "ffprobe", FROM, duration, 1080, 1920)
     if not plan.get("available"):
         out(f"   the tracker declined: {plan.get('reason')}")
         return
@@ -322,7 +330,7 @@ def main() -> int:
     # so it is asked about the case that matters rather than about all of them.
     if missing:
         return 0
-    target = (tight or results)[:1] or [{"source": sources[0], "duration": 60.0,
+    target = (tight or results)[:1] or [{"source": sources[0], "window": 60.0,
                                          "src_w": 0, "centre": None}]
     for r in target:
         speaker_view(cw, speaker, r)
