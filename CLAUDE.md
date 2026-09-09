@@ -10003,38 +10003,49 @@ The Google **100-user cap is the one that cannot be undone** — it applies over
 the project's lifetime. Verification is the only way past it, and it is worth
 starting before the count climbs rather than after.
 
-### The Google data-access verification was REJECTED (read 9 Sept 2026)
+### Google data access: rejected, refilled, RESUBMITTED (9 Sept 2026)
 
-CLAUDE.md has said since 4 Sept that "branding is VERIFIED and PUBLISHED" and
-that the only blocker was a demo video. **The branding half is still true and
-the other half was worse than recorded.** Read off the console rather than
-recalled:
+**It is under review as of 9 Sept 2026** -- Verification centre reads
+*"Your app's data access is under review."* The rejection below is history and
+is kept because the two gaps it names are the ones that will be checked again.
 
-    Branding status     "Your branding has been verified and is being shown
-                         to users."
-    Data access status  "You previously submitted this app for verification,
-                         but it was NOT APPROVED."
+    Branding status     verified and being shown to users
+    Data access status  under review (was: "submitted ... but it was NOT
+                         APPROVED")
 
-So the half that lifts the **100-user lifetime cap** was submitted and refused,
-and nothing in this file said so. Youssef asked "i dont think we got verified"
-and he was right.
+**What was actually missing, and what filled it:**
 
-**Two fields are missing, not one**, and the submit page names both:
-*"Missing the following fields for one or more requested scopes: scope
-justification, demo video."*
+- **The scope justification box was EMPTY** -- `0 / 1000` -- while this file
+  claimed it was written. 887 characters now saved on Data access: what each
+  scope is used for, the exact API call behind each (`channels.list` with
+  `mine=true`, `videos.insert` resumable), that no statistics or analytics are
+  requested, why no narrower scope works, and the 30-day retention per Policy
+  III.E.4. Confirmed persisted through a full page reload.
+- **The demo video was Not provided.** It exists and always did:
+  `youtube.com/watch?v=9JHzV8nYfxk`, "Google authentication demo video |
+  DeenClipped", 8:28, unlisted, on the DeenClipped channel, opening on the real
+  live app. **An earlier session assumed the only recording was the TikTok one
+  and put a re-record on Youssef; that was wrong** -- ask which videos exist
+  before declaring one missing.
+- **The submission is a QUESTIONNAIRE, not a button.** Pressing Confirm opens
+  four Yes/No questions (personal use only / internal only /
+  development-testing-staging only / a WordPress Gmail SMTP plug-in -- all
+  **No** for this product) plus two acknowledgements the operator signs. Budget
+  for that rather than expecting one click.
 
-- **The scope justification box is EMPTY** -- `0 / 1000` on Data access, under
-  "How will the scopes be used?". This file claimed it was written; it is not
-  there. Draft it, paste it, save it.
-- **The demo video is Not provided.** Google wants a link showing the consent
-  screen and each scope in use, and the TikTok recording does not qualify --
-  it demonstrates TikTok.
+**CASA does not apply and the console says so.** Both scopes sit under
+**sensitive**; **restricted scopes is EMPTY**. The Cloud App Security
+Assessment -- the expensive, months-long third-party audit, recertified
+annually -- is a restricted-scope requirement. Nothing here is on that path,
+whatever the acknowledgement box implies.
 
-**One thing is BETTER than this file implied.** Both scopes
-(`youtube.readonly`, `youtube.upload`) sit under **Your sensitive scopes**;
-**Your restricted scopes is EMPTY**. Sensitive scopes need verification and
-NOT the third-party security assessment restricted scopes drag in -- which is
-the expensive, months-long path. Nothing here is on that path.
+**What is still NOT verified about the video.** Nobody in a session has watched
+it: the Chrome automation tab will not decode YouTube playback (frozen at 0:00
+however play is pressed), which is the same class of limitation this file
+already records for video in an agent browser. So whether it shows Google's
+consent screen INCLUDING the "unverified app" warning -- which Google's own
+note on that page says must appear -- is Youssef's check, and it is the
+likeliest reason for a second rejection if one comes.
 
 ### Waiting on Youssef (nothing in the repo unblocks these)
 
