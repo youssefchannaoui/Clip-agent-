@@ -344,16 +344,32 @@ test('the deck states where a clip posts, outside the 9:16 stage', () => {
   assert.match(design, /<div data-deck-info="1"/, 'the export lost the deck-info hook');
 });
 
-test('the page is told the live bar is there', () => {
-  // #studioLiveBar is fixed at bottom:18px with z-index 150 and nothing
-  // reserved space for it, so a control whose centre fell in its band got no
-  // clicks -- they went to the bar. Measured covered-not-clipped controls:
-  // 3 on the queue at 1280 and 1 on the library at 1100, 0 at 1440. After the
-  // allowance: 0 at all three widths.
+test('the live bar floats, and the screen still clears it', () => {
+  // #studioLiveBar is fixed at bottom:18px with z-index 150, so a control
+  // whose centre falls in its band gets no clicks -- they go to the bar.
+  // v3.125.0 answered that by RESERVING 92px on `#studio main`; `main` is
+  // transparent, so the Schedule's card ended 92px early and the page ground
+  // showed as a black band around the bar. Youssef, 8 Sept 2026: "make it a
+  // float over all tabs".
+  // So the reservation is gone and the same 92px is added to each screen's
+  // CONTENT as scroll clearance. Measured covered-not-clipped controls on
+  // thirteen screens at 1100/1280/1440 in both themes: 0 reserved, 8 with the
+  // reservation simply deleted, 0 with the clearance.
   assert.match(page, /classList\.toggle\('dc-livebar',barUp\)/,
     'the body class is not stamped with the bar');
-  assert.match(tokens, /body\.dc-livebar #studio main \{ padding-bottom: 92px; \}/,
-    'nothing reserves the bar\'s band');
+  assert.ok(!/body\.dc-livebar\s+#studio\s+main\s*\{[^}]*padding-bottom/.test(tokens),
+    'the bar still reserves a lane on #studio main -- that is the black band');
+  assert.match(tokens, /body\.dc-livebar #studio main > :not\(#dcTopbar\) \{ padding-bottom: var\(--dc-livebar-lane\); \}/,
+    'the screen wrapper carries no scroll clearance for the bar');
+  // A wrapper holding ONE clamped box (flex:1 1 0, min-height:0, its columns
+  // spilling past it) cannot carry it: the padding lands after that box, at
+  // y=732 of a 1530px scroll, so scrollHeight never moves. The Schedule is
+  // that shape, and without this its month grid's last week row and the
+  // Posting-windows switch sat under the bar with nothing left to scroll.
+  assert.match(tokens, /body\.dc-livebar #studio main > :not\(#dcTopbar\) > :only-child > \* \{ padding-bottom: var\(--dc-livebar-lane\); \}/,
+    'a one-box screen wrapper passes no clearance to its columns');
+  // One number, read by both rules.
+  assert.match(tokens, /--dc-livebar-lane: 92px;/, 'the lane has no single source');
 });
 
 test('a confirmation that leaves by itself does not swallow a click', () => {

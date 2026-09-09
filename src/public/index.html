@@ -7284,17 +7284,18 @@ function studioWanted(){return window.STUDIO_SHELL===true}
       const any=vals.liveCount>0;
       const barUp=!onHome&&any;
       liveEls.bar.classList.toggle('hide',!barUp);
-      /* THE BAR IS PAINTED OVER THE PAGE, so the page has to be told it is
-         there. It is fixed at bottom:18px with z-index 150 and nothing
-         reserved space for it, so any control whose centre fell in its band
-         received no clicks at all -- the click went to the bar. Measured
-         4 Sept 2026: on the review deck at 1100x950 it covered Reject, Edit,
-         Approve and Previous, and a real click at Approve's centre was
-         dispatched to `div.slb-head`; on Templates it took 171x26px of the
-         watermark-position row.
-         The class lets every scrolling screen bring its foot above the bar.
-         The DECK is the one screen that deliberately does not scroll, so it
-         gets the allowance as its own bottom offset instead. */
+      /* THE BAR FLOATS OVER THE PAGE, so the page has to be told it is there.
+         It is fixed at bottom:18px with z-index 150, and a control whose
+         centre falls in its band gets no clicks at all -- the click goes to
+         the bar. Measured 4 Sept 2026: on the review deck at 1100x950 it
+         covered Reject, Edit, Approve and Previous, and a real click at
+         Approve's centre was dispatched to `div.slb-head`.
+         Nothing is RESERVED for it any more (Youssef, 8 Sept 2026: "make it a
+         float over all tabs" -- the reservation left a black band under the
+         Schedule's card). The class buys SCROLL CLEARANCE instead: the same
+         92px, added to each screen's content by studio-tokens.css, so whatever
+         the bar covers can be scrolled out from under it. Measured 0 covered
+         controls on thirteen screens at three widths in both themes. */
       document.body.classList.toggle('dc-livebar',barUp);
       if(onHome){
         dockLiveHome(liveEls.home);
