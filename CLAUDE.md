@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1983 JS + 874 Python**
+- `npm test` and `npm run check` must pass. Currently **1986 JS + 874 Python**
   (9 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -17448,6 +17448,86 @@ progress line at 69% and then runs Ollama over the shortlist for around five
 minutes -- 23% of a job -- without emitting another, so the fraction the band
 implies sat at exactly 0.4 the entire time. Taking the clock alone would throw
 away a real measurement whenever the worker does report one.
+
+### Is it right from START to finish? Measured, and two places were not (v3.177.2)
+
+Youssef: "is ETAs now from start to beginning correct and working and well, or
+is it just at a specific time?" Answered by walking a whole job second by second
+and asking the dashboard what it would say at each point, against what was
+actually left. That found two things reasoning had not.
+
+**There was NO ETA AT ALL while a lecture was queued.** `pipelineEta` returned
+null for any record with no phase, and a queued job has none -- so the one
+moment somebody most wants to know how long this will take, straight after
+pressing Start, was the one moment nothing was said. Nothing about it needs
+guessing: the pipeline's cost is computable from the source length and the clip
+count, and the wait in front is the queue position times what a lecture
+typically costs here (`pace.jobTotalSec`, learned; the job's own cost stands in
+before there is history).
+
+**And the queued number then JUMPED UP when the import started**, by up to six
+minutes, because the shipped import rate was `0.03` of source realtime -- a
+figure from the old provider and six times too fast for a 1080p lecture through
+the pool. It is 0.11 now (631 MB for 1936s at about 3 MB/s, from the box's own
+measurements), and the queued estimate carries a stated `QUEUED_CAUTION` of 1.2.
+
+**THAT 1.2 IS THE ONE DELIBERATE PESSIMISM IN THIS MODEL.** A queued lecture has
+measured nothing -- not the file's size, not today's speed out of the pool -- and
+the two ways of being wrong are not equally bad: a number that comes DOWN as it
+learns reads as progress, and one that climbs the moment work begins is the
+single thing an ETA must never do. Measured across the pool's real range:
+
+    download speed   queued      first live reading   climbed?
+    1.1 MB/s         31 min  ->  31 min               no
+    1.8 MB/s         31 min  ->  28 min               no
+    2.9 MB/s         31 min  ->  26 min               no
+    5.7 MB/s         31 min  ->  24 min               no
+
+Unbiased it climbed on the first two. It costs a fast pool one downward
+correction, which is the trade taken on purpose.
+
+**Where it stands now**, over 103 samples across a whole job: an ETA at every
+point, **zero upward jumps**, and while more than a minute remains the error is
+**3.8% median, 23.8% worst**. The largest absolute error anywhere is the queued
+over-estimate, and it only ever comes down from there. In the last thirty
+seconds the fixed 20s upload tail dominates a small number -- that tail is real
+work and is the one figure `timings` cannot see, because the worker's clock
+stops before the upload.
+
+### The pace model learns from the FIRST lecture now, not the third
+
+It refused to learn below three, so an account's first two ran on figures
+measured against somebody else's box and the third changed the answer in one
+step. The measurement is blended toward the shipped rate by how much of it there
+is -- `n / (n + PRIOR_STRENGTH)`, so one lecture moves it a third of the way,
+three move it three fifths, ten move it most of the way. Nothing is discarded
+and nothing is believed on the strength of one job. `learned` is that weight
+rather than a flag, so the Health screen can say how much of the answer is now
+this box's own.
+
+**The shipped table is written down TWICE** -- src/pace.js and a copy in
+studio-adapter.js, because the browser cannot import the module and that copy is
+what a page renders from when the payload predates the field. They drifted
+within the hour: the module's import rate was corrected and the adapter's was
+left six times too fast, which is visible only as a queued lecture quoting five
+minutes less than the same lecture quotes once its download starts.
+`test/pace.test.mjs` reads both and fails if they disagree.
+
+### `check-version-bump.mjs --preflight` asks before the branch goes red
+
+The guard is a CI check, so it catches a version collision at the point it has
+already cost somebody the time. Collisions here are not carelessness -- two
+sessions working the same afternoon take the next number from the same base, so
+minting the same one is the DEFAULT -- and this file records it on 31 Aug, twice
+on 3 Sept, again on 7 Sept, and on 9 Sept with two sessions in one working
+directory where there is not even a branch in between.
+
+Run before committing. It fetches and answers the three things a session cannot
+see from its own checkout: whether the remote has moved underneath it, whether
+this version already exists there (anywhere in its recent history, not only at
+its tip -- another session may have pushed past it), and what the next free
+number is. It writes nothing and never fails a build; it is a question, so it
+exits 0 whatever the answer. Its first real run found 3.177.1 already taken.
 
 ### TWO SESSIONS WERE IN THIS WORKING TREE AT ONCE, and it nearly cost work
 

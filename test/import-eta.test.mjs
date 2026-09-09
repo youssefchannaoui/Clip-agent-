@@ -45,7 +45,9 @@ test('THE REPORTED BUG: bytes climbing with no total no longer reads 0%', () => 
   const early = importing({ bytesDone: 214_000_000, phaseStartedAt: started });
   // Binary units, matching what the OS reports for the same file.
   assert.match(early.meta, /204\.1 MB/, 'the megabytes are shown');
-  assert.doesNotMatch(early.meta, /0% of this step/,
+  // Word-boundaried: a bare /0% of this step/ also matches "30% of this step",
+  // so it passed against the very thing it was written to catch.
+  assert.doesNotMatch(early.meta, /(^|[^\d])0% of this step/,
     'and the step percentage is not pinned to zero beside them');
   assert.match(early.meta, /\d+% of this step/);
 });

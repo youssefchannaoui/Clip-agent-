@@ -34,6 +34,14 @@
  *    guard is against a rate learned from mis-recorded timings, not against the
  *    box genuinely being slow: the band is wide enough (a quarter to four
  *    times) that any real hardware change passes through it.
+ * 4. **A small sample moves the estimate a small way.** The first version
+ *    refused to learn at all below three lectures, so an account's first two
+ *    ran on figures measured against somebody else's box -- and the third
+ *    changed the answer in one step. The measurement is BLENDED toward the
+ *    shipped rate by how much of it there is (`PRIOR_STRENGTH`): one lecture
+ *    moves the estimate a third of the way, three move it three fifths, ten
+ *    move it most of the way. Nothing is thrown away and nothing is believed
+ *    on the strength of a single job.
  *
  * Nothing here is per-account. The worker is one box shared by every account,
  * so how fast it runs is a property of the deployment; learning it per account
@@ -49,11 +57,20 @@
  * today rather than from what different hardware did in August.
  */
 export const SHIPPED_PACE = Object.freeze({
-  // Import is BANDWIDTH-bound, not length-bound, so this is only ever used
-  // before any bytes have moved -- the moment the download reports a rate, the
-  // measured one wins. Kept as a fraction of source length because that is the
-  // only thing known about a lecture before it starts arriving.
-  importPerSourceSec: 0.03,
+  // Import time is bytes over bandwidth, and bytes are roughly bitrate times
+  // length -- so a fraction of the source's length is the right SHAPE, with the
+  // constant standing for this deployment's bitrate over its bandwidth. That is
+  // exactly the quantity that varies between proxy exits, which is why it is
+  // learned per deployment and why the default only has to be reasonable.
+  //
+  // 0.11 is a 1080p lecture at about 2.6 Mbit a second of video (631 MB for
+  // 1936s, measured on the box) arriving at around 3 MB/s. THE 0.03 THIS
+  // REPLACES was six times too fast: it made a queued lecture quote five
+  // minutes less than the same lecture quoted the moment its download started,
+  // and an estimate that JUMPS UP when work begins is the one thing an ETA must
+  // never do. Erring slightly slow here is deliberate -- before any measurement
+  // exists the number should come down as it learns, not climb.
+  importPerSourceSec: 0.11,
   transcribePerSourceSec: 0.27,
   // Scoring is Ollama over a shortlist, so it grows with the transcript and has
   // a floor no short lecture gets under. A flat 75s was the single worst
@@ -71,9 +88,12 @@ export const SHIPPED_PACE = Object.freeze({
 // mis-measurement rather than believed as a slow box. See property 3.
 const SANE_LOW = 0.25;
 const SANE_HIGH = 4;
-// Below this many finished lectures a phase keeps its shipped rate: two samples
-// can agree with each other and still both be unusual.
-const MIN_SAMPLES = 3;
+// How many lectures' worth of confidence the shipped rate is treated as
+// carrying. The blend is `n / (n + PRIOR_STRENGTH)` toward what was measured,
+// so the estimate starts moving on the FIRST finished lecture and approaches
+// the measurement as the evidence accumulates -- rather than ignoring two
+// lectures completely and then jumping on the third.
+const PRIOR_STRENGTH = 2;
 // Learned from the most recent lectures only. See property 2.
 const WINDOW = 25;
 
@@ -131,16 +151,25 @@ export function measurePace(projects) {
   const learned = {};
   for (const [key, values] of Object.entries(rates)) {
     samples[key] = values.length;
-    const middle = values.length >= MIN_SAMPLES ? median(values) : null;
+    const middle = values.length ? median(values) : null;
     const shipped = SHIPPED_PACE[key];
     if (middle !== null && middle > shipped * SANE_LOW && middle < shipped * SANE_HIGH) {
-      pace[key] = Math.round(middle * 1000) / 1000;
-      learned[key] = true;
+      const weight = values.length / (values.length + PRIOR_STRENGTH);
+      pace[key] = Math.round((shipped + weight * (middle - shipped)) * 1000) / 1000;
+      // How far this rate has moved from the shipped one, 0 to 1. A flag would
+      // say only that SOMETHING was learned; the operator's Health screen wants
+      // to know how much of the answer is now this box's own.
+      learned[key] = Math.round(weight * 100) / 100;
     } else {
-      learned[key] = false;
+      learned[key] = 0;
     }
   }
-  return { ...pace, samples, learned, lectures: finished.length };
+  // What a whole lecture costs, for the jobs waiting AHEAD of one in the queue.
+  // Their own lengths are not knowable from here -- only how many there are --
+  // so the typical job this deployment runs is the honest stand-in.
+  const totals = finished.map(project => Number(project.timings?.total || 0)).filter(value => value > 0);
+  const wholeJob = totals.length ? median(totals) : null;
+  return { ...pace, jobTotalSec: wholeJob, samples, learned, lectures: finished.length };
 }
 
 /**

@@ -29,6 +29,57 @@ import { execFileSync } from 'node:child_process';
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 const tryGit = (...args) => { try { return git(...args); } catch { return null; } };
 
+/*
+ * --preflight: ask the question BEFORE committing rather than after pushing.
+ *
+ * This guard is a CI check, so it catches a version collision at the point the
+ * branch turns red -- which is the point it has already cost somebody the time.
+ * Collisions are not rare here and they are not carelessness: two sessions
+ * working the same afternoon take the next number from the same base, so
+ * minting the same one is the DEFAULT rather than the exception. CLAUDE.md
+ * records it happening on 31 Aug, twice on 3 Sept and again on 7 Sept, and on
+ * 9 Sept two sessions were writing the same working directory at once, where
+ * there is not even a branch in between.
+ *
+ * It fetches, and answers three things a session cannot see from its own
+ * checkout: whether the remote has moved underneath it, whether the version in
+ * package.json already exists there, and what the next free number is. It never
+ * writes anything and it never fails a build -- it is a question, so it exits 0
+ * whatever the answer and prints what it found.
+ */
+if (process.argv.includes('--preflight')) {
+  const branch = tryGit('rev-parse', '--abbrev-ref', 'HEAD') || 'HEAD';
+  const remote = `origin/${branch}`;
+  tryGit('fetch', '--quiet', 'origin', branch);
+  const mine = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+  const theirs = tryGit('show', `${remote}:package.json`);
+  const remoteVersion = theirs ? JSON.parse(theirs).version : null;
+  const behind = Number((tryGit('rev-list', '--count', `HEAD..${remote}`) || '0').trim());
+  const lines = [];
+  if (!remoteVersion) lines.push(`preflight: no ${remote} to compare against -- nothing to collide with.`);
+  else {
+    lines.push(`preflight: yours ${mine} · ${remote} ${remoteVersion} · ${behind} commit(s) on the remote you do not have.`);
+    if (behind > 0) lines.push(`  The remote has moved. Pull before you commit, or the merge owes a version bump of its own.`);
+    // The number is taken whether it sits at the remote's tip or anywhere in
+    // its recent history -- another session may have pushed past it already.
+    const recent = (tryGit('rev-list', '--max-count=60', remote) || '').split('\n').filter(Boolean);
+    const taken = new Set(recent.map(sha => {
+      const text = tryGit('show', `${sha}:package.json`);
+      try { return text ? JSON.parse(text).version : null; } catch { return null; }
+    }).filter(Boolean));
+    if (taken.has(mine)) {
+      const [major, minor, patch] = mine.split('.').map(Number);
+      let next = `${major}.${minor}.${patch}`;
+      for (let n = patch + 1; n < patch + 40; n++) { next = `${major}.${minor}.${n}`; if (!taken.has(next)) break; }
+      lines.push(`  !! ${mine} IS ALREADY ON THE REMOTE. Two trees would answer to one number, and`);
+      lines.push(`     that number is what the worker deploy compares the running container against.`);
+      lines.push(`     The next free patch is ${next}; a feature takes the next free minor.`);
+    } else lines.push(`  ${mine} is free on the remote.`);
+  }
+  console.log(lines.join('\n'));
+  process.exit(0);
+}
+
 const fail = (headline, ...detail) => {
   console.error(`check-version-bump: ${headline}`);
   for (const line of detail) console.error(`  ${line}`);

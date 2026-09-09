@@ -5180,7 +5180,16 @@
     // lectures it has already finished (src/pace.js) and sent with the state.
     // An older payload, or a deployment that has finished nothing, falls back
     // to the figures measured on the box -- never to a missing model.
-    var SHIPPED_PACE = { importPerSourceSec: 0.03, transcribePerSourceSec: 0.27, scorePerSourceSec: 0.15, scoreFloorSec: 60, renderPerClipSec: 40, tailSec: 20 };
+    // A COPY OF src/pace.js's SHIPPED_PACE, and test/pace.test.mjs fails if the
+    // two ever disagree. The browser cannot import the module, and this file
+    // being wrong is not harmless: it is what a page renders from when the
+    // payload predates the field. Changing one of them and not the other is
+    // exactly the drift that put a six-times-too-fast import rate here while
+    // the module had been corrected.
+    // See the queued branch of pipelineEta: before anything has been measured,
+    // the estimate is deliberately the one that only needs correcting downward.
+    var QUEUED_CAUTION = 1.2;
+    var SHIPPED_PACE = { importPerSourceSec: 0.11, transcribePerSourceSec: 0.27, scorePerSourceSec: 0.15, scoreFloorSec: 60, renderPerClipSec: 40, tailSec: 20 };
     function paceOf() {
       var sent = (LAST_DATA && LAST_DATA.pace) || null;
       if (!sent) return SHIPPED_PACE;
@@ -5189,6 +5198,12 @@
         var value = Number(sent[key]);
         out[key] = isFinite(value) && value > 0 ? value : SHIPPED_PACE[key];
       }
+      // Not in SHIPPED_PACE because there is no honest constant for it: what a
+      // whole lecture costs depends on its length, so it is null until this
+      // deployment has finished one and the queued estimate falls back to the
+      // waiting job's own cost.
+      var whole = Number(sent.jobTotalSec);
+      out.jobTotalSec = isFinite(whole) && whole > 0 ? whole : null;
       return out;
     }
     function pipelineEta(pr) {
@@ -5206,7 +5221,34 @@
       };
       var order = ['import', 'transcribe', 'score', 'render'];
       var name = phaseOf(pr);
-      if (!name) return { etaSec: null, stagePct: null };
+      // A QUEUED LECTURE HAS AN ANSWER TOO, and it used to be given none at
+      // all. Measured across a whole job seven ways, this was the only stretch
+      // with no ETA whatsoever -- so the one moment somebody most wants to know
+      // how long this will take, straight after pressing Start, was the one
+      // moment nothing was said. Nothing about it is a guess: the whole
+      // pipeline's cost is computable from the source length and the clip
+      // count, and the wait in front of it is the queue position times what a
+      // lecture typically costs on this box.
+      if (!name) {
+        if (pr.status !== 'queued') return { etaSec: null, stagePct: null };
+        // ERRING HIGH HERE IS DELIBERATE, and it is the one place in this model
+        // that does. A queued lecture has no measurement of anything -- not the
+        // file's size, not today's speed out of the proxy pool -- and the two
+        // ways of being wrong are not equally bad: an estimate that comes DOWN
+        // as it learns reads as progress, and one that climbs the moment work
+        // starts is the single thing an ETA must never do. Measured across the
+        // pool's real range, the unbiased number climbed by up to six minutes
+        // on a slow exit; at 1.2 it comes down on everything from about
+        // 1.5 MB/s upward. It costs a fast pool one downward correction.
+        var mine = (cost.import + cost.transcribe + cost.score + cost.render + pace.tailSec) * QUEUED_CAUTION;
+        // Their lengths are not knowable from here, only how many there are.
+        // The typical finished lecture is the honest stand-in, and this job's
+        // own cost is the fallback before there is one -- an account's lectures
+        // resemble each other more than they resemble a constant.
+        var each = Number(pace.jobTotalSec) > 0 ? Number(pace.jobTotalSec) : mine;
+        var ahead = Math.max(0, Number(pr.queueAhead) || 0);
+        return { etaSec: Math.max(10, mine + ahead * each), stagePct: null };
+      }
       var frac = stageFraction(pr, name);
       var remaining = cost[name] * (1 - frac);
       // THE WORKER'S OWN ETA WINS, FOR WHATEVER STAGE REPORTED IT. It is a
