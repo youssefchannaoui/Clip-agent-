@@ -139,6 +139,24 @@ test('only the injected half can fail the run, and only after a clean control', 
     'exactly one place fails the run');
 });
 
+test('a rescue says which plan won and whether it held its range', () => {
+  // A rescued import that quietly falls back to the full download costs the
+  // whole lecture instead of the window, and the FIRST run of this probe
+  // could not tell that from a section attempt whose range was ignored --
+  // it printed the byte count and nothing that explained it.
+  // BOUNDED TO THE RESCUE BLOCK. The control prints a `windowed` line of its
+  // own, so an unbounded match passes with the rescue's deleted -- which is
+  // exactly what the first version of this assertion did.
+  const rescue = script.slice(script.indexOf('RESCUED in'));
+  assert.ok(rescue, 'the rescue reports something');
+  assert.match(rescue, /won on\s+the \{plan\} plan, \{client\} client/,
+    'the winning plan and client are reported');
+  assert.match(rescue, /windowed\s+\{result\.windowed\}/,
+    'and whether the range was actually honoured');
+  assert.match(script, /probe\.plans\.append/,
+    'the plan and client are recorded per attempt, not guessed afterwards');
+});
+
 test('with no injection asked for, nothing changes', () => {
   // The ordinary "can this box fetch this video" dispatch must not start
   // paying for a second download or a second minute of backoff.

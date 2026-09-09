@@ -143,14 +143,29 @@ class Refusals:
         self.real = ytdlp.YoutubeDL
         self.refused = 0
         self.attempts: list[tuple[float, str]] = []
+        self.plans: list[tuple[str, str]] = []
 
     def __enter__(self) -> "Refusals":
         probe = self
 
         def build(options=None, *args, **kwargs):
             instance = probe.real(options, *args, **kwargs)
-            proxy = str((options or {}).get("proxy") or "")
+            opts = options or {}
+            proxy = str(opts.get("proxy") or "")
+            # WHICH PLAN AND WHICH CLIENT, per attempt. A rescue that lands on
+            # the full-download plan costs the whole lecture instead of the
+            # window, and the only way to tell that from a section attempt
+            # whose range the extractor ignored is to record what was ASKED
+            # beside what came back.
+            client = ""
+            try:
+                client = str((opts.get("extractor_args") or {})
+                             .get("youtube", {}).get("player_client", [""])[0] or "")
+            except Exception:  # noqa: BLE001
+                client = ""
             probe.attempts.append((time.time(), proxy))
+            probe.plans.append(("section" if opts.get("download_ranges") else "full",
+                                client or "default"))
             if probe.refused < probe.refuse_first:
                 probe.refused += 1
 
@@ -275,6 +290,7 @@ def main() -> int:
         return 0
 
     result, size = detail
+    control_size = size
     out(f"  {label}: IMPORTED in {seconds:.1f}s")
     out(f"  title          {scrub(result.title)[:120]}")
     out(f"  bytes          {size:,}")
@@ -307,8 +323,20 @@ def main() -> int:
         return 1
 
     result, size = detail
+    plan, client = (spy.plans[-1] if spy and spy.plans else ("?", "?"))
     out(f"  RESCUED in {seconds:.1f}s -- {size:,} bytes after {refused} refusal(s)")
+    out(f"  won on         the {plan} plan, {client} client")
+    # THE FIELD THAT SAYS WHAT THE BYTES MEAN. windowed is set from the range
+    # callback having RUN, not from having asked -- so False on a section plan
+    # is an extractor that ignored the range, and False on the full plan is the
+    # designed fallback. Without it a large download is unexplainable, which is
+    # exactly where the first run of this probe left the question.
+    out(f"  windowed       {result.windowed}"
+        + ("" if result.windowed else "  <- the whole file, not the window"))
     out(f"  title          {scrub(result.title)[:120]}")
+    if not result.windowed:
+        out(f"  the rescue cost {size / 1e6:.0f} MB where the control cost"
+            f" {control_size / 1e6:.1f} MB for the same window.")
     return 0
 
 
