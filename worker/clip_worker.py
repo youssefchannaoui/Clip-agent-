@@ -3468,6 +3468,20 @@ AYAH_SIZE_SCALE = 6.10
 # Two is the compromise, and it is a single number to move if a real clip says
 # otherwise.
 AYAH_OUTLINE_MIN = 2.0
+# THE HALO'S WIDTH WHEN THE SCRIPTURE CAPTION IS DRAWN AS A SOFT SHADOW.
+#
+# Youssef, 10 Sept 2026, with a reference clip: "Quran recitation should be like
+# this instead of ugly old fashion outlines of text ... it has a light shadow
+# thing in the back." The thing in the back is a blurred dark halo rather than a
+# stroke, and libass draws one by blurring a BORDER -- so there has to be a
+# border wide enough to survive the blur. AYAH_OUTLINE_MIN (2.0) is sized for a
+# hard edge and all but disappears once it is spread; a halo needs several times
+# that before it reads as a shadow at all.
+#
+# It is a FLOOR like AYAH_OUTLINE_MIN, not a replacement: a template that
+# already asks for a heavier edge keeps it, and the blur softens whatever is
+# there.
+AYAH_GLOW_BORDER = 9.0
 
 # libass sizes a font by its Win cell (usWinAscent + usWinDescent, in em).
 # The mushaf faces have very tall cells, so the same nominal size draws them
@@ -3810,6 +3824,7 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
                 word_times: list[tuple[float, float]] | None = None,
                 word_heard: list[bool] | None = None,
                 word_offset: int = 0, word_count: int = 0,
+                glow: float = 0.0,
                 plan: dict[str, Any] | None = None) -> list[str]:
     """The Dialogue lines carrying an ayah, a short phrase at a time.
 
@@ -3910,7 +3925,12 @@ def ayah_events(found: dict[str, Any], *, ornament: str, start: float, end: floa
         # longer than the frame ran off BOTH edges, cut mid-word at each end.
         # Smart wrapping breaks it at the style's own margins; a line that
         # already fits is untouched.
-        events.append(f"Dialogue: 2,{ass_time(chunk_start)},{ass_time(chunk_end)},Ayah,,0,0,0,,{fade_tag}" + "{\\q0}" + text)
+        # The soft shadow. \blur spreads the style's border into a halo, and
+        # the ayah and its translation share this one event, so a single tag
+        # covers both lines exactly as the reference frame does.
+        glow_tag = f"{{\\blur{glow:g}}}" if glow > 0 else ""
+        events.append(f"Dialogue: 2,{ass_time(chunk_start)},{ass_time(chunk_end)},Ayah,,0,0,0,,{fade_tag}"
+                      + glow_tag + "{\\q0}" + text)
     return events
 
 
@@ -4723,7 +4743,10 @@ def write_ass(candidate: Candidate, template: dict[str, Any], ass_file: Path) ->
     # templates that already set a heavy outline are right for their own face
     # and are left exactly as they are; only the ones that leave scripture
     # under-outlined are raised.
-    ayah_outline = max(outline_width, AYAH_OUTLINE_MIN)
+    # The soft shadow, and the wider border it needs to be spread from. With no
+    # glow this is exactly the hard outline it always was.
+    scripture_glow = max(0.0, min(30.0, float(template.get("captionScriptureGlow", 0) or 0)))
+    ayah_outline = max(outline_width, AYAH_GLOW_BORDER if scripture_glow > 0 else AYAH_OUTLINE_MIN)
     shadow = float(template.get("captionShadow", 1))
     # Scripture is always centred, whatever the style says.
     #
@@ -4993,7 +5016,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     start=hit["start"], end=hit["end"],
                     latin_font=font, translation_size=translation_size,
                     show_translation=show_translation, ayah_size=ayah_size,
-                    mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
+                    mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))), glow=scripture_glow,
                     ayah_font=ayah_font, word_times=hit.get("words"),
                     word_heard=hit.get("heard"),
                     word_offset=int(hit.get("wordFrom") or 0),
@@ -5101,7 +5124,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                 start=piece_start, end=piece_end,
                                 latin_font=font, translation_size=translation_size,
                                 show_translation=show_translation, ayah_size=ayah_size,
-                                mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
+                                mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))), glow=scripture_glow,
                                 ayah_font=ayah_font,
                             ))
                         caption_gap(cursor, seg_words)
@@ -5124,7 +5147,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     found, ornament=ornament_text(ayah_font, found["ayah"]), start=start, end=end,
                     latin_font=font, translation_size=translation_size,
                     show_translation=show_translation, ayah_size=ayah_size,
-                    mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
+                    mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))), glow=scripture_glow,
                     ayah_font=ayah_font,
                 ))
             if captioned:
@@ -5325,7 +5348,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             found, ornament=ornament_text(ayah_font, found["ayah"]), start=span["start"], end=span["end"],
             latin_font=font, translation_size=translation_size,
             show_translation=bool(template.get("captionTranslation", True)), ayah_size=ayah_size,
-            mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))),
+            mark_size=int(round(ayah_size * ayah_mark_scale(ayah_font))), glow=scripture_glow,
             ayah_font=ayah_font, word_times=span.get("words"),
             # AND WHICH OF THOSE TIMES WERE HEARD. Omitted here for the same
             # reason the quran branch dropped it: the keyword simply was not

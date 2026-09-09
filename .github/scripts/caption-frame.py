@@ -74,7 +74,10 @@ def families() -> list[str]:
     return sorted(seen)
 
 
-def ass_file(path: str, body: str, *, font: str, size: int) -> None:
+def ass_file(path: str, body: str, *, font: str, size: int, outline: float = 0) -> None:
+    """`outline` is the border width the style draws. It defaults to 0, which is
+    what every existing caller measured with -- an outline adds ink and would
+    have changed every ink-height number in this file."""
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {WIDTH}
@@ -84,7 +87,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,60,60,0,1
+Style: Caption,{font},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,{outline:g},0,5,60,60,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -94,10 +97,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         handle.write(header)
 
 
-def render(ass_path: str, png_path: str) -> bool:
+def render(ass_path: str, png_path: str, ground: str = "black") -> bool:
+    """`ground` defaults to black, which every ink measurement in this file
+    depends on -- gray_rows reads Y>=200 as ink and a bright ground is all
+    ink by that test. It is only for the LOOK comparison, where the whole
+    question is how the text separates from a busy picture."""
     cmd = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-        "-f", "lavfi", "-i", f"color=c=black:s={WIDTH}x{HEIGHT}:d=1",
+        "-f", "lavfi", "-i", f"color=c={ground}:s={WIDTH}x{HEIGHT}:d=1",
         "-vf", f"subtitles={ass_path}", "-frames:v", "1", png_path,
     ]
     try:
@@ -272,8 +279,93 @@ def main() -> int:
     else:
         out("  the box is on a build with no inline Arabic size; nothing to show")
     out("")
+
+    scripture_look(cw, work, arabic)
     out("== done ==")
     return 0
+
+
+def scripture_look(cw, work: str, arabic: str) -> None:
+    """The hard outline against the soft shadow, rendered and measured.
+
+    Youssef, 10 Sept 2026, with a reference clip: "Quran recitation should be
+    like this instead of ugly old fashion outlines of text ... it has a light
+    shadow thing in the back not 100% sure what it is but it looks SO MUCH
+    NICER AND CLEANER."
+
+    The thing in the back is a blurred dark halo. libass draws one by BLURRING A
+    BORDER, so the two move together -- a blur with nothing behind it spreads
+    nothing, and the 2px edge sized for a hard outline all but vanishes once it
+    is spread. This renders the pairs the product can actually ship and measures
+    the difference on a BRIGHT ground, which is where a thin outline stops
+    separating the text from the picture and where the whole question lives.
+    """
+    out("== the scripture caption: hard outline against soft shadow ==")
+    # The size the product actually renders scripture at, not a guess: libass
+    # sizes by the face's win cell rather than its em, so a mushaf face at a
+    # nominal size draws a fraction of what the Latin does -- ayah_nominal_scale
+    # is what compensates, and CLAUDE.md records the arithmetic being disproved
+    # by two separate frames before it was measured.
+    scale = cw.ayah_nominal_scale(arabic) if hasattr(cw, "ayah_nominal_scale") else 4.0
+    size = max(1, int(round(FONT_SIZE * scale)))
+    border_min = getattr(cw, "AYAH_OUTLINE_MIN", 2.0)
+    border_glow = getattr(cw, "AYAH_GLOW_BORDER", 9.0)
+    # (label, border, blur) -- exactly the two the templates can produce.
+    variants = [
+        ("hard outline (today)", border_min, 0.0),
+        ("soft shadow", border_glow, 6.0),
+    ]
+    # Bright, because that is where these clips live. On black a missing halo
+    # is invisible and every variant looks identical.
+    for ground, name in (("0xB4AFA6", "bright"), ("black", "black")):
+        out(f"  -- on a {name} ground --")
+        for label, border, blur in variants:
+            tag = f"{{\\blur{blur:g}}}" if blur else ""
+            ass = os.path.join(work, f"look-{name}-{blur:g}.ass")
+            png = os.path.join(work, f"look-{name}-{blur:g}.png")
+            ass_file(ass, f"Dialogue: 0,0:00:00.00,0:00:02.00,Caption,,0,0,0,,{tag}{{\\q0}}{SAMPLE_ARABIC}",
+                     font=arabic, size=int(size), outline=border)
+            if not render(ass, png, ground=ground):
+                out(f"     {label}: render failed")
+                continue
+            spread = edge_spread(png)
+            out(f"     {label:22s} border {border:4.1f}  blur {blur:3.1f}  "
+                f"edge falls off over {spread}px  ({'ramp' if spread > 3 else 'step'})")
+            if ground == "bright":
+                band = os.path.join(work, f"band-{blur:g}.png")
+                rows, _ = gray_rows(png)
+                if rows and crop_band(png, band, rows[0], rows[-1]):
+                    emit_png(f"scripture-{'shadow' if blur else 'outline'}.png", band)
+    out("")
+
+
+def edge_spread(png_path: str) -> int:
+    """How many pixels the ink takes to fall away to its background.
+
+    A hard outline steps from white to dark in a pixel or two; a blurred one
+    ramps over several. That number IS the difference being asked about, and it
+    is the one thing a picture of two similar frames cannot be argued about.
+    """
+    raw = os.path.join(tempfile.gettempdir(), "dc-edge.gray")
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", png_path,
+                    "-pix_fmt", "gray", "-f", "rawvideo", raw],
+                   capture_output=True, timeout=120, check=True)
+    data = open(raw, "rb").read()
+    os.unlink(raw)
+    rows = [y for y in range(HEIGHT) if max(data[y * WIDTH:(y + 1) * WIDTH]) >= 200]
+    if not rows:
+        return 0
+    line = data[rows[len(rows) // 2] * WIDTH:(rows[len(rows) // 2] + 1) * WIDTH]
+    peak = max(range(WIDTH), key=lambda x: line[x])
+    start = line[peak]
+    # Walk right until the value stops changing -- that is where the halo ends
+    # and the background begins.
+    steps = 0
+    for x in range(peak + 1, min(WIDTH, peak + 60)):
+        if abs(line[x] - line[x - 1]) <= 1:
+            break
+        steps += 1
+    return steps
 
 
 if __name__ == "__main__":

@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2018 JS + 941 Python**
+- `npm test` and `npm run check` must pass. Currently **2018 JS + 950 Python**
   (13 Python skipped) — the skips are where ffmpeg or OpenCV is absent, which
   is CI.
   These numbers were once wrong by more than a factor of
@@ -18042,6 +18042,63 @@ the Premiere podcast plugins cheat by reading separate microphone tracks, which
 a single mixed YouTube track does not have. OpusClip's own reviews report the
 identical failure -- "wobbled on two-person crosstalk sections, cropping the
 wrong face twice".
+
+## Scripture is a soft shadow now, not an outline (v3.185.0, 10 Sept 2026)
+
+Youssef, with a reference clip on screen: "Quran recitation should be like this
+instead of ugly old fashion outlines of text, it should be like this, it has a
+light shadow thing in the back not 100% sure what it is but it looks SO MUCH
+NICER AND CLEANER."
+
+**The thing in the back is a blurred dark halo**, and libass already draws one --
+`\blur` has been spreading the word highlight's glow since v3.x. Putting the
+same tag behind the ayah is the whole mechanism.
+
+`captionScriptureGlow` (0-30, 0 = the hard outline everything had before) rides
+the SCRIPTURE line only. The ayah and its translation share one Dialogue event,
+so a single tag covers both exactly as the reference frame shows them. Spoken
+captions keep their outline: they sit on a different face at a different size,
+and this was a decision about how the Qur'an looks.
+
+**A BLUR AND A BORDER MOVE TOGETHER, and that pairing is most of the change.**
+libass makes a halo by blurring a border, so a blur with nothing behind it
+spreads nothing -- and `AYAH_OUTLINE_MIN` (2.0) is sized for a hard edge and all
+but vanishes once it is spread. `AYAH_GLOW_BORDER` is 9.0 and applies ONLY when
+the glow is on, as a floor: a template already asking for a heavier edge keeps
+it, and with no glow the border is byte-identical to what it always was.
+
+**Four call sites build ayah events** -- first render, re-render, the editor
+preview and the plate -- and one missed would render scripture with a hard
+outline on that path alone, which nobody would think to look for. A test counts
+them, so a fifth added later fails rather than quietly rendering the old look.
+
+### The probe was already built, by the other session
+
+`caption-frame.py` (theirs, committed) already renders a caption on the box with
+real libass and the real mushaf faces and hands back a PNG. **A second probe was
+written here and deleted before it was committed** -- two rigs answering one
+question is the duplication this file keeps punishing, and the right move was to
+add the missing dimension to theirs: an outline width, a ground colour, and a
+comparison section. Both defaults are unchanged, deliberately: every ink
+measurement in that file reads Y>=200 as ink, so a bright ground would read as
+all ink, and an outline adds ink and would move every height it reports.
+
+It measures **edge falloff** -- how many pixels the ink takes to reach its
+background. A hard outline steps in one or two; a blurred one ramps over
+several. That number is the difference being asked about, and it is the thing
+two similar-looking frames cannot be argued about. It renders on a BRIGHT ground
+because that is where these clips live and where a thin outline stops separating
+the text from the picture.
+
+### NOT YET SEEN
+
+The tag, the pairing and the template are covered by nine tests with five probes
+proven red, and the suite is green -- but **no frame has been rendered yet**.
+CLAUDE.md's oldest caption rule is that only a rendered frame settles a caption
+question, and this machine has neither libass nor an Arabic face. `caption_frame`
+on the deploy workflow is one dispatch and returns the picture; the value of 6
+is a starting point chosen from typesetting practice, not a measurement, and the
+render is what should decide it.
 
 ## Whoever is speaking is centred, and the crop follows them (v3.179.0, 9 Sept 2026)
 

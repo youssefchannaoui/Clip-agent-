@@ -77,6 +77,23 @@ const DEFAULTS = Object.freeze({
   captionTranslationSize: 46,
   captionHighlightItalic: true,
   captionHighlightGlow: 0,
+  /*
+   * The scripture caption's soft shadow, as a blur radius. 0 is the hard
+   * outline every caption had before it.
+   *
+   * Youssef, 10 Sept 2026, with a reference clip: "Quran recitation should be
+   * like this instead of ugly old fashion outlines of text ... it has a light
+   * shadow thing in the back not 100% sure what it is but it looks SO MUCH
+   * NICER AND CLEANER." The thing in the back is a blurred dark halo rather
+   * than a stroke -- the same \blur libass already draws for the word
+   * highlight, put behind the ayah instead.
+   *
+   * It applies to the SCRIPTURE line only (the ayah and the translation under
+   * it, which share one event). Spoken captions keep their outline: they sit
+   * on a different face at a different size, and this was a decision about how
+   * the Qur'an looks.
+   */
+  captionScriptureGlow: 0,
   // Caption animation. The renderer has always popped the live word by 8% over
   // 120ms; both numbers were hardcoded, so the effect could be neither tuned
   // nor turned off. A pop of 100 is no pop at all.
@@ -209,6 +226,7 @@ export const NUMBER_RANGES = {
   captionFontSize: [24, 240], captionOutlineWidth: [0, 14], captionShadow: [0, 8], captionBackgroundOpacity: [0, 100],
   // Clamped to what clip_worker.py accepts for the highlight's glow.
   captionHighlightGlow: [0, 30],
+  captionScriptureGlow: [0, 30],
   captionTranslationSize: [20, 90],
   // 100 = no pop. 0ms on either timing switches that animation off.
   // Below 100 starts the word small and grows it in; above, it overshoots and
