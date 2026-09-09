@@ -126,7 +126,11 @@ def main() -> int:
     pool = ip.proxy_pool()
     options = ip.youtube_network_options()
     out(f"  proxy pool     {len(pool)} address(es)")
-    out(f"  cookies        {'yes' if options.get('cookiefile') else 'no'}")
+    # The box's own default. A real import also carries the cookies pasted at
+    # /admin/import-network, which this probe has no way to read -- so `no`
+    # here does not mean the product is importing without cookies.
+    out(f"  cookies (box)  {'yes' if options.get('cookiefile') else 'no'}"
+        + " -- a real job also carries /admin/import-network's")
     out(f"  PO token       {'yes' if options.get('extractor_args') else 'no'}")
     try:
         import yt_dlp

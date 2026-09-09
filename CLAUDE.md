@@ -9628,13 +9628,29 @@ where it means the refresh is not landing rather than that nobody has released.
   answerable without a dispatch, and reading it is what caught my own wrong
   diagnosis here.
 
-### What is NOT fixed, and it is the strongest defence
+### COOKIES WERE ALREADY CONFIGURED, AND I READ THE PROBE WRONG
 
-**Cookies are not configured** (`cookies: no`, measured). A cookies.txt from a
-signed-in Google account is what makes YouTube stop treating the box as
-anonymous, and `server.js` already has the operator page for it. That is
-Youssef's to paste; the box uses it the moment it exists and now reports
-whether it does.
+This section said "cookies are not configured (`cookies: no`, measured)" and
+put pasting them on Youssef. **It was wrong.** `/admin/import-network` holds
+**62 youtube.com cookies**, read off the live page on 9 Sept 2026, and every
+real import has been using them: they are sealed in the app's store, travel on
+the job's own `network.cookiesText` (local-engine.js:2064), and
+`youtube_options_for_source` writes them into the job's scratch directory as
+`cookiefile`.
+
+**What the probe measures is the BOX'S OWN DEFAULT**, and the probe carries no
+job payload -- so `cookies: no` is the honest answer to a question nobody was
+asking. The readout says so now, in both scripts, rather than inviting the same
+reading again: *"cookies (box) no -- a real job carries whatever
+/admin/import-network holds"*. The same mistake, one field over, as calling
+yt-dlp stale at twenty days: a true measurement of the wrong thing.
+
+The proxy field on that page is empty and that is also fine -- the pool lives
+in `VIDEO_IMPORT_PROXIES` on the box (19 addresses, measured), and the page's
+field is an override that wins when set.
+
+So the strongest defence was never missing. What is genuinely still unproven is
+below: a live 403 rescued by the new rounds.
 
 ### THE BOX CAN BE ASKED WHETHER IT CAN FETCH A VIDEO RIGHT NOW
 
