@@ -162,6 +162,10 @@ on:
         description: 'Framing: pick the cached source nearest this many seconds (0 = newest)'
         required: false
         default: '0'
+      framing_sources:
+        description: 'Framing: how many cached sources to sweep, newest first'
+        required: false
+        default: '4'
   # Only worker/ code. Editing this file changes how the deploy runs, not what
   # is running on the box, so it must not trigger a deploy of its own -- an
   # unarmed run going red on every edit to the deploy script is noise, and the
@@ -598,6 +602,7 @@ jobs:
           RAW_PASSWORD: ${{ secrets.WORKER_SSH_PASSWORD }}
           FRAMING_SECONDS: ${{ inputs.framing_seconds }}
           FRAMING_DURATION: ${{ inputs.framing_duration }}
+          FRAMING_SOURCES: ${{ inputs.framing_sources }}
         run: |
           set -euo pipefail
           export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
@@ -612,7 +617,7 @@ jobs:
             // NUMBERS ONLY, for the reason the probes above record: this literal
             // is substituted into a PYTHON file and JSON.stringify spells a
             // boolean `true`, which Python reads as an undefined name.
-            const params = { seconds: Math.min(120, num("FRAMING_SECONDS", 30) || 30), duration: num("FRAMING_DURATION", 0), frames: 12 };
+            const params = { seconds: Math.min(120, num("FRAMING_SECONDS", 30) || 30), duration: num("FRAMING_DURATION", 0), frames: 12, sources: Math.min(8, num("FRAMING_SOURCES", 4) || 4) };
             fs.writeFileSync(process.env.RUNNER_TEMP + "/framing-probe.py",
               src.replace("PARAMS = {}", "PARAMS = " + JSON.stringify(params)));
           '
