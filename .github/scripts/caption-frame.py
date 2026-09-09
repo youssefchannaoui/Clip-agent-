@@ -328,25 +328,41 @@ def scripture_look(cw, work: str, arabic: str) -> None:
             if not render(ass, png, ground=ground):
                 out(f"     {label}: render failed")
                 continue
-            spread = edge_spread(png)
+            reach = halo_width(png, 175 if ground == "bright" else 16)
+            if reach < 0:
+                out(f"     {label:22s} NO INK RENDERED -- the face or the size is wrong")
+                continue
             out(f"     {label:22s} border {border:4.1f}  blur {blur:3.1f}  "
-                f"edge falls off over {spread}px  ({'ramp' if spread > 3 else 'step'})")
+                f"halo reaches {reach:2d}px from the ink")
             if ground == "bright":
                 band = os.path.join(work, f"band-{blur:g}.png")
                 rows, _ = gray_rows(png)
-                if rows and crop_band(png, band, rows[0], rows[-1]):
+                if not rows:
+                    out("       (no ink rows, so no picture)")
+                elif not crop_band(png, band, rows[0], rows[-1]):
+                    out("       (crop failed, so no picture)")
+                else:
                     emit_png(f"scripture-{'shadow' if blur else 'outline'}.png", band)
     out("")
 
 
-def edge_spread(png_path: str) -> int:
-    """How many pixels the ink takes to fall away to its background.
+def halo_width(png_path: str, ground: int) -> int:
+    """How far the dark halo reaches out from the ink, in pixels.
 
-    A hard outline steps from white to dark in a pixel or two; a blurred one
-    ramps over several. That number IS the difference being asked about, and it
-    is the one thing a picture of two similar frames cannot be argued about.
+    THE FIRST VERSION OF THIS MEASURED NOTHING AND SAID SO CONFIDENTLY. It
+    walked right from the brightest pixel until two neighbours were equal --
+    and the pixel next to the peak is the glyph's own flat white interior, so
+    it stopped immediately and reported 0px for every variant, hard outline and
+    soft shadow alike. That is the third probe in two days to report a number
+    it had not taken; a measurement that cannot tell two obviously different
+    things apart is broken, not a finding.
+
+    This asks the question directly instead. On a bright ground the halo is the
+    only thing DARKER than the background, so: step off the glyph's edge and
+    count how far the darkening reaches. A hard 2px outline is a thin rim; a
+    blurred one is a wide soft cloud, and the two cannot come out the same.
     """
-    raw = os.path.join(tempfile.gettempdir(), "dc-edge.gray")
+    raw = os.path.join(tempfile.gettempdir(), "dc-halo.gray")
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", png_path,
                     "-pix_fmt", "gray", "-f", "rawvideo", raw],
                    capture_output=True, timeout=120, check=True)
@@ -354,19 +370,17 @@ def edge_spread(png_path: str) -> int:
     os.unlink(raw)
     rows = [y for y in range(HEIGHT) if max(data[y * WIDTH:(y + 1) * WIDTH]) >= 200]
     if not rows:
-        return 0
-    line = data[rows[len(rows) // 2] * WIDTH:(rows[len(rows) // 2] + 1) * WIDTH]
-    peak = max(range(WIDTH), key=lambda x: line[x])
-    start = line[peak]
-    # Walk right until the value stops changing -- that is where the halo ends
-    # and the background begins.
-    steps = 0
-    for x in range(peak + 1, min(WIDTH, peak + 60)):
-        if abs(line[x] - line[x - 1]) <= 1:
-            break
-        steps += 1
-    return steps
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+        return -1  # no ink at all: the caller must say so rather than print 0
+    widest = 0
+    for y in rows[::5]:
+        line = data[y * WIDTH:(y + 1) * WIDTH]
+        peak = max(range(WIDTH), key=lambda x: line[x])
+        x = peak
+        while x < WIDTH - 1 and line[x] >= 200:   # off the ink
+            x += 1
+        reach = 0
+        while x < WIDTH - 1 and line[x] < ground - 8 and reach < 80:
+            reach += 1
+            x += 1
+        widest = max(widest, reach)
+    return widest
