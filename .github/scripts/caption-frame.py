@@ -33,7 +33,7 @@ PARAMS = {}
 WIDTH = int(PARAMS.get("width") or 1080)
 HEIGHT = int(PARAMS.get("height") or 1920)
 FONT_SIZE = int(PARAMS.get("fontSize") or 62)
-SCALES = PARAMS.get("scales") or [1.0, 1.5, 2.0, 2.5, 3.0]
+SCALES = PARAMS.get("scales") or [1.0, 3.0, 3.5, 4.0, 4.25, 4.5, 5.0]
 
 # Ours, written here, so nothing of anybody's lecture is in the picture.
 SAMPLE_LATIN = "MERCY"
@@ -195,6 +195,26 @@ def main() -> int:
             f"(latin {heights['latin']}px / arabic {heights['arabic']}px at the same nominal size)")
         out("  -- the multiplier that makes an Arabic word the same height as the")
         out("     English words beside it in one caption line.")
+    out("")
+
+    out("== is the shipped multiplier equal? ==")
+    # The ratio is what Youssef asked for in as many words -- "make sure sizing
+    # of Arabic and English ratio is similar" -- so it is MEASURED at the value
+    # that actually ships rather than inferred from the linear one above.
+    if hasattr(cw, "arabic_inline_size") and heights.get("latin"):
+        want = cw.arabic_inline_size(FONT_SIZE)
+        ass = os.path.join(work, "shipped.ass")
+        png = os.path.join(work, "shipped.png")
+        ass_file(ass, f"Dialogue: 0,0:00:00.00,0:00:02.00,Caption,,0,0,0,,{SAMPLE_ARABIC}",
+                 font=arabic, size=want)
+        if render(ass, png):
+            tall, top, bottom = ink_height(png)
+            latin = heights["latin"]
+            out(f"  arabic at the shipped nominal {want}: {tall}px against the Latin's {latin}px")
+            out(f"  RATIO {tall / latin:.2f}  (1.00 is equal)")
+            if latin:
+                out(f"  the multiplier that would make it exactly equal: "
+                    f"{cw.ARABIC_INLINE_SCALE * latin / max(1, tall):.2f}")
     out("")
 
     out("== the mixed line, through the REAL renderer, at each multiplier ==")
