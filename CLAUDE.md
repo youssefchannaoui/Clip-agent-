@@ -17542,20 +17542,27 @@ like diagnose, printing geometry only (face positions as percentages of the
 frame width, box heights in pixels; no frame ever leaves the box). Six cached
 sources, twelve frames each. cv2 4.14.0, so the detector genuinely runs.
 
-### What it found, and it was not the shape I expected
+### What it found -- AND THE FIRST READING OF IT WAS MY PROBE'S ERROR
 
-    a real face   24% of the width, seen 3x, 238px tall
-    spurious      40% of the width, seen 3x,  64px tall
-    spurious      68% of the width, seen 3x,  66px tall
-    the crop kept 22.9%..54.6%  ->  the ONLY real face 1.1% from its edge
+The first run appeared to show a real face at 24% of the width beside spurious
+boxes at 40% and 68%, with the crop keeping 22.9%..54.6% and the only real face
+1.1% from its edge. **That reading was wrong, and it was wrong because the probe
+bucketed detections at a fixed 4% of the width.** A 238px face on a 1920px frame
+is 12% of the width wide, so its centre scattering between 24% and 40% is ONE
+person, not a person and two ghosts. Merged by face size the same source reads
+as one person at 34% seen 9 times, comfortably inside the crop.
 
+So the customer-visible failure was NOT reproduced, and this entry says so
+rather than keeping the number that made a better story. What remains is a
+code-level fact that does not need a reproduction to be worth fixing:
 `detect_main_face_crop` took **the biggest face in each sampled frame** and then
-the median of those centres. In a frame where the cascades miss the real person
--- which happens constantly, the detector is noisy -- the biggest box IS a
-spurious one, so it votes, and the median across frames lands between the person
-and the noise. A single face's centre also WOBBLES a few per cent between
-frames, which scatters one person across positions and gives the noise more
-relative weight still.
+the median of those centres. The cascades are demonstrably noisy here -- 58 to
+66 pixel boxes on 1080p footage, in four of six sources -- and in a frame where
+the real person is missed the biggest box IS a spurious one, so it votes. A
+single face's centre also wobbles between frames, scattering one person across
+positions and giving that noise more relative weight still. Per-frame voting is
+the wrong shape for a noisy detector whether or not today's cache happens to
+contain a clip where it shows.
 
 `dominant_subject()` groups every detection across every sample into PEOPLE and
 scores each group by **how often it was seen times how big it is**. Both halves
@@ -17565,14 +17572,26 @@ face the cascades find reliably. **Two detections closer together than the face
 is WIDE cannot be two people**, so the face's own size is the merge distance --
 which scales with the shot, where a threshold in pixels or per cent could not.
 
-### The probe was wrong before the app was, and that is worth keeping
+### The probe was wrong before the app was, and that is the lesson
 
 Its first version bucketed detections at a fixed 4% of the width and reported
-one person as two -- so it called a source a "TIGHT two-shot" when a 346px face
-on a 1920px frame is 18% of the width wide and its centre moving 4% between
-frames is the same person. **A measurement that classifies has to be read as
-sceptically as the code it is measuring.** It merges by face size now, the same
-rule the fix uses.
+one person as two -- so it called two sources "TIGHT two-shots" when a 346px
+face on a 1920px frame is 18% of the width wide and its centre moving 4% between
+frames is the same person. With the merge corrected, **none of the six cached
+sources is a tight two-shot at all**; they are all one dominant face or one
+person. **A measurement that CLASSIFIES has to be read as sceptically as the
+code it is measuring**, and this one produced two confident false findings
+before it produced a true one. It merges by face size now, the same rule the fix
+uses.
+
+### What DID verify the fix: two independent methods agreeing
+
+The static crop and `track_speaker_keyframes` are unrelated -- one is a median
+over grouped detections, the other follows mouth movement sample by sample. On
+the same source, before this change they disagreed by **2.7% of the frame
+width**; after it they agree to **0.1%**. That is the strongest evidence
+available without a reproduction: the fixed selection lands where a
+speaker-aware method independently puts the speaker.
 
 ### What is NOT done, with the measurement now behind it
 
@@ -17586,10 +17605,13 @@ swing between two. Youssef's "whoever talks must be central" is that feature,
 and it needs the crop filter to take an expression in `t` rather than four
 fixed integers. `crop=w:h:x:y` accepts one; nothing has been built on it.
 
-**This release does NOT make the crop move.** It makes the static one land on a
-person instead of between a person and the detector's noise, which is the half
-that could be measured and fixed in one step. A moving crop is a bigger change
-and the honest order is this first.
+**This release does NOT make the crop move**, and it does not claim to have
+fixed the reported clip. It makes the static selection robust to a noisy
+detector, verified by agreeing with the tracker to 0.1%. **The lecture Youssef
+showed is not in the box's source cache**, so his exact shot -- two people close
+together and similar in size -- has still never been measured. Re-importing that
+lecture puts it in the cache and `framing_duration` reaches it; that is the next
+measurement, and a moving crop is the next feature after it.
 
 ### TWO SESSIONS WERE IN THIS WORKING TREE AT ONCE, and it nearly cost work
 
