@@ -165,7 +165,7 @@ def main() -> int:
     out()
     out("== what the SHIPPED static crop chooses ==")
     duration = max(5.0, min(SECONDS, 60.0))
-    candidate = cw.Candidate(start=0.0, end=duration, text="", score=0.0)
+    candidate = cw.Candidate(start=0.0, end=duration, text="", segments=[], score=0, reasons=[], quote_risk=False)
     crop = cw.detect_main_face_crop(source, "ffprobe", candidate, 1080, 1920)
     if not crop:
         out("  no crop was returned (already narrow enough, or nothing found)")
@@ -193,6 +193,23 @@ def main() -> int:
                     out(f"  the crop sits on a cluster ({nearest:.1f}% from the nearer face)")
             else:
                 out("  one cluster of faces -- the case that already looks right")
+        # THE DIRECT MEASURE OF THE COMPLAINT: which faces the crop actually
+        # keeps. A centre that reads as reasonable can still cut a person out.
+        left_edge = crop["x"] / src_w * 100
+        right_edge = (crop["x"] + crop["w"]) / src_w * 100
+        out(f"  the crop keeps {left_edge:.1f}% to {right_edge:.1f}% of the width")
+        for row in per_frame:
+            if not row:
+                continue
+        seen: dict[int, list[float]] = {}
+        for row in per_frame:
+            for x, h in row:
+                seen.setdefault(round(x / 5) * 5, []).append(h)
+        for bucket in sorted(seen):
+            heights = seen[bucket]
+            inside = left_edge <= bucket <= right_edge
+            out(f"    a face near {bucket:3d}% (seen {len(heights):2d}x, median height "
+                f"{int(statistics.median(heights)):3d}px) is {'INSIDE' if inside else 'OUTSIDE'} the crop")
 
     out()
     out("== what the ACTIVE-SPEAKER tracker would choose (wired to nothing today) ==")
