@@ -122,7 +122,7 @@ on:
         required: false
         default: '0'
       diagnose_from:
-        description: 'Diagnose: seconds into the source to start the audio probe (a long English lecture holds its Arabic well past the opening)'
+        description: 'Diagnose/framing: seconds into the source to start (a lecture opens on a title card, and holds its Arabic well past the opening)'
         required: false
         default: '0'
       diagnose_duration:
@@ -164,10 +164,6 @@ on:
         default: '30'
       framing_duration:
         description: 'Framing: pick the cached source nearest this many seconds (0 = newest)'
-        required: false
-        default: '0'
-      framing_from:
-        description: 'Framing: seconds into the source to start (the opening of a lecture is a title card and an introduction)'
         required: false
         default: '0'
       framing_sources:
@@ -628,7 +624,11 @@ jobs:
           FRAMING_SECONDS: ${{ inputs.framing_seconds }}
           FRAMING_DURATION: ${{ inputs.framing_duration }}
           FRAMING_SOURCES: ${{ inputs.framing_sources }}
-          FRAMING_FROM: ${{ inputs.framing_from }}
+          # ONE INPUT, TWO PROBES, and not only because GitHub caps a
+          # workflow_dispatch at 25 of them: "how far into the source to start"
+          # is the same question for both, and a second input for it would be
+          # two names that have to be kept meaning the same thing.
+          FRAMING_FROM: ${{ inputs.diagnose_from }}
         run: |
           set -euo pipefail
           export SSHPASS="$(printf '%s' "${RAW_PASSWORD:-}" | tr -d '\r\n')"
