@@ -3547,6 +3547,18 @@ def ayah_nominal_scale(face: str) -> float:
 # size on the ayah treatment, where the Arabic has a line of its own; this is
 # against the caption size, on a line the Arabic shares with English.
 # `caption_frame` in deploy-worker.yml is the rig, and it renders the frame.
+#
+# 4.25 IS THE VALUE THE PICTURE CHOSE, NOT THE ARITHMETIC. 34/8 says 4.25 would
+# make the two inks EQUAL; rendered at that nominal the Arabic measures 46px
+# against the Latin's 34 -- a ratio of 1.35, because 8px at nominal 62 is a
+# handful of pixels and rounding dominates it. Equal full ink would be 3.14,
+# and 3.14 is WRONG: Arabic's ink span carries the tall lam and alef and the
+# descending bowls, where Latin cap height carries neither, so matching the
+# spans leaves the Arabic BODY visibly smaller than the English beside it. At
+# 4.25 the bodies match on the frame and at 3.14 they do not. The comparison
+# the eye makes is the body; the number that comes out of it is 1.35 of the
+# span. (CLAUDE.md has recorded twice that this arithmetic is disproved by a
+# render -- this is the third.)
 ARABIC_INLINE_SCALE = 4.25
 
 

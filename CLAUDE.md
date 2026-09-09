@@ -10237,8 +10237,19 @@ been drawn at a QUARTER the height of the words around it** -- an illegible
 smudge, on a frame, for as long as that function has existed. libass sizes by
 the face's win ascent+descent rather than its em, and Amiri reserves roughly
 three times its em for tashkeel it may never draw. `ARABIC_INLINE_SCALE` is
-**4.25**, measured, and `arabic_inline_size()` is what every caption mode now
-asks for.
+**4.25**, and `arabic_inline_size()` is what every caption mode now asks for.
+
+**THE PICTURE CHOSE 4.25, NOT THE ARITHMETIC, and that is the third time this
+file has recorded that order.** Youssef: "make sure sizing of Arabic and
+English ratio is similar." 34/8 says 4.25 makes the two inks EQUAL; rendered at
+that nominal the Arabic measures **46px against the Latin's 34 -- a ratio of
+1.35**, because 8px at nominal 62 is a handful of pixels and rounding dominates
+it. Equal full ink would be **3.14**, and 3.14 is wrong: Arabic's ink span
+carries the tall lam and alef and the descending bowls where Latin cap height
+carries neither, so matching the SPANS leaves the Arabic BODY visibly smaller
+than the English. On the frames the bodies match at 4.25 and plainly do not at
+3.14. What the eye compares is the body; 1.35 of the span is what that comes
+out as.
 
 **This is NOT `ayah_nominal_scale`.** That one is tuned against the TRANSLATION
 size on the ayah treatment, where the Arabic has a line of its own; this is

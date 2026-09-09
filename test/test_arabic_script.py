@@ -203,7 +203,12 @@ class SizeTests(unittest.TestCase):
                      text="He said alhamdulillah and carried on")
         want = worker.arabic_inline_size(62)
         self.assertIn(f"\\fs{want}", "\n".join(events(ass)))
-        self.assertGreater(want, 62 * 2, "an Arabic word must not be drawn near the Latin nominal")
+        # A band with the reason rather than the number: Amiri needs several
+        # times the Latin nominal to draw the same size (measured on the box,
+        # 8px against 34px at nominal 62), and a tidy-up back towards 1 would
+        # put the smudge back with nothing failing.
+        self.assertGreater(want, 62 * 3, "an Arabic word drawn near the Latin nominal is a smudge")
+        self.assertLess(want, 62 * 6, "and one drawn far past it blows the line box apart")
 
     def test_the_size_is_closed_the_moment_the_arabic_ends(self):
         # An override block holds until something changes it, so an \fs on one
