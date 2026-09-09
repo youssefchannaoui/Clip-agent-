@@ -235,6 +235,32 @@ def speaker_view(cw, speaker, r: dict) -> None:
         f"({sum(seen) / len(seen):.1f} faces a frame, most {max(seen)}, "
         f"{sum(1 for n in seen if n == 0)} with none)")
 
+    # IS THE SAMPLE WIDTH THE LIMIT, or is the camera simply not on a face?
+    # Those look identical from a detection rate alone, and they call for
+    # opposite fixes. Frames are decoded at SAMPLE_WIDTH before the landmarker
+    # sees them, so the only way to tell is to decode the SAME seconds larger
+    # and count again. Only asked when the rate is poor enough to matter, since
+    # it costs a second pass.
+    blank = sum(1 for n in seen if n == 0) / max(1, len(seen))
+    if blank > 0.25:
+        was = speaker.SAMPLE_WIDTH
+        for wider in (1440, 1920):
+            if wider <= was or wider > src_w:
+                continue
+            speaker.SAMPLE_WIDTH = wider
+            try:
+                begun = time.monotonic()
+                again = speaker.measure(ffmpeg="ffmpeg", source=source, start=FROM,
+                                        duration=duration, src_w=src_w, src_h=src_h)
+            finally:
+                speaker.SAMPLE_WIDTH = was
+            counts = [len(faces) for _t, faces in again]
+            if not counts:
+                continue
+            out(f"   at {wider}px instead of {was}: "
+                f"{sum(1 for n in counts if n == 0)} with none, most {max(counts)}, "
+                f"{sum(counts) / len(counts):.1f} a frame, in {time.monotonic() - begun:.0f}s")
+
     rows = speaker.assign_subjects(samples)
     series = speaker.subject_series(rows)
     where: dict[int, list[float]] = {}
