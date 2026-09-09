@@ -310,10 +310,17 @@ def scripture_look(cw, work: str, arabic: str) -> None:
     size = max(1, int(round(FONT_SIZE * scale)))
     border_min = getattr(cw, "AYAH_OUTLINE_MIN", 2.0)
     border_glow = getattr(cw, "AYAH_GLOW_BORDER", 9.0)
-    # (label, border, blur) -- exactly the two the templates can produce.
+    # (label, border, blur). The ladder is the point: "a LIGHT shadow thing in
+    # the back" is a look, and a look is settled by looking at it rather than by
+    # typesetting practice -- the 6 shipped in v3.185.0 was a guess and its own
+    # commit message said so. Each rung emits a band, so the value is chosen
+    # from rendered frames.
     variants = [
         ("hard outline (today)", border_min, 0.0),
-        ("soft shadow", border_glow, 6.0),
+        ("soft shadow, blur 3", border_glow, 3.0),
+        ("soft shadow, blur 4.5", border_glow, 4.5),
+        ("soft shadow, blur 6", border_glow, 6.0),
+        ("soft shadow, blur 9", border_glow, 9.0),
     ]
     # BRIGHT ONLY, and that is a limit of the measurement rather than a
     # preference. The halo is the one thing DARKER than its ground, so on a
@@ -346,7 +353,8 @@ def scripture_look(cw, work: str, arabic: str) -> None:
                 elif not crop_band(png, band, rows[0], rows[-1]):
                     out("       (crop failed, so no picture)")
                 else:
-                    emit_png(f"scripture-{'shadow' if blur else 'outline'}.png", band)
+                    stem = f"blur{blur:g}".replace(".", "-") if blur else "outline"
+                    emit_png(f"scripture-{stem}.png", band)
     out("")
 
 
