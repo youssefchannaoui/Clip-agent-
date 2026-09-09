@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **1995 JS + 900 Python**
+- `npm test` and `npm run check` must pass. Currently **1998 JS + 900 Python**
   (13 Python skipped) — the skips are where ffmpeg or OpenCV is absent, which
   is CI.
   These numbers were once wrong by more than a factor of
@@ -10069,6 +10069,81 @@ measurement of what Whisper returns on that audio and of which options a job
 now asks for -- not of a rendered frame with Arabic script on it. The next
 import of a lecture holding a quotation is the confirmation, and the frame is
 what settles it.
+
+
+## Test on Instagram answered "Unknown social provider" (v3.180.1, 9 Sept 2026)
+
+Youssef, with the connections dialog open and a toast reading **"Unknown social
+provider. x4"**: "I once asked to keep Instagram and Facebook separate in terms
+of logging in ... whenever I wanna log in to Instagram, I have to log in
+through Meta, which is confusing because what if they don't have a Meta account
+that's connected to Instagram?"
+
+### THE SEPARATION IS BUILT AND CONFIGURED, AND HIS OWN SCREENSHOT PROVES IT
+
+v3.160.0 shipped Instagram Login -- `www.instagram.com/oauth/authorize`, the
+code exchange on `api.instagram.com`, publishing through `graph.instagram.com`,
+no Page anywhere in the chain -- and it is inert until
+`INSTAGRAM_CLIENT_ID`/`SECRET` are set. **They are set.** The proof is in the
+screenshot rather than in a dashboard: the Instagram row's button reads
+**"Add another"**, and `canAdd` requires `addsAccounts(r)`, which is
+`r.oauth !== 'meta'`. The row's oauth is only ever `'instagram'` when
+`providerConfigured('instagram')` is true. So pressing Connect there opens
+Instagram, not Meta.
+
+**What he is still on is the other road**, and that is a fact about his
+ACCOUNT rather than about the product: the row names `islamicreminders.dc`
+with no `@`, and `instagramDirect` names a direct connection `@username` while
+a Page-derived one takes the Page's `instagramName`. His Instagram was
+connected through Meta before the direct login existed, and nothing migrates a
+live credential on its own. Disconnect that account and Connect again and it
+goes in through Instagram.
+
+### The toast was a real bug, and it was mine from v3.160.0
+
+`testConnection`'s provider chain is `youtube / meta / tiktok / else throw`.
+That release taught `oauthStartUrl`, `completeOAuth`, `disconnect`,
+`connectedAccountIds`, `selectedAccount`, `publishTarget`, `pollTarget` and the
+credential layer about Instagram **and not this one** -- so the moment the row's
+own oauth became `'instagram'`, the single button whose job is to check a
+connection could only ever refuse. Every other chain in social.js was swept and
+this was the only gap.
+
+- **It resolves through `instagramTarget`, the function the PUBLISH path uses**
+  -- so the host, the id and the token it checks are the three a Reel would
+  actually be posted with. Asking `graph.facebook` about a directly connected
+  account, or `graph.instagram` about a Page-derived one, reports on a
+  credential nobody publishes with. A test asserts the Page road answers on
+  `graph.facebook.com` with the PAGE's own token and never touches the
+  Instagram host.
+- **It asks the account for its own id and handle**, and that id is exactly
+  what `/media` is posted to -- so an answer means the account this app would
+  publish to accepted this app's token. There is no cheaper check that proves
+  anything.
+- **`testedRecord()` is ONE answer to "whose credential is this", read by the
+  success write AND by the catch.** They were separate expressions, and a test
+  that records success on one record and failure on another marks a healthy
+  connection dead. Instagram is where that could actually happen, because it is
+  the one platform with two roads in and only one of them owns a record: a
+  Page-derived account has no `instagram` connection at all, so its failure
+  belongs on the **Meta login** -- which is what `connectionStatus` reads for
+  that row when there is no direct connection, and what somebody actually has
+  to sign into again. That also makes the Facebook row say "needs
+  reconnecting", which is correct rather than collateral: it is the same login.
+
+### Driven through the real connect, never a hand-written record
+
+Both roads are exercised end to end -- `completeOAuth('instagram', ...)` and
+`completeOAuth('meta', ...)` against a stubbed fetch -- so the token under test
+is sealed by the credential layer. **The first cut hand-wrote
+`{ access_token: 'page-token' }` and the app refused it** with "Stored social
+credentials could not be read", which is the app being right about a fixture
+that lies. That is the second time this file records a fixture that did not
+match what production writes.
+
+Three probes proven red: the branch removed (the shipped bug, 3 failures), the
+Page road forced onto the Facebook host, and a Page failure written to the
+`instagram` record instead of the Meta one.
 
 
 ## Open items

@@ -40,6 +40,14 @@ process.env.DATA_DIR = dataDir;
 process.env.SOCIAL_PUBLISH_ENABLED = 'true';
 process.env.SOCIAL_TOKEN_KEY = 'k'.repeat(48);
 process.env.PUBLIC_BASE_URL = 'https://example.test';
+// Meta is configured too, because the Page road has to be driven through the
+// REAL connect: a Page token is sealed by the credential layer and a
+// hand-written one is refused ("Stored social credentials could not be read"),
+// which is the app being right about a fixture that lies.
+process.env.META_APP_ID = 'meta-app';
+process.env.META_APP_SECRET = 'meta-secret';
+process.env.META_GRAPH_BASE = 'https://graph.facebook.com';
+process.env.META_DIALOG_BASE = 'https://facebook.test';
 process.env.INSTAGRAM_CLIENT_ID = 'ig-app-id';
 process.env.INSTAGRAM_CLIENT_SECRET = 'ig-app-secret';
 const { state } = await import('../src/store.js');
@@ -260,3 +268,127 @@ test('the button names the login it opens', () => {
   assert.match(host, /Connect with \$\{r\.connectWith\|\|r\.name\}/);
   assert.match(host, /no Facebook Page needed/);
 });
+
+// ── testing the connection, on either road ─────────────────────────────────
+
+test('Test on a directly connected Instagram account answers, rather than "Unknown social provider"', async () => {
+  /*
+   * REPORTED BY YOUSSEF, 9 Sept 2026, from the live dialog: pressing Test on
+   * the Instagram row toasted "Unknown social provider." four times.
+   *
+   * v3.160.0 made Instagram a provider in its own right -- oauthStartUrl,
+   * disconnect, the credential layer and both publish calls all learned it --
+   * and `testConnection` did not. Its provider chain is
+   * youtube / meta / tiktok / else throw, so the moment the row's own oauth
+   * became 'instagram' (which it does the instant INSTAGRAM_CLIENT_ID is set,
+   * and which is exactly what the "Add another" label on his screenshot
+   * proves) the one button that checks a connection could only ever refuse.
+   *
+   * Driven through the REAL connect so the token is genuinely sealed: a
+   * hand-written record would test the branch against a credential shape the
+   * app never writes.
+   */
+  const userId = 'u_igtest';
+  state.authUsers = [{ id: userId, email: 't@example.com', role: 'creator' }];
+  state.socialConnections = {};
+  const stateText = new URL(social.oauthStartUrl('instagram', userId)).searchParams.get('state');
+
+  const realFetch = global.fetch;
+  global.fetch = async (input) => {
+    const url = String(input?.url || input);
+    if (url.includes('api.instagram.com/oauth/access_token')) return respond({ access_token: 'short' });
+    if (url.includes('graph.instagram.com/access_token')) return respond({ access_token: 'long', expires_in: 5184000 });
+    if (url.includes('graph.instagram.com/me?')) return respond({ user_id: 'ig-user-1', username: 'deenclipped' });
+    // THE TEST'S OWN CALL: the account the publish path would post to,
+    // answering on the host and with the token that path would use.
+    if (url.includes('graph.instagram.com/') && url.includes('fields=')) {
+      return respond({ id: 'ig-user-1', username: 'deenclipped' });
+    }
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  try {
+    await social.completeOAuth('instagram', `https://example.test/auth/instagram/callback?code=c&state=${encodeURIComponent(stateText)}`);
+    const result = await social.testConnection('instagram', 'ig-user-1', { id: userId });
+    assert.equal(result.provider, 'instagram');
+    assert.equal(result.accountId, 'ig-user-1');
+    assert.match(result.name, /deenclipped/);
+  } finally {
+    global.fetch = realFetch;
+  }
+});
+
+
+test('Test on a Page-derived Instagram account asks Facebook’s graph, with the Page token', async () => {
+  /*
+   * THE ROAD YOUSSEF'S OWN ACCOUNT IS ON. Instagram Login was configured only
+   * this week, so every Instagram already connected came in through a Page --
+   * and those have no `instagram` connection record at all. Resolving them
+   * through instagramTarget is what makes one Test button serve both roads
+   * without the dialog having to know which one an account arrived by.
+   */
+  const userId = 'u_igpage';
+  state.authUsers = [{ id: userId, email: 'pg@example.com', role: 'creator' }];
+  state.socialConnections = {};
+  const stateText = new URL(social.oauthStartUrl('meta', userId)).searchParams.get('state');
+
+  const asked = [];
+  const realFetch = global.fetch;
+  global.fetch = async (input) => {
+    const url = String(input?.url || input);
+    if (url.includes('/oauth/access_token')) return respond({ access_token: 'user-token' });
+    if (url.includes('/me/accounts')) {
+      return respond({ data: [{ id: 'p1', name: 'Page', access_token: 'page-token', instagram_business_account: { id: 'ig-page-1', username: 'islamicreminders.dc' } }] });
+    }
+    asked.push(url);
+    return respond({ id: 'ig-page-1', username: 'islamicreminders.dc' });
+  };
+  try {
+    await social.completeOAuth('meta', `https://example.test/auth/meta/callback?code=c&state=${encodeURIComponent(stateText)}`);
+    const result = await social.testConnection('instagram', 'ig-page-1', { id: userId });
+    assert.equal(result.accountId, 'ig-page-1');
+    assert.equal(result.viaInstagramLogin, false, 'this one came through the Page');
+    assert.equal(asked.length, 1);
+    assert.match(asked[0], /^https:\/\/graph\.facebook\.com\//, 'the Page road answers on Facebook’s graph');
+    assert.ok(asked[0].includes('page-token'), 'and with the Page’s own token');
+    assert.ok(!asked[0].includes('graph.instagram.com'));
+  } finally {
+    global.fetch = realFetch;
+  }
+});
+
+test('a Page-derived failure is recorded on the Meta login, which is the thing to reconnect', async () => {
+  /*
+   * A Page-derived account has no `instagram` record to write to, so a failure
+   * written there would land on nothing and the row would go on saying the
+   * connection is fine. It belongs on the META login -- which is what
+   * connectionStatus reads for this row when there is no direct connection,
+   * and which is genuinely what somebody has to sign into again.
+   */
+  const userId = 'u_igfail';
+  state.authUsers = [{ id: userId, email: 'f@example.com', role: 'creator' }];
+  state.socialConnections = {};
+  const stateText = new URL(social.oauthStartUrl('meta', userId)).searchParams.get('state');
+
+  const realFetch = global.fetch;
+  global.fetch = async (input) => {
+    const url = String(input?.url || input);
+    if (url.includes('/oauth/access_token')) return respond({ access_token: 'user-token' });
+    if (url.includes('/me/accounts')) {
+      return respond({ data: [{ id: 'p1', name: 'Page', access_token: 'page-token', instagram_business_account: { id: 'ig-f', username: 'x' } }] });
+    }
+    return respond({ error: { message: 'Error validating access token', code: 190 } });
+  };
+  try {
+    await social.completeOAuth('meta', `https://example.test/auth/meta/callback?code=c&state=${encodeURIComponent(stateText)}`);
+    await assert.rejects(() => social.testConnection('instagram', 'ig-f', { id: userId }));
+  } finally {
+    global.fetch = realFetch;
+  }
+  const status = social.connectionStatus({ id: userId }).providers.instagram;
+  assert.match(String(status.lastTestError), /access token/i, 'the row reports it');
+  assert.equal(status.needsReconnect, true);
+});
+
+function respond(data) {
+  return new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } });
+}

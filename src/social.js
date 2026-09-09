@@ -1583,6 +1583,28 @@ async function tiktokToken(userId, accountId = '') {
   return token.access_token;
 }
 
+/**
+ * The stored credential a test's outcome belongs to.
+ *
+ * ONE answer, read by the success write and by the catch, because a test that
+ * records success on one record and failure on another marks a healthy
+ * connection dead -- and Instagram is where that could actually happen: it has
+ * two roads in, and only one of them owns a record of its own.
+ *
+ * A Page-derived Instagram account has no `instagram` connection at all; what
+ * failed is the META login, which is where `connectionStatus` reads that row's
+ * error from when there is no direct connection. Writing it there also makes
+ * the Facebook row say "needs reconnecting", and that is correct rather than
+ * collateral: it is the same login, and it is the thing to fix.
+ */
+function testedRecord(provider, userId, accountId) {
+  if (provider === 'meta') return connection(userId, 'meta');
+  if (provider === 'instagram') {
+    return connectionFo(userId, 'instagram', accountId) || connection(userId, 'meta');
+  }
+  return connectionFo(userId, provider, accountId);
+}
+
 export async function testConnection(provider, accountId = '', user) {
   const userId = user?.id || user || '';
   if (!userId) throw new SocialError('Sign in to test a connection.');
@@ -1618,13 +1640,32 @@ export async function testConnection(provider, accountId = '', user) {
       const tiktokConnection = connectionFo(userId, 'tiktok', accountId) || {};
       result = { provider, accountId: profile?.data?.user?.open_id || tiktokConnection?.accountId || '', name: profile?.data?.user?.display_name || tiktokConnection?.name || 'TikTok account', creatorInfo: creator };
       Object.assign(tiktokConnection, { lastTestAt: testedAt, lastTestError: null, creatorInfo: creator });
+    } else if (provider === 'instagram') {
+      /*
+       * TESTED THROUGH `instagramTarget`, the SAME function the publish path
+       * resolves with -- so the host, the id and the token this checks are the
+       * three the Reel would actually be posted with. Asking graph.facebook
+       * about a directly connected account, or graph.instagram about a
+       * Page-derived one, would report on a credential nobody publishes with.
+       *
+       * The account is asked for its own id and handle: that id is exactly
+       * what `/media` is posted to, so an answer here means the account this
+       * app would publish to accepted this app's token. There is no cheaper
+       * check that proves anything.
+       */
+      const { account, accessToken, base, version, id } = await instagramTarget(accountId, userId);
+      if (!id) throw new SocialError('Instagram is connected, but no account id is stored. Reconnect the account in Connections.', { provider: 'instagram' });
+      const profile = await jsonRequest(
+        `${base}/${version}/${encodeURIComponent(id)}?fields=id,username&access_token=${encodeURIComponent(accessToken)}`,
+        {}, 'Instagram');
+      const handle = profile?.username ? `@${profile.username}` : (account.name || account.instagramName || 'Instagram account');
+      result = { provider, accountId: String(profile?.id || id), name: handle, viaInstagramLogin: Boolean(account.viaInstagramLogin) };
+      Object.assign(testedRecord(provider, userId, accountId) || {}, { lastTestAt: testedAt, lastTestError: null });
     } else throw new SocialError('Unknown social provider.');
     save();
     return result;
   } catch (error) {
-    const failed = provider === 'meta'
-      ? connection(userId, 'meta')
-      : connectionFo(userId, provider, accountId);
+    const failed = testedRecord(provider, userId, accountId);
     if (failed) Object.assign(failed, { lastTestAt: testedAt, lastTestError: error.message });
     save();
     throw error;
