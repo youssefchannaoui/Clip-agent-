@@ -7,617 +7,286 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&family=Outfit:wght@400;500;600&display=swap">
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: Outfit, Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-    a { color: #D9B478; text-decoration: none; }
-    a:hover { color: #F0D6A6; }
-    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+    body { margin: 0; font-family: Outfit, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #D9B478; text-decoration: none; } a:hover { color: #F0D6A6; }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; text-align: left; }
 
-    /* One aurora behind the card. Atmosphere, not a gradient background. */
-    @keyframes dcBreathe { 0%,100% { opacity: .5; transform: scale(1); } 50% { opacity: .78; transform: scale(1.06); } }
-    /* Four names, alternating, so the animation RESTARTS on every step change.
-       Re-pointing a rule at the same animation-name does not restart it. */
-    @keyframes dcNextA { from { opacity: 0; transform: translateX(26px); } }
-    @keyframes dcNextB { from { opacity: 0; transform: translateX(26px); } }
-    @keyframes dcPrevA { from { opacity: 0; transform: translateX(-26px); } }
-    @keyframes dcPrevB { from { opacity: 0; transform: translateX(-26px); } }
-    @keyframes dcRise  { from { opacity: 0; transform: translateY(14px); } }
-    @keyframes dcPop   { from { transform: scale(.7); opacity: 0; } }
-    @keyframes dcRing  { 0% { box-shadow: 0 0 0 0 rgba(217,180,120,.45); } 70%,100% { box-shadow: 0 0 0 9px rgba(217,180,120,0); } }
-    @keyframes dcSheen { from { transform: translateX(-130%); } to { transform: translateX(230%); } }
-    @keyframes dcFill  { from { transform: scaleY(0); } }
-    @keyframes dcFade  { from { opacity: 0; } }
+    @keyframes eRise  { from { opacity: 0; transform: translateY(18px); } }
+    @keyframes eInA   { from { opacity: 0; transform: translateY(16px); } }
+    @keyframes eInB   { from { opacity: 0; transform: translateY(16px); } }
+    @keyframes eBackA { from { opacity: 0; transform: translateY(-16px); } }
+    @keyframes eBackB { from { opacity: 0; transform: translateY(-16px); } }
+    @keyframes eGlow  { 0%,100% { opacity: .4; } 50% { opacity: .66; } }
+    @keyframes eRule  { from { transform: scaleX(0); } }
 
-    .stage { width: 1240px; height: 880px; background: #09090A; position: relative;
-             display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    .aurora { position: absolute; width: 900px; height: 900px; left: 50%; top: -280px; margin-left: -450px;
-              background: radial-gradient(closest-side, rgba(217,180,120,.13), rgba(217,180,120,0) 72%);
-              animation: dcBreathe 9s ease-in-out infinite; pointer-events: none; }
-    .grain { position: absolute; inset: 0; opacity: .5; pointer-events: none;
-             background-image: radial-gradient(rgba(255,255,255,.028) 1px, transparent 1px);
-             background-size: 3px 3px; }
+    .stage { width: 1240px; height: 880px; background: #09090A; position: relative; overflow: hidden;
+             display: flex; align-items: center; justify-content: center; }
+    .halo { position: absolute; left: 50%; top: -320px; width: 1000px; height: 760px; margin-left: -500px;
+            background: radial-gradient(closest-side, rgba(217,180,120,.10), rgba(217,180,120,0) 70%);
+            animation: eGlow 11s ease-in-out infinite; pointer-events: none; }
 
-    .panel { position: relative; width: 1128px; height: 764px; display: flex;
-             background: #121214; border: 1px solid #26262A; border-radius: 20px; overflow: hidden;
-             box-shadow: 0 40px 120px rgba(0,0,0,.66), 0 0 0 1px rgba(217,180,120,.05);
-             animation: dcRise .5s cubic-bezier(.2,.8,.2,1) backwards; }
-    .panel::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px;
-             background: linear-gradient(90deg, transparent, rgba(217,180,120,.5), transparent); }
+    .card { position: relative; width: 968px; min-height: 636px; background: #0E0E11;
+            border: 1px solid #1E1E22; border-radius: 18px; padding: 40px 56px 34px;
+            display: flex; flex-direction: column;
+            box-shadow: 0 44px 120px rgba(0,0,0,.7);
+            animation: eRise .58s cubic-bezier(.2,.8,.2,1) backwards; }
+    .card::before { content: ""; position: absolute; left: 56px; right: 56px; top: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(217,180,120,.42), transparent); }
 
-    /* ── the rail: a path, not a counter ─────────────────────────────── */
-    .rail { width: 246px; flex: none; background: #0E0E11; border-right: 1px solid #1E1E22;
-            padding: 26px 22px; display: flex; flex-direction: column; gap: 18px; }
-    .src { display: flex; gap: 11px; align-items: center; }
-    .thumb { width: 60px; height: 34px; flex: none; border-radius: 6px; object-fit: cover;
-             background: linear-gradient(135deg, #1E1E22, #17171A); border: 1px solid #26262A; }
-    .srcTitle { font-size: 11.5px; line-height: 15px; color: #BCBCC3; font-weight: 500;
-                display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .srcMeta { font-size: 10px; color: #85858E; letter-spacing: .1em; text-transform: uppercase; margin-top: 3px; }
+    .top { display: flex; align-items: center; gap: 11px; }
+    .arch { flex: none; opacity: .82; }
+    .src { font-size: 10.5px; letter-spacing: .17em; text-transform: uppercase; color: #62626B;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dur { margin-left: auto; font-size: 10.5px; letter-spacing: .17em; color: #62626B;
+           font-variant-numeric: tabular-nums; }
 
-    .nodes { display: flex; flex-direction: column; gap: 0; margin-top: 4px; }
-    .node { display: flex; gap: 13px; align-items: flex-start; padding: 0; position: relative; text-align: left; width: 100%; }
-    .gutter { width: 22px; flex: none; display: flex; flex-direction: column; align-items: center; }
-    .dot { width: 22px; height: 22px; flex: none; border-radius: 50%; display: flex; align-items: center;
-           justify-content: center; border: 1.5px solid #26262A; background: #121214;
-           font-size: 10.5px; font-weight: 600; color: #62626B; transition: all .32s cubic-bezier(.2,.8,.2,1); }
-    .track { width: 2px; flex: 1; min-height: 24px; background: #1E1E22; position: relative; margin: 4px 0; border-radius: 2px; }
-    .track > i { position: absolute; inset: 0; background: linear-gradient(#D9B478, rgba(217,180,120,.35));
-                 transform-origin: top; border-radius: 2px; }
-    .lbl { padding-bottom: 22px; }
-    .lblT { font-size: 12.5px; font-weight: 500; color: #62626B; transition: color .3s ease; line-height: 22px; }
-    .lblV { font-size: 10.5px; color: #8B8B93; margin-top: -1px; }
+    .rule { height: 1px; background: #1A1A1E; margin: 20px 0 0; position: relative; }
+    .rule > i { position: absolute; left: 0; top: 0; height: 1px; background: #D9B478; transform-origin: left;
+                transition: width .62s cubic-bezier(.2,.8,.2,1); }
 
-    .node.done .dot { border-color: #D9B478; background: #D9B478; color: #0E0E11; }
-    .node.done .lblT { color: #8B8B93; }
-    .node.now .dot { border-color: #D9B478; color: #F0D6A6; background: rgba(217,180,120,.1);
-                     animation: dcRing 2.4s ease-out infinite; }
-    .node.now .lblT { color: #F2F2F4; font-weight: 600; }
-    .node:hover .lblT { color: #E9E9ED; }
-    .node.done .tick { animation: dcPop .3s cubic-bezier(.2,1.6,.4,1) backwards; }
+    .stepName { margin-top: 26px; font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase;
+                color: #D9B478; font-weight: 500; }
 
-    .railFoot { margin-top: auto; border-top: 1px solid #1E1E22; padding-top: 14px; }
-    .preset { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px 10px; border-radius: 9px;
-              border: 1px solid #26262A; background: #17171A; transition: all .2s ease; }
-    .preset:hover { border-color: #34343A; background: #1A1A1E; transform: translateY(-1px); }
-    .presetT { font-size: 11.5px; font-weight: 500; color: #BCBCC3; }
-    .presetS { font-size: 10px; color: #85858E; }
+    .q { font-family: Newsreader, Georgia, serif; font-weight: 300; font-size: 47px; line-height: 1.1;
+         color: #F2F2F4; letter-spacing: -.012em; margin: 13px 0 0; max-width: 20ch; text-wrap: balance; }
+    .sub { margin-top: 13px; font-size: 13.5px; line-height: 1.6; color: #8B8B93; max-width: 54ch; text-wrap: pretty; }
 
-    /* ── the body ────────────────────────────────────────────────────── */
-    .body { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 30px 34px 0; }
-    .eyebrow { font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: #85858E; font-weight: 500; }
-    h1 { font-size: 27px; line-height: 1.15; font-weight: 600; color: #F2F2F4; margin: 9px 0 7px; letter-spacing: -.01em; }
-    .hint { font-size: 13px; line-height: 1.5; color: #8B8B93; max-width: 52ch; text-wrap: pretty; }
+    .work { flex: 1; min-height: 0; padding-top: 30px; }
+    .anim { animation-duration: .5s; animation-timing-function: cubic-bezier(.2,.8,.2,1); animation-fill-mode: backwards; }
+    .nextA .anim { animation-name: eInA; }
+    .nextB .anim { animation-name: eInB; }
+    .prevA .anim { animation-name: eBackA; }
+    .prevB .anim { animation-name: eBackB; }
+    .anim:nth-child(2) { animation-delay: .07s; }
+    .anim:nth-child(3) { animation-delay: .13s; }
 
-    .steps { flex: 1; min-height: 0; padding: 22px 0 0; overflow: hidden; }
-    .stepIn { animation-duration: .42s; animation-timing-function: cubic-bezier(.2,.8,.2,1); animation-fill-mode: backwards; }
-    .nextA .stepIn { animation-name: dcNextA; }
-    .nextB .stepIn { animation-name: dcNextB; }
-    .prevA .stepIn { animation-name: dcPrevA; }
-    .prevB .stepIn { animation-name: dcPrevB; }
-    .stepIn:nth-child(2) { animation-delay: .05s; }
-    .stepIn:nth-child(3) { animation-delay: .1s; }
+    /* An underline, not a box. */
+    .write { width: 100%; background: none; border: 0; border-bottom: 1px solid #26262A; padding: 0 0 13px;
+             font-family: Newsreader, Georgia, serif; font-size: 21px; font-weight: 300; color: #E9E9ED;
+             transition: border-color .3s ease; resize: none; min-height: 34px; line-height: 1.5; }
+    .write::placeholder { color: #4A4A52; }
+    .write:focus { outline: none; border-bottom-color: rgba(217,180,120,.62); }
 
-    .row { display: flex; gap: 10px; flex-wrap: wrap; }
-    .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-    .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    /* Suggestions as lines, not chips. */
+    .lines { margin-top: 24px; display: flex; flex-direction: column; }
+    .line { display: flex; align-items: baseline; gap: 14px; padding: 11px 0; width: 100%;
+            border-bottom: 1px solid #17171A; transition: all .26s cubic-bezier(.2,.8,.2,1); }
+    .line:hover { border-bottom-color: #26262A; padding-left: 7px; }
+    .dash { width: 15px; height: 1px; background: #34343A; flex: none; position: relative; top: -4px;
+            transition: background .26s ease, width .26s cubic-bezier(.2,.8,.2,1); }
+    .line:hover .dash { background: #D9B478; width: 22px; }
+    .lineT { font-size: 14.5px; color: #8B8B93; transition: color .26s ease; }
+    .line:hover .lineT { color: #E9E9ED; }
 
-    .field { width: 100%; min-height: 104px; padding: 14px 15px; border-radius: 12px; resize: none;
-             background: #0E0E11; border: 1px solid #26262A; color: #E9E9ED; font-size: 14px; line-height: 1.55;
-             transition: border-color .2s ease, box-shadow .2s ease; }
-    .field::placeholder { color: #62626B; }
-    .field:focus { outline: none; border-color: rgba(217,180,120,.55); box-shadow: 0 0 0 3px rgba(217,180,120,.09); }
+    /* Choices as lines with a gold marker, not cards. */
+    .pick { display: flex; gap: 20px; align-items: flex-start; width: 100%; padding: 20px 0 20px 20px;
+            border-bottom: 1px solid #17171A; position: relative; transition: all .28s cubic-bezier(.2,.8,.2,1); }
+    .pick::before { content: ""; position: absolute; left: 0; top: 20px; bottom: 20px; width: 2px;
+                    background: #26262A; transition: background .28s ease, transform .28s ease; transform: scaleY(.5); }
+    .pick:hover { padding-left: 26px; }
+    .pick:hover::before { background: #34343A; transform: scaleY(1); }
+    .pick.on::before { background: #D9B478; transform: scaleY(1); }
+    .pickT { font-family: Newsreader, Georgia, serif; font-weight: 400; font-size: 25px; color: #BCBCC3;
+             line-height: 1.2; transition: color .28s ease; min-width: 250px; }
+    .pick.on .pickT { color: #F2F2F4; }
+    .pickS { font-size: 13px; line-height: 1.6; color: #62626B; flex: 1; transition: color .28s ease; }
+    .pick:hover .pickS, .pick.on .pickS { color: #8B8B93; }
 
-    .chip { padding: 8px 13px; border-radius: 999px; border: 1px solid #26262A; background: #17171A;
-            font-size: 12px; color: #BCBCC3; transition: all .2s cubic-bezier(.2,.8,.2,1); }
-    .chip:hover { border-color: #34343A; color: #E9E9ED; transform: translateY(-1px); }
-    .chip.on { border-color: rgba(217,180,120,.6); background: rgba(217,180,120,.11); color: #F0D6A6; font-weight: 500; }
+    /* The range, as a hairline the gold sits on. */
+    .time { position: relative; height: 3px; background: #1A1A1E; border-radius: 2px; margin-top: 8px; }
+    .band { position: absolute; top: -1px; height: 5px; background: #D9B478; border-radius: 3px;
+            transition: left .55s cubic-bezier(.2,.8,.2,1), width .55s cubic-bezier(.2,.8,.2,1);
+            box-shadow: 0 0 18px rgba(217,180,120,.45); }
+    .grip { position: absolute; top: -6px; width: 3px; height: 15px; background: #F0D6A6; border-radius: 2px; }
+    .clock { display: flex; justify-content: space-between; margin-top: 15px; font-size: 11.5px;
+             color: #4A4A52; font-variant-numeric: tabular-nums; }
+    .clockNow { font-family: Newsreader, Georgia, serif; font-size: 26px; color: #F0D6A6; font-weight: 400;
+                margin-top: 26px; letter-spacing: -.01em; }
 
-    .card { padding: 15px; border-radius: 13px; border: 1px solid #26262A; background: #17171A;
-            text-align: left; transition: all .24s cubic-bezier(.2,.8,.2,1); position: relative; overflow: hidden; }
-    .card:hover { border-color: #34343A; transform: translateY(-2px); box-shadow: 0 10px 26px rgba(0,0,0,.34); }
-    .card.on { border-color: rgba(217,180,120,.6); background: rgba(217,180,120,.07); }
-    .card.on::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: #D9B478; }
-    .cardT { font-size: 13.5px; font-weight: 600; color: #F2F2F4; }
-    .cardS { font-size: 11.5px; color: #8B8B93; margin-top: 4px; line-height: 1.45; }
-
-    .scopeBar { display: flex; align-items: center; gap: 10px; padding: 11px 13px; border-radius: 11px;
-                background: rgba(217,180,120,.055); border: 1px solid rgba(217,180,120,.2); }
-    .scopeT { font-size: 11.5px; color: #BCBCC3; flex: 1; }
-    .seg { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: #0E0E11; border: 1px solid #26262A; }
-    .segB { padding: 5px 11px; border-radius: 7px; font-size: 11px; color: #8B8B93; transition: all .22s ease; }
-    .segB.on { background: #26262A; color: #F0D6A6; font-weight: 500; }
-
-    .stepper { display: flex; align-items: center; gap: 0; border: 1px solid #26262A; border-radius: 10px;
-               background: #17171A; overflow: hidden; }
-    .stepper button { width: 34px; height: 38px; color: #BCBCC3; transition: background .18s ease; }
-    .stepper button:hover { background: #1E1E22; color: #F0D6A6; }
-    .stepperV { min-width: 46px; text-align: center; font-size: 16px; font-weight: 600; color: #F2F2F4;
-                font-variant-numeric: tabular-nums; }
-
-    .bar { height: 44px; border-radius: 10px; background: #0E0E11; border: 1px solid #26262A;
-           position: relative; overflow: hidden; }
-    .barBand { position: absolute; top: 0; bottom: 0; background: rgba(217,180,120,.2);
-               border-left: 2px solid #D9B478; border-right: 2px solid #D9B478;
-               transition: left .42s cubic-bezier(.2,.8,.2,1), width .42s cubic-bezier(.2,.8,.2,1); }
-    .barTicks { position: absolute; inset: 0; display: flex; }
-    .barTicks > i { flex: 1; border-right: 1px solid #17171A; }
-
-    /* ── the footer: cost is next to the handles, not hidden at the end ─ */
-    .foot { border-top: 1px solid #1E1E22; margin: 0 -34px; padding: 15px 34px 18px;
-            display: flex; align-items: center; gap: 14px; }
-    .btn { padding: 11px 18px; border-radius: 10px; font-size: 13px; font-weight: 500;
-           border: 1px solid #26262A; background: #17171A; color: #BCBCC3; transition: all .2s ease; }
-    .btn:hover { border-color: #34343A; color: #F2F2F4; }
-    .btnGo { position: relative; overflow: hidden; border-color: #D9B478; background: #D9B478; color: #0E0E11;
-             font-weight: 600; padding: 11px 22px; }
-    .btnGo:hover { background: #E4C48F; border-color: #E4C48F; transform: translateY(-1px);
-                   box-shadow: 0 8px 22px rgba(217,180,120,.22); }
-    .btnGo > span { position: relative; }
-    .btnGo::after { content: ""; position: absolute; top: 0; bottom: 0; width: 34%;
-                    background: linear-gradient(90deg, transparent, rgba(255,255,255,.34), transparent);
-                    animation: dcSheen 3.6s ease-in-out infinite; }
-
-    /* ── the side: a preview that is always there ────────────────────── */
-    .side { width: 296px; flex: none; background: #0E0E11; border-left: 1px solid #1E1E22;
-            padding: 24px 22px; display: flex; flex-direction: column; gap: 16px; }
-    .frame { width: 148px; aspect-ratio: 9 / 16; margin: 0 auto; border-radius: 12px; position: relative;
-             overflow: hidden; border: 1px solid #26262A; background: #17171A;
-             box-shadow: 0 14px 40px rgba(0,0,0,.5); }
-    .frameArt { position: absolute; inset: 0; transition: filter .5s ease, opacity .4s ease; }
-    .cap { position: absolute; left: 9px; right: 9px; bottom: 26%; text-align: center; color: #FFFFFF;
-           font-weight: 700; line-height: 1.16; text-shadow: 0 2px 7px rgba(0,0,0,.85);
-           transition: font-size .34s cubic-bezier(.2,.8,.2,1); }
-    .mark { position: absolute; left: 0; right: 0; top: 9px; text-align: center; font-size: 6px;
-            letter-spacing: .18em; color: rgba(255,255,255,.62); font-weight: 600; }
-    .safe { position: absolute; inset: 8% 12% 22% 6%; border: 1px dashed rgba(217,180,120,.28); border-radius: 4px; }
-
-    .money { border: 1px solid #26262A; border-radius: 12px; background: #121214; padding: 14px; }
-    .moneyTop { display: flex; align-items: baseline; gap: 7px; }
-    .big { font-size: 30px; font-weight: 700; color: #F0D6A6; font-variant-numeric: tabular-nums; line-height: 1; }
-    .unit { font-size: 11.5px; color: #8B8B93; }
-    .moneyRow { display: flex; justify-content: space-between; font-size: 11.5px; margin-top: 11px;
-                padding-top: 11px; border-top: 1px solid #1E1E22; }
-    .k { color: #85858E; } .v { color: #BCBCC3; font-variant-numeric: tabular-nums; }
-    .note { font-size: 10.5px; line-height: 1.5; color: #85858E; }
-
-    .dests { display: flex; gap: 6px; }
-    .dest { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #26262A; background: #17171A;
-            display: flex; align-items: center; justify-content: center; transition: all .2s ease; }
-    .dest.on { border-color: rgba(217,180,120,.5); background: rgba(217,180,120,.1); }
+    .foot { display: flex; align-items: flex-end; gap: 20px; border-top: 1px solid #1A1A1E;
+            margin: 0 -56px; padding: 22px 56px 0; }
+    .cost { font-size: 12px; color: #62626B; line-height: 1.6; }
+    .costV { color: #BCBCC3; font-variant-numeric: tabular-nums; }
+    .go { margin-left: auto; display: flex; align-items: center; gap: 10px; padding: 12px 22px;
+          border-radius: 10px; background: #D9B478; color: #0E0E11; font-size: 13.5px; font-weight: 600;
+          transition: all .26s cubic-bezier(.2,.8,.2,1); }
+    .go:hover { background: #E4C48F; transform: translateY(-1px); box-shadow: 0 10px 26px rgba(217,180,120,.2); }
+    .go svg { transition: transform .26s cubic-bezier(.2,.8,.2,1); }
+    .go:hover svg { transform: translateX(4px); }
+    .back { font-size: 13px; color: #62626B; transition: color .2s ease; padding: 12px 0; }
+    .back:hover { color: #BCBCC3; }
 
     @media (prefers-reduced-motion: reduce) {
-      .panel, .stepIn, .node.done .tick { animation: none; }
-      .aurora, .btnGo::after, .node.now .dot { animation: none; }
-      .card, .chip, .btn, .btnGo, .preset { transition: none; }
+      .card, .anim, .halo { animation: none; }
+      .go, .pick, .line, .band, .rule > i { transition: none; }
     }
   </style>
 </helmet>
 
 <div class="stage">
-  <div class="aurora"></div>
-  <div class="grain"></div>
+  <div class="halo"></div>
 
-  <div class="panel">
-
-    <!-- ── rail ─────────────────────────────────────────────────────── -->
-    <div class="rail">
-      <div class="src">
-        <div class="thumb"></div>
-        <div style="min-width: 0">
-          <div class="srcTitle">MOST Muslims Don&#39;t Realize This About Allah</div>
-          <div class="srcMeta">32:16 · Sheikh Abu Bakr Zoud</div>
-        </div>
-      </div>
-
-      <div class="nodes">
-        <sc-for list="{{ rail }}" as="n" hint-placeholder-count="8">
-          <button class="{{ n.cls }}" onClick="{{ n.go }}">
-            <div class="gutter">
-              <div class="dot">
-                <sc-if value="{{ n.tick }}" hint-placeholder-val="{{ false }}">
-                  <svg class="tick" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"></path></svg>
-                </sc-if>
-                <sc-if value="{{ n.num }}" hint-placeholder-val="{{ true }}">{{ n.n }}</sc-if>
-              </div>
-              <sc-if value="{{ n.line }}" hint-placeholder-val="{{ true }}">
-                <div class="track"><i style="{{ n.fill }}"></i></div>
-              </sc-if>
-            </div>
-            <div class="lbl">
-              <div class="lblT">{{ n.label }}</div>
-              <sc-if value="{{ n.value }}" hint-placeholder-val="{{ true }}"><div class="lblV">{{ n.value }}</div></sc-if>
-            </div>
-          </button>
-        </sc-for>
-      </div>
-
-      <div class="railFoot">
-        <button class="preset" onClick="{{ noop }}">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D9B478" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16l-7-4-7 4z"></path></svg>
-          <div style="text-align: left">
-            <div class="presetT">Friday khutbah</div>
-            <div class="presetS">Use my saved setup</div>
-          </div>
-        </button>
-      </div>
+  <div class="card">
+    <div class="top">
+      <svg class="arch" width="15" height="19" viewBox="0 0 26 34" fill="none" stroke="#D9B478" stroke-width="1.9">
+        <path d="M1.6 33V13.4a11.4 11.4 0 0 1 22.8 0V33"></path>
+      </svg>
+      <div class="src">MOST Muslims Don&#39;t Realize This About Allah</div>
+      <div class="dur">32:16</div>
     </div>
 
-    <!-- ── body ─────────────────────────────────────────────────────── -->
-    <div class="body">
-      <div>
-        <div class="eyebrow">{{ eyebrow }}</div>
-        <h1>{{ title }}</h1>
-        <div class="hint">{{ hint }}</div>
-      </div>
+    <div class="rule"><i style="{{ ruleStyle }}"></i></div>
 
-      <div class="steps {{ anim }}">
+    <div class="stepName">{{ stepName }}</div>
+    <h1 class="q">{{ question }}</h1>
+    <div class="sub">{{ sub }}</div>
 
-        <sc-if value="{{ isBrief }}" hint-placeholder-val="{{ true }}">
-          <div>
-            <div class="stepIn">
-              <textarea class="field" placeholder="e.g. the parts about repentance, or the story he tells about his mother"></textarea>
-            </div>
-            <div class="row stepIn" style="margin-top: 13px">
-              <sc-for list="{{ examples }}" as="e" hint-placeholder-count="4">
-                <button class="chip" onClick="{{ noop }}">{{ e.text }}</button>
-              </sc-for>
-            </div>
-            <div class="note stepIn" style="margin-top: 13px">Skip this and the clipper picks the strongest moments on its own.</div>
+    <div class="work {{ dirCls }}">
+
+      <sc-if value="{{ isBrief }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div class="anim">
+            <textarea class="write" placeholder="the parts about repentance, or the story he tells about his mother"></textarea>
           </div>
-        </sc-if>
-
-        <sc-if value="{{ isKind }}" hint-placeholder-val="{{ false }}">
-          <div class="grid2 stepIn">
-            <sc-for list="{{ kinds }}" as="k" hint-placeholder-count="2">
-              <button class="{{ k.cls }}" onClick="{{ k.pick }}">
-                <div class="cardT">{{ k.title }}</div>
-                <div class="cardS">{{ k.sub }}</div>
+          <div class="lines anim">
+            <sc-for list="{{ examples }}" as="e" hint-placeholder-count="4">
+              <button class="line" onClick="{{ noop }}">
+                <span class="dash"></span>
+                <span class="lineT">{{ e.text }}</span>
               </button>
             </sc-for>
           </div>
-        </sc-if>
+        </div>
+      </sc-if>
 
-        <sc-if value="{{ isTrim }}" hint-placeholder-val="{{ false }}">
-          <div>
-            <div class="stepIn">
-              <div class="bar">
-                <div class="barTicks"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-                <div class="barBand" style="{{ bandStyle }}"></div>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11.5px; color: #85858E">
-                <span>0:00</span><span style="color: #F0D6A6; font-weight: 600">{{ rangeLabel }}</span><span>32:16</span>
+      <sc-if value="{{ isKind }}" hint-placeholder-val="{{ false }}">
+        <div class="anim">
+          <sc-for list="{{ kinds }}" as="k" hint-placeholder-count="2">
+            <button class="{{ k.cls }}" onClick="{{ k.pick }}">
+              <div class="pickT">{{ k.title }}</div>
+              <div class="pickS">{{ k.sub }}</div>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isTrim }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div class="anim">
+            <div class="time">
+              <div class="band" style="{{ bandStyle }}">
+                <span class="grip" style="left: -2px"></span>
+                <span class="grip" style="right: -2px"></span>
               </div>
             </div>
-            <div class="row stepIn" style="margin-top: 18px">
-              <sc-for list="{{ ranges }}" as="r" hint-placeholder-count="4">
-                <button class="{{ r.cls }}" onClick="{{ r.pick }}">{{ r.label }}</button>
-              </sc-for>
-            </div>
-            <div class="note stepIn" style="margin-top: 14px">This is the part you pay for. The cost on the right moves with it.</div>
+            <div class="clock"><span>0:00</span><span>32:16</span></div>
+            <div class="clockNow">{{ rangeText }}</div>
           </div>
-        </sc-if>
-
-        <sc-if value="{{ isClips }}" hint-placeholder-val="{{ false }}">
-          <div>
-            <div class="stepIn" style="display: flex; align-items: center; gap: 16px">
-              <div class="stepper">
-                <button onClick="{{ less }}">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"></path></svg>
-                </button>
-                <div class="stepperV">{{ count }}</div>
-                <button onClick="{{ more }}">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
-                </button>
-              </div>
-              <div style="font-size: 12.5px; color: #8B8B93">clips from this lecture</div>
-            </div>
-            <div class="row stepIn" style="margin-top: 18px">
-              <sc-for list="{{ bands }}" as="b" hint-placeholder-count="4">
-                <button class="{{ b.cls }}" onClick="{{ b.pick }}">{{ b.label }}</button>
-              </sc-for>
-            </div>
-            <div class="scopeBar stepIn" style="margin-top: 20px">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D9B478" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5l3 2"></path><circle cx="12" cy="12" r="9"></circle></svg>
-              <div class="scopeT">These used to change your account default. Now they don&#39;t, unless you say so.</div>
-              <div class="seg">
-                <button class="{{ scopeOnceCls }}" onClick="{{ scopeOnce }}">This lecture</button>
-                <button class="{{ scopeAllCls }}" onClick="{{ scopeAll }}">Save as default</button>
-              </div>
-            </div>
-          </div>
-        </sc-if>
-
-        <sc-if value="{{ isStyle }}" hint-placeholder-val="{{ false }}">
-          <div>
-            <div class="grid3 stepIn">
-              <sc-for list="{{ styles }}" as="s" hint-placeholder-count="3">
-                <button class="{{ s.cls }}" onClick="{{ s.pick }}">
-                  <div class="cardT">{{ s.title }}</div>
-                  <div class="cardS">{{ s.sub }}</div>
-                </button>
-              </sc-for>
-            </div>
-            <div class="stepIn" style="margin-top: 20px">
-              <div class="eyebrow" style="margin-bottom: 11px">Just this lecture</div>
-              <div class="row">
-                <sc-for list="{{ tweaks }}" as="t" hint-placeholder-count="5">
-                  <button class="{{ t.cls }}" onClick="{{ t.pick }}">{{ t.label }}</button>
-                </sc-for>
-              </div>
-              <div class="note" style="margin-top: 12px">Nothing here is written back to the style, so every other lecture keeps it as it was.</div>
-            </div>
-          </div>
-        </sc-if>
-
-        <sc-if value="{{ isPicture }}" hint-placeholder-val="{{ false }}">
-          <div class="grid2 stepIn">
-            <sc-for list="{{ pictures }}" as="p" hint-placeholder-count="2">
-              <button class="{{ p.cls }}" onClick="{{ p.pick }}">
-                <div class="cardT">{{ p.title }}</div>
-                <div class="cardS">{{ p.sub }}</div>
+          <div class="lines anim" style="margin-top: 22px">
+            <sc-for list="{{ ranges }}" as="r" hint-placeholder-count="4">
+              <button class="line" onClick="{{ r.pick }}">
+                <span class="dash" style="{{ r.dash }}"></span>
+                <span class="lineT" style="{{ r.ink }}">{{ r.label }}</span>
               </button>
             </sc-for>
           </div>
-        </sc-if>
-
-        <sc-if value="{{ isSound }}" hint-placeholder-val="{{ false }}">
-          <div class="grid2 stepIn">
-            <sc-for list="{{ sounds }}" as="s" hint-placeholder-count="2">
-              <button class="{{ s.cls }}" onClick="{{ s.pick }}">
-                <div class="cardT">{{ s.title }}</div>
-                <div class="cardS">{{ s.sub }}</div>
-              </button>
-            </sc-for>
-          </div>
-        </sc-if>
-
-        <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
-          <div>
-            <div class="stepIn" style="font-size: 18px; line-height: 1.62; color: #BCBCC3; max-width: 56ch">
-              Look for <b style="color: #F0D6A6; font-weight: 600">{{ sBrief }}</b>, cut
-              <b style="color: #F0D6A6; font-weight: 600">{{ sClips }}</b> in
-              <b style="color: #F0D6A6; font-weight: 600">{{ sStyle }}</b>, with
-              <b style="color: #F0D6A6; font-weight: 600">{{ sSound }}</b> underneath — then post to
-              <b style="color: #F0D6A6; font-weight: 600">YouTube and Instagram</b> at your next two windows.
-            </div>
-            <div class="stepIn" style="margin-top: 22px; display: flex; align-items: center; gap: 12px">
-              <div class="dests">
-                <div class="dest on"><svg width="15" height="15" viewBox="0 0 24 24" fill="#D9B478"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.8 1.8C5.8 19 12 19 12 19s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8zM10 15V9l5 3z"></path></svg></div>
-                <div class="dest on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D9B478" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.2" cy="6.8" r="1.1" fill="#D9B478" stroke="none"></circle></svg></div>
-                <div class="dest"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#62626B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3v10.5a4 4 0 1 1-3.2-3.9"></path><path d="M16 3c.6 2.4 2.3 3.8 4.6 4"></path></svg></div>
-              </div>
-              <div class="note" style="flex: 1">TikTok is switched off for this one — it needs reconnecting.</div>
-            </div>
-          </div>
-        </sc-if>
-
-      </div>
-
-      <div class="foot">
-        <button class="btn" onClick="{{ back }}">Back</button>
-        <div style="flex: 1"></div>
-        <div style="text-align: right; margin-right: 4px">
-          <div style="font-size: 11.5px; color: #8B8B93">{{ footK }}</div>
-          <div style="font-size: 11.5px; color: #F0D6A6; font-weight: 500">{{ footV }}</div>
         </div>
-        <button class="btnGo" onClick="{{ next }}"><span>{{ cta }}</span></button>
-      </div>
+      </sc-if>
+
     </div>
 
-    <!-- ── side ─────────────────────────────────────────────────────── -->
-    <div class="side">
-      <div class="eyebrow">Live preview</div>
-      <div class="frame">
-        <div class="frameArt" style="{{ artStyle }}"></div>
-        <div class="safe"></div>
-        <div class="mark">DEENCLIPPED</div>
-        <div class="cap" style="{{ capStyle }}">{{ capText }}</div>
+    <div class="foot">
+      <button class="back" onClick="{{ back }}">Back</button>
+      <div class="cost">
+        <span class="costV">{{ tokens }} tokens</span> · ready in <span class="costV">{{ eta }}</span><br>
+        {{ basis }}
       </div>
-
-      <div class="money">
-        <div class="moneyTop">
-          <div class="big">{{ tokens }}</div>
-          <div class="unit">tokens</div>
-        </div>
-        <div class="note" style="margin-top: 5px">{{ costBasis }}</div>
-        <div class="moneyRow"><span class="k">Ready in</span><span class="v">{{ eta }}</span></div>
-        <div class="moneyRow" style="margin-top: 0"><span class="k">Balance after</span><span class="v">{{ after }}</span></div>
-      </div>
-
-      <div class="note" style="margin-top: auto">Every preview is the style the renderer actually produces. Nothing posts until you approve it.</div>
+      <button class="go" onClick="{{ next }}">
+        {{ cta }}
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"></path></svg>
+      </button>
     </div>
-
   </div>
 </div>
 </x-dc>
 
-<script data-dc-script data-props='{"$preview":{"width":1240,"height":880},"accent":{"editor":"color","default":"#D9B478","options":["#D9B478","#7CC2A6","#C08B7A","#8FA3C8"],"section":"Theme"},"showSafeZone":{"editor":"boolean","default":true,"section":"Theme"}}'>
+<script data-dc-script data-props='{"$preview":{"width":1240,"height":880}}'>
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = {
-      step: 1, dir: 'next', flip: false,
-      kind: 'lecture', range: 'whole', count: 6, band: '30-60',
-      scope: 'once', style: 'clean', tweak: 'default',
-      picture: 'own', sound: 'rotate',
-    };
+    this.state = { step: 1, dir: 'next', flip: false, kind: 'lecture', range: 'whole' };
   }
-
   go(n) {
-    var s = this.state;
-    if (n < 1 || n > 8) return;
-    this.setState({ step: n, dir: n > s.step ? 'next' : 'prev', flip: !s.flip });
+    if (n < 1 || n > 3) return;
+    this.setState({ step: n, dir: n > this.state.step ? 'next' : 'prev', flip: !this.state.flip });
   }
-
-  set(patch) { this.setState(patch); }
-
   renderVals() {
-    var self = this;
-    var s = this.state;
-    var accent = this.props.accent ?? '#D9B478';
-
-    var STEPS = [
-      { label: 'Brief',    value: 'Repentance' },
-      { label: 'Kind',     value: s.kind === 'quran' ? 'Recitation' : 'Lecture' },
-      { label: 'Range',    value: '' },
-      { label: 'Clips',    value: '' },
-      { label: 'Style',    value: '' },
-      { label: 'Picture',  value: s.picture === 'own' ? 'Own footage' : 'Scenery' },
-      { label: 'Sound',    value: s.sound === 'rotate' ? 'Rotate' : 'One nasheed' },
-      { label: 'Review',   value: '' },
-    ];
+    var self = this, s = this.state;
 
     var RANGES = {
-      whole:  { label: 'Whole lecture', mins: 32, left: 0,  width: 100, text: '0:00 – 32:16' },
-      first:  { label: 'First 20 min',  mins: 20, left: 0,  width: 62,  text: '0:00 – 20:00' },
-      middle: { label: 'The middle',    mins: 16, left: 25, width: 50,  text: '8:04 – 24:12' },
-      last:   { label: 'Last 15 min',   mins: 15, left: 53, width: 47,  text: '17:16 – 32:16' },
+      whole:  { label: 'The whole lecture', mins: 32, left: 0,  width: 100, text: '0:00 – 32:16' },
+      first:  { label: 'The first twenty minutes', mins: 20, left: 0, width: 62, text: '0:00 – 20:00' },
+      middle: { label: 'The middle of it', mins: 16, left: 25, width: 50, text: '8:04 – 24:12' },
+      last:   { label: 'The last fifteen minutes', mins: 15, left: 53, width: 47, text: '17:16 – 32:16' },
     };
-    var range = RANGES[s.range] || RANGES.whole;
+    var r = RANGES[s.range] || RANGES.whole;
+    var tokens = Math.max(1, Math.ceil(r.mins));
+    var lo = Math.max(4, Math.round(r.mins * 0.6)), hi = Math.max(8, Math.round(r.mins * 1.0));
 
-    var STYLES = {
-      clean:   { title: 'Clean Line',   sub: 'One line, centred low',  cap: 'He never stops<br>answering you', size: 12 },
-      bold:    { title: 'Bold Stack',   sub: 'Stacked, top-weighted',  cap: 'HE NEVER<br>STOPS', size: 15 },
-      mono:    { title: 'Mono Minimal', sub: 'Small, quiet, precise',  cap: 'he never stops answering you', size: 8 },
-    };
-    var style = STYLES[s.style] || STYLES.clean;
-
-    var TWEAKS = {
-      default: { label: 'As the style is', filter: 'none', bump: 0 },
-      bigger:  { label: 'Bigger captions', filter: 'none', bump: 4 },
-      warm:    { label: 'Warm look',       filter: 'sepia(.3) saturate(1.25) contrast(1.05)', bump: 0 },
-      mono2:   { label: 'Black & white',   filter: 'grayscale(1) contrast(1.12)', bump: 0 },
-      rain:    { label: 'Rain over it',    filter: 'brightness(.82) contrast(1.06)', bump: 0 },
-    };
-    var tweak = TWEAKS[s.tweak] || TWEAKS.default;
-
-    // Tokens are charged per source minute; the panel must never claim a
-    // figure the range does not support.
-    var tokens = Math.max(1, Math.ceil(range.mins));
-    var lo = Math.max(4, Math.round(range.mins * 0.6));
-    var hi = Math.max(8, Math.round(range.mins * 1.0));
-
-    var TITLES = [
-      ['Step 1 of 8 · optional', 'What would you like clipped?', 'Name a subject and the clipper looks for it. Leave it empty and it takes the strongest moments on its own.'],
-      ['Step 2 of 8', 'What are you clipping?', 'This decides which styles fit, and whether a nasheed belongs underneath.'],
-      ['Step 3 of 8', 'How much of the lecture?', 'Drag either handle, or take one of the usual cuts. This is the part you pay for.'],
-      ['Step 4 of 8', 'How many clips, and how long?', 'For this lecture only — your account default stays where it is.'],
-      ['Step 5 of 8', 'How should it look?', 'Pick a style, then adjust it for this lecture without changing it everywhere.'],
-      ['Step 6 of 8', 'What plays on screen?', 'The lecture itself, or scenery with the voice over it.'],
-      ['Step 7 of 8', 'What plays underneath?', 'A nasheed sits under the voice, ducked so it never competes with it.'],
-      ['Ready to go', 'Here is what happens next', 'Anything here can still be changed. Nothing posts until you approve each clip.'],
+    var COPY = [
+      ['Brief · optional', 'What would you like clipped?',
+       'Name a subject and the clipper goes looking for it. Leave it be, and it takes the strongest moments on its own.'],
+      ['Two of eight', 'What are you clipping?',
+       'This settles which styles fit, and whether a nasheed belongs underneath the voice.'],
+      ['Three of eight', 'How much of it?',
+       'This is the part you pay for, and the only number on this screen that moves the cost.'],
     ];
-    var t = TITLES[s.step - 1];
-
-    var mk = function (list, key, current) {
-      return list.map(function (item) {
-        var patch = {}; patch[key] = item.id;
-        return Object.assign({}, item, {
-          cls: 'card' + (current === item.id ? ' on' : ''),
-          pick: function () { self.set(patch); },
-        });
-      });
-    };
+    var c = COPY[s.step - 1];
 
     return {
-      accent: accent,
-      anim: s.dir + (s.flip ? 'A' : 'B'),
-      eyebrow: t[0], title: t[1], hint: t[2],
-
-      rail: STEPS.map(function (row, i) {
-        var n = i + 1;
-        var done = n < s.step, now = n === s.step;
-        return {
-          n: String(n), label: row.label, value: done ? row.value : '',
-          num: !done, tick: done, line: n < 8,
-          cls: 'node' + (done ? ' done' : now ? ' now' : ''),
-          fill: 'transform: scaleY(' + (done ? 1 : 0) + '); transition: transform .5s cubic-bezier(.2,.8,.2,1);',
-          go: function () { self.go(n); },
-        };
-      }),
-
-      isBrief: s.step === 1, isKind: s.step === 2, isTrim: s.step === 3, isClips: s.step === 4,
-      isStyle: s.step === 5, isPicture: s.step === 6, isSound: s.step === 7, isReview: s.step === 8,
+      ruleStyle: 'width: ' + Math.round((s.step / 8) * 100) + '%;',
+      dirCls: s.dir + (s.flip ? 'A' : 'B'),
+      stepName: c[0], question: c[1], sub: c[2],
+      isBrief: s.step === 1, isKind: s.step === 2, isTrim: s.step === 3,
 
       examples: [
         { text: 'The parts about repentance and mercy' },
         { text: 'Any story he tells' },
         { text: 'Advice for young Muslims' },
-        { text: 'Where he talks about the hereafter' },
+        { text: 'Where he speaks about the hereafter' },
       ],
 
-      kinds: mk([
-        { id: 'lecture', title: 'Islamic lecture', sub: 'Captions on the speech, a nasheed underneath, watermark on the frame.' },
-        { id: 'quran', title: 'Quran recitation', sub: 'The ayah and its translation only. No nasheed, nothing drawn over scripture.' },
-      ], 'kind', s.kind),
+      kinds: [
+        { id: 'lecture', title: 'An Islamic lecture',
+          sub: 'Captions follow the speech, a nasheed sits underneath it, and your mark goes on the frame.' },
+        { id: 'quran', title: 'Quran recitation',
+          sub: 'The ayah and its translation, and nothing else. No nasheed, and nothing drawn over scripture.' },
+      ].map(function (k) {
+        return Object.assign({}, k, {
+          cls: 'pick' + (s.kind === k.id ? ' on' : ''),
+          pick: function () { self.setState({ kind: k.id }); },
+        });
+      }),
 
-      bandStyle: 'left: ' + range.left + '%; width: ' + range.width + '%;',
-      rangeLabel: range.text,
+      bandStyle: 'left: ' + r.left + '%; width: ' + r.width + '%;',
+      rangeText: r.text,
       ranges: Object.keys(RANGES).map(function (id) {
+        var on = s.range === id;
         return {
           label: RANGES[id].label,
-          cls: 'chip' + (s.range === id ? ' on' : ''),
-          pick: function () { self.set({ range: id }); },
+          dash: on ? 'background: #D9B478; width: 22px;' : '',
+          ink: on ? 'color: #F0D6A6;' : '',
+          pick: function () { self.setState({ range: id }); },
         };
       }),
-
-      count: String(s.count),
-      more: function () { self.set({ count: Math.min(20, s.count + 1) }); },
-      less: function () { self.set({ count: Math.max(1, s.count - 1) }); },
-      bands: ['15-30', '30-60', '45-75', '60-90'].map(function (id) {
-        return {
-          label: id.replace('-', '–') + 's',
-          cls: 'chip' + (s.band === id ? ' on' : ''),
-          pick: function () { self.set({ band: id }); },
-        };
-      }),
-      scopeOnceCls: 'segB' + (s.scope === 'once' ? ' on' : ''),
-      scopeAllCls: 'segB' + (s.scope === 'all' ? ' on' : ''),
-      scopeOnce: function () { self.set({ scope: 'once' }); },
-      scopeAll: function () { self.set({ scope: 'all' }); },
-
-      styles: mk([
-        { id: 'clean', title: 'Clean Line', sub: STYLES.clean.sub },
-        { id: 'bold', title: 'Bold Stack', sub: STYLES.bold.sub },
-        { id: 'mono', title: 'Mono Minimal', sub: STYLES.mono.sub },
-      ], 'style', s.style),
-      tweaks: Object.keys(TWEAKS).map(function (id) {
-        return {
-          label: TWEAKS[id].label,
-          cls: 'chip' + (s.tweak === id ? ' on' : ''),
-          pick: function () { self.set({ tweak: id }); },
-        };
-      }),
-
-      pictures: mk([
-        { id: 'own', title: 'The lecture itself', sub: 'Cropped to the frame, following whoever is speaking.' },
-        { id: 'scene', title: 'Scenery behind the voice', sub: 'From your background library, with the audio over it.' },
-      ], 'picture', s.picture),
-
-      sounds: mk([
-        { id: 'rotate', title: 'Rotate the library', sub: 'A different nasheed under each clip, ducked under the voice.' },
-        { id: 'one', title: 'One nasheed', sub: 'The same bed under every clip from this lecture.' },
-      ], 'sound', s.sound),
-
-      sBrief: 'repentance and mercy',
-      sClips: s.count + ' clips of ' + s.band.replace('-', '–') + 's',
-      sStyle: STYLES[s.style].title,
-      sSound: s.sound === 'rotate' ? 'a rotating nasheed' : 'one nasheed',
-
-      artStyle: 'background: linear-gradient(160deg, #2A2118 0%, #17171A 55%, #0E0E11 100%); filter: ' + tweak.filter + ';',
-      capText: style.cap.replace(/<br>/g, ' '),
-      capStyle: 'font-size: ' + (style.size + tweak.bump) + 'px;',
 
       tokens: String(tokens),
-      costBasis: range.mins + ' minutes of source, charged once',
       eta: lo + '–' + hi + ' min',
-      after: (2450 - tokens) + ' left',
-
-      footK: s.step === 8 ? 'This run costs' : 'So far',
-      footV: tokens + ' tokens · ' + lo + '–' + hi + ' min',
-      cta: s.step === 8 ? 'Start clipping' : 'Continue',
+      basis: r.mins + ' minutes of source, charged once',
+      cta: s.step === 3 ? 'Continue' : 'Continue',
       next: function () { self.go(s.step + 1); },
       back: function () { self.go(s.step - 1); },
       noop: function () {},
