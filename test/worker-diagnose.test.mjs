@@ -206,7 +206,12 @@ test('the posture matches import_providers, against a real empty pool', () => {
   fs.rmSync(dir, { recursive: true, force: true });
   assert.match(printed, /== the way in ==/);
   assert.match(printed, /proxy pool\s+0 address\(es\)/, 'an empty pool reads as zero');
-  assert.match(printed, /cookies\s+no/);
+  // The BOX's own cookies, and the line must say so: reading a bare
+  // "cookies: no" as "the product has no cookies" was a real wrong call --
+  // a real job carries whatever /admin/import-network holds.
+  assert.match(printed, /cookies \(box\)\s+no/);
+  assert.match(printed, /a real job carries whatever \/admin\/import-network holds/,
+    'the readout must say the box is not the only source of cookies');
   assert.match(printed, /THIS SERVER'S ADDRESS being blocked/,
     'with nothing configured the honest reading is that the block is ours');
 });

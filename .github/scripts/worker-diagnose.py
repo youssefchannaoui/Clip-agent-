@@ -158,8 +158,15 @@ def import_posture() -> None:
     cookie_file = str(options.get("cookiefile") or "")
     out(f"  provider           {provider}")
     out(f"  proxy pool         {len(pool)} address(es), from {where}")
-    out(f"  cookies            {'yes' if cookie_file else 'no'}"
-        + (f" ({Path(cookie_file).name})" if cookie_file else ""))
+    # THE BOX'S OWN DEFAULT, WHICH IS NOT WHAT A REAL IMPORT CARRIES. Cookies
+    # pasted at /admin/import-network are sealed in the app's store and travel
+    # on the job's own `network.cookiesText`, written to the job's scratch
+    # directory by youtube_options_for_source(). So `no` here means the BOX has
+    # none of its own; it says nothing about whether the dashboard holds a set.
+    # Reading this line as "cookies are not configured" was a wrong call once.
+    out(f"  cookies (box)      {'yes' if cookie_file else 'no'}"
+        + (f" ({Path(cookie_file).name})" if cookie_file else "")
+        + " -- a real job carries whatever /admin/import-network holds")
     out(f"  PO token server    {'yes' if options.get('extractor_args') else 'no'}")
     out(f"  clients tried      {len(getattr(import_providers, 'YOUTUBE_CLIENTS', []))} per plan, two plans")
     try:
