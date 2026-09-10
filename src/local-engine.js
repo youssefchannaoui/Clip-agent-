@@ -670,17 +670,18 @@ function cleanSourceRange(options = {}) {
 
 function validateSubmission(url, user, options = {}) {
   const value = String(url || '').trim();
-  if (!value) throw new Error(options.sourceKind === 'object_storage' ? 'Upload a video first.' : 'Paste a video link first.');
+  if (!value) throw new Error('Upload a video first.');
   if (remoteProcessing() && options.sourceKind === 'object_storage') assertStorageObjectKey(value);
-  else if (remoteProcessing()) parseYouTubeUrl(value);
-  else if (/^https?:\/\//i.test(value)) { /* a link is fine in any mode */ }
   else if (value.startsWith('file://') || path.isAbsolute(value)) {
     // Only the upload route may name a file on this box. Through the link
     // form it would let one account read any media path the process can --
     // another tenant's upload included.
-    if (options.sourceKind !== 'upload') throw new Error('Use a complete http(s) video link.');
+    if (options.sourceKind !== 'upload') throw new Error('Upload the original video file you own or are authorised to use.');
   } else {
-    throw new Error('Use a complete http(s) video link.');
+    throw new Error('Link imports are unavailable. Upload the original video file you own or are authorised to use.');
+  }
+  if (options.sourceRightsConfirmed !== true) {
+    throw new Error('Confirm that you own this video or have permission to repurpose it before uploading.');
   }
   // The job's own choice first. The token page picks a content kind, and the
   // kind picks the template -- but the id never left the browser, so a job
@@ -735,7 +736,9 @@ export function readiness(user) {
     ready: Boolean(template?.id && tracks.length), templateReady: Boolean(template?.id), template,
     musicReady: tracks.length > 0, musicTrackCount: tracks.length, engine: remoteProcessing() ? 'remote-worker' : 'self-hosted', model: config.aiModel,
     worker: { configured: workerClient.configured(), mode: config.processingMode },
-    youtubeImport: { configured: remoteProcessing() ? Boolean(config.videoImportApiKey && workerClient.configured()) : vizard.configured(), provider: remoteProcessing() ? config.videoImportProvider : 'vizard' },
+    // Source files are uploaded directly by the creator. Do not represent URL
+    // ingestion as a supported YouTube feature while the service is audited.
+    youtubeImport: { configured: false, provider: null },
   };
 }
 
@@ -761,16 +764,8 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
   const sourceMeta = Array.isArray(options?.sourceMeta) ? options.sourceMeta.find(item => String(item?.url || '') === value) || options.sourceMeta[0] : (options?.sourceMeta || {});
   const projectId = id('project');
   const useRemote = remoteProcessing();
-  const useVizard = !useRemote && vizard.isYouTubeUrl(value);
-  if (useVizard && !vizard.configured()) {
-    throw new Error('YouTube URL import is not configured yet. The site owner must add a Vizard API key. You can still upload an MP4 or MOV.');
-  }
+  const useVizard = false;
   const knownDuration = Number(sourceMeta?.durationSec || 0);
-  const trimsYouTube = sourceRange.startSec > 0
-    || (sourceRange.endSec && knownDuration > 0 && sourceRange.endSec < knownDuration - 2);
-  if (useVizard && trimsYouTube) {
-    throw new Error('YouTube URL import currently processes the full video. Reset the source window to Full video, or upload the original file to clip only a selected range.');
-  }
   const project = withOwner({
     // Falling back to the URL here put "https://www.youtube.com/watch?v=..." in
     // every heading until the worker finished and sent the real title back --
@@ -804,6 +799,7 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     publishTo: Array.isArray(options.publishTo) ? options.publishTo.map(String) : null,
     sourceKind: options.sourceKind || 'link', originalFileName: options.originalFileName || null,
     uploadedInputFile: options.uploadedInputFile || null, sourceObjectKey: options.sourceKind === 'object_storage' ? value : null,
+    sourceRightsConfirmed: true, sourceRightsConfirmedAt: Number(options.sourceRightsConfirmedAt) || Date.now(),
   }, user.id);
   state.projects.unshift(project);
   save();

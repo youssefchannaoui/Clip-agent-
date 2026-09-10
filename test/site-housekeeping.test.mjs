@@ -215,17 +215,17 @@ test('public imagery stays on the established realistic asset library', async ()
     'floating reel images must size their height from the card width instead of their intrinsic pixel height');
 });
 
-test('the homepage keeps a labelled source-video entry point', async () => {
+test('the homepage keeps a labelled original-video upload entry point', async () => {
   const home = await fetch(`${base}/`, { headers: { accept: 'text/html' } }).then(r => r.text());
-  assert.match(home, /<form class="source-bar" data-source-form>/);
-  assert.match(home, /<label class="sr-only" for="source-url">Video URL<\/label>/);
-  assert.match(home, /<input id="source-url" name="source"/);
+  assert.match(home, /<a class="source-bar" href="\/login\?returnTo=\/app">/);
+  assert.match(home, /Upload your original video to begin/);
+  assert.doesNotMatch(home, /Paste a YouTube link to begin/);
 });
 
-test('privacy copy names current import and DeenAI processing without stale vendors', async () => {
+test('privacy copy describes original upload and DeenAI processing without stale vendors', async () => {
   const page = await fetch(`${base}/privacy`, { headers: { accept: 'text/html' } }).then(r => r.text());
-  assert.match(page, /yt-dlp/);
-  assert.match(page, /Webshare/);
+  assert.match(page, /accepts original video files uploaded by the creator/);
+  assert.match(page, /does not import, download or retrieve audiovisual source files from public YouTube URLs/);
   assert.match(page, /Ask DeenAI/);
-  assert.doesNotMatch(page, /SocialKit|Vizard/);
+  assert.doesNotMatch(page, /SocialKit|Vizard|yt-dlp|Webshare/);
 });

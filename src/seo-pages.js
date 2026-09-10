@@ -144,7 +144,7 @@ export const SEO_PAGES = [
     kind: KIND.TOOL,
     title: 'YouTube to Shorts — Long Video to Shorts | DeenClipped',
     description:
-      'Paste a YouTube link, pick the stretch worth clipping, and get vertical captioned Shorts you can review and publish back to your own channel.',
+      'Upload a long-form video you own or are authorised to use, then create vertical captioned Shorts you can review and publish to your own channel.',
     intent: 'youtube to shorts',
     cluster: 'platforms',
     lastmod: '2026-08-30',
@@ -156,7 +156,7 @@ export const SEO_PAGES = [
     kind: KIND.TOOL,
     title: 'YouTube to TikTok — Repurpose Long Video | DeenClipped',
     description:
-      'Turn a YouTube video into vertical TikTok clips with captions, then post to your connected TikTok account once you have approved each one.',
+      'Turn a long-form video you own or are authorised to use into vertical TikTok clips with captions, then post once you have approved each one.',
     intent: 'youtube to tiktok',
     cluster: 'platforms',
     lastmod: '2026-08-30',
@@ -168,7 +168,7 @@ export const SEO_PAGES = [
     kind: KIND.TOOL,
     title: 'YouTube to Reels — Video Into Instagram Reels | DeenClipped',
     description:
-      'Turn a YouTube video into Instagram Reels: vertical framing, burned-in captions, and a review step before anything reaches your account.',
+      'Turn a long-form video you own or are authorised to use into Instagram Reels with vertical framing, captions and a review step before anything reaches your account.',
     intent: 'youtube to reels',
     cluster: 'platforms',
     lastmod: '2026-08-30',
