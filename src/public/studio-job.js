@@ -90,8 +90,9 @@
       + '<div class="poster" style="' + (posterImage(vals) ? 'background-image: ' + esc(posterImage(vals)) : '') + '"><span>' + esc(vals.jobRangeLabel) + '</span></div>'
       + '<div style="min-width: 0"><div class="eyebrow">New lecture</div><div class="lecT">' + esc(vals.jobSourceLabel) + '</div><div class="lecM">' + esc(vals.jobLenLabel) + '</div></div>'
       + '<div class="path"><div class="pathN"><b>' + n + '</b><span> / 6 · ' + NAMES[id] + '</span></div><div class="steps">' + segs + '</div>'
-      + '<button type="button" class="x" data-act="close"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></div>'
-      + '</div><div class="hr"><i></i></div>'
+      + '</div></div>'
+      + '<button type="button" class="x" data-act="close" aria-label="Close"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>'
+      + '<div class="hr"><i></i></div>'
       + '<div class="q"><h1 class="rv"><span>' + esc(q[0]) + '</span> <em>' + esc(q[1]) + '</em></h1><div class="lead rv">' + esc(vals.jobStepHint) + '</div></div>'
       + '<div class="work">';
     var body = '';
@@ -148,13 +149,20 @@
       var paid = !cur ? true : (cur.features && typeof cur.features.templates === 'boolean') ? cur.features.templates : String(cur.plan || 'free') !== 'free';
       var tpls = DATA.templates || [];
       var w = 118;
-      body += '<div class="rv tpls big">' + tpls.map(function (t) { return tplCard(t, t.name === active, Boolean(t.pro) && !paid, w); }).join('') + '</div>';
+      var mini = typeof window.dcTplMiniHtml === 'function' ? window.dcTplMiniHtml : null;
+      body += mini
+        ? '<div class="rv bgt-row dcjTpls">' + tpls.map(function (t) {
+            var on = t.name === active, locked = Boolean(t.pro) && !paid;
+            return '<button type="button" class="bgt-card' + (on ? ' on' : '') + (locked ? ' locked' : '') + '" data-tpl="' + esc(t.name) + '" title="' + esc(t.description || t.name) + '">' + mini(t)
+              + (locked ? '<span class="bgt-lock dc-pro">Pro</span>' : '') + '<span class="bgt-name">' + esc(t.name) + '</span></button>';
+          }).join('') + '</div>'
+        : '<div class="rv tpls big">' + tpls.map(function (t) { return tplCard(t, t.name === active, Boolean(t.pro) && !paid, w); }).join('') + '</div>';
     } else if (id === 'sound') {
       if (vals.jobSoundBlocked) {
         body += '<div class="rv fnote" style="font-size: 14px; color: #a8a196">' + esc(vals.jobStepHint) + '</div>';
       } else {
         var vol = Number(vals.jobVolume) || 13;
-        body += '<div style="display: flex; gap: 40px; align-items: flex-start"><div class="rv trackList" style="flex: 1; display: flex; flex-direction: column">'
+        body += '<div class="soundWrap" style="display: flex; gap: 40px; align-items: flex-start; flex: 1; min-height: 0"><div class="rv trackList" style="flex: 1; display: flex; flex-direction: column; align-self: stretch">'
           + (vals.jobMusicOn ? (vals.jobNasheeds || []).map(function (t, ix) {
             var on = /rgba\(217,182,111/.test(t.style || '') || /F0D6A6/.test(t.style || '');
             var wave = ''; for (var wi = 0; wi < 22; wi += 1) wave += '<i style="animation-delay: ' + ((wi * 37) % 40) / 100 + 's"></i>';
@@ -190,7 +198,7 @@
         + '<div class="clockBox"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d9b66f" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><div><b>' + esc(vals.jobEtaLabel) + '</b><span>' + esc(vals.jobQueueLabel) + '</span></div></div>'
         + (vals.genBusy ? '<div class="fnote">' + esc(vals.genProgressLabel || 'Starting…') + '</div>' : '')
         + '<button type="button" class="go" data-act="generate"' + (vals.genBusy ? ' disabled' : '') + '><span>' + esc(vals.genLabel || 'Generate clips') + '</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"></path></svg></button>'
-        + '<div class="fnote" style="text-align: center">Cutting more clips, re-rendering and editing never cost another token.</div></div></div>';
+        + '</div></div>';
     }
     var blocker = vals.jobNextLabel && vals.jobNextLabel !== 'Continue' ? vals.jobNextLabel : '';
     var foot = '</div><div class="foot">'

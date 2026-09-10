@@ -6400,6 +6400,8 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        through the same Win-cell divisor libass uses, so a style that renders
        large looks large here. */
     const MINI_W = 172;
+    /* The job panel (studio-job.js) draws the same thumbnails, so the two cannot disagree. */
+    window.dcTplMiniHtml = function(t){ return tplMiniHtml(t); };
     function tplMiniHtml(t){
       /* Three looks are black and white, not one: monochrome is flat, noir
          hard, silver soft. A thumb that only knew about the first drew the
