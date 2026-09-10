@@ -209,7 +209,7 @@
     .dests { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
     .revR { width: 380px; flex: none; border-left: 1px solid rgba(245,241,232,.12); padding-left: 32px; }
     .cost { display: flex; align-items: baseline; gap: 10px; margin-top: 8px; }
-    .cost b { font-family: "Fraunces", Georgia, serif; font-weight: 400; font-size: 54px; line-height: .9; color: #f1d18e; letter-spacing: -.02em; }
+    .cost b { font-family: "Fraunces", Georgia, serif; font-weight: 400; font-size: 46px; line-height: .9; color: #f1d18e; letter-spacing: -.02em; }
     .cost span { font-size: 13px; color: #a8a196; }
     .rows { margin-top: 16px; }
     .row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(245,241,232,.09); font-size: 12.5px; }
@@ -282,6 +282,23 @@
     .bc .coin { width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f7e2ad, #d9b66f 55%, #9c7a34); box-shadow: 0 6px 16px rgba(217,182,111,.35); display: flex; align-items: center; justify-content: center; color: #181410; font-weight: 700; font-size: 13px; flex: none; }
     .bc b { display: block; font-family: "Fraunces", Georgia, serif; font-weight: 400; font-size: 21px; line-height: 1; color: #f1d18e; letter-spacing: -.02em; }
     .bc span { display: block; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #a8a196; margin-top: 6px; }
+    /* v9 */
+    .kc { position: relative; flex: 1; display: flex; gap: 18px; align-items: stretch; padding: 14px; border: 1px solid rgba(245,241,232,.1); border-radius: 8px; background: rgba(7,6,7,.5); text-align: left; transition: transform .35s cubic-bezier(.2,.8,.2,1), border-color .35s; }
+    .kc:hover { transform: translateY(-3px); border-color: rgba(245,241,232,.3); } .kc.on { border-color: #d9b66f; box-shadow: 0 0 0 1px #d9b66f, 0 20px 50px rgba(0,0,0,.6); }
+    .kc .pf { position: relative; width: 108px; aspect-ratio: 9 / 16; border-radius: 5px; overflow: hidden; flex: none; background: #111; }
+    .kc .pf img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: kb 12s ease-in-out infinite alternate; }
+    .kc .kT { font-family: "Fraunces", Georgia, serif; font-size: 22px; color: #f2ecdf; letter-spacing: -.02em; margin-top: 6px; }
+    .kc .kD { font-size: 12.5px; line-height: 1.55; color: #a8a196; margin-top: 8px; max-width: 300px; }
+    .kc .kOn { position: absolute; right: 14px; top: 14px; width: 10px; height: 10px; border-radius: 50%; border: 1px solid #d9b66f; } .kc.on .kOn { background: #d9b66f; box-shadow: 0 0 10px rgba(217,182,111,.8); }
+    .pf .cyc { left: 8px; right: 8px; bottom: 26px; height: 50px; } .pf .cyc span { font-size: 12px; text-align: center; } .pf .cyc.ar span { font-size: 14px; } .pf .cyc.ar span small { font-size: 7.5px; margin-top: 2px; }
+    .pf .mk { position: absolute; top: 8px; left: 0; right: 0; text-align: center; font-size: 5px; letter-spacing: .28em; color: rgba(242,236,223,.8); font-weight: 600; }
+    .tpls.big .tpl { width: 196px; }
+    .revCard { width: 340px; flex: none; padding: 22px; border: 1px solid rgba(217,182,111,.28); border-radius: 10px; background: linear-gradient(180deg, rgba(217,182,111,.10), rgba(7,6,7,.4) 60%); display: flex; flex-direction: column; gap: 16px; }
+    .revCard .hrl { height: 1px; background: rgba(217,182,111,.18); }
+    .clockBox { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid rgba(217,182,111,.2); border-radius: 6px; background: rgba(7,6,7,.5); }
+    .clockBox b { display: block; font-size: 12.5px; color: #f2ecdf; font-weight: 500; } .clockBox span { font-size: 11px; color: #a8a196; }
+    .go { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 15px 24px; background: #d9b66f; color: #181410; font-size: 13.5px; font-weight: 600; letter-spacing: .04em; border-radius: 6px; transition: all .3s cubic-bezier(.2,.8,.2,1); }
+    .go:hover { background: #f1d18e; transform: translateY(-1px); box-shadow: 0 14px 40px rgba(217,182,111,.25); }
   </style>
 </helmet>
 
@@ -325,10 +342,14 @@
           </div>
           <div class="rv" style="display: flex; gap: 8px; margin-top: 10px"><sc-for list="{{ ranges }}" as="r" hint-placeholder-count="4"><button class="{{ r.cls }}" onClick="{{ r.pick }}">{{ r.label }}</button></sc-for></div>
           <div class="rv kinds">
-            <button class="{{ kLecCls }}" onClick="{{ pickLecture }}"><img src="preview-sample.webp" style="object-position: 50% 20%"><div class="shade"></div><div class="kT">Lecture</div><div class="kS">Captions follow the speech</div><div class="kOn"></div>
-              <div class="cyc"><span>He <b>never</b> stops answering</span><span><i>Turn back, and He turns to you</i></span><span>THE DOOR <b>NEVER</b> CLOSES</span></div></button>
-            <button class="{{ kQurCls }}" onClick="{{ pickQuran }}"><img src="reel-quran.webp" style="object-position: 50% 35%"><div class="shade"></div><div class="kT">Qur’an recitation</div><div class="kS">The ayah and its translation</div><div class="kOn"></div>
-              <div class="cyc ar"><span>إِنَّ مَعَ ٱلْعُسْرِ يُسْرًا<small>Indeed, with hardship comes ease</small></span><span>وَسَيَجْزِي ٱللَّهُ ٱلشَّـٰكِرِينَ<small>And Allah will reward the grateful</small></span><span>فَٱذْكُرُونِىٓ أَذْكُرْكُمْ<small>So remember Me; I will remember you</small></span></div></button>
+            <button class="{{ kLecCls }}" onClick="{{ pickLecture }}">
+              <div class="pf"><img src="preview-sample.webp"><div class="mk">DEENCLIPPED</div><div class="cyc"><span>He <b>never</b> stops</span><span><i>Turn back to Him</i></span><span>THE DOOR <b>NEVER</b> CLOSES</span></div></div>
+              <div><div class="kT">Islamic lecture</div><div class="kD">Captions what is said. Moments are scored and cut for you, with a nasheed underneath.</div></div><div class="kOn"></div>
+            </button>
+            <button class="{{ kQurCls }}" onClick="{{ pickQuran }}">
+              <div class="pf"><img src="reel-quran.webp"><div class="cyc ar"><span>إِنَّ مَعَ ٱلْعُسْرِ يُسْرًا<small>With hardship comes ease</small></span><span>فَٱذْكُرُونِىٓ أَذْكُرْكُمْ<small>Remember Me; I will remember you</small></span><span>وَسَيَجْزِي ٱللَّهُ ٱلشَّـٰكِرِينَ<small>Allah will reward the grateful</small></span></div></div>
+              <div><div class="kT">Qur’an recitation</div><div class="kD">Captions the ayah from the Qur’an itself, with its translation. No nasheed, nothing over scripture.</div></div><div class="kOn"></div>
+            </button>
           </div>
         </div>
       </sc-if>
@@ -353,17 +374,8 @@
 
       <sc-if value="{{ isTemplate }}" hint-placeholder-val="{{ false }}">
         <div style="display: flex; gap: 36px; align-items: flex-start">
-          <div class="rv tplL">
-            <sc-if value="{{ tQuran }}" hint-placeholder-val="{{ false }}"><img class="bg" src="reel-quran.webp" style="{{ lookF }}"></sc-if>
-            <sc-if value="{{ tNotQuran }}" hint-placeholder-val="{{ true }}"><img class="bg" src="preview-sample.webp" style="{{ lookF }}"><div class="mark" style="{{ markL }}">DEENCLIPPED</div></sc-if>
-            <sc-if value="{{ tBold }}" hint-placeholder-val="{{ false }}"><div class="tc bold" style="{{ capL }}"><span>He</span><span class="dim">never</span><span>stops</span><span class="dim">answering</span></div></sc-if>
-            <sc-if value="{{ tClean }}" hint-placeholder-val="{{ true }}"><div class="tc cards" style="{{ capL }}"><span>He never stops answering</span></div></sc-if>
-            <sc-if value="{{ tHead }}" hint-placeholder-val="{{ false }}"><div class="tc head" style="{{ capL }}"><span>He never</span><span class="dim">stops</span><span>answering</span></div></sc-if>
-            <sc-if value="{{ tMono }}" hint-placeholder-val="{{ false }}"><div class="tc mono" style="{{ capL }}"><span>answering</span></div></sc-if>
-            <div class="tplN"><span>{{ tplName }}</span><small>{{ lookName }}</small></div>
-          </div>
           <div class="rv" style="flex: 1; min-width: 0">
-            <div class="tpls">
+            <div class="tpls big">
               <button class="{{ tCleanCls }}" onClick="{{ pickClean }}"><img class="bg" src="preview-sample.webp"><div class="mark" style="{{ markS }}">DEENCLIPPED</div><div class="tc cards" style="{{ capClean }}"><span>He never stops</span></div><div class="tplN"><span>Clean Line</span></div></button>
               <button class="{{ tBoldCls }}" onClick="{{ pickBold }}"><img class="bg" src="preview-sample.webp"><div class="mark" style="{{ markS }}">DEENCLIPPED</div><div class="tc bold" style="{{ capBold }}"><span>He</span><span class="dim">never</span><span>stops</span><span class="dim">answering</span></div><div class="tplN"><span>Bold Stack</span><small>Pro</small></div></button>
               <button class="{{ tHeadCls }}" onClick="{{ pickHead }}"><img class="bg" src="preview-sample.webp"><div class="mark" style="{{ markS }}">DEENCLIPPED</div><div class="tc head" style="{{ capHead }}"><span>He never</span><span class="dim">stops</span><span>answering</span></div><div class="tplN"><span>Headline</span><small>Pro</small></div></button>
@@ -418,30 +430,24 @@
               <div class="wr"><div class="wn">4</div><div><div class="wt">They land in the review queue</div><div class="ws">Nothing is published until you approve it. Editing and re-rendering are free.</div></div></div>
             </div>
           </div>
-          <div class="revR rv">
-            <div style="display: flex; gap: 18px; align-items: flex-start">
-              <div class="tplL" style="width: 92px; border-radius: 4px; box-shadow: none; flex: none"><sc-if value="{{ tQuran }}" hint-placeholder-val="{{ false }}"><img class="bg" src="reel-quran.webp"></sc-if><sc-if value="{{ tNotQuran }}" hint-placeholder-val="{{ true }}"><img class="bg" src="preview-sample.webp" style="{{ lookF }}"></sc-if></div>
-              <div>
-                <div class="secT">{{ sStyle }}</div>
-                <div class="fnote" style="margin-top: 6px">{{ lookName }} · {{ sClips }}</div>
-              </div>
+          <div class="revCard rv">
+            <div>
+              <div class="secT">This run costs</div>
+              <div class="cost"><b>{{ tokens }}</b><span>tokens</span></div>
+              <div class="fnote" style="margin-top: 4px">{{ costTail }}</div>
             </div>
-            <div class="rows">
+            <div class="hrl"></div>
+            <div class="rows" style="margin-top: 0">
               <div class="row"><span class="rk">Looking for</span><button class="re" onClick="{{ goLecture }}">Edit</button><span class="rvv">{{ briefText }}</span></div>
               <div class="row"><span class="rk">From the lecture</span><button class="re" onClick="{{ goLecture }}">Edit</button><span class="rvv">{{ fromLecture }}</span></div>
               <div class="row"><span class="rk">Clips</span><button class="re" onClick="{{ goClips }}">Edit</button><span class="rvv">{{ sClips }}</span></div>
               <div class="row"><span class="rk">Template</span><button class="re" onClick="{{ goTemplate }}">Edit</button><span class="rvv">{{ sStyle }}</span></div>
-                            <div class="row"><span class="rk">Look</span><button class="re" onClick="{{ goTemplate }}">Edit</button><span class="rvv">{{ lookName }}</span></div>
+              <div class="row"><span class="rk">Look</span><button class="re" onClick="{{ goTemplate }}">Edit</button><span class="rvv">{{ lookName }}</span></div>
               <div class="row"><span class="rk">Underneath</span><button class="re" onClick="{{ goSound }}">Edit</button><span class="rvv">{{ sSound }}</span></div>
-              <div class="row"><span class="rk">Queue</span><span class="rvv">Next in line</span></div>
             </div>
+            <div class="clockBox"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d9b66f" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><div><b>Ready in roughly {{ eta }}</b><span>Next in line · nothing posts until you approve it</span></div></div>
+            <button class="go"><span>Generate clips</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"></path></svg></button>
           </div>
-        </div>
-        <div class="bill rv">
-          <div class="bc" style="flex: 1.35"><div class="coin">DC</div><div><b>{{ tokens }} tokens</b><span>Charged once · {{ balanceAfter }} of 650 left after</span></div></div>
-          <div class="bc"><div><b>{{ minsLabel }}</b><span>Of source · {{ rangeText }}</span></div></div>
-          <div class="bc"><div><b>{{ count }} clips</b><span>{{ bandsShort }}</span></div></div>
-          <div class="bc"><div><b>~{{ eta }}</b><span>Until they are in your review queue</span></div></div>
         </div>
       </sc-if>
 
@@ -450,7 +456,7 @@
     <div class="foot">
       <button class="back" onClick="{{ back }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H6M12 5l-7 7 7 7"></path></svg>Back</button>
       <div class="fnote">{{ footNote }}</div>
-      <button class="cta" onClick="{{ next }}"><span>{{ cta }}</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"></path></svg></button>
+      <button class="cta" onClick="{{ next }}" style="{{ ctaSt }}"><span>{{ cta }}</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"></path></svg></button>
     </div>
   </div>
 </div>
@@ -520,7 +526,7 @@ class Component extends DCLogic {
       bandSt: 'left: ' + r.l + '%; width: ' + r.w + '%;',
       ranges: chips(Object.keys(RANGES).map(function (id) { return [id, RANGES[id].label]; }), 'range', s.range),
       briefText: 'Clip the parts about…', briefHint: 'optional',
-      kLecCls: on('kind', !quran), kQurCls: on('kind', quran), pickLecture: set({ kind: 'lecture', tpl: 'clean' }), pickQuran: set({ kind: 'quran' }),
+      kLecCls: on('kc', !quran), kQurCls: on('kc', quran), pickLecture: set({ kind: 'lecture', tpl: 'clean' }), pickQuran: set({ kind: 'quran' }),
       kindRule: quran ? 'Captioned from the Qur’an itself, never from what the microphone heard. No nasheed and nothing drawn over scripture; every clip waits for your review.'
                       : 'Captions follow the speech. Recited scripture inside the lecture is shown as the ayah with its translation.',
       count: String(s.count), more: set({ count: Math.min(20, s.count + 1) }), less: set({ count: Math.max(1, s.count - 1) }), countNote: 'from ' + r.mins + ' minutes',
@@ -532,7 +538,7 @@ class Component extends DCLogic {
       tQuran: tplId === 'quran', tNotQuran: tplId !== 'quran', tBold: tplId === 'bold', tClean: tplId === 'clean', tHead: tplId === 'headline', tMono: tplId === 'mono',
       tCleanCls: on('tpl', tplId === 'clean'), tBoldCls: on('tpl', tplId === 'bold'), tHeadCls: on('tpl', tplId === 'headline'), tMonoCls: on('tpl', tplId === 'mono'), tQurCls: on('tpl', tplId === 'quran'),
       pickClean: set({ tpl: 'clean', kind: 'lecture' }), pickBold: set({ tpl: 'bold', kind: 'lecture' }), pickHead: set({ tpl: 'headline', kind: 'lecture' }), pickMono: set({ tpl: 'mono', kind: 'lecture' }), pickQur: set({ tpl: 'quran', kind: 'quran' }),
-      capL: cap(tplId, 250), capClean: cap('clean', 156), capBold: cap('bold', 156), capHead: cap('headline', 156), capMono: cap('mono', 156), markL: mark(250), markS: mark(156),
+      capL: cap(tplId, 250), capClean: cap('clean', 196), capBold: cap('bold', 196), capHead: cap('headline', 196), capMono: cap('mono', 196), markL: mark(250), markS: mark(196),
       lookF: 'filter: ' + lookF + ';', tplName: TPL[tplId], tplDesc: DESC[tplId],
       looks: chips(LOOKS, 'look', s.look), lookName: LOOKS.filter(function (l) { return l[0] === s.look; })[0][1],
       sounds: SOUNDS.map(function (x) { return Object.assign({}, x, { cls: on('track', s.sound === x.id), pick: set({ sound: x.id }) }); }),
@@ -542,7 +548,7 @@ class Component extends DCLogic {
       sSound: quran ? 'None — recitation' : (s.sound === 'rotate' ? 'Nasheed, rotating' : SOUNDS.filter(function (x) { return x.id === s.sound; })[0].title),
       goLecture: goTo(1), goClips: goTo(2), goTemplate: goTo(3), goSound: goTo(4),
       footNote: s.step === 5 ? 'Anything above can still be changed.' : 'Step ' + s.step + ' of 5 · ' + tokens + ' tokens · ready in roughly ' + eta,
-      cta: s.step === 5 ? 'Generate clips' : 'Continue', next: goTo(s.step + 1), back: goTo(s.step - 1),
+      cta: 'Continue', ctaSt: s.step === 5 ? 'display: none;' : '', next: goTo(s.step + 1), back: goTo(s.step - 1),
     };
     return out;
   }
