@@ -542,7 +542,7 @@
     var cost = Math.max(1, Math.ceil((job.end - job.start) / 60 * tokenRate));
     if (job.durationKnown) {
       rows.push(Object.assign({ label: 'From the lecture' },
-        value(humanDuration(job.end - job.start) + ' of ' + humanDuration(job.durationSec), '', jobStepNo('trim'))));
+        value(humanDuration(job.end - job.start) + ' of ' + humanDuration(job.durationSec), '', jobStepNo('brief'))));
     }
     var settings = (DATA && DATA.clipSettings) || {};
     var chosen = Array.isArray(settings.clipLengthBands) ? settings.clipLengthBands.length : 0;
@@ -611,18 +611,16 @@
    * other, and the cost last because it is the sum of them.
    */
   var JOB_STEPS = [
-    // OPTIONAL, and deliberately first. Every other step asks how the clips
-    // should LOOK; this one asks what they should be ABOUT, and that is the
-    // question somebody has in mind at the moment they paste a link -- asked
-    // after six styling questions it reads as an afterthought. Nothing blocks
-    // on it: Continue is enabled with the box empty, and an empty box takes
-    // exactly the decisions this product took before the step existed.
-    { id: 'brief', title: 'What would you like clipped?', hint: 'Optional. Name a subject and the clipper looks for it. Leave it empty to take the best moments.' },
-    { id: 'kind', title: 'What are you clipping?', hint: 'This decides which styles fit and whether a nasheed belongs underneath.' },
-    { id: 'trim', title: 'How much of the lecture?', hint: 'This is the part you pay for. Drag either handle.' },
-    { id: 'lengths', title: 'How long should the clips be?', hint: 'Pick any. Moments are cut to fit the lengths you allow.' },
-    { id: 'style', title: 'How should the captions look?', hint: 'Every preview is the style the renderer actually produces.' },
-    { id: 'picture', title: 'What plays on screen?', hint: 'The lecture itself, or scenery with the voice over it.' },
+    // Six questions, and only the ones a template cannot answer about THIS
+    // lecture. Caption look, motion, framing and scenery belong to the
+    // template (Youssef, 10 Sept 2026: "templates do most of the thing ...
+    // that's what the templates are there for"), so they are not asked here.
+    // The brief and the range share the first step: both are "what am I
+    // clipping", and the brief is optional so nothing blocks on it.
+    { id: 'brief', title: 'What is it about, and which part?', hint: 'Optional: name a subject and the clipper looks for it. Then drag to the part you want clipped.' },
+    { id: 'kind', title: 'What are you clipping?', hint: 'This decides how the captions are read and whether a nasheed belongs underneath.' },
+    { id: 'lengths', title: 'How many clips, and how long?', hint: 'Pick any lengths. Moments are cut to fit the ones you allow.' },
+    { id: 'style', title: 'Which template?', hint: 'The template decides the captions, the framing and the mark. The preview is what the renderer produces.' },
     { id: 'sound', title: 'What plays underneath?', hint: 'A nasheed sits under the voice, ducked so it never competes with it.' },
     { id: 'review', title: 'Ready to go', hint: 'Check it over. Anything here can be changed before you start.' },
   ];
@@ -657,7 +655,7 @@
    */
   function jobStepBlocker(DATA, job) {
     var id = jobStepId();
-    if (id === 'trim' && job && job.durationKnown && job.end - job.start < 20) {
+    if (id === 'brief' && job && job.durationKnown && job.end - job.start < 20) {
       return 'Select at least 20 seconds';
     }
     if (id === 'style') {
@@ -7847,7 +7845,7 @@
       // poster half the dialog.
       // A fixed 152px strip, not a hero. The panel asks one question at a
       // time now and the source is context for it, not the subject.
-      jobPosterStyle: 'position: relative; display: block; flex: none; width: 216px; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden;'
+      jobPosterStyle: 'position: relative; display: block; flex: none; width: 300px; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden;'
         + ' border: 1px solid var(--dc-n-2a2a32, #2A2A32); background-color: var(--dc-bg-raised, #17171A);'
         + ' box-shadow: 0 10px 26px rgba(0,0,0,.5), inset 0 1px 0 rgba(248,248,249,.06);'
         + (job && job.thumbnail ? ' background-image: ' + posterLayers(job) + '; background-size: cover; background-position: center; background-repeat: no-repeat;' : ''),
@@ -7913,7 +7911,7 @@
       // handles address a percentage of the lecture, so the wording no longer
       // needs to explain which is which.
       jobRangeHint: !job ? '' : job.durationKnown
-        ? ' of ' + secsToClock(job.durationSec) + ' — drag either handle to trim'
+        ? ' of ' + secsToClock(job.durationSec) + ' \u00b7 ready in roughly ' + jobEtaRange(job.end - job.start)
         : '',
       // Charging is per source minute, so an estimate is only honest once the
       // length is known. The server confirms the real cost before processing.
@@ -7959,20 +7957,21 @@
       // and the DeenAI screen already settled this the same way.
       jobBrief: String(UI.jobBrief || ''),
       jobBriefMax: 400,
-      jobBriefExamples: [
-        'The parts about repentance and mercy',
-        'Any story he tells',
-        'Advice for young Muslims',
-        'Where he talks about the hereafter',
-      ],
+      // No example chips: they read as random buttons under the box
+      // (Youssef, 10 Sept 2026). The placeholder says what the box is for.
+      jobBriefExamples: [],
       jobIsStepKind: jobStepId() === 'kind',
-      jobIsStepTrim: jobStepId() === 'trim',
+      // The range lives on the first step now; the export's trim block is
+      // gated on this binding, so pointing it at the brief step shows it there.
+      jobIsStepTrim: jobStepId() === 'brief',
       jobIsStepLengths: jobStepId() === 'lengths',
       // Drawn under the length bands. Empty for an account with no destination
       // that cares, which is most of them.
       jobLengthNote: lengthWarning(DATA),
       jobIsStepStyle: jobStepId() === 'style',
-      jobIsStepPicture: jobStepId() === 'picture',
+      // Scenery is a template decision, not a per-lecture one; the picker
+      // stays built and never shows in the panel.
+      jobIsStepPicture: false,
       jobIsStepSound: jobStepId() === 'sound',
       jobIsStepReview: jobStepId() === 'review',
       // What pressing the button actually sets off. The last of these is the

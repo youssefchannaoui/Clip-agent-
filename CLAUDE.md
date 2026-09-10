@@ -18812,3 +18812,35 @@ only, and any PNG is a generated ground plus text the probe itself wrote. No
 dispatch input is interpolated into a shell command -- inputs become a JSON
 literal in the `PARAMS = {}` seam and the script travels as one base64 blob.
 `WORKER_SHARED_SECRET` is read inside the container and never printed.
+
+## The job panel asks six questions, and the template answers the rest (v3.187.0, 10 Sept 2026)
+
+Youssef, after five canvas rounds: "templates do most of the thing because
+they're meant to configure a template ... then have a billion options now."
+So the panel now asks only what a template cannot know about THIS lecture:
+
+    1 What is it about, and which part?   brief (optional) + the range
+    2 What are you clipping?              lecture / Qur'an, spoken language
+    3 How many clips, and how long?       count + tick-any length bands
+    4 Which template?                     the template cards
+    5 What plays underneath?              nasheed
+    6 Ready to go                         the summary, unchanged
+
+- **The `trim` and `picture` steps are GONE from `JOB_STEPS`.** The range now
+  shows on step 1 because the export's trim block is gated on the binding
+  `jobIsStepTrim`, which simply reads `=== 'brief'` -- no re-import. Scenery is
+  a template decision; `jobIsStepPicture` is `false`, so `paintJobBackground`
+  stays built and never mounts. The 20-second blocker moved with the range.
+- **No example chips under the brief** ("random buttons underneath");
+  `jobBriefExamples` is `[]` and the painter still handles a list.
+- **The panel is `rgba(9,9,10,.84)` with a backdrop blur** rather than the
+  warm gradient, at his call ("just a black background, a bit transparent so
+  you can see what's behind"). Design edit, re-import proven byte-stable
+  first; the diff is exactly that one hoisted class's values.
+- The poster is 300px wide (was 216); the range hint reads the length and
+  the ETA rather than "drag either handle".
+- Every reader of step numbers goes through `jobStepNo(id)`, which is why the
+  summary's Edit links followed the change without a hand edit.
+- **Not built, said rather than implied:** the Look row (natural / dark /
+  black & white per lecture) and auto-approve locked to Pro from the canvas.
+  Both are new product decisions, not layout.

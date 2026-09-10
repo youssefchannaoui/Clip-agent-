@@ -145,12 +145,12 @@ function atStep(n, brief) {
 test('the brief is the first step, and it never blocks', () => {
   const v = atStep(1);
   assert.equal(v.jobIsStepBrief, true, 'step one is the brief');
-  assert.match(v.jobStepTitle, /what would you like clipped/i);
+  assert.match(v.jobStepTitle, /what is it about/i);
   assert.match(v.jobStepHint, /optional/i, 'the hint says so, because the button cannot');
   // Optional means Continue is live with the box empty. jobNextLabel carries
   // the blocker's reason when there is one.
   assert.equal(v.jobNextLabel, 'Continue');
-  assert.equal(v.jobStepCounter, '1 / 8');
+  assert.equal(v.jobStepCounter, '1 / 6');
 });
 
 test('typing a brief and clearing it both reach the binding', () => {
@@ -162,20 +162,19 @@ test('typing a brief and clearing it both reach the binding', () => {
   assert.equal(A.bindings(DATA).jobBrief, '');
 });
 
-test('the examples fill the box rather than only suggesting wording', () => {
+test('no example chips under the box', () => {
+  // They read as "random buttons underneath" (Youssef, 10 Sept 2026). The
+  // painter still handles a list, so this pins the DECISION that it is empty:
+  // a chip that comes back has to come back on purpose.
   const v = atStep(1);
-  assert.ok(v.jobBriefExamples.length >= 3, 'a row worth drawing');
-  for (const example of v.jobBriefExamples) {
-    v.onJobBrief(example);
-    assert.equal(A.bindings(DATA).jobBrief, example, `${example} did not reach the box`);
-  }
+  assert.deepEqual(Array.from(v.jobBriefExamples), []);
 });
 
 test('the review names what it is looking for, empty or not', () => {
-  const blank = atStep(8).jobSummaryRows.find((r) => r.label === LOOKING);
+  const blank = atStep(6).jobSummaryRows.find((r) => r.label === LOOKING);
   assert.ok(blank, 'the review says nothing about the first question otherwise');
   assert.match(blank.value, /anything worth clipping/i, 'silence would read as the step not happening');
-  const asked = atStep(8, 'the parts about repentance').jobSummaryRows.find((r) => r.label === LOOKING);
+  const asked = atStep(6, 'the parts about repentance').jobSummaryRows.find((r) => r.label === LOOKING);
   assert.equal(asked.value, 'the parts about repentance');
 });
 
@@ -187,17 +186,17 @@ test('every review row lands on the step that produced it', () => {
   // from any other number, and the first version of this test proved that by
   // failing on `brief.slice(0, 57)`.
   const expected = {
-    [LOOKING]: 'What would you like clipped?',
-    'From the lecture': 'How much of the lecture?',
-    'Clip lengths': 'How long should the clips be?',
-    Style: 'How should the captions look?',
-    'Captions from': 'How should the captions look?',
+    [LOOKING]: 'What is it about, and which part?',
+    'From the lecture': 'What is it about, and which part?',
+    'Clip lengths': 'How many clips, and how long?',
+    Style: 'Which template?',
+    'Captions from': 'Which template?',
     'Spoken language': 'What are you clipping?',
     Underneath: 'What plays underneath?',
   };
   const seen = [];
   for (const [label, title] of Object.entries(expected)) {
-    const row = atStep(8).jobSummaryRows.find((r) => r.label === label);
+    const row = atStep(6).jobSummaryRows.find((r) => r.label === label);
     if (!row) continue;
     seen.push(label);
     row.go(null);
