@@ -1136,7 +1136,7 @@ function renderHome(){
         <div class="dc-v5-hero-copy">
           <div class="dc-v5-eyebrow"><i></i> AI clip studio</div>
           <h1>One talk.<br>Your next month of content.</h1>
-          <p>Upload a lecture or recitation you own, then let DeenClipped build clean vertical clips you review before publishing.</p>
+          <p>DeenClipped finds the strongest moments, builds clean vertical clips and prepares them for every channel—while you stay in control of what gets published.</p>
           <div class="dc-v5-hero-actions"><button class="dc-btn" id="dcHeroCreate">Start clipping</button>${waiting?`<button class="dc-btn secondary" data-dc-nav="review">Review ${waiting} ready</button>`:''}</div>
           <div class="dc-v5-inline-stats" aria-label="Workspace summary">${v5InlineStat(projects.length,'Sources')}${v5InlineStat(clips.length,'Clips')}${v5InlineStat(waiting,'To review')}${v5InlineStat(posted,'Published')}</div>
           ${v5BrandRail(d)}
@@ -1145,14 +1145,14 @@ function renderHome(){
       </section>
 
       <section class="dc-v5-create" data-tour="create-form">
-        <div class="dc-v5-create-head"><div><h2>Create your clips</h2><p>Upload the original video file you own or are authorised to repurpose.</p></div><span class="dc-v5-token-note">${uiIcon('tokens')} Token cost is confirmed before processing</span></div>
+        <div class="dc-v5-create-head"><div><h2>Create your clips</h2><p>Paste a supported video link or upload your original file.</p></div><span class="dc-v5-token-note">${uiIcon('tokens')} Token cost is confirmed before processing</span></div>
+        <div class="dc-v5-url-row"><span class="dc-v5-url-brand">${socialSvg('youtube')}</span><input id="dcCreateUrl" placeholder="Paste a YouTube or video URL"><button class="dc-btn" id="dcGenerate" data-tour="generate-button">Generate clips</button></div>
         <div class="dc-v5-options">
           <label class="dc-v5-option"><span>Look</span><select id="dcCreateTemplate" data-tour="template-picker">${(d.templates||[]).map(t=>`<option value="${esc(t.id)}" ${t.id===d.selectedTemplate?.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label>
           <label class="dc-v5-option"><span>Clips</span><select id="dcCreateCount" aria-label="Number of clips"><option>4</option><option selected>8</option><option>12</option><option>16</option></select></label>
           <label class="dc-v5-option"><span>Length</span><select id="dcCreateDuration" aria-label="Clip duration"><option value="15,45">15–45 sec</option><option value="30,60" selected>30–60 sec</option><option value="45,90">45–90 sec</option></select></label>
           <button class="dc-btn secondary dc-v5-upload" id="dcPickVideo" type="button">${uiIcon('publish')} Upload original</button>
         </div>
-        <label class="dc-v5-rights"><input id="dcSourceRights" type="checkbox"> <span>I confirm that I own this video or have permission to create clips and publish them.</span></label>
         <input id="dcVideoUpload" type="file" accept="video/mp4,video/quicktime,video/x-m4v,video/webm,video/x-matroska" hidden>
       </section>
 
@@ -1163,9 +1163,10 @@ function renderHome(){
         <aside class="dc-v5-side">${v5UpNext(d,jobs,next,waiting,selectedTemplate)}${v5Channels(d,connected)}</aside>
       </section>
     </div>`;
+  $('#dcGenerate').onclick=generateProject;
   $('#dcPickVideo').onclick=()=>$('#dcVideoUpload').click();
   $('#dcVideoUpload').onchange=()=>prepareVideoUpload($('#dcVideoUpload').files?.[0]);
-  $('#dcHeroCreate').onclick=()=>$('#dcPickVideo').click();
+  $('#dcHeroCreate').onclick=()=>$('#dcCreateUrl').focus();
   requestAnimationFrame(()=>animatePanel(panel));
 }
 function uiIcon(name){return `<span class="dc-ui-icon">${ICON[name]||ICON.sparkles}</span>`}
@@ -1642,7 +1643,6 @@ function videoDuration(file){
 
 async function prepareVideoUpload(file){
   if(!file)return;
-  if(!$('#dcSourceRights')?.checked){$('#dcVideoUpload').value='';return notify('Confirm you own this video or have permission to repurpose it before uploading.','bad')}
   if(file.size>2*1024*1024*1024){$('#dcVideoUpload').value='';return notify('Choose a video smaller than 2 GB.','bad')}
   const button=$('#dcPickVideo');button.disabled=true;button.textContent='Reading…';
   try{
@@ -1654,7 +1654,6 @@ async function prepareVideoUpload(file){
 }
 
 async function queueVideoUpload(file,button,range={}){
-  if(!$('#dcSourceRights')?.checked)throw new Error('Confirm you own this video or have permission to repurpose it before uploading.');
   const [min,max]=$('#dcCreateDuration').value.split(',').map(Number);
   button.disabled=true;button.textContent='Uploading…';
   try{
@@ -1665,7 +1664,6 @@ async function queueVideoUpload(file,button,range={}){
     const response=await fetch(upload.uploadUrl,{method:'PUT',headers:{'Content-Type':contentType},body:file});
     if(!response.ok)throw new Error(`Secure upload failed (${response.status}). Check the object-storage CORS settings and try again.`);
     const payload={objectKey:upload.key,fileName:file.name,title:file.name.replace(/\.[^.]+$/,''),durationSec:Number(range.durationSec||0),sourceStartSeconds:Math.max(0,Math.round(Number(range.sourceStartSeconds||0)))};
-    payload.sourceRightsConfirmed=true;
     if(Number.isFinite(Number(range.sourceEndSeconds))&&Number(range.sourceEndSeconds)>payload.sourceStartSeconds)payload.sourceEndSeconds=Math.round(Number(range.sourceEndSeconds));
     await callApi('/api/videos',{method:'POST',body:JSON.stringify(payload)});
     notify('Video uploaded directly to processing storage — clip generation is queued');await refreshData();renderHome();

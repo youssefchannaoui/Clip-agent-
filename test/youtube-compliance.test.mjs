@@ -177,7 +177,7 @@ test('the YouTube mark is unmodified, uncontained and at least 20px', () => {
   assert.match(page, /:has\(> i\.ph-youtube-logo:first-child\)\{[^}]*border-color:transparent/);
 });
 
-test('the privacy policy names the connected-channel API use, retention and the way out', async () => {
+test('the privacy policy names the API calls, the retention and the way out', async () => {
   const marketing = await import('../src/marketing.js');
   const html = marketing.privacy({ base: 'https://deenclipped.online', currentUser: null });
   for (const needle of [
@@ -192,13 +192,17 @@ test('the privacy policy names the connected-channel API use, retention and the 
   }
 });
 
-test('the source-content section makes the production upload-only boundary explicit', async () => {
+test('the URL-processing section describes production, not the local-mode path', async () => {
+  // This section goes to Google as part of a ToS response, so it must match
+  // the running configuration: WORKER_BASE_URL is set in production, which
+  // makes processingMode "remote". Since 26 Aug 2026 the production worker
+  // downloads through yt-dlp and the configured Webshare residential pool.
   const marketing = await import('../src/marketing.js');
   const html = marketing.privacy({ base: 'https://deenclipped.online', currentUser: null });
-  const section = html.slice(html.indexOf('Source content'), html.indexOf('Security and storage'));
-  assert.match(section, /original video files uploaded by the creator/);
-  assert.match(section, /must confirm that they own the source or have permission to repurpose it/);
-  assert.match(section, /does not import, download or retrieve audiovisual source files from public YouTube URLs/);
-  assert.doesNotMatch(section, /yt-dlp|Webshare|SocialKit|Vizard/,
-    'retired URL-import providers must not be presented as the production workflow');
+  const section = html.slice(html.indexOf('YouTube URL processing'), html.indexOf('Security and storage'));
+  assert.match(section, /yt-dlp/, 'names the downloader production actually calls');
+  assert.match(section, /Webshare/, 'names the proxy network production may call');
+  assert.match(section, /No Google credentials are sent/i);
+  assert.doesNotMatch(section, /SocialKit|Vizard/,
+    'retired providers must not be presented as the current production path');
 });

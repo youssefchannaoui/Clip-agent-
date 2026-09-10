@@ -2339,7 +2339,6 @@ async function route(req, res, url) {
   }
 
   if (method === 'POST' && pathname === '/api/source-info') {
-    return json(res, 410, { error: 'Link imports are unavailable. Upload the original video file you own or are authorised to use.', originalVideoRequired: true });
     const body = await readBody(req);
     const urls = String(body.urls || '').split(/[\n,]+/).map(value => value.trim()).filter(Boolean);
     if (!urls.length) return json(res, 400, { error: 'Paste at least one video link.' });
@@ -2398,7 +2397,6 @@ async function route(req, res, url) {
     if (body.objectKey) {
       try {
         assertVerified(currentUser);
-        if (body.sourceRightsConfirmed !== true) throw new Error('Confirm that you own this video or have permission to repurpose it before uploading.');
         const objectKey = assertStorageObjectKey(body.objectKey);
         // The key shape is checked above; this checks it is *this* account's
         // upload, so one tenant cannot submit another tenant's file.
@@ -2419,14 +2417,12 @@ async function route(req, res, url) {
           backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds,
           publishTo: Array.isArray(body.publishTo) ? body.publishTo : null,
           sourceKind: 'object_storage', originalFileName: body.fileName || '', displayUrl: `Uploaded file · ${body.fileName || 'video'}`,
-          sourceRightsConfirmed: true, sourceRightsConfirmedAt: Date.now(),
           sourceMeta: { title: body.title || body.fileName || '', durationSec: Number(body.durationSec || 0) || null, thumbnail: '' },
           sourceRange: { startSec: Number(body.sourceStartSeconds || 0), endSec: Number(body.sourceEndSeconds) || null },
         });
         return json(res, 201, { ok: true, projectId });
       } catch (error) { return json(res, 400, { error: error.message }); }
     }
-    return json(res, 410, { error: 'Link imports are unavailable. Upload the original video file you own or are authorised to use.', originalVideoRequired: true });
     const urls = String(body.urls || '').split(/[\n,]+/).map(value => value.trim()).filter(Boolean);
     if (!urls.length) return json(res, 400, { error: 'Paste at least one video link.' });
     try { assertVerified(currentUser); }
@@ -2451,7 +2447,6 @@ async function route(req, res, url) {
     }
     let upload = null;
     try {
-      if (req.headers['x-source-rights-confirmed'] !== 'true') throw new Error('Confirm that you own this video or have permission to repurpose it before uploading.');
       upload = await saveVideoUpload(req, currentUser.id);
       const sourceStartSeconds = Math.max(0, Math.round(Number(req.headers['x-source-start-seconds'] || 0)));
       const sourceEndRaw = Number(req.headers['x-source-end-seconds']);
@@ -2471,7 +2466,6 @@ async function route(req, res, url) {
         sourceRange: { startSec: sourceStartSeconds, endSec: sourceEndSeconds },
         sourceMeta: { title: upload.title, durationSec: durationSec || null, thumbnail: '' },
         sourceKind: 'upload', originalFileName: upload.fileName, uploadedInputFile: upload.filePath,
-        sourceRightsConfirmed: true, sourceRightsConfirmedAt: Date.now(),
         displayUrl: `Uploaded file · ${upload.fileName}`,
       });
       return json(res, 201, { ok: true, projectId, fileName: upload.fileName, size: upload.size });
