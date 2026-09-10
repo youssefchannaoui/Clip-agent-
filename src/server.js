@@ -108,6 +108,9 @@ const STUDIO_ASSETS = {
   '/studio-deenai.js': { file: studioAsset('studio-deenai.js'), type: JS_TYPE },
   '/studio-templates.css': { file: studioAsset('studio-templates.css'), type: 'text/css; charset=utf-8' },
   '/studio-templates.js': { file: studioAsset('studio-templates.js'), type: JS_TYPE },
+  // The Start-job panel: the canvas design as its own host panel over the same bindings.
+  '/studio-job.css': { file: studioAsset('studio-job.css'), type: 'text/css; charset=utf-8' },
+  '/studio-job.js': { file: studioAsset('studio-job.js'), type: JS_TYPE },
   /*
    * The push service worker, and it must be served from THE ROOT. A worker's
    * scope cannot rise above its own path, so at /studio-sw.js it could only

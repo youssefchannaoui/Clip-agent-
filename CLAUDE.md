@@ -18844,3 +18844,34 @@ So the panel now asks only what a template cannot know about THIS lecture:
 - **Not built, said rather than implied:** the Look row (natural / dark /
   black & white per lecture) and auto-approve locked to Pro from the canvas.
   Both are new product decisions, not layout.
+
+## The job panel IS the canvas now (v3.189.0, 10 Sept 2026)
+
+Youssef: "why arent you followig your own deisng? its meant to be a redesign
+to EXACTLY YOUR BUILD?" Two releases had restyled the export's panel toward
+the canvas; this one moves the canvas in.
+
+- **`src/public/studio-job.js` + `studio-job.css`** -- a host panel over the
+  SAME bindings and handlers, the device the Templates screen and the phone
+  use. `StudioJob.paint(vals, DATA)` runs in paintStudio's list; it mounts
+  `#dcJob` inside the export's dialog and hides the dialog's own children in
+  place (`data-host-style`), never removing them (v3.124.5). The export
+  removes the overlay when the job closes and the panel goes with it.
+- **The stylesheet is GENERATED from `design-canvas/Main.dc.html`'s `<style>`**,
+  every selector scoped under `#dcJob` and every keyframe prefixed `dcj-`, plus
+  a tail of overrides. Regenerate from the canvas rather than editing the
+  scoped rules by hand; the script is in this release's commit.
+- **The studio has its own `.sld` and `.seg`** (absolute, full-bleed), and they
+  reached the panel through the class names the canvas shares -- the whole
+  sound step painted beige. Overridden in the tail. Any canvas class that
+  collides with a studio class needs the same.
+- Every control calls the adapter's handler: `setJobStart/End` and `setTpl`
+  with a synthetic `{target:{value}}`, `pickJobType`, `countOpts[].toggle`,
+  `jobNasheeds[].select`, `toggleJobMusic`, `setJobVolume`, `jobSummaryRows[].go`,
+  `runGenerate`. Bands write through `StudioAdapter.onClipSettings` with the
+  export painter's own rule; destinations mutate `ui.jobPublishTo` the way
+  `paintJobDest` does. The brief textarea and the range handles are never
+  rebuilt under the caret (the signature excludes their values).
+- The export's own step blocks (brief, kind cards, style row, bands, dest,
+  music) still paint into the hidden `#studioJobSlot`; harmless, and they
+  are what the phone's full-height sheet shows.

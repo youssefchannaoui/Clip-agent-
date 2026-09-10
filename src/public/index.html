@@ -77,6 +77,7 @@
 <!-- The desktop Templates screen. A second template over the same bindings,
      mounted only on that screen and only above the phone seam. -->
 <link rel="stylesheet" href="/studio-templates.css">
+<link rel="stylesheet" href="/studio-job.css">
 <link rel="stylesheet" href="/studio-deenai.css">
 <!-- The clip editor is held back for launch: it opens, blurred, behind a
      "coming soon" notice. Deleting these two lines and the two files they name
@@ -2828,6 +2829,7 @@ select:focus{outline:none;border-color:var(--blue)}
 <script src="/studio-adapter.js"></script>
 <script src="/studio-mobile.js"></script>
 <script src="/studio-templates.js"></script>
+<script src="/studio-job.js"></script>
 <script src="/studio-deenai.js"></script>
 <script src="/studio-notify.js"></script>
 
@@ -12465,6 +12467,7 @@ function paintStudio(){
   paintJobBackground(vals);
   paintJobDest(vals);
   paintJobMusic(vals);
+  if(window.StudioJob)window.StudioJob.paint(vals,DATA);
   paintTemplatesLayout();
   paintHelp();
   /* DATA is in paintStudio's scope and not in the painter's -- the trap this
