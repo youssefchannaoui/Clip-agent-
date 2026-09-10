@@ -230,6 +230,32 @@
       .hall img, .rv, .hr > i, .pv.on, .shape.on, .kb, .fill img, .blurbg img, .cap span, .cap .tw, .wave i, .scan, .found, .rainy, .snowy, .dusty, .bokeh, .pv.live .kb, .pv.mini .kb { animation: none; }
       .pv, .shape, .opt, .cta, .band, .stp > i { transition: none; }
     }
+    /* v7 */
+    .briefRow { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+    .briefIn { flex: 1; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border: 1px solid rgba(245,241,232,.14); border-radius: 4px; background: rgba(7,6,7,.5); font-size: 14px; color: #f2ecdf; }
+    .briefIn small { color: #736d63; font-size: 12px; }
+    .kindSeg { display: inline-flex; border: 1px solid rgba(245,241,232,.14); border-radius: 4px; overflow: hidden; }
+    .kindSeg button { padding: 12px 18px; font-size: 12.5px; color: #a8a196; letter-spacing: .04em; } .kindSeg button.on { background: #d9b66f; color: #181410; }
+    .tpls { display: flex; gap: 16px; }
+    .tpl { position: relative; width: 156px; aspect-ratio: 9 / 16; border-radius: 6px; overflow: hidden; background: #111; border: 1px solid rgba(245,241,232,.1); transition: transform .35s cubic-bezier(.2,.8,.2,1), border-color .35s; }
+    .tpl:hover { transform: translateY(-4px); border-color: rgba(245,241,232,.3); } .tpl.on { border-color: #d9b66f; box-shadow: 0 0 0 1px #d9b66f, 0 20px 50px rgba(0,0,0,.6); }
+    .tpl img.bg, .tplL img.bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .tplL { position: relative; width: 250px; aspect-ratio: 9 / 16; border-radius: 8px; overflow: hidden; background: #111; box-shadow: 0 30px 80px rgba(0,0,0,.65); }
+    .tplN { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 10px 9px; font-size: 11px; letter-spacing: .06em; color: #f2ecdf; background: linear-gradient(transparent, rgba(7,6,7,.85)); display: flex; justify-content: space-between; align-items: baseline; }
+    .tplN small { font-size: 9px; letter-spacing: .14em; color: #d9b66f; text-transform: uppercase; }
+    .mark { position: absolute; left: 0; right: 0; text-align: center; letter-spacing: .28em; color: rgba(242,236,223,.85); font-weight: 600; }
+    .tc { position: absolute; left: 6%; right: 6%; text-align: center; color: #fff; font-family: "Montserrat", "Helvetica Neue", Arial, sans-serif; }
+    .tc.bold { font-weight: 800; } .tc.bold span { display: block; animation: stack 4.2s ease-in-out infinite; } .tc.bold span:nth-child(2) { animation-delay: .35s } .tc.bold span:nth-child(3) { animation-delay: .7s } .tc.bold span:nth-child(4) { animation-delay: 1.05s }
+    .tc.head { font-weight: 800; text-transform: uppercase; } .tc.head span { display: block; animation: stack 4.2s ease-in-out infinite; } .tc.head span:nth-child(2) { animation-delay: .35s } .tc.head span:nth-child(3) { animation-delay: .7s }
+    .tc.cards span { display: inline-block; padding: .22em .55em; background: rgba(7,6,7,.78); border-radius: .18em; animation: cardIn 4.2s ease-in-out infinite; }
+    .tc.mono { font-family: "Outfit", "Helvetica Neue", Arial, sans-serif; font-weight: 500; } .tc.mono span { animation: kw 1.4s steps(1) infinite; }
+    .tc.mono span:nth-child(2) { animation-delay: .35s } .tc.mono span:nth-child(3) { animation-delay: .7s } .tc.mono span:nth-child(4) { animation-delay: 1.05s }
+    .dim { color: #808080; }
+    .lock { display: inline-flex; align-items: center; gap: 6px; font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: #d9b66f; border: 1px solid rgba(217,182,111,.4); border-radius: 3px; padding: 3px 7px; }
+    .tplMeta { display: flex; flex-direction: column; gap: 10px; }
+    .tplMeta b { font-family: "Fraunces", Georgia, serif; font-weight: 400; font-size: 26px; color: #f2ecdf; letter-spacing: -.02em; }
+    .tplMeta p { font-size: 12.5px; line-height: 1.6; color: #a8a196; margin: 0; max-width: 300px; }
+    .tplMeta a { font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: #d9b66f; }
   </style>
 </helmet>
 
@@ -248,7 +274,7 @@
       </div>
       <div class="path">
         <div class="pathN"><b>{{ stepNo }}</b><span>{{ pathRest }}</span></div>
-        <div class="steps"><sc-for list="{{ segs }}" as="s" hint-placeholder-count="9"><div class="stp"><i style="{{ s.st }}"></i></div></sc-for></div>
+        <div class="steps"><sc-for list="{{ segs }}" as="s" hint-placeholder-count="5"><div class="stp"><i style="{{ s.st }}"></i></div></sc-for></div>
         <button class="x"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
       </div>
     </div>
@@ -261,67 +287,21 @@
 
     <div class="work {{ dirCls }}">
 
-      <sc-if value="{{ isBrief }}" hint-placeholder-val="{{ true }}">
-        <div style="display: grid; grid-template-columns: 1.15fr .85fr; gap: 34px">
-          <div class="rv">
-            <textarea class="write" placeholder="e.g. the parts about repentance, or the story he tells about his mother"></textarea>
-            <div class="opts" style="margin-top: 10px"><sc-for list="{{ examples }}" as="e" hint-placeholder-count="6"><button class="{{ e.cls }}" onClick="{{ e.pick }}">{{ e.label }}</button></sc-for></div>
-            <div class="sec" style="margin-top: 18px">
-              <div class="secT">Spoken language</div>
-              <div class="seg"><button class="{{ langAuto }}" onClick="{{ setAuto }}">Detect it</button><button class="{{ langEn }}" onClick="{{ setEn }}">English</button><button class="{{ langAr }}" onClick="{{ setAr }}">Arabic</button></div>
-              <div class="fnote">Auto reads both — Arabic inside an English lecture comes out in Arabic script.</div>
-            </div>
-          </div>
-          <div class="rv sec">
-            <div class="secT">What the clipper will look for</div>
-            <div class="tx">
-              <div class="scan"></div>
-              <div class="tl">…and that is the thing people forget. <span class="found fA">Allah does not close the door of repentance</span> because you walked through it yesterday. He is not waiting for you to run out of chances.</div>
-              <div class="tl">My mother used to say — and I only understood this much later — <span class="found fB">His mercy reaches you before you reach Him</span>. That is the whole of it.</div>
-              <div class="tl">So when someone says it is too late, ask them: <span class="found fC">too late for whom?</span> The door has never once been shut.</div>
-            </div>
-          </div>
-        </div>
-      </sc-if>
-
-      <sc-if value="{{ isKind }}" hint-placeholder-val="{{ false }}">
-        <div style="display: flex; gap: 34px; align-items: flex-start">
-          <div class="rv" style="display: flex; gap: 12px">
-            <button class="{{ kLecCls }}" onClick="{{ pickLecture }}" style="width: 176px; aspect-ratio: 9 / 16">
-              <img class="kb" src="preview-sample.webp"><div class="wm">DEENCLIPPED</div>
-              <div class="cap clean {{ modeCls }}"><span>He</span><span>never</span><span>stops</span><span>answering</span></div>
-              <div class="pvL">Islamic lecture<small>Captions, nasheed, your mark</small></div>
-            </button>
-            <button class="{{ kQurCls }}" onClick="{{ pickQuran }}" style="width: 176px; aspect-ratio: 9 / 16">
-              <img class="kb" src="reel-quran.webp">
-              <div class="pvL">Quran recitation<small>Ayah and translation only</small></div>
-            </button>
-          </div>
-          <div class="rv sec" style="flex: 1">
-            <div class="secT">How the captions move</div>
-            <div class="opts">
-              <sc-for list="{{ modes }}" as="m" hint-placeholder-count="6"><button class="{{ m.cls }}" onClick="{{ m.pick }}"><span>{{ m.label }}</span><small>{{ m.sub }}</small></button></sc-for>
-            </div>
-            <div class="secT" style="margin-top: 8px">Rules this kind carries</div>
-            <div class="fnote" style="line-height: 1.6; max-width: 52ch">{{ kindRule }}</div>
-          </div>
-        </div>
-      </sc-if>
-
-      <sc-if value="{{ isTrim }}" hint-placeholder-val="{{ false }}">
+      <sc-if value="{{ isLecture }}" hint-placeholder-val="{{ true }}">
         <div>
           <div class="rv">
             <div class="strip">
               <sc-for list="{{ cells }}" as="c" hint-placeholder-count="14"><div class="cell"><img src="preview-sample.webp" style="{{ c.img }}"></div></sc-for>
               <div class="band" style="{{ bandSt }}"><span class="grip" style="left: -4px"></span><span class="grip" style="right: -4px"></span></div>
             </div>
-            <div class="clock"><span>0:00</span><b>{{ rangeText }}</b><span>32:16</span></div>
+            <div class="clock"><span>0:00</span><b>{{ rangeText }} · {{ minsLabel }} · {{ tokens }} tokens</b><span>32:16</span></div>
           </div>
-          <div class="rv" style="display: flex; gap: 34px; margin-top: 16px; align-items: flex-start">
-            <div class="sec"><div class="secT">Usual cuts</div><div class="opts"><sc-for list="{{ ranges }}" as="r" hint-placeholder-count="4"><button class="{{ r.cls }}" onClick="{{ r.pick }}">{{ r.label }}</button></sc-for></div></div>
-            <div class="sec"><div class="secT">Exact</div><div style="display: flex; gap: 8px"><div class="fld">Start <b>{{ startT }}</b></div><div class="fld">End <b>{{ endT }}</b></div><div class="fld"><span>Length</span><b>{{ minsLabel }}</b></div></div></div>
-            <div class="sec" style="margin-left: auto; text-align: right"><div class="secT" style="justify-content: flex-end">Cost</div><div><span style="font-family: Fraunces, Georgia, serif; font-size: 28px; color: #f1d18e">{{ tokens }}</span> <span class="fnote">tokens, charged once</span></div></div>
+          <div class="rv" style="display: flex; gap: 8px; margin-top: 10px"><sc-for list="{{ ranges }}" as="r" hint-placeholder-count="4"><button class="{{ r.cls }}" onClick="{{ r.pick }}">{{ r.label }}</button></sc-for></div>
+          <div class="rv briefRow">
+            <div class="briefIn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d9b66f" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg><span>{{ briefText }}</span><small>{{ briefHint }}</small></div>
+            <div class="kindSeg"><button class="{{ kLecCls }}" onClick="{{ pickLecture }}">Lecture</button><button class="{{ kQurCls }}" onClick="{{ pickQuran }}">Qur’an recitation</button></div>
           </div>
+          <div class="rv fnote" style="margin-top: 12px">{{ kindRule }}</div>
         </div>
       </sc-if>
 
@@ -333,98 +313,39 @@
             <div class="cardF" style="{{ deck5 }}"><img src="reel-depart.webp"></div><div class="cardF" style="{{ deck6 }}"><img src="reel-winter.webp"></div>
             <div class="cardF" style="{{ deck7 }}"><img src="reel-kaaba-a.webp"></div><div class="cardF" style="{{ deck8 }}"><img src="reel-landscape.webp"></div>
           </div>
-          <div class="rv" style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 22px 34px">
-            <div class="sec"><div class="secT">How many</div><div style="display: flex; align-items: center; gap: 12px"><div class="stepper"><button onClick="{{ less }}">−</button><div class="stepV">{{ count }}</div><button onClick="{{ more }}">+</button></div><span class="fnote">clips from this lecture, up to 20</span></div></div>
-            <div class="sec"><div class="secT">Lengths allowed</div><div class="opts"><sc-for list="{{ bands }}" as="b" hint-placeholder-count="6"><button class="{{ b.cls }}" onClick="{{ b.pick }}">{{ b.label }}</button></sc-for></div></div>
-            <div class="sec"><div class="secT">Auto-approve this lecture</div><div class="seg"><button class="{{ apOff }}" onClick="{{ setApOff }}">Off — I review</button><button class="{{ ap80 }}" onClick="{{ setAp80 }}">Score 80+</button><button class="{{ ap90 }}" onClick="{{ setAp90 }}">Score 90+</button></div><div class="fnote">Scripture always waits for you, whatever this says.</div></div>
+          <div class="rv" style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 26px 34px">
+            <div class="sec"><div class="secT">How many</div><div style="display: flex; align-items: center; gap: 12px"><div class="stepper"><button onClick="{{ less }}">−</button><div class="stepV">{{ count }}</div><button onClick="{{ more }}">+</button></div><span class="fnote">{{ countNote }}</span></div></div>
+            <div class="sec"><div class="secT">Lengths allowed · pick any</div><div class="opts"><sc-for list="{{ bands }}" as="b" hint-placeholder-count="6"><button class="{{ b.cls }}" onClick="{{ b.pick }}">{{ b.label }}</button></sc-for></div><div class="fnote" style="margin-top: 8px">{{ bandNote }}</div></div>
+            <div class="sec" style="grid-column: 1 / -1"><div class="secT">Auto-approve <span class="lock" style="margin-left: 10px">Pro &amp; Studio</span></div>
+              <div class="seg"><button class="{{ apOff }}" onClick="{{ setApOff }}">Off — I review every clip</button><button class="{{ ap80 }}" onClick="{{ setAp80 }}">Score 80+</button><button class="{{ ap90 }}" onClick="{{ setAp90 }}">Score 90+</button></div>
+              <div class="fnote" style="margin-top: 8px">{{ apNote }}</div></div>
           </div>
         </div>
       </sc-if>
 
-      <sc-if value="{{ isStyle }}" hint-placeholder-val="{{ false }}">
-        <div style="display: flex; gap: 30px; align-items: flex-start">
-          <div class="rv" style="flex: none">
-            <div class="secT" style="margin-bottom: 10px">Live preview</div>
-            <div class="pv live" style="width: 236px; aspect-ratio: 9 / 16; cursor: default">
-              <div class="kbw" style="{{ lookStyle }}"><sc-if value="{{ liveQuran }}" hint-placeholder-val="{{ false }}"><img class="kb" src="reel-quran.webp"></sc-if><sc-if value="{{ liveNotQuran }}" hint-placeholder-val="{{ true }}"><img class="kb" src="preview-sample.webp"></sc-if></div>
-              <div class="dark"></div>
-              <sc-if value="{{ isRain }}" hint-placeholder-val="{{ false }}"><div class="rainy"></div></sc-if>
-              <sc-if value="{{ isSnow }}" hint-placeholder-val="{{ false }}"><div class="snowy"></div></sc-if>
-              <sc-if value="{{ isDust }}" hint-placeholder-val="{{ false }}"><div class="dusty"></div></sc-if>
-              <sc-if value="{{ isBokeh }}" hint-placeholder-val="{{ false }}"><div class="bokeh"></div></sc-if>
-              <sc-if value="{{ liveWm }}" hint-placeholder-val="{{ true }}"><div class="wm big">DEENCLIPPED</div></sc-if>
-              <sc-if value="{{ liveClean }}" hint-placeholder-val="{{ true }}"><div class="cap clean {{ modeCls }}" style="{{ liveCapStyle }}"><span>He</span><span>never</span><span>stops</span><span>answering</span></div></sc-if>
-              <sc-if value="{{ liveBold }}" hint-placeholder-val="{{ false }}"><div class="cap bold" style="{{ liveCapStyle }}"><span>He never</span><span style="animation-delay: .4s">stops</span><span style="animation-delay: .8s">answering</span></div></sc-if>
-              <sc-if value="{{ liveHead }}" hint-placeholder-val="{{ false }}"><div class="cap headline" style="{{ liveCapStyle }}"><span>He never stops</span><span style="animation-delay: .25s; font-size: .72em">answering you</span></div></sc-if>
-              <sc-if value="{{ liveMono }}" hint-placeholder-val="{{ false }}"><div class="cap mono" style="{{ liveCapStyle }}"><span class="tw">he never stops answering you</span></div></sc-if>
-                            <div class="pvL"><span>{{ liveLabel }}</span><small>{{ liveSub }}</small></div>
-            </div>
+      <sc-if value="{{ isTemplate }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; gap: 36px; align-items: flex-start">
+          <div class="rv tplL">
+            <sc-if value="{{ tQuran }}" hint-placeholder-val="{{ false }}"><img class="bg" src="reel-quran.webp" style="{{ lookF }}"></sc-if>
+            <sc-if value="{{ tNotQuran }}" hint-placeholder-val="{{ true }}"><img class="bg" src="preview-sample.webp" style="{{ lookF }}"><div class="mark" style="{{ markL }}">DEENCLIPPED</div></sc-if>
+            <sc-if value="{{ tBold }}" hint-placeholder-val="{{ false }}"><div class="tc bold" style="{{ capL }}"><span>He</span><span class="dim">never</span><span>stops</span><span class="dim">answering</span></div></sc-if>
+            <sc-if value="{{ tClean }}" hint-placeholder-val="{{ true }}"><div class="tc cards" style="{{ capL }}"><span>He never stops answering</span></div></sc-if>
+            <sc-if value="{{ tHead }}" hint-placeholder-val="{{ false }}"><div class="tc head" style="{{ capL }}"><span>He never</span><span class="dim">stops</span><span>answering</span></div></sc-if>
+            <sc-if value="{{ tMono }}" hint-placeholder-val="{{ false }}"><div class="tc mono" style="{{ capL }}"><span>answering</span></div></sc-if>
+            <div class="tplN"><span>{{ tplName }}</span><small>{{ lookName }}</small></div>
           </div>
           <div class="rv" style="flex: 1; min-width: 0">
-            <div class="secT">Style</div>
-            <div style="display: flex; gap: 8px; margin-top: 10px">
-              <button class="{{ stCleanCls }}" onClick="{{ stCleanPick }}" style="width: 82px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="wm">DEENCLIPPED</div><div class="cap clean sm"><span>He</span><span>never</span><span>stops</span><span>answering</span></div><div class="pvL">Clean Line</div></button>
-              <button class="{{ stBoldCls }}" onClick="{{ stBoldPick }}" style="width: 82px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="wm">DEENCLIPPED</div><div class="cap bold sm"><span>He never</span><span style="animation-delay: .4s">stops</span><span style="animation-delay: .8s">answering</span></div><div class="pvL">Bold Stack</div></button>
-              <button class="{{ stHeadCls }}" onClick="{{ stHeadPick }}" style="width: 82px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="cap headline sm"><span>He never stops</span><span style="animation-delay: .25s; font-size: .72em">answering you</span></div><div class="pvL">Headline</div></button>
-              <button class="{{ stMonoCls }}" onClick="{{ stMonoPick }}" style="width: 82px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="wm">DEENCLIPPED</div><div class="cap mono sm"><span class="tw">he never stops answering</span></div><div class="pvL">Mono Minimal</div></button>
-              <button class="{{ stQurCls }}" onClick="{{ stQurPick }}" style="width: 82px; aspect-ratio: 9 / 16"><img class="kb" src="reel-quran.webp"><div class="pvL">Quran</div></button>
+            <div class="tpls">
+              <button class="{{ tCleanCls }}" onClick="{{ pickClean }}"><img class="bg" src="preview-sample.webp"><div class="mark" style="{{ markS }}">DEENCLIPPED</div><div class="tc cards" style="{{ capClean }}"><span>He never stops</span></div><div class="tplN"><span>Clean Line</span></div></button>
+              <button class="{{ tBoldCls }}" onClick="{{ pickBold }}"><img class="bg" src="preview-sample.webp"><div class="mark" style="{{ markS }}">DEENCLIPPED</div><div class="tc bold" style="{{ capBold }}"><span>He</span><span class="dim">never</span><span>stops</span><span class="dim">answering</span></div><div class="tplN"><span>Bold Stack</span><small>Pro</small></div></button>
+              <button class="{{ tHeadCls }}" onClick="{{ pickHead }}"><img class="bg" src="preview-sample.webp"><div class="mark" style="{{ markS }}">DEENCLIPPED</div><div class="tc head" style="{{ capHead }}"><span>He never</span><span class="dim">stops</span><span>answering</span></div><div class="tplN"><span>Headline</span><small>Pro</small></div></button>
+              <button class="{{ tMonoCls }}" onClick="{{ pickMono }}"><img class="bg" src="preview-sample.webp" style="filter: grayscale(1)"><div class="mark" style="{{ markS }}">DEENCLIPPED</div><div class="tc mono" style="{{ capMono }}"><span>answering</span></div><div class="tplN"><span>Mono Minimal</span><small>Pro</small></div></button>
+              <button class="{{ tQurCls }}" onClick="{{ pickQur }}"><img class="bg" src="reel-quran.webp"><div class="tplN"><span>Qur’an</span></div></button>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px 30px; margin-top: 16px">
-              <div class="sec"><div class="secT">Caption size</div><div class="seg"><sc-for list="{{ sizes }}" as="z" hint-placeholder-count="4"><button class="{{ z.cls }}" onClick="{{ z.pick }}">{{ z.label }}</button></sc-for></div></div>
-              <div class="sec"><div class="secT">Position</div><div class="seg"><sc-for list="{{ positions }}" as="p" hint-placeholder-count="3"><button class="{{ p.cls }}" onClick="{{ p.pick }}">{{ p.label }}</button></sc-for></div></div>
-              <div class="sec"><div class="secT">Motion</div><div class="seg"><sc-for list="{{ motions }}" as="m" hint-placeholder-count="4"><button class="{{ m.cls }}" onClick="{{ m.pick }}">{{ m.label }}</button></sc-for></div></div>
-              <div class="sec"><div class="secT">Watermark</div><div class="seg"><sc-for list="{{ wms }}" as="w" hint-placeholder-count="2"><button class="{{ w.cls }}" onClick="{{ w.pick }}">{{ w.label }}</button></sc-for></div></div>
-              <div class="sec" style="grid-column: 1 / -1"><div class="secT">Look</div><div class="opts"><sc-for list="{{ looks }}" as="l" hint-placeholder-count="12"><button class="{{ l.cls }}" onClick="{{ l.pick }}">{{ l.label }}</button></sc-for></div></div>
-              <div class="sec"><div class="secT">Atmosphere</div><div class="opts"><sc-for list="{{ atmos }}" as="a" hint-placeholder-count="5"><button class="{{ a.cls }}" onClick="{{ a.pick }}">{{ a.label }}</button></sc-for></div></div>
-              <div class="sec"><div class="secT">Darken</div><div class="seg"><sc-for list="{{ darks }}" as="d" hint-placeholder-count="4"><button class="{{ d.cls }}" onClick="{{ d.pick }}">{{ d.label }}</button></sc-for></div></div>
-              <div class="fnote" style="grid-column: 1 / -1">Every press redraws the preview on the left. The renderer produces exactly this frame.</div>
+            <div style="display: flex; gap: 40px; margin-top: 26px; align-items: flex-start">
+              <div class="tplMeta"><b>{{ tplName }}</b><p>{{ tplDesc }}</p><a>Change how this template looks on Templates →</a></div>
+              <div class="sec" style="margin-left: auto"><div class="secT">Look for this lecture</div><div class="opts"><sc-for list="{{ looks }}" as="l" hint-placeholder-count="3"><button class="{{ l.cls }}" onClick="{{ l.pick }}">{{ l.label }}</button></sc-for></div><div class="fnote" style="margin-top: 8px">The only thing here that is not part of the template.</div></div>
             </div>
-          </div>
-        </div>
-      </sc-if>
-
-      <sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
-        <div style="display: flex; gap: 34px; align-items: flex-start">
-          <div class="rv" style="flex: 1">
-            <div class="matrix">
-              <div class="mrow">Portrait 9:16</div><div class="mrow">Feed 4:5</div><div class="mrow">Square 1:1</div><div class="mrow">Landscape 16:9</div>
-              <button class="{{ sh1 }}" onClick="{{ pk1 }}" style="width: 100%; aspect-ratio: 9 / 16"><div class="fill"><img src="preview-sample.webp"></div><div class="safe"></div><div class="lbl">Fill</div></button>
-              <button class="{{ sh2 }}" onClick="{{ pk2 }}" style="width: 100%; aspect-ratio: 4 / 5"><div class="fill"><img src="preview-sample.webp"></div><div class="lbl">Fill</div></button>
-              <button class="{{ sh3 }}" onClick="{{ pk3 }}" style="width: 100%; aspect-ratio: 1 / 1"><div class="fill"><img src="preview-sample.webp"></div><div class="lbl">Fill</div></button>
-              <button class="{{ sh4 }}" onClick="{{ pk4 }}" style="width: 100%; aspect-ratio: 16 / 9"><div class="fill"><img src="preview-sample.webp" style="object-position: 50% 20%"></div><div class="lbl">Full</div></button>
-              <button class="{{ sh5 }}" onClick="{{ pk5 }}" style="width: 100%; aspect-ratio: 9 / 16"><div class="blurbg"><img src="preview-sample.webp"></div><div class="inset"><img src="preview-sample.webp"></div><div class="lbl">Blur</div></button>
-              <button class="{{ sh6 }}" onClick="{{ pk6 }}" style="width: 100%; aspect-ratio: 4 / 5"><div class="blurbg"><img src="preview-sample.webp"></div><div class="inset"><img src="preview-sample.webp"></div><div class="lbl">Blur</div></button>
-              <button class="{{ sh7 }}" onClick="{{ pk7 }}" style="width: 100%; aspect-ratio: 1 / 1"><div class="blurbg"><img src="preview-sample.webp"></div><div class="inset"><img src="preview-sample.webp"></div><div class="lbl">Blur</div></button>
-              <button class="{{ sh8 }}" onClick="{{ pk8 }}" style="width: 100%; aspect-ratio: 16 / 9"><div class="blurbg"><img src="preview-sample.webp"></div><div class="inset" style="aspect-ratio: 9 / 16; width: 40%; left: 30%; right: auto"><img src="preview-sample.webp"></div><div class="lbl">Blur</div></button>
-            </div>
-          </div>
-          <div class="rv sec" style="width: 300px; flex: none">
-            <div class="secT">Framing follows</div>
-            <div class="seg"><sc-for list="{{ biases }}" as="b" hint-placeholder-count="4"><button class="{{ b.cls }}" onClick="{{ b.pick }}">{{ b.label }}</button></sc-for></div>
-            <div class="fnote" style="line-height: 1.6">Auto keeps whoever is speaking centred, and moves between two people as they take over.</div>
-            <div class="secT" style="margin-top: 10px">Fit on black</div>
-            <div class="opts"><button class="{{ fitOff }}" onClick="{{ setFitOff }}">Off</button><button class="{{ fitOn }}" onClick="{{ setFitOn }}">Keep the whole frame</button></div>
-            <div class="secT" style="margin-top: 10px">Safe area</div>
-            <div class="fnote" style="line-height: 1.6">The dashed box is where TikTok, Shorts and Reels draw their own buttons. Captions stay inside it wherever the clip posts.</div>
-          </div>
-        </div>
-      </sc-if>
-
-      <sc-if value="{{ isPicture }}" hint-placeholder-val="{{ false }}">
-        <div style="display: flex; gap: 34px; align-items: flex-start">
-          <div class="rv" style="display: flex; gap: 10px">
-            <button class="{{ pcOwnCls }}" onClick="{{ pcOwnPick }}" style="width: 132px; aspect-ratio: 9 / 16"><img class="kb" src="preview-sample.webp"><div class="pvL">The lecture<small>Following the speaker</small></div></button>
-            <button class="{{ pcHallCls }}" onClick="{{ pcHallPick }}" style="width: 132px; aspect-ratio: 9 / 16"><img class="kb" src="hero-hall.webp" style="object-position: 62% 50%"><div class="pvL">Mosque hall<small>Scenery, voice over it</small></div></button>
-            <button class="{{ pcKaabaCls }}" onClick="{{ pcKaabaPick }}" style="width: 132px; aspect-ratio: 9 / 16"><img class="kb" src="reel-kaaba-a.webp"><div class="pvL">Kaaba<small>Scenery, voice over it</small></div></button>
-            <button class="{{ pcLandCls }}" onClick="{{ pcLandPick }}" style="width: 132px; aspect-ratio: 9 / 16"><img class="kb" src="reel-landscape.webp"><div class="pvL">Landscape<small>Scenery, voice over it</small></div></button>
-            <button class="{{ pcWinterCls }}" onClick="{{ pcWinterPick }}" style="width: 132px; aspect-ratio: 9 / 16"><img class="kb" src="reel-winter.webp"><div class="pvL">Winter<small>Scenery, voice over it</small></div></button>
-          </div>
-          <div class="rv sec" style="flex: 1">
-            <div class="secT">Opening title</div>
-            <div class="seg"><sc-for list="{{ intros }}" as="i" hint-placeholder-count="4"><button class="{{ i.cls }}" onClick="{{ i.pick }}">{{ i.label }}</button></sc-for></div>
-            <div class="fnote" style="line-height: 1.6">Seconds of scenery before the speaker is heard, with the clip title over it.</div>
-            <div class="secT" style="margin-top: 10px">Library</div>
-            <div class="fnote" style="line-height: 1.6">Nine backgrounds shipped with DeenClipped, plus anything you upload. A shared upload goes through review first.</div>
           </div>
         </div>
       </sc-if>
@@ -474,15 +395,7 @@
           </div>
           <div class="revR rv">
             <div style="display: flex; gap: 18px; align-items: flex-start">
-              <div class="pv mini" style="width: 92px; aspect-ratio: 9 / 16; cursor: default">
-                <div class="kbw" style="{{ lookStyle }}"><sc-if value="{{ liveQuran }}" hint-placeholder-val="{{ false }}"><img class="kb" src="reel-quran.webp"></sc-if><sc-if value="{{ liveNotQuran }}" hint-placeholder-val="{{ true }}"><img class="kb" src="preview-sample.webp"></sc-if></div>
-                <div class="dark"></div>
-                <sc-if value="{{ liveWm }}" hint-placeholder-val="{{ true }}"><div class="wm">DEENCLIPPED</div></sc-if>
-                <sc-if value="{{ liveClean }}" hint-placeholder-val="{{ true }}"><div class="cap clean sm {{ modeCls }}"><span>He</span><span>never</span><span>stops</span><span>answering</span></div></sc-if>
-                <sc-if value="{{ liveBold }}" hint-placeholder-val="{{ false }}"><div class="cap bold sm"><span>He never</span><span style="animation-delay: .4s">stops</span><span style="animation-delay: .8s">answering</span></div></sc-if>
-                <sc-if value="{{ liveHead }}" hint-placeholder-val="{{ false }}"><div class="cap headline sm"><span>He never stops</span><span style="animation-delay: .25s; font-size: .72em">answering you</span></div></sc-if>
-                <sc-if value="{{ liveMono }}" hint-placeholder-val="{{ false }}"><div class="cap mono sm"><span class="tw">he never stops answering</span></div></sc-if>
-              </div>
+              <div class="tplL" style="width: 92px; border-radius: 4px; box-shadow: none; flex: none"><sc-if value="{{ tQuran }}" hint-placeholder-val="{{ false }}"><img class="bg" src="reel-quran.webp"></sc-if><sc-if value="{{ tNotQuran }}" hint-placeholder-val="{{ true }}"><img class="bg" src="preview-sample.webp" style="{{ lookF }}"></sc-if></div>
               <div>
                 <div class="secT">This run costs</div>
                 <div class="cost"><b>{{ tokens }}</b><span>{{ costTail }}</span></div>
@@ -490,12 +403,11 @@
               </div>
             </div>
             <div class="rows">
-              <div class="row"><span class="rk">Looking for</span><button class="re" onClick="{{ goBrief }}">Edit</button><span class="rvv">repentance and mercy</span></div>
-              <div class="row"><span class="rk">From the lecture</span><button class="re" onClick="{{ goTrim }}">Edit</button><span class="rvv">{{ fromLecture }}</span></div>
+              <div class="row"><span class="rk">Looking for</span><button class="re" onClick="{{ goLecture }}">Edit</button><span class="rvv">{{ briefText }}</span></div>
+              <div class="row"><span class="rk">From the lecture</span><button class="re" onClick="{{ goLecture }}">Edit</button><span class="rvv">{{ fromLecture }}</span></div>
               <div class="row"><span class="rk">Clips</span><button class="re" onClick="{{ goClips }}">Edit</button><span class="rvv">{{ sClips }}</span></div>
-              <div class="row"><span class="rk">Style</span><button class="re" onClick="{{ goStyle }}">Edit</button><span class="rvv">{{ sStyle }}</span></div>
-              <div class="row"><span class="rk">Frame</span><button class="re" onClick="{{ goFrame }}">Edit</button><span class="rvv">{{ sFrame }}</span></div>
-              <div class="row"><span class="rk">On screen</span><button class="re" onClick="{{ goPicture }}">Edit</button><span class="rvv">{{ sPicture }}</span></div>
+              <div class="row"><span class="rk">Template</span><button class="re" onClick="{{ goTemplate }}">Edit</button><span class="rvv">{{ sStyle }}</span></div>
+                            <div class="row"><span class="rk">Look</span><button class="re" onClick="{{ goTemplate }}">Edit</button><span class="rvv">{{ lookName }}</span></div>
               <div class="row"><span class="rk">Underneath</span><button class="re" onClick="{{ goSound }}">Edit</button><span class="rvv">{{ sSound }}</span></div>
               <div class="row"><span class="rk">Queue</span><span class="rvv">Next in line</span></div>
             </div>
@@ -518,36 +430,44 @@
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { step: 1, dir: 'next', flip: false, brief: 1, lang: 'auto', kind: 'lecture', mode: 'word', range: 'whole', count: 6, band: '30-60', ap: 'off', scope: 'once',
-                   style: 'clean', size: 'M', pos: 'bottom', look: 'natural', atmo: 'none', shape: 1, bias: 'auto', fit: 'off', picture: 'own', intro: '0', sound: 'rotate', motion: 'word', wm: 'on', dark: 0 };
+    this.state = { step: 1, dir: 'next', flip: false, range: 'whole', kind: 'lecture', count: 6, bands: { '30-60': true, '45-75': true }, ap: 'off', tpl: 'clean', look: 'natural', sound: 'rotate', scope: 'once' };
   }
-  go(n) { if (n < 1 || n > 9) return; this.setState({ step: n, dir: n > this.state.step ? 'next' : 'prev', flip: !this.state.flip }); }
+  go(n) { if (n < 1 || n > 5) return; this.setState({ step: n, dir: n > this.state.step ? 'next' : 'prev', flip: !this.state.flip }); }
   renderVals() {
     var self = this, s = this.state;
     var set = function (patch) { return function () { self.setState(patch); }; };
     var goTo = function (n) { return function () { self.go(n); }; };
     var on = function (base, is) { return base + (is ? ' on' : ''); };
-    var RANGES = { whole: { label: 'Whole lecture', mins: 32, l: 0, w: 100, t: '0:00 – 32:16', a: '0:00', b: '32:16' }, first: { label: 'First 20 minutes', mins: 20, l: 0, w: 62, t: '0:00 – 20:00', a: '0:00', b: '20:00' },
-                   middle: { label: 'The middle', mins: 16, l: 25, w: 50, t: '8:04 – 24:12', a: '8:04', b: '24:12' }, last: { label: 'Last 15 minutes', mins: 15, l: 53, w: 47, t: '17:16 – 32:16', a: '17:16', b: '32:16' } };
-    var r = RANGES[s.range];
-    var tokens = Math.max(1, Math.ceil(r.mins));
-    var eta = Math.max(4, Math.round(r.mins * .6)) + '–' + Math.max(8, Math.round(r.mins)) + ' min';
-    var NAMES = ['Brief', 'Kind', 'Range', 'Clips', 'Style', 'Frame', 'Picture', 'Sound', 'Review'];
+    var RANGES = { whole: { label: 'Whole lecture', mins: 32, l: 0, w: 100, t: '0:00 – 32:16' }, first: { label: 'First 20 min', mins: 20, l: 0, w: 62, t: '0:00 – 20:00' },
+                   middle: { label: 'The middle', mins: 16, l: 25, w: 50, t: '8:04 – 24:12' }, last: { label: 'Last 15 min', mins: 15, l: 53, w: 47, t: '17:16 – 32:16' } };
+    var r = RANGES[s.range]; var tokens = r.mins; var eta = Math.max(4, Math.round(r.mins * .6)) + '–' + Math.max(8, Math.round(r.mins)) + ' min';
+    var NAMES = ['Lecture', 'Clips', 'Template', 'Sound', 'Review'];
     var Q = [
-      ['What would you like', 'clipped?', 'Optional. Name a subject and the clipper looks for it in the transcript. Leave it empty and it takes the strongest moments on its own.'],
-      ['What are you', 'clipping?', 'This decides how the captions are drawn and whether a nasheed belongs underneath.'],
-      ['How much of', 'the lecture?', 'Drag either handle, or take one of the usual cuts. This is the part you pay for.'],
-      ['How many clips,', 'and how long?', 'For this lecture only. Your account default stays where it is unless you make these the new one.'],
-      ['How should', 'it look?', 'Every frame is the style the renderer produces. Pick one, then tune it for this lecture.'],
-      ['What shape, and', 'how is it framed?', 'Portrait for Shorts, Reels and TikTok; square and 4:5 for the feed; landscape for YouTube itself.'],
-      ['What plays', 'on screen?', 'The lecture itself, or scenery from your library with the voice over it.'],
+      ['Which part, and', 'what for?', 'Drag the handles to the part you want clipped. Everything else on this screen is optional.'],
+      ['How many clips,', 'how long?', 'Moments are cut to fit any length you allow. Your account default stays unless you save these on the last step.'],
+      ['Which', 'template?', 'A template already decides the captions, the framing and the mark. Pick one; the preview is what the renderer produces.'],
       ['What plays', 'underneath?', 'A nasheed sits under the voice, ducked so it never competes with it.'],
       ['Ready', 'to go', 'Check it over. Anything here can be changed before you start.'],
     ];
     var q = Q[s.step - 1];
-    var STYLE = { clean: 'Clean Line', bold: 'Bold Stack', headline: 'Headline', mono: 'Mono Minimal', quran: 'Quran Recitation' };
-    var SHAPES = ['Portrait · Fill', 'Feed 4:5 · Fill', 'Square · Fill', 'Landscape · Full', 'Portrait · Blur', 'Feed 4:5 · Blur', 'Square · Blur', 'Landscape · Blur'];
-    var PIC = { own: 'The lecture', hall: 'Mosque hall', kaaba: 'Kaaba', land: 'Landscape', winter: 'Winter' };
+    var quran = s.kind === 'quran';
+    var TPL = { clean: 'Clean Line', bold: 'Bold Stack', headline: 'Headline', mono: 'Mono Minimal', quran: 'Qur’an Recitation' };
+    var DESC = { clean: 'Montserrat, one phrase at a time in a soft card, low in the frame. The default, and free.',
+                 bold: 'Montserrat ExtraBold at 187, four words stacking from the top, the spoken word lit. Pro.',
+                 headline: 'Uppercase ExtraBold, three lines at the top like a poster. Pro.',
+                 mono: 'Outfit, one word at a time in the middle, black and white. Pro.',
+                 quran: 'The ayah and its translation, from the Qur’an itself. No nasheed, no mark, nothing over scripture.' };
+    var LOOKS = [['natural', 'Natural', 'none'], ['dark', 'Dark', 'brightness(.72) saturate(.8) contrast(1.1)'], ['mono', 'Black & white', 'grayscale(1) contrast(1.1)']];
+    var lookF = LOOKS.filter(function (l) { return l[0] === s.look; })[0][2];
+    if (s.tpl === 'mono') lookF = 'grayscale(1)';
+    // template geometry from src/templates/*.json, scaled from a 1080x1920 frame
+    var cap = function (id, w) { var k = w / 1080;
+      if (id === 'bold') return 'top: ' + (290 / 1920 * 100).toFixed(1) + '%; font-size: ' + (187 * k).toFixed(1) + 'px; line-height: .92; letter-spacing: ' + (-11 * k).toFixed(1) + 'px;';
+      if (id === 'headline') return 'top: ' + (300 / 1920 * 100).toFixed(1) + '%; font-size: ' + (136 * k).toFixed(1) + 'px; line-height: 1.15; letter-spacing: ' + (-4 * k).toFixed(1) + 'px;';
+      if (id === 'clean') return 'bottom: ' + (680 / 1920 * 100).toFixed(1) + '%; font-size: ' + (89 * k).toFixed(1) + 'px; line-height: 1; letter-spacing: ' + (-2 * k).toFixed(1) + 'px;';
+      if (id === 'mono') return 'top: 50%; transform: translateY(-50%); font-size: ' + (64 * k).toFixed(1) + 'px;';
+      return ''; };
+    var mark = function (w) { var k = w / 1080; return 'top: ' + (60 * k).toFixed(0) + 'px; font-size: ' + (26 * k).toFixed(1) + 'px;'; };
     var SOUNDS = [
       { id: 'rotate', title: 'Rotate the library', sub: 'A different nasheed under each clip', dur: '9 tracks' },
       { id: 'asma', title: 'Asma ul Husna', sub: 'Muffled · added by DeenClipped', dur: '3:42' },
@@ -557,71 +477,43 @@ class Component extends DCLogic {
     ];
     var shown = Math.min(s.count, 8);
     var deckAt = function (i) { if (i >= shown) return 'display: none;'; var k = i - (shown - 1) / 2; return 'transform: translateX(' + (110 + k * 22) + 'px) rotate(' + (k * 5) + 'deg); z-index: ' + i + ';'; };
-    var chips = function (list, key, cur) { return list.map(function (x) { var p = {}; p[key] = x[0]; return { label: x[1], sub: x[2] || '', cls: on('opt', cur === x[0]), pick: set(p) }; }); };
-    var quran = s.kind === 'quran';
+    var chips = function (list, key, cur) { return list.map(function (x) { var p = {}; p[key] = x[0]; return { label: x[1], cls: on('opt', cur === x[0]), pick: set(p) }; }); };
+    var BANDS = [['15-30', '15–30s'], ['30-45', '30–45s'], ['30-60', '30–60s'], ['45-75', '45–75s'], ['60-90', '60–90s'], ['90-180', '90–180s']];
+    var chosen = BANDS.filter(function (b) { return s.bands[b[0]]; });
+    var tplId = quran ? 'quran' : s.tpl;
     var out = {
-      rangeText: r.t, stepNo: String(s.step), stepName: NAMES[s.step - 1], pathRest: ' / 9 · ' + NAMES[s.step - 1], minsLabel: r.mins + ' min', costTail: 'tokens · ' + r.mins + 'm of source, charged once',
-      segs: [1,2,3,4,5,6,7,8,9].map(function (n) { return { st: 'transform: scaleX(' + (n <= s.step ? 1 : 0) + ');' }; }),
+      rangeText: r.t, stepNo: String(s.step), pathRest: ' / 5 · ' + NAMES[s.step - 1], minsLabel: r.mins + ' min', tokens: String(tokens), eta: eta, costTail: 'tokens · ' + r.mins + 'm of source, charged once',
+      segs: [1,2,3,4,5].map(function (n) { return { st: 'transform: scaleX(' + (n <= s.step ? 1 : 0) + ');' }; }),
       dirCls: s.dir + (s.flip ? 'A' : 'B'), qA: q[0], qB: q[1], lead: q[2],
-      isBrief: s.step === 1, isKind: s.step === 2, isTrim: s.step === 3, isClips: s.step === 4, isStyle: s.step === 5, isFrame: s.step === 6, isPicture: s.step === 7, isSound: s.step === 8, isReview: s.step === 9,
-      examples: chips([[1, 'The parts about repentance and mercy'], [2, 'Any story he tells'], [3, 'Advice for young Muslims'], [4, 'Where he talks about the hereafter'], [5, 'Every du’a he makes'], [6, 'The questions from the audience']], 'brief', s.brief),
-      langAuto: on('', s.lang === 'auto'), langEn: on('', s.lang === 'en'), langAr: on('', s.lang === 'ar'), setAuto: set({ lang: 'auto' }), setEn: set({ lang: 'en' }), setAr: set({ lang: 'ar' }),
-      kLecCls: on('pv', !quran), kQurCls: on('pv', quran), pickLecture: set({ kind: 'lecture' }), pickQuran: set({ kind: 'quran' }),
-      modes: [['phrase', 'Phrase', 'A line at a time'], ['word', 'Word', 'The spoken word lit'], ['stack', 'Stack', 'Words build up'], ['cards', 'Cards', 'Each phrase boxed'], ['fill', 'Fill', 'Words fill the line']].map(function (x) { return { label: x[1], sub: x[2], cls: on('opt', s.motion === x[0]), pick: set({ motion: x[0] }) }; }),
-      kindRule: quran ? 'Captioned from the Qur’an itself — the verse the reciter is on and its translation — never from what the microphone heard. No nasheed, no watermark, nothing drawn over scripture, and every clip waits for your approval.'
-                      : 'Captions follow the speech; recited scripture inside the lecture is shown as the ayah with its translation. A nasheed sits underneath, ducked, and your mark goes on the frame.',
+      isLecture: s.step === 1, isClips: s.step === 2, isTemplate: s.step === 3, isSound: s.step === 4, isReview: s.step === 5,
       cells: [0,1,2,3,4,5,6,7,8,9,10,11,12,13].map(function (i) { return { img: 'object-position: ' + (35 + (i * 37) % 40) + '% ' + (10 + (i * 23) % 30) + '%; filter: brightness(' + (.7 + (i % 4) * .08) + ');' }; }),
-      bandSt: 'left: ' + r.l + '%; width: ' + r.w + '%;', startT: r.a, endT: r.b, mins: String(r.mins), tokens: String(tokens), eta: eta,
+      bandSt: 'left: ' + r.l + '%; width: ' + r.w + '%;',
       ranges: chips(Object.keys(RANGES).map(function (id) { return [id, RANGES[id].label]; }), 'range', s.range),
-      count: String(s.count), more: set({ count: Math.min(20, s.count + 1) }), less: set({ count: Math.max(1, s.count - 1) }),
+      briefText: 'Clip the parts about…', briefHint: 'optional',
+      kLecCls: on('', !quran), kQurCls: on('', quran), pickLecture: set({ kind: 'lecture', tpl: 'clean' }), pickQuran: set({ kind: 'quran' }),
+      kindRule: quran ? 'Captioned from the Qur’an itself, never from what the microphone heard. No nasheed and nothing drawn over scripture; every clip waits for your review.'
+                      : 'Captions follow the speech. Recited scripture inside the lecture is shown as the ayah with its translation.',
+      count: String(s.count), more: set({ count: Math.min(20, s.count + 1) }), less: set({ count: Math.max(1, s.count - 1) }), countNote: 'from ' + r.mins + ' minutes',
       deck1: deckAt(0), deck2: deckAt(1), deck3: deckAt(2), deck4: deckAt(3), deck5: deckAt(4), deck6: deckAt(5), deck7: deckAt(6), deck8: deckAt(7),
-      bands: chips([['15-30', '15–30s'], ['30-45', '30–45s'], ['30-60', '30–60s'], ['45-75', '45–75s'], ['60-90', '60–90s'], ['90-180', '90–180s']], 'band', s.band),
+      bands: BANDS.map(function (b) { return { label: b[1], cls: on('opt', !!s.bands[b[0]]), pick: function () { var nb = Object.assign({}, s.bands); if (nb[b[0]] && chosen.length > 1) delete nb[b[0]]; else nb[b[0]] = true; self.setState({ bands: nb }); } }; }),
+      bandNote: chosen.length === 1 ? 'One length. Tick more and the clipper chooses per moment.' : chosen.length + ' lengths allowed · the clipper picks per moment',
       apOff: on('', s.ap === 'off'), ap80: on('', s.ap === '80'), ap90: on('', s.ap === '90'), setApOff: set({ ap: 'off' }), setAp80: set({ ap: '80' }), setAp90: set({ ap: '90' }),
-      scopeOnceCls: on('', s.scope === 'once'), scopeAllCls: on('', s.scope === 'all'), scopeOnce: set({ scope: 'once' }), scopeAll: set({ scope: 'all' }),
-      stCleanCls: on('pv', s.style === 'clean'), stCleanPick: set({ style: 'clean' }), stBoldCls: on('pv', s.style === 'bold'), stBoldPick: set({ style: 'bold' }),
-      stHeadCls: on('pv', s.style === 'headline'), stHeadPick: set({ style: 'headline' }), stMonoCls: on('pv', s.style === 'mono'), stMonoPick: set({ style: 'mono' }),
-      stQurCls: on('pv', s.style === 'quran'), stQurPick: set({ style: 'quran' }),
-      isRain: s.atmo === 'rain',
-      sizes: ['S', 'M', 'L', 'XL'].map(function (z) { return { label: z, cls: on('', s.size === z), pick: set({ size: z }) }; }),
-      positions: ['top', 'middle', 'bottom'].map(function (p) { return { label: p[0].toUpperCase() + p.slice(1), cls: on('', s.pos === p), pick: set({ pos: p }) }; }),
-      looks: chips(['natural', 'crisp', 'vivid', 'warm', 'cinematic', 'teal', 'faded', 'night', 'monochrome', 'noir', 'silver', 'sepia'].map(function (l) { return [l, l[0].toUpperCase() + l.slice(1)]; }), 'look', s.look),
-      atmos: chips([['none', 'None'], ['rain', 'Rain'], ['snow', 'Snow'], ['dust', 'Dust'], ['bokeh', 'Bokeh']], 'atmo', s.atmo),
-      sh1: on('shape', s.shape === 1), sh2: on('shape', s.shape === 2), sh3: on('shape', s.shape === 3), sh4: on('shape', s.shape === 4), sh5: on('shape', s.shape === 5), sh6: on('shape', s.shape === 6), sh7: on('shape', s.shape === 7), sh8: on('shape', s.shape === 8),
-      pk1: set({ shape: 1 }), pk2: set({ shape: 2 }), pk3: set({ shape: 3 }), pk4: set({ shape: 4 }), pk5: set({ shape: 5 }), pk6: set({ shape: 6 }), pk7: set({ shape: 7 }), pk8: set({ shape: 8 }),
-      biases: chips([['auto', 'Auto'], ['left', 'Left'], ['center', 'Centre'], ['right', 'Right']], 'bias', s.bias).map(function (b) { b.cls = b.cls.replace('opt', ''); return b; }),
-      fitOff: on('opt', s.fit === 'off'), fitOn: on('opt', s.fit === 'on'), setFitOff: set({ fit: 'off' }), setFitOn: set({ fit: 'on' }),
-      pcOwnCls: on('pv', s.picture === 'own'), pcOwnPick: set({ picture: 'own' }), pcHallCls: on('pv', s.picture === 'hall'), pcHallPick: set({ picture: 'hall' }),
-      pcKaabaCls: on('pv', s.picture === 'kaaba'), pcKaabaPick: set({ picture: 'kaaba' }), pcLandCls: on('pv', s.picture === 'land'), pcLandPick: set({ picture: 'land' }),
-      pcWinterCls: on('pv', s.picture === 'winter'), pcWinterPick: set({ picture: 'winter' }),
-      intros: chips([['0', 'None'], ['2', '2 seconds'], ['3', '3 seconds'], ['5', '5 seconds']], 'intro', s.intro).map(function (b) { b.cls = b.cls.replace('opt', ''); return b; }),
+      apNote: s.ap === 'off' ? 'Nothing posts until you approve it.' : 'Clips scoring ' + s.ap + '+ go straight to the schedule. Scripture always waits for you.',
+      tQuran: tplId === 'quran', tNotQuran: tplId !== 'quran', tBold: tplId === 'bold', tClean: tplId === 'clean', tHead: tplId === 'headline', tMono: tplId === 'mono',
+      tCleanCls: on('tpl', tplId === 'clean'), tBoldCls: on('tpl', tplId === 'bold'), tHeadCls: on('tpl', tplId === 'headline'), tMonoCls: on('tpl', tplId === 'mono'), tQurCls: on('tpl', tplId === 'quran'),
+      pickClean: set({ tpl: 'clean', kind: 'lecture' }), pickBold: set({ tpl: 'bold', kind: 'lecture' }), pickHead: set({ tpl: 'headline', kind: 'lecture' }), pickMono: set({ tpl: 'mono', kind: 'lecture' }), pickQur: set({ tpl: 'quran', kind: 'quran' }),
+      capL: cap(tplId, 250), capClean: cap('clean', 156), capBold: cap('bold', 156), capHead: cap('headline', 156), capMono: cap('mono', 156), markL: mark(250), markS: mark(156),
+      lookF: 'filter: ' + lookF + ';', tplName: TPL[tplId], tplDesc: DESC[tplId],
+      looks: chips(LOOKS, 'look', s.look), lookName: LOOKS.filter(function (l) { return l[0] === s.look; })[0][1],
       sounds: SOUNDS.map(function (x) { return Object.assign({}, x, { cls: on('track', s.sound === x.id), pick: set({ sound: x.id }) }); }),
-      costS: r.mins + 'm of source, charged once', fromLecture: r.mins + 'm of 32m',
-      sClips: s.count + ' × ' + s.band.replace('-', '–') + 's', sStyle: STYLE[s.style], sFrame: SHAPES[s.shape - 1], sPicture: PIC[s.picture],
-      sSound: s.sound === 'rotate' ? 'Nasheed, rotating' : SOUNDS.filter(function (x) { return x.id === s.sound; })[0].title,
-      goBrief: goTo(1), goTrim: goTo(3), goClips: goTo(4), goStyle: goTo(5), goFrame: goTo(6), goPicture: goTo(7), goSound: goTo(8),
-      footNote: s.step === 9 ? 'Anything above can still be changed.' : 'Step ' + s.step + ' of 9 · ' + tokens + ' tokens · ready in roughly ' + eta,
-      cta: s.step === 9 ? 'Generate clips' : 'Continue', next: goTo(s.step + 1), back: goTo(s.step - 1),
+      scopeOnceCls: on('', s.scope === 'once'), scopeAllCls: on('', s.scope === 'all'), scopeOnce: set({ scope: 'once' }), scopeAll: set({ scope: 'all' }),
+      scopeNote: s.scope === 'once' ? 'Only this lecture uses these. Your defaults stay as they are.' : 'The clip count, lengths, auto-approve and look become your defaults from now on.',
+      fromLecture: r.mins + 'm of 32m', sClips: s.count + ' × ' + chosen.map(function (b) { return b[1]; }).join(', '), sStyle: TPL[tplId],
+      sSound: quran ? 'None — recitation' : (s.sound === 'rotate' ? 'Nasheed, rotating' : SOUNDS.filter(function (x) { return x.id === s.sound; })[0].title),
+      goLecture: goTo(1), goClips: goTo(2), goTemplate: goTo(3), goSound: goTo(4),
+      footNote: s.step === 5 ? 'Anything above can still be changed.' : 'Step ' + s.step + ' of 5 · ' + tokens + ' tokens · ready in roughly ' + eta,
+      cta: s.step === 5 ? 'Generate clips' : 'Continue', next: goTo(s.step + 1), back: goTo(s.step - 1),
     };
-    var LOOKF = { natural: 'none', crisp: 'contrast(1.15) saturate(1.05)', vivid: 'saturate(1.5) contrast(1.08)', warm: 'sepia(.25) saturate(1.2)', cinematic: 'contrast(1.12) saturate(.85) sepia(.15)',
-                  teal: 'hue-rotate(-12deg) saturate(1.1) contrast(1.05)', faded: 'contrast(.85) brightness(1.08) saturate(.8)', night: 'brightness(.72) saturate(.8) hue-rotate(15deg) contrast(1.1)',
-                  monochrome: 'grayscale(1)', noir: 'grayscale(1) contrast(1.35) brightness(.9)', silver: 'grayscale(1) contrast(.9) brightness(1.12)', sepia: 'sepia(.8)' };
-    var SIZEF = { S: .85, M: 1, L: 1.22, XL: 1.5 };
-    var BASE = { clean: 23, bold: 36, headline: 29, mono: 16 };
-    var posStyle = s.style === 'headline' ? 'top: 8%;' : (s.pos === 'top' ? 'top: 12%; bottom: auto;' : s.pos === 'middle' ? 'top: 44%; bottom: auto;' : 'bottom: 22%;');
-    var MOTION_CLS = { phrase: 'm-phrase', word: '', cards: 'm-cards', stack: 'm-stack', fill: 'm-fill', 'dynamic-stack': 'm-stack', 'stack-build': 'm-stack' };
-    var liveSubs = { clean: 'One line, the spoken word lit', bold: 'Three heavy lines, stacked', headline: 'Ink on paper, at the top', mono: 'Typed, small, quiet', quran: 'Ayah and translation, nothing else' };
-    out.lookStyle = 'filter: ' + (LOOKF[s.look] || 'none') + '; --dk: ' + (s.dark / 100) + ';';
-    out.liveCapStyle = 'font-size: ' + Math.round(BASE[s.style] * SIZEF[s.size]) + 'px; ' + posStyle;
-    out.liveQuran = s.style === 'quran'; out.liveNotQuran = s.style !== 'quran';
-    out.liveClean = s.style === 'clean'; out.liveBold = s.style === 'bold'; out.liveHead = s.style === 'headline'; out.liveMono = s.style === 'mono';
-    out.liveWm = s.wm === 'on' && s.style !== 'quran';
-    out.modeCls = MOTION_CLS[s.motion] || '';
-    out.liveLabel = STYLE[s.style]; out.liveSub = liveSubs[s.style];
-    out.isSnow = s.atmo === 'snow'; out.isDust = s.atmo === 'dust'; out.isBokeh = s.atmo === 'bokeh';
-    out.motions = [['word', 'Word'], ['phrase', 'Phrase'], ['cards', 'Cards'], ['stack', 'Stack'], ['fill', 'Fill']].map(function (m) { return { label: m[1], cls: on('', s.motion === m[0]), pick: set({ motion: m[0] }) }; });
-    out.wms = [['on', 'Shown'], ['off', 'Hidden']].map(function (w) { return { label: w[1], cls: on('', s.wm === w[0]), pick: set({ wm: w[0] }) }; });
-    out.darks = [0, 20, 40, 60].map(function (d) { return { label: d === 0 ? 'Off' : d + '%', cls: on('', s.dark === d), pick: set({ dark: d }) }; });
-    out.scopeNote = s.scope === 'once' ? 'Only this lecture uses these. Your defaults on Templates stay exactly as they are.' : 'These become your defaults for every lecture from now on. You can change them again on Templates.';
     return out;
   }
 }
