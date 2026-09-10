@@ -50,3 +50,40 @@
 /* The studio has its own .sld and .seg; ours are the canvas's. */
 #dcJob .sld { position: static; inset: auto; background: transparent; padding: 0; margin-top: 10px; width: auto; height: auto; }
 #dcJob .trackList { max-height: 360px; overflow: auto; padding-right: 6px; }
+
+/* Youssef, 10 Sept 2026: the old panel's size, no picture behind it, near-opaque
+   black, and everything smaller. These win over the canvas sizes above. */
+#dcJob { width: min(1060px, 100%); background: rgba(9,9,10,.94); border-radius: 20px; border: 1px solid rgba(217,182,111,.18); }
+#dcJob .hall, #dcJob .hallFade, #dcJob .grain { display: none; }
+#dcJob .frame { padding: 22px 26px 20px; min-height: 430px; }
+#dcJob .poster { width: 150px; height: 84px; }
+#dcJob .lecT { font-size: 15px; margin-top: 3px; }
+#dcJob .q h1, #dcJob h1 { font-size: 26px !important; line-height: 1.12 !important; margin: 0 0 4px !important; }
+#dcJob .q { margin-top: 10px !important; gap: 6px !important; }
+#dcJob .lead { font-size: 12.5px; padding-bottom: 0; }
+#dcJob .hr { margin-top: 12px !important; }
+#dcJob textarea.briefBox { font-size: 15px; }
+#dcJob .briefBig { padding: 12px 14px !important; }
+#dcJob .strip { height: 52px !important; }
+#dcJob .kinds { gap: 12px; margin-top: 12px; }
+#dcJob .kc { padding: 10px 12px; gap: 12px; }
+#dcJob .kc .pf { width: 66px; }
+#dcJob .kc .kT { font-size: 16px; margin-top: 2px; }
+#dcJob .kc .kD { font-size: 11.5px; margin-top: 4px; }
+#dcJob .deck { height: 150px; width: 220px; }
+#dcJob .cardF { width: 78px; }
+#dcJob .tpls.big .tpl { width: 118px !important; }
+#dcJob .tplN { padding: 14px 8px 7px !important; font-size: 10px !important; }
+#dcJob .track { padding: 8px 10px !important; }
+#dcJob .trackList { max-height: 260px; }
+#dcJob .cost b { font-size: 34px !important; }
+#dcJob .revCard { width: 300px !important; padding: 18px !important; gap: 12px !important; }
+#dcJob .review { gap: 28px !important; }
+#dcJob .what { gap: 8px !important; }
+#dcJob .wt { font-size: 12.5px !important; } #dcJob .ws { font-size: 11px !important; }
+#dcJob .row { padding: 6px 0 !important; font-size: 12px !important; }
+#dcJob .foot { margin-top: 14px !important; padding-top: 12px !important; }
+#dcJob .cta { padding: 11px 18px !important; font-size: 12.5px !important; }
+#dcJob .go { padding: 12px 18px !important; font-size: 12.5px !important; }
+#dcJob .opt { padding: 7px 11px !important; font-size: 11.5px !important; }
+#dcJob .fnote { font-size: 11.5px !important; }

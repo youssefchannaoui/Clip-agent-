@@ -147,7 +147,7 @@
       var cur = DATA.billing && DATA.billing.current;
       var paid = !cur ? true : (cur.features && typeof cur.features.templates === 'boolean') ? cur.features.templates : String(cur.plan || 'free') !== 'free';
       var tpls = DATA.templates || [];
-      var w = tpls.length > 5 ? 156 : 196;
+      var w = 118;
       body += '<div class="rv tpls big">' + tpls.map(function (t) { return tplCard(t, t.name === active, Boolean(t.pro) && !paid, w); }).join('') + '</div>';
     } else if (id === 'sound') {
       if (vals.jobSoundBlocked) {
@@ -270,7 +270,7 @@
       if (c === root) return;
       if (!c.hasAttribute('data-host-style')) { c.setAttribute('data-host-style', ''); c.style.display = 'none'; }
     });
-    dialog.style.padding = '0'; dialog.style.border = '0'; dialog.style.background = 'transparent'; dialog.style.boxShadow = 'none'; dialog.style.maxWidth = '1360px';
+    dialog.style.padding = '0'; dialog.style.border = '0'; dialog.style.background = 'transparent'; dialog.style.boxShadow = 'none'; dialog.style.maxWidth = '1060px';
     var html = render(vals, DATA);
     // The brief textarea and the range inputs are live controls: never
     // rebuild them under the caret. Signature excludes the brief text and
