@@ -8107,12 +8107,13 @@
       // and left behind it pinned activeTemplate everywhere -- the Templates
       // screen preview stopped following the selection because a stale job
       // choice silently outranked it.
-      closeJob: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, jobBrief: '', volumeDraft: null }); },
+      closeJob: function (e) { stop(e); setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, jobBrief: '', jobRightsConfirmed: false, volumeDraft: null }); },
       runGenerate: function (e) {
         stop(e);
         if (!job || UI.generating) return;
-        if (jobGate === 'nasheed') { setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, jobBrief: '', volumeDraft: null, screen: 'music' }); return; }
-        if (jobGate === 'plan') { setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, jobBrief: '', volumeDraft: null, screen: 'tokens' }); return; }
+        if (jobGate === 'nasheed') { setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, jobBrief: '', jobRightsConfirmed: false, volumeDraft: null, screen: 'music' }); return; }
+        if (jobGate === 'plan') { setUI({ job: null, jobTplId: null, jobStep: 1, jobLang: null, jobBrief: '', jobRightsConfirmed: false, volumeDraft: null, screen: 'tokens' }); return; }
+        if (UI.jobRightsConfirmed !== true) { toast('Confirm you own this video or have permission to repurpose it before generating clips.', 'bad'); return; }
         UI.jobError = null;
         setUI({ generating: true });
         global.StudioAdapter.onGenerate(job.url, job.durationKnown
@@ -8127,6 +8128,7 @@
             // the server reads an empty string as "no brief" rather than as a
             // brief that matches nothing.
             clipBrief: String(UI.jobBrief || '').trim(),
+            sourceRightsConfirmed: true,
           });
       },
       // The panel stays mounted while an error is showing. It used to render
@@ -9377,6 +9379,8 @@
 
       // ── Start-a-job form (shared by Home and the library) ──
       jobUrlVal: UI.jobUrl,
+      jobRightsConfirmed: UI.jobRightsConfirmed === true,
+      toggleJobRights: function () { setUI({ jobRightsConfirmed: UI.jobRightsConfirmed !== true }); },
       setJobUrl: function (e) { UI.jobUrl = e.target.value; refresh(); },
       startJob: function (e) {
         stop(e);

@@ -2433,9 +2433,12 @@ async function route(req, res, url) {
     if (sourceEndSeconds !== null && sourceEndSeconds - sourceStartSeconds < 30) return json(res, 400, { error: 'Choose at least 30 seconds of source video.' });
     const sourceRange = { startSec: sourceStartSeconds, endSec: sourceEndSeconds };
     const sourceMeta = Array.isArray(body.sourceMeta) ? body.sourceMeta : [];
+    if (body.sourceRightsConfirmed !== true) {
+      return json(res, 400, { error: 'Confirm that you own this video or have permission to repurpose and publish it before creating clips.' });
+    }
     const results = [];
     for (const source of urls) {
-      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, musicTrackId: String(body.musicTrackId || ''), templateId: String(body.templateId || ''), backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds, language: String(body.language || ''), publishTo: Array.isArray(body.publishTo) ? body.publishTo : null, clipBrief: String(body.clipBrief || '') }) }); }
+      try { results.push({ url: source, ok: true, projectId: await agent.submitVideo(source, body.title || '', currentUser.id, { sourceRange, sourceMeta, idempotencyKey: body.idempotencyKey, musicEnabled: body.musicEnabled !== false, musicTrackId: String(body.musicTrackId || ''), templateId: String(body.templateId || ''), backgroundMode: body.backgroundMode, backgroundId: body.backgroundId, introSeconds: body.introSeconds, language: String(body.language || ''), publishTo: Array.isArray(body.publishTo) ? body.publishTo : null, clipBrief: String(body.clipBrief || ''), sourceRightsConfirmed: true, sourceRightsConfirmedAt: Date.now() }) }); }
       catch (error) { results.push({ url: source, error: error.message }); }
     }
     return json(res, 200, { results, sourceRange });

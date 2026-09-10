@@ -682,6 +682,9 @@ function validateSubmission(url, user, options = {}) {
   } else {
     throw new Error('Use a complete http(s) video link.');
   }
+  if (options.sourceKind !== 'upload' && options.sourceKind !== 'object_storage' && options.sourceRightsConfirmed !== true) {
+    throw new Error('Confirm that you own this video or have permission to repurpose and publish it before creating clips.');
+  }
   // The job's own choice first. The token page picks a content kind, and the
   // kind picks the template -- but the id never left the browser, so a job
   // showing "Quran Recitation" in its dropdown silently rendered with the
@@ -804,6 +807,8 @@ export async function submitVideo(url, title = '', userId = '', options = {}) {
     publishTo: Array.isArray(options.publishTo) ? options.publishTo.map(String) : null,
     sourceKind: options.sourceKind || 'link', originalFileName: options.originalFileName || null,
     uploadedInputFile: options.uploadedInputFile || null, sourceObjectKey: options.sourceKind === 'object_storage' ? value : null,
+    sourceRightsConfirmed: options.sourceRightsConfirmed === true,
+    sourceRightsConfirmedAt: options.sourceRightsConfirmed === true ? (Number(options.sourceRightsConfirmedAt) || Date.now()) : null,
   }, user.id);
   state.projects.unshift(project);
   save();

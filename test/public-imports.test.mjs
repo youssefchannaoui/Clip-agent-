@@ -80,7 +80,8 @@ test('resubmitting with the same idempotency key does not create a second projec
   // cannot tell, retries, and the account pays for the same lecture twice.
   const before = engine.state?.projects?.length;
   const key = 'test-idem-key-1';
-  const first = await engine.submitVideo('https://www.youtube.com/watch?v=aaaaaaaaaaa', 'A', 'user_admin', { idempotencyKey: key })
+  const submission = { idempotencyKey: key, sourceRightsConfirmed: true };
+  const first = await engine.submitVideo('https://www.youtube.com/watch?v=aaaaaaaaaaa', 'A', 'user_admin', submission)
     .catch(error => ({ error: error.message }));
   if (first && first.error) {
     // Submission was refused for an unrelated reason -- no template, no import
@@ -94,7 +95,7 @@ test('resubmitting with the same idempotency key does not create a second projec
     assert.match(first.error, /nasheed|template|Sign in|not configured/i);
     return;
   }
-  const second = await engine.submitVideo('https://www.youtube.com/watch?v=aaaaaaaaaaa', 'A', 'user_admin', { idempotencyKey: key });
+  const second = await engine.submitVideo('https://www.youtube.com/watch?v=aaaaaaaaaaa', 'A', 'user_admin', submission);
   assert.equal(second, first, 'the same key returns the original project');
   if (typeof before === 'number') assert.equal(engine.state.projects.length, before + 1);
 });

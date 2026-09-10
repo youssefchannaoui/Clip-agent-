@@ -8313,6 +8313,7 @@ StudioAdapter.onProbeSource=async url=>{
          step existed -- which is what makes "optional" true on the wire as
          well as on the screen. */
       if(opts&&opts.clipBrief)body.clipBrief=opts.clipBrief;
+      if(opts&&opts.sourceRightsConfirmed===true)body.sourceRightsConfirmed=true;
       /* The probe already fetched the title, duration and poster; sending them
          stores the maxres thumbnail rather than leaving the server to derive
          hqdefault from the URL. Not sending it at all is why every lecture had

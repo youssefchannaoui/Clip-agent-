@@ -109,7 +109,8 @@
           var on = Math.abs(l - c[2]) < 1 && Math.abs(r - c[3]) < 1;
           return '<button type="button" class="opt' + (on ? ' on' : '') + '" data-act="cut" data-a="' + c[2] + '" data-b="' + c[3] + '">' + c[1] + '</button>';
         }).join('') + '</div>'
-        + '<div class="rv fnote" style="margin-top: 14px">Skip the box and the clipper picks the strongest moments on its own.</div>';
+        + '<div class="rv fnote" style="margin-top: 14px">Skip the box and the clipper picks the strongest moments on its own.</div>'
+        + '<label class="rv fnote" style="display:flex;align-items:flex-start;gap:9px;margin-top:18px;cursor:pointer;color:#d9d2c6"><input type="checkbox" data-act="rights"' + (vals.jobRightsConfirmed ? ' checked' : '') + ' style="margin:3px 0 0;accent-color:#d9b478"> <span>I own this video or have permission from the rights holder to create clips and publish them.</span></label>';
     } else if (id === 'kind') {
       var quran = Boolean(vals.jobTypeQuran);
       var lang = ui.jobLang || (quran ? 'ar' : 'en');
@@ -221,6 +222,7 @@
       if (act === 'cut') { v.setJobStart({ target: { value: el.dataset.a } }); v.setJobEnd({ target: { value: el.dataset.b } }); return; }
       if (act === 'kind') { v.pickJobType(el.dataset.kind); return; }
       if (act === 'lang') { ui.jobLang = el.dataset.lang; repaint(); return; }
+      if (act === 'rights') { v.toggleJobRights(); return; }
       if (act === 'count') { var o = (v.countOpts || []).filter(function (x) { return x.label === el.dataset.n; })[0]; if (o) o.toggle(e); return; }
       if (act === 'band') {
         var lo = Number(el.dataset.lo), hi = Number(el.dataset.hi);
