@@ -701,8 +701,8 @@ html, body { margin: 0; background: #09090A; }
 .sii{margin-top: 9px; font-size: 13.5px; color: #F2F2F4}
 .sij{margin-top: 3px; font-size: 11px; color: #85858E}
 .sik{margin-top: 11px; font-size: 11.5px; color: #BCBCC3; line-height: 1.5}
-.sil{position: fixed; inset: 0; z-index: 94; display: grid; place-items: start center; padding: 6vh 24px 24px; background: radial-gradient(120% 90% at 50% 0%, rgba(38,29,18,.5), rgba(6,6,8,.86) 62%), rgba(6,6,8,.6); backdrop-filter: blur(9px)}
-.sim{width: 100%; max-width: 1060px; max-height: 92vh; overflow: auto; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 26px; padding: 26px 28px 24px; border: 1px solid #2C2C33; border-radius: 20px; background: rgba(9,9,10,.84); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); box-shadow: 0 48px 120px rgba(0,0,0,.76), inset 0 1px 0 rgba(248,248,249,.05); animation: dcPop .18s cubic-bezier(.2,.8,.2,1)}
+.sil{position: fixed; inset: 0; z-index: 94; display: grid; place-items: start center; padding: 6vh 24px 24px; background: linear-gradient(180deg, rgba(7,6,7,.72), rgba(7,6,7,.9)), url(/marketing-assets/hero-hall.webp) center / cover no-repeat; backdrop-filter: blur(9px)}
+.sim{width: 100%; max-width: 1060px; max-height: 92vh; overflow: auto; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 26px; padding: 26px 28px 24px; border: 1px solid rgba(217,182,111,.22); border-radius: 20px; background: rgba(9,9,10,.84); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); box-shadow: 0 48px 120px rgba(0,0,0,.76), inset 0 1px 0 rgba(248,248,249,.05); animation: dcPop .18s cubic-bezier(.2,.8,.2,1)}
 .sin{flex: 1 1 460px; min-width: 0; min-height: 430px; display: flex; flex-direction: column; gap: 14px}
 .sio{display: flex; align-items: center; gap: 14px}
 .sip{position: absolute; inset: 0; background: linear-gradient(180deg, rgba(9,9,10,.15), rgba(9,9,10,.7))}
@@ -742,8 +742,8 @@ html, body { margin: 0; background: #09090A; }
 .sjn{display: flex; align-items: center; gap: 7px; padding: 12px 18px; border: 1px solid #2A2A30; border-radius: 10px; background: #17171A; color: #BCBCC3; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: color .15s ease, border-color .15s ease, background .15s ease}
 .sjo:hover{color: #F2F2F4; border-color: #3A3A42; background: #1C1C21}
 .sjp{display: flex; margin-top: auto; padding-top: 16px; border-top: 1px solid #1F1F25}
-.sjq{position: sticky; top: 0; flex: 0 1 322px; min-width: 288px; display: flex; flex-direction: column; gap: 18px; padding: 22px; border: 1px solid #2E2A24; border-radius: 12px; background: linear-gradient(180deg, #16150F 0%, #121214 62%)}
-.sjr{font-family: Outfit, Inter, sans-serif; font-size: 34px; font-weight: 600; line-height: 1; letter-spacing: -.03em; color: #F0D6A6}
+.sjq{position: sticky; top: 0; flex: 0 1 322px; min-width: 288px; display: flex; flex-direction: column; gap: 18px; padding: 22px; border: 1px solid rgba(217,182,111,.28); border-radius: 12px; background: linear-gradient(180deg, rgba(217,182,111,.10) 0%, rgba(7,6,7,.4) 60%)}
+.sjr{font-family: Fraunces, Georgia, serif; font-size: 46px; font-weight: 400; line-height: .9; letter-spacing: -.02em; color: #F0D6A6}
 .sjs{font-size: 13px; color: #BCBCC3}
 .sjt{height: 1px; background: #2A2723}
 .sju:hover{background: rgba(248,248,249,.04) !important}

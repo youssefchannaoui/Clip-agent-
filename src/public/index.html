@@ -1297,9 +1297,9 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 @keyframes lbGrow{from{transform:scaleX(0)}to{transform:none}}
 @media (prefers-reduced-motion: reduce){.lb-fill{animation:none}}
 .dc-hover-row:hover{background:var(--dc-n-1b1b1f, #1B1B1F)}
-.bgt-row{display:flex;gap:12px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
-.bgt-card{position:relative;flex:none;width:124px;background:none;border:0;padding:0;cursor:pointer;text-align:center}
-.bgt-thumb{position:relative;display:block;width:124px;height:220px;margin:0 auto;border-radius:10px;border:1px solid var(--dc-n-212127, #212127);background-color:var(--dc-n-131315, #131315);background-size:cover;background-position:center;transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;overflow:hidden}
+.bgt-row{display:flex;gap:16px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.bgt-card{position:relative;flex:none;width:172px;background:none;border:0;padding:0;cursor:pointer;text-align:center}
+.bgt-thumb{position:relative;display:block;width:172px;height:306px;margin:0 auto;border-radius:10px;border:1px solid var(--dc-n-212127, #212127);background-color:var(--dc-n-131315, #131315);background-size:cover;background-position:center;transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;overflow:hidden}
 /* The previews run. A caption style is defined by what it DOES -- words
    arriving, a line waiting in grey, a card cutting to the next -- and a still
    frame shows none of it. One shared 5s loop so all five stay in phase, and
@@ -1338,11 +1338,13 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   transform:translateX(-130%);animation:dcProShine 4.6s ease-in-out infinite}
 @keyframes dcProShine{0%,58%{transform:translateX(-130%)}84%,100%{transform:translateX(240%)}}
 @media (prefers-reduced-motion: reduce){.dc-pro::after{animation:none;opacity:0}}
-.bgt-lock{position:absolute;top:190px;left:9px;background:rgba(10,10,12,.86);pointer-events:none}
+.bgt-thumb:not(.bgt-ph){background-image:linear-gradient(180deg,rgba(9,9,10,.12),rgba(9,9,10,.5)),url(/preview-sample.webp)}
+.bgt-thumb.bgt-q{background-image:linear-gradient(180deg,rgba(9,9,10,.2),rgba(9,9,10,.6)),url(/marketing-assets/reel-quran.webp)}
+.bgt-lock{position:absolute;top:276px;left:9px;background:rgba(10,10,12,.86);pointer-events:none}
 .bgt-name{white-space:normal;line-height:1.35}
 .bgt-card:not(.on):hover .bgt-thumb{border-color:var(--dc-n-3a3a42, #3A3A42);transform:translateY(-1px)}
 .bgt-card.on .bgt-thumb{border-color:rgba(240,214,166,.8)}
-.bgt-name{display:block;margin-top:7px;font:400 12px Outfit,Inter,sans-serif;color:var(--dc-ink-dim, #8B8B93);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bgt-name{display:block;margin-top:9px;font:400 15px Fraunces,Georgia,serif;letter-spacing:-.01em;color:var(--dc-ink-dim, #8B8B93);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bgt-card.on .bgt-name{color:var(--dc-n-f6f6f8, #F6F6F8);font-weight:600}
 /* The four destination tiles on the last step. The platform marks are drawn
    as backgrounds by the rules above, which strip the tile from any box whose
@@ -6395,7 +6397,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        Sizes are the template's real captionFontSize scaled into the thumb,
        through the same Win-cell divisor libass uses, so a style that renders
        large looks large here. */
-    const MINI_W = 124;
+    const MINI_W = 172;
     function tplMiniHtml(t){
       /* Three looks are black and white, not one: monochrome is flat, noir
          hard, silver soft. A thumb that only knew about the first drew the
@@ -6446,7 +6448,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           + line('finds rest', px(t.captionFontSize), queued, 'bgtL2');
       }
       const inset = t.captionHorizontal === 'center' ? '0 7px' : '0 6px';
-      return `<span class="bgt-thumb" style="display:flex;flex-direction:column;align-items:${align};justify-content:${justify};padding:9px ${inset};${mono ? 'filter:grayscale(1);' : ''}">`
+      return `<span class="bgt-thumb${t.captionMode === 'quran' ? ' bgt-q' : ''}" style="display:flex;flex-direction:column;align-items:${align};justify-content:${justify};padding:12px ${inset};${mono ? 'filter:grayscale(1);' : ''}">`
         + `<span style="display:flex;flex-direction:column;align-items:${align};gap:1px;max-width:100%">${inner}</span></span>`;
     }
     /* The job panel is a flex column with max-height: 88vh and overflow:

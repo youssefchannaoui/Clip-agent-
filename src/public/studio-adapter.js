@@ -7939,6 +7939,8 @@
         : JOB_STEPS[jobStepIndex() - 1].hint,
       jobStepCounter: jobStepIndex() + ' / ' + JOB_STEPS.length,
       segRail: SEG_RAIL,
+      // The nasheed list is rows, not pills: a title reads, a pill wraps.
+      trackRail: 'display: flex; flex-direction: column; width: 100%; max-width: 560px; max-height: 232px; overflow: auto; border: 1px solid rgba(245,241,232,.1); border-radius: 8px; overflow: hidden; background: rgba(7,6,7,.5);',
       // A label, in its own column, not another word on the same line as the
       // options -- as an inline run "Which nasheed" read as a fourth choice
       // and highlighted like body text when anyone dragged over it.
@@ -8089,7 +8091,9 @@
         var on = t.id ? UI.jobTrackId === t.id : !UI.jobTrackId;
         return {
           label: t.name || t.fileName || 'Untitled',
-          style: wordOption(on, 14),
+          style: 'display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 14px; text-align: left; border: 0; border-bottom: 1px solid rgba(245,241,232,.08);'
+            + ' font-family: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: background .2s ease, color .2s ease;'
+            + (on ? ' background: rgba(217,182,111,.12); color: var(--dc-gold-lit, #F0D6A6);' : ' background: transparent; color: var(--dc-ink-body, #BCBCC3);'),
           select: function (e) { stop(e); setUI({ jobTrackId: t.id || null }); },
         };
       }),
