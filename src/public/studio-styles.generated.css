@@ -714,7 +714,7 @@ html, body { margin: 0; background: #09090A; }
 .siv{position: relative; flex: 1 1 auto; height: 2px; border-radius: 2px; background: #232329; overflow: hidden}
 .siw{flex: none; font-size: 11px; color: #85858E; font-variant-numeric: tabular-nums}
 .six{display: flex; flex-direction: column; gap: 6px; animation: dcStep .3s cubic-bezier(.2,.75,.3,1) both}
-.siy{font-family: Outfit, Inter, sans-serif; font-size: 27px; font-weight: 600; line-height: 1.15; letter-spacing: -.025em; color: #F6F6F8}
+.siy{font-family: Fraunces, Georgia, serif; font-size: 34px; font-weight: 500; line-height: 1.1; letter-spacing: -.025em; color: #F6F6F8}
 .siz{font-size: 13px; line-height: 1.55; color: #8B8B93; max-width: 62ch}
 .sj0{display: flex; flex-direction: column; gap: 10px; animation: dcStep .3s cubic-bezier(.2,.75,.3,1) both; animation-delay: .04s}
 .sj1{display: flex; align-items: baseline; font-size: 13px; color: #8B8B93}

@@ -617,7 +617,7 @@
     // that's what the templates are there for"), so they are not asked here.
     // The brief and the range share the first step: both are "what am I
     // clipping", and the brief is optional so nothing blocks on it.
-    { id: 'brief', title: 'What is it about, and which part?', hint: 'Optional: name a subject and the clipper looks for it. Then drag to the part you want clipped.' },
+    { id: 'brief', title: 'What is it about, and which part?', hint: 'Optional: name a subject and the clipper looks for it. Below, the part of the lecture to clip.' },
     { id: 'kind', title: 'What are you clipping?', hint: 'This decides how the captions are read and whether a nasheed belongs underneath.' },
     { id: 'lengths', title: 'How many clips, and how long?', hint: 'Pick any lengths. Moments are cut to fit the ones you allow.' },
     { id: 'style', title: 'Which template?', hint: 'The template decides the captions, the framing and the mark. The preview is what the renderer produces.' },
@@ -7845,7 +7845,7 @@
       // poster half the dialog.
       // A fixed 152px strip, not a hero. The panel asks one question at a
       // time now and the source is context for it, not the subject.
-      jobPosterStyle: 'position: relative; display: block; flex: none; width: 300px; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden;'
+      jobPosterStyle: 'position: relative; display: block; flex: none; width: 264px; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden;'
         + ' border: 1px solid var(--dc-n-2a2a32, #2A2A32); background-color: var(--dc-bg-raised, #17171A);'
         + ' box-shadow: 0 10px 26px rgba(0,0,0,.5), inset 0 1px 0 rgba(248,248,249,.06);'
         + (job && job.thumbnail ? ' background-image: ' + posterLayers(job) + '; background-size: cover; background-position: center; background-repeat: no-repeat;' : ''),
