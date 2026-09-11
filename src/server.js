@@ -1631,7 +1631,7 @@ async function route(req, res, url) {
   }
   // `instagram` is the DIRECT Instagram Login, alongside `meta` which reaches
   // Instagram through a Facebook Page. Both roads land here.
-  const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok|instagram|buffer)\/callback$/);
+  const oauthCallback = pathname.match(/^\/auth\/(meta|tiktok|instagram|buffer)\/callback$/);
   if (method === 'GET' && oauthCallback) {
     const provider = oauthCallback[1];
     try {
@@ -2220,12 +2220,12 @@ async function route(req, res, url) {
   }
 
 
-  const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok|instagram|buffer)\/connect$/);
+  const socialConnect = pathname.match(/^\/api\/social\/(meta|tiktok|instagram|buffer)\/connect$/);
   if (method === 'POST' && socialConnect) {
     try { return json(res, 200, { url: social.oauthStartUrl(socialConnect[1], currentUser?.id) }); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
-  const socialDisconnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok|instagram|buffer)\/disconnect$/);
+  const socialDisconnect = pathname.match(/^\/api\/social\/(meta|tiktok|instagram|buffer)\/disconnect$/);
   if (method === 'POST' && socialDisconnect) {
     try {
       const body = await readBody(req).catch(() => ({}));
@@ -2234,7 +2234,7 @@ async function route(req, res, url) {
     }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
-  const socialTest = pathname.match(/^\/api\/social\/(youtube|meta|tiktok|instagram)\/test$/);
+  const socialTest = pathname.match(/^\/api\/social\/(tiktok|instagram)\/test$/);
   if (method === 'POST' && socialTest) {
     const body = await readBody(req);
     try { return json(res, 200, { ok: true, result: await social.testConnection(socialTest[1], String(body.accountId || ''), currentUser), social: social.connectionStatus(currentUser) }); }
@@ -3991,6 +3991,7 @@ if (fatal.length) {
 
 server.listen(config.port, () => {
   console.log(`DeenClipped self-hosted engine listening on http://localhost:${config.port}`);
+  social.retireDirectYoutubeConnections();
   // Before anything schedules or posts: correct clips that went out to one
   // destination and were filed as if they had gone nowhere. Left alone they
   // sit under "missed their slots" for ever, and their button says "Post now"

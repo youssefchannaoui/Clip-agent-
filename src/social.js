@@ -86,7 +86,9 @@ function redirectUri(provider) {
 }
 function providerConfigured(provider) {
   if (!config.socialTokenKey || config.socialTokenKey.length < 32 || !config.publicBaseUrl) return false;
-  if (provider === 'youtube') return Boolean(config.googleClientId && config.googleClientSecret);
+  // YouTube publishing is brokered through Buffer. Keeping a direct Google
+  // OAuth path alive would make the rejected client reachable again.
+  if (provider === 'youtube') return Boolean(config.directYoutubeOAuthEnabled && config.googleClientId && config.googleClientSecret);
   if (provider === 'meta') return Boolean(config.metaAppId && config.metaAppSecret);
   if (provider === 'tiktok') return Boolean(config.tiktokClientKey && config.tiktokClientSecret);
   // The DIRECT Instagram login, which is its own app id and secret. Kept
@@ -868,7 +870,7 @@ function connectionFo(userId, provider, accountId) {
 }
 
 function youtubeSummary(userId) {
-  return [...bufferAccounts(userId, 'youtube'), ...connections(userId, 'youtube').flatMap(c => youtubeEntry(c))];
+  return [...bufferAccounts(userId, 'youtube'), ...(config.directYoutubeOAuthEnabled ? connections(userId, 'youtube').flatMap(c => youtubeEntry(c)) : [])];
 }
 function bufferConnection(userId) { return connection(userId, 'buffer'); }
 function bufferAccounts(userId, provider) {
@@ -938,6 +940,35 @@ function tiktokSummary(userId) {
   return connections(userId, 'tiktok').map(c => ({
     id: c.accountId, name: c.name, avatar: c.avatar || '', creatorInfo: c.creatorInfo || null, needsReconnect: needsReconnect(c),
   }));
+}
+
+/**
+ * The direct Google/YouTube OAuth integration was retired in favour of
+ * Buffer. Remove the dormant refresh tokens as the server starts instead of
+ * leaving credentials that no supported route can use. Existing clips stay
+ * untouched; only future YouTube posting is switched off until the user picks
+ * the same channel through Buffer.
+ */
+export function retireDirectYoutubeConnections() {
+  let removed = 0;
+  for (const userId of Object.keys(state.socialConnections || {})) {
+    if (!removeConnection(state.socialConnections, userId, 'youtube')) continue;
+    removed += 1;
+    const user = userById(userId);
+    if (!user?.id) continue;
+    const settings = publishingSettings(user);
+    const next = {
+      ...settings,
+      youtube: { ...(settings.youtube || {}), enabled: false, accountId: '', accountIds: [] },
+    };
+    if (!['instagram', 'facebook', 'tiktok'].some(provider => next[provider]?.enabled)) next.enabled = false;
+    setPublishingSettings(user, next);
+  }
+  if (removed) {
+    save();
+    log(`Retired ${removed} direct YouTube OAuth connection${removed === 1 ? '' : 's'}; future YouTube publishing now goes through Buffer.`, 'info');
+  }
+  return removed;
 }
 
 export function connectionStatus(user) {
@@ -1057,7 +1088,7 @@ function selectedAccount(provider, accountId, userId) {
   const buffered = bufferAccounts(userId, provider);
   const bufferMatch = accountId ? buffered.find(item => String(item.id) === String(accountId)) : (buffered.length === 1 ? buffered[0] : null);
   if (bufferMatch) return bufferMatch;
-  if (provider === 'youtube') return oneOf('youtube', accountId, userId);
+  if (provider === 'youtube') return config.directYoutubeOAuthEnabled ? oneOf('youtube', accountId, userId) : null;
   if (provider === 'facebook') return (connection(userId, 'meta')?.accounts || []).find(item => item.pageId === accountId) || null;
   if (provider === 'instagram') {
     /*
@@ -2373,6 +2404,9 @@ function publishingAccountFor(clip, target) {
 export async function publishTarget(clip, target, file) {
   const userId = publishingAccountFor(clip, target);
   if (selectedAccount(target.provider, target.accountId, userId)?.viaBuffer) return publishBuffer(clip, target, userId);
+  if (target.provider === 'youtube' && !config.directYoutubeOAuthEnabled) {
+    throw new SocialError('Connect your YouTube channel through Buffer before publishing.', { provider: 'youtube', retryable: false });
+  }
   if (target.provider === 'instagram') return startInstagram(clip, target, userId);
   if (!file || !fs.existsSync(file)) throw new SocialError('The rendered clip file is missing.', { provider: target.provider });
   if (target.provider === 'youtube') return uploadYouTube(clip, target, file, userId);

@@ -138,7 +138,7 @@ function looksLikeAppleServiceId(value) {
 }
 
 function configured(provider) {
-  if (provider === 'google') return Boolean(config.googleSigninClientId && config.googleSigninClientSecret);
+  if (provider === 'google') return Boolean(config.googleSigninEnabled && config.googleSigninClientId && config.googleSigninClientSecret);
   if (provider === 'apple') {
     return Boolean(looksLikeAppleServiceId(config.appleSigninClientId)
       && config.appleSigninTeamId && config.appleSigninKeyId && config.appleSigninPrivateKey);

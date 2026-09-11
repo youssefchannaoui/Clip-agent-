@@ -11,6 +11,7 @@ process.env.SOCIAL_PUBLISH_ENABLED = 'true';
 process.env.PUBLIC_BASE_URL = 'https://app.test';
 process.env.GOOGLE_CLIENT_ID = 'google-client';
 process.env.GOOGLE_CLIENT_SECRET = 'google-secret';
+process.env.DIRECT_YOUTUBE_OAUTH_ENABLED = 'true';
 process.env.GOOGLE_AUTH_BASE = 'https://accounts.test';
 process.env.GOOGLE_TOKEN_URL = 'https://google.test/token';
 process.env.GOOGLE_REVOKE_URL = 'https://google.test/revoke';

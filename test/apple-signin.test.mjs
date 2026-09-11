@@ -129,11 +129,16 @@ test('the divider and the row go with the last button', async () => {
   assert.ok(html.includes('Continue with email'), 'but signing in by email still works');
 });
 
-test('Google is unaffected and is drawn on its own', () => {
-  const { html } = page({ GOOGLE_SIGNIN_CLIENT_ID: 'g', GOOGLE_SIGNIN_CLIENT_SECRET: 's' });
+test('Google sign-in is shown only when explicitly enabled', () => {
+  const { html } = page({ GOOGLE_SIGNIN_ENABLED: 'true', GOOGLE_SIGNIN_CLIENT_ID: 'g', GOOGLE_SIGNIN_CLIENT_SECRET: 's' });
   assert.ok(html.includes('Continue with Google'));
   assert.ok(!html.includes('Continue with Apple'));
   assert.ok(html.includes('or use email'), 'one provider still earns the divider');
+});
+
+test('Google credentials alone never switch on a sign-in button', () => {
+  const { html } = page({ GOOGLE_SIGNIN_CLIENT_ID: 'g', GOOGLE_SIGNIN_CLIENT_SECRET: 's' });
+  assert.ok(!html.includes('Continue with Google'));
 });
 
 test('the shape check claims only what it can prove', () => {

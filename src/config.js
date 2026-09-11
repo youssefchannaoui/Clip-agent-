@@ -411,8 +411,12 @@ export const config = {
     .split(',').map(entry => entry.trim().toLowerCase()).filter(Boolean),
   adminName: process.env.ADMIN_NAME || 'DeenClipped Admin',
 
-  googleSigninClientId: String(process.env.GOOGLE_SIGNIN_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').trim(),
-  googleSigninClientSecret: String(process.env.GOOGLE_SIGNIN_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim(),
+  // Google sign-in is deliberately opt-in and has credentials separate from
+  // any legacy YouTube publishing client. A rejected publishing OAuth client
+  // must never quietly turn "Continue with Google" back on at login.
+  googleSigninEnabled: boolean(process.env.GOOGLE_SIGNIN_ENABLED, false),
+  googleSigninClientId: String(process.env.GOOGLE_SIGNIN_CLIENT_ID || '').trim(),
+  googleSigninClientSecret: String(process.env.GOOGLE_SIGNIN_CLIENT_SECRET || '').trim(),
   googleSigninRedirectUri: process.env.GOOGLE_SIGNIN_REDIRECT_URI || '',
 
   appleSigninClientId: String(process.env.APPLE_SIGNIN_CLIENT_ID || '').trim(),
@@ -423,6 +427,9 @@ export const config = {
 
   googleClientId: String(process.env.GOOGLE_CLIENT_ID || '').trim(),
   googleClientSecret: String(process.env.GOOGLE_CLIENT_SECRET || '').trim(),
+  // Emergency compatibility switch for isolated tests only. The HTTP routes
+  // never expose direct YouTube OAuth, regardless of this value.
+  directYoutubeOAuthEnabled: boolean(process.env.DIRECT_YOUTUBE_OAUTH_ENABLED, false),
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || '',
   googleAuthBase: (process.env.GOOGLE_AUTH_BASE || 'https://accounts.google.com').replace(/\/+$/, ''),
   googleTokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',

@@ -11,6 +11,7 @@ process.env.EMAIL_SIGNIN_ENABLED = 'true';
 process.env.OPERATOR_EMAILS = 'operator@deenclipped.test';
 process.env.GOOGLE_SIGNIN_CLIENT_ID = 'test-client';
 process.env.GOOGLE_SIGNIN_CLIENT_SECRET = 'test-secret';
+process.env.GOOGLE_SIGNIN_ENABLED = 'true';
 
 const store = await import('../src/store.js');
 const auth = await import('../src/auth.js');
