@@ -1631,7 +1631,7 @@ async function route(req, res, url) {
   }
   // `instagram` is the DIRECT Instagram Login, alongside `meta` which reaches
   // Instagram through a Facebook Page. Both roads land here.
-  const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok|instagram)\/callback$/);
+  const oauthCallback = pathname.match(/^\/auth\/(youtube|meta|tiktok|instagram|buffer)\/callback$/);
   if (method === 'GET' && oauthCallback) {
     const provider = oauthCallback[1];
     try {
@@ -2220,12 +2220,12 @@ async function route(req, res, url) {
   }
 
 
-  const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok|instagram)\/connect$/);
+  const socialConnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok|instagram|buffer)\/connect$/);
   if (method === 'POST' && socialConnect) {
     try { return json(res, 200, { url: social.oauthStartUrl(socialConnect[1], currentUser?.id) }); }
     catch (error) { return json(res, 400, { error: error.message }); }
   }
-  const socialDisconnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok|instagram)\/disconnect$/);
+  const socialDisconnect = pathname.match(/^\/api\/social\/(youtube|meta|tiktok|instagram|buffer)\/disconnect$/);
   if (method === 'POST' && socialDisconnect) {
     try {
       const body = await readBody(req).catch(() => ({}));

@@ -428,6 +428,14 @@ export const config = {
   googleTokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
   googleRevokeUrl: process.env.GOOGLE_REVOKE_URL || 'https://oauth2.googleapis.com/revoke',
   youtubeApiBase: (process.env.YOUTUBE_API_BASE || 'https://www.googleapis.com').replace(/\/+$/, ''),
+  // Buffer owns the platform OAuth grants.  DeenClipped only receives a
+  // Buffer grant and sends rendered, already-approved MP4s to Buffer's API.
+  // Keep these server-only: a browser must never see the client secret.
+  bufferClientId: String(process.env.BUFFER_CLIENT_ID || '').trim(),
+  bufferClientSecret: String(process.env.BUFFER_CLIENT_SECRET || '').trim(),
+  bufferRedirectUri: String(process.env.BUFFER_REDIRECT_URI || '').trim(),
+  bufferAuthBase: (process.env.BUFFER_AUTH_BASE || 'https://auth.buffer.com').replace(/\/+$/, ''),
+  bufferApiBase: (process.env.BUFFER_API_BASE || 'https://api.buffer.com').replace(/\/+$/, ''),
   // No YOUTUBE_DATA_API_KEY here on purpose. Nothing in this product asks the
   // YouTube Data API about a video, and an unread key sitting in config is how
   // a `videos.list` call quietly comes back -- which is the exact thing Google
