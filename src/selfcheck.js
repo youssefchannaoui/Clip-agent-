@@ -254,6 +254,42 @@ function configReady({ env = process.env } = {}) {
   return { key: 'config', ok: !broken.length, detail };
 }
 
+/**
+ * A platform switched ON with nothing connected to it publishes NOTHING, and
+ * until now nothing anywhere said so. `configReady` only asks whether
+ * credentials exist in the ENVIRONMENT, so through the whole of 11-14 Sept
+ * 2026 -- every scheduled clip refused, three YouTube credentials deleted --
+ * Owner -> Health went on reporting Posting as configured. That is the
+ * "monitor reading the wrong side" failure this file already records against
+ * the worker version check, on the path that carries the product.
+ *
+ * It reads the REAL account records rather than the environment, because that
+ * is the side the publisher reads. `accounts` is a per-provider count of
+ * connected channels; `enabled` is a per-provider switch.
+ */
+function postingReady({ publishing }) {
+  if (!publishing) return { key: 'posting', ok: true, detail: 'not checked on this deployment' };
+  const dead = [];
+  let live = 0;
+  for (const [provider, row] of Object.entries(publishing)) {
+    if (!row || !Number(row.enabled)) continue;
+    // ANY account switched on with nothing behind it counts. Reporting only
+    // when EVERY account is broken would hide one customer's dead channel
+    // behind another customer's working one.
+    if (Number(row.missing) > 0) dead.push(provider); else live += 1;
+  }
+  const ok = !dead.length;
+  return {
+    key: 'posting',
+    ok,
+    detail: ok
+      ? (live ? `${live} destination(s) switched on, each with a channel connected` : 'no destination switched on')
+      : `${dead.join(', ')} ${dead.length === 1 ? 'is' : 'are'} switched on with no channel connected, `
+        + 'so every clip scheduled to them is refused. Reconnect them in Connections, '
+        + 'or switch them off so the schedule stops trying.',
+  };
+}
+
 export function checks(deps = {}) {
   return [
     assetsOnDisk(deps),
@@ -261,6 +297,7 @@ export function checks(deps = {}) {
     mediaDomain(deps),
     workerCurrent(deps),
     configReady(deps),
+    postingReady(deps),
   ];
 }
 

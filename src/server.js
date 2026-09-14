@@ -3864,6 +3864,29 @@ function selfCheckInputs({ workerVersion = '', workerReachable = false } = {}) {
     remote: config.processingMode === 'remote' && workerReachable,
     workerRelease: config.workerRelease,
     workerVersion,
+    /* Read through social.connectionStatus -- the SAME function the
+     * Connections screen reads -- so the health check and the screen can never
+     * disagree about whether a channel is connected. Walked across every
+     * account, because a destination switched on with nothing behind it
+     * refuses every clip scheduled to it whoever owns it. */
+    publishing: (() => {
+      const out = {};
+      for (const user of (state.authUsers || [])) {
+        let status;
+        let settings;
+        try {
+          status = social.connectionStatus(user);
+          settings = publishingSettings(user);
+        } catch { continue; }
+        for (const provider of ['youtube', 'tiktok', 'instagram', 'facebook']) {
+          if (!settings?.[provider]?.enabled) continue;
+          const row = out[provider] || (out[provider] = { enabled: 0, missing: 0 });
+          row.enabled += 1;
+          if (!status?.providers?.[provider]?.connected) row.missing += 1;
+        }
+      }
+      return out;
+    })(),
   };
 }
 

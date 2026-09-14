@@ -619,10 +619,40 @@ test('a known duration still gives a real range and a token estimate', () => {
 
 test('generate sends no range when the length is unknown', () => {
   StudioAdapter.openJob({ url: 'https://youtu.be/x', title: 'Talk', durationSec: null });
+  // The source-rights box gates runGenerate. This test is about the RANGE, so
+  // it is ticked here; the gate itself is pinned by its own test below.
+  StudioAdapter.ui.jobRightsConfirmed = true;
   let sent = 'not called';
   StudioAdapter.onGenerate = (url, range) => { sent = range; };
   StudioAdapter.bindings(SAMPLE_STATE).runGenerate({ preventDefault() {} });
   assert.equal(sent, null, 'a 0-0 range would be a lie the server must interpret');
+  StudioAdapter.ui.jobRightsConfirmed = false;
+  StudioAdapter.ui.generating = false;
+  StudioAdapter.onGenerate = () => {};
+});
+
+test('no job starts until the source rights are confirmed', () => {
+  /*
+   * The one control standing between a pasted link and a render, and until now
+   * nothing in the browser layer pinned it. It refuses BEFORE `generating` is
+   * set, so a refused press must leave the panel exactly as it found it --
+   * otherwise the button locks itself and the customer is stuck on a spinner.
+   */
+  StudioAdapter.openJob({ url: 'https://youtu.be/x', title: 'Talk', durationSec: 600 });
+  StudioAdapter.ui.jobRightsConfirmed = false;
+  let started = false;
+  StudioAdapter.onGenerate = () => { started = true; };
+  StudioAdapter.bindings(SAMPLE_STATE).runGenerate({ preventDefault() {} });
+  assert.equal(started, false, 'unticked, nothing is sent to the server');
+  assert.notEqual(StudioAdapter.ui.generating, true, 'and the panel is not left spinning');
+
+  StudioAdapter.ui.jobRightsConfirmed = true;
+  StudioAdapter.bindings(SAMPLE_STATE).runGenerate({ preventDefault() {} });
+  assert.equal(started, true, 'ticked, it goes');
+
+  StudioAdapter.ui.jobRightsConfirmed = false;
+  StudioAdapter.ui.generating = false;
+  StudioAdapter.onGenerate = () => {};
 });
 
 // ── connections read the right part of DATA ───────────────────────────────
@@ -3407,11 +3437,13 @@ test('the chosen nasheed travels with the job', () => {
   state.tracks = [{ id: 't1', name: 'Nasheed one' }, { id: 't2', name: 'Nasheed two' }];
   StudioAdapter.openJob({ url: 'https://youtu.be/x', title: 'Talk', durationSec: 600 });
   StudioAdapter.ui.jobTrackId = 't2';
+  StudioAdapter.ui.jobRightsConfirmed = true;   // gates runGenerate; see its own test
   let sent = null;
   StudioAdapter.onGenerate = (url, range, opts) => { sent = opts; };
   StudioAdapter.bindings(state).runGenerate({ preventDefault() {} });
   assert.equal(sent.musicTrackId, 't2');
   StudioAdapter.ui.generating = false;
+  StudioAdapter.ui.jobRightsConfirmed = false;
   StudioAdapter.ui.jobTrackId = null;
   StudioAdapter.onGenerate = () => {};
 });

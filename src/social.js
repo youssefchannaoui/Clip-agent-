@@ -950,6 +950,19 @@ function tiktokSummary(userId) {
  * the same channel through Buffer.
  */
 export function retireDirectYoutubeConnections() {
+  /* ONCE, EVER -- and the stamp is the whole of it. This DELETES stored
+   * credentials, and it used to run on every boot: a channel reconnected
+   * today was deleted again at the next deploy, with the customer given no
+   * reason and no way out. It ran for real in production on 11 Sept 2026
+   * ("Retired 3 direct YouTube OAuth connections") and must never be able to
+   * take another one.
+   *
+   * The stamp is written even when it removed NOTHING, which is the case that
+   * matters: a deployment with no YouTube connection today would otherwise
+   * stay armed for ever and eat the first one somebody makes tomorrow.
+   */
+  state.authSettings = state.authSettings || {};
+  if (Number(state.authSettings.directYoutubeRetiredAt)) return 0;
   let removed = 0;
   for (const userId of Object.keys(state.socialConnections || {})) {
     if (!removeConnection(state.socialConnections, userId, 'youtube')) continue;
@@ -964,9 +977,10 @@ export function retireDirectYoutubeConnections() {
     if (!['instagram', 'facebook', 'tiktok'].some(provider => next[provider]?.enabled)) next.enabled = false;
     setPublishingSettings(user, next);
   }
+  state.authSettings.directYoutubeRetiredAt = Date.now();
+  save();
   if (removed) {
-    save();
-    log(`Retired ${removed} direct YouTube OAuth connection${removed === 1 ? '' : 's'}; future YouTube publishing now goes through Buffer.`, 'info');
+    log(`Retired ${removed} direct YouTube OAuth connection${removed === 1 ? '' : 's'}; future YouTube publishing now goes through Buffer. This runs once and will not run again.`, 'info');
   }
   return removed;
 }
