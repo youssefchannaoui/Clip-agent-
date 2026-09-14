@@ -18813,65 +18813,55 @@ dispatch input is interpolated into a shell command -- inputs become a JSON
 literal in the `PARAMS = {}` seam and the script travels as one base64 blob.
 `WORKER_SHARED_SECRET` is read inside the container and never printed.
 
-## The job panel asks six questions, and the template answers the rest (v3.187.0, 10 Sept 2026)
+## The job panel redesign is REVERTED, and the whole of it is the lesson (v3.190.0, 14 Sept 2026)
 
-Youssef, after five canvas rounds: "templates do most of the thing because
-they're meant to configure a template ... then have a billion options now."
-So the panel now asks only what a template cannot know about THIS lecture:
+Youssef, after six releases of it: "the whole new job panel. I'm not really a
+big fan of it, to be honest with you, and it's all really, like, messed up ...
+if you can revert back to how it used to be, that would be great, and then
+we'll go on from there."
 
-    1 What is it about, and which part?   brief (optional) + the range
-    2 What are you clipping?              lecture / Qur'an, spoken language
-    3 How many clips, and how long?       count + tick-any length bands
-    4 Which template?                     the template cards
-    5 What plays underneath?              nasheed
-    6 Ready to go                         the summary, unchanged
+**Reverted in full**: `0a88b97` (v3.187.0, eight steps became six), `1cc5eec`,
+`9b1d5f8`, `7d6ea1d` (v3.189.0, the canvas panel mounted over the export's
+own), `87699d4`, `2bef241`. `src/public/studio-job.{js,css}` are deleted, their
+two `STUDIO_ASSETS` lines with them, and `JOB_STEPS` is the eight-step list
+again -- brief, kind, trim, lengths, style, picture, sound, review. The canvas
+itself (`design-canvas/Main.dc.html`, nine versions of it) is untouched and
+still in the tree; nothing shipped ever read it.
 
-- **The `trim` and `picture` steps are GONE from `JOB_STEPS`.** The range now
-  shows on step 1 because the export's trim block is gated on the binding
-  `jobIsStepTrim`, which simply reads `=== 'brief'` -- no re-import. Scenery is
-  a template decision; `jobIsStepPicture` is `false`, so `paintJobBackground`
-  stays built and never mounts. The 20-second blocker moved with the range.
-- **No example chips under the brief** ("random buttons underneath");
-  `jobBriefExamples` is `[]` and the painter still handles a list.
-- **The panel is `rgba(9,9,10,.84)` with a backdrop blur** rather than the
-  warm gradient, at his call ("just a black background, a bit transparent so
-  you can see what's behind"). Design edit, re-import proven byte-stable
-  first; the diff is exactly that one hoisted class's values.
-- The poster is 300px wide (was 216); the range hint reads the length and
-  the ETA rather than "drag either handle".
-- Every reader of step numbers goes through `jobStepNo(id)`, which is why the
-  summary's Edit links followed the change without a hand edit.
-- **Not built, said rather than implied:** the Look row (natural / dark /
-  black & white per lecture) and auto-approve locked to Pro from the canvas.
-  Both are new product decisions, not layout.
+**WHAT WENT WRONG IS NOT THE DESIGN, IT IS THAT IT WAS NEVER ONE DECISION.**
+Nine canvas rounds and six shipped releases, each answering the last screenshot
+-- "no background image", "everything is massive", "same size as the old one",
+"box size changes on each step", "templates dont even look like mty own
+templates". Every one of those was a real fault and every fix was correct. The
+panel still came out worse than the one it replaced, because a screenshot can
+only ever say what is wrong with the thing in front of it; it cannot say the
+thing should not exist. **Six consecutive reactive fixes with no round of "is
+this better than what it replaced" is the signal to stop and ask, not to fix
+faster.** The canvas was approved as a DRAWING and never once compared, on
+screen, against the panel it was replacing.
 
-## The job panel IS the canvas now (v3.189.0, 10 Sept 2026)
+**A second panel over the first was the structural mistake.** `#dcJob` mounted
+INSIDE the export's dialog and hid its children in place, so two panels existed
+at once, and every collision this file already warns about arrived at once: the
+studio's `.seg` and `.sld` (screen-sized, absolute) reached the canvas classes
+of the same name, the template previews were hand-drawn imitations of the real
+templates, and the dialog's height followed each step's content. That is the
+"two controls for one thing" fault at the scale of a whole screen -- the fifth
+time in this file, and by far the most expensive.
 
-Youssef: "why arent you followig your own deisng? its meant to be a redesign
-to EXACTLY YOUR BUILD?" Two releases had restyled the export's panel toward
-the canvas; this one moves the canvas in.
+**WHAT SURVIVED THE REVERT, AND WHY IT HAD TO.** The other session shipped a
+source-rights confirmation the same week (`9642166`): `runGenerate` refuses
+without `UI.jobRightsConfirmed` and sends `sourceRightsConfirmed: true`. They
+put the CHECKBOX in `studio-job.js` -- the file this revert deletes. Reverting
+blind would have left the gate with nothing anywhere to satisfy it: Generate
+refusing forever, on every account, with a toast naming a control that does not
+exist. `paintJobRights` re-renders it on the REVIEW step, which is better than
+where it was: the refusal fires on the step that holds the button, so the box
+is in front of the person reading the refusal rather than seven steps back.
 
-- **`src/public/studio-job.js` + `studio-job.css`** -- a host panel over the
-  SAME bindings and handlers, the device the Templates screen and the phone
-  use. `StudioJob.paint(vals, DATA)` runs in paintStudio's list; it mounts
-  `#dcJob` inside the export's dialog and hides the dialog's own children in
-  place (`data-host-style`), never removing them (v3.124.5). The export
-  removes the overlay when the job closes and the panel goes with it.
-- **The stylesheet is GENERATED from `design-canvas/Main.dc.html`'s `<style>`**,
-  every selector scoped under `#dcJob` and every keyframe prefixed `dcj-`, plus
-  a tail of overrides. Regenerate from the canvas rather than editing the
-  scoped rules by hand; the script is in this release's commit.
-- **The studio has its own `.sld` and `.seg`** (absolute, full-bleed), and they
-  reached the panel through the class names the canvas shares -- the whole
-  sound step painted beige. Overridden in the tail. Any canvas class that
-  collides with a studio class needs the same.
-- Every control calls the adapter's handler: `setJobStart/End` and `setTpl`
-  with a synthetic `{target:{value}}`, `pickJobType`, `countOpts[].toggle`,
-  `jobNasheeds[].select`, `toggleJobMusic`, `setJobVolume`, `jobSummaryRows[].go`,
-  `runGenerate`. Bands write through `StudioAdapter.onClipSettings` with the
-  export painter's own rule; destinations mutate `ui.jobPublishTo` the way
-  `paintJobDest` does. The brief textarea and the range handles are never
-  rebuilt under the caret (the signature excludes their values).
-- The export's own step blocks (brief, kind cards, style row, bands, dest,
-  music) still paint into the hidden `#studioJobSlot`; harmless, and they
-  are what the phone's full-height sheet shows.
+**Check the remote before reverting anything.** This revert was first done as a
+wholesale `git checkout <sha> -- <files>` and would have destroyed that
+session's Buffer OAuth work and the rights gate, which had landed in the same
+files an hour earlier. `git log HEAD..origin/<branch>` first, merge, and then
+`git revert` the specific commits -- three-way merge keeps the other side's
+edits where they do not collide, and flags the one file where they do.

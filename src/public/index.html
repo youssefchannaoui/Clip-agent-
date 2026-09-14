@@ -19,7 +19,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Outfit:wght@400;500;600;700&family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
 <!-- The phone dashboard's serif (studio-mobile.css). Media-scoped to the phone
      query, so it is applied only where those rules apply. -->
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" media="(max-width: 820px), (pointer: coarse) and (max-height: 500px)">
 <style>
 /* The mushaf face the render burns ayat in (KFGQPC HAFS v2.1, see
    worker/fonts/NOTICE.md), self-hosted so previews draw the same glyphs --
@@ -77,7 +77,6 @@
 <!-- The desktop Templates screen. A second template over the same bindings,
      mounted only on that screen and only above the phone seam. -->
 <link rel="stylesheet" href="/studio-templates.css">
-<link rel="stylesheet" href="/studio-job.css">
 <link rel="stylesheet" href="/studio-deenai.css">
 <!-- The clip editor is held back for launch: it opens, blurred, behind a
      "coming soon" notice. Deleting these two lines and the two files they name
@@ -1298,9 +1297,9 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 @keyframes lbGrow{from{transform:scaleX(0)}to{transform:none}}
 @media (prefers-reduced-motion: reduce){.lb-fill{animation:none}}
 .dc-hover-row:hover{background:var(--dc-n-1b1b1f, #1B1B1F)}
-.bgt-row{display:flex;gap:16px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
-.bgt-card{position:relative;flex:none;width:172px;background:none;border:0;padding:0;cursor:pointer;text-align:center}
-.bgt-thumb{position:relative;display:block;width:172px;height:306px;margin:0 auto;border-radius:10px;border:1px solid var(--dc-n-212127, #212127);background-color:var(--dc-n-131315, #131315);background-size:cover;background-position:center;transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;overflow:hidden}
+.bgt-row{display:flex;gap:12px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.bgt-card{position:relative;flex:none;width:124px;background:none;border:0;padding:0;cursor:pointer;text-align:center}
+.bgt-thumb{position:relative;display:block;width:124px;height:220px;margin:0 auto;border-radius:10px;border:1px solid var(--dc-n-212127, #212127);background-color:var(--dc-n-131315, #131315);background-size:cover;background-position:center;transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;overflow:hidden}
 /* The previews run. A caption style is defined by what it DOES -- words
    arriving, a line waiting in grey, a card cutting to the next -- and a still
    frame shows none of it. One shared 5s loop so all five stay in phase, and
@@ -1339,13 +1338,11 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
   transform:translateX(-130%);animation:dcProShine 4.6s ease-in-out infinite}
 @keyframes dcProShine{0%,58%{transform:translateX(-130%)}84%,100%{transform:translateX(240%)}}
 @media (prefers-reduced-motion: reduce){.dc-pro::after{animation:none;opacity:0}}
-.bgt-thumb:not(.bgt-ph){background-image:linear-gradient(180deg,rgba(9,9,10,.12),rgba(9,9,10,.5)),url(/preview-sample.webp)}
-.bgt-thumb.bgt-q{background-image:linear-gradient(180deg,rgba(9,9,10,.2),rgba(9,9,10,.6)),url(/marketing-assets/reel-quran.webp)}
-.bgt-lock{position:absolute;top:276px;left:9px;background:rgba(10,10,12,.86);pointer-events:none}
+.bgt-lock{position:absolute;top:190px;left:9px;background:rgba(10,10,12,.86);pointer-events:none}
 .bgt-name{white-space:normal;line-height:1.35}
 .bgt-card:not(.on):hover .bgt-thumb{border-color:var(--dc-n-3a3a42, #3A3A42);transform:translateY(-1px)}
 .bgt-card.on .bgt-thumb{border-color:rgba(240,214,166,.8)}
-.bgt-name{display:block;margin-top:9px;font:400 15px Fraunces,Georgia,serif;letter-spacing:-.01em;color:var(--dc-ink-dim, #8B8B93);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bgt-name{display:block;margin-top:7px;font:400 12px Outfit,Inter,sans-serif;color:var(--dc-ink-dim, #8B8B93);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bgt-card.on .bgt-name{color:var(--dc-n-f6f6f8, #F6F6F8);font-weight:600}
 /* The four destination tiles on the last step. The platform marks are drawn
    as backgrounds by the rules above, which strip the tile from any box whose
@@ -1379,23 +1376,19 @@ h2{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0;line-height:1.
 .bgt-card:hover .bgt-del{opacity:1}
 .bgt-ph{display:grid;place-items:center;color:var(--dc-ink-dim, #8B8B93);font-size:18px}
 .bgt-dash{border-style:dashed;background:transparent}
-.jt-row{display:flex;gap:14px;align-items:stretch}
-.jt-card{position:relative;flex:1;display:flex;gap:16px;align-items:center;padding:14px 16px;border-radius:12px;text-align:left;cursor:pointer;background:rgba(9,9,10,.55);border:1px solid var(--dc-line, #26262A);transition:border-color .2s ease,transform .3s cubic-bezier(.2,.8,.2,1),box-shadow .3s ease}
-.jt-card:hover{transform:translateY(-2px)}
-.jt-card .jt-body{display:flex;flex-direction:column;gap:5px;min-width:0}
-.jt-card .t{font:400 20px Fraunces,Georgia,serif;letter-spacing:-.02em;color:var(--dc-n-d2d2d8, #D2D2D8);transition:color .15s ease}
-.jt-card .d{font:400 12px Outfit,Inter,sans-serif;line-height:1.5;color:var(--dc-ink-dim, #8B8B93);transition:color .15s ease}
-.jt-card .k{position:absolute;top:12px;right:12px;font-size:15px;color:var(--dc-gold-lit, #F0D6A6);opacity:0;transform:translateX(6px);transition:opacity .15s ease,transform .15s ease}
-.jt-mini{position:relative;flex:none;width:78px;height:138px;border-radius:8px;border:1px solid var(--dc-line, #26262A);overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;padding:0 6px 16px;text-align:center;background:#111 url(/preview-sample.webp) center/cover;filter:saturate(.7);opacity:.85;transition:filter .2s ease,opacity .2s ease,border-color .2s ease}
-.jt-mini::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(9,9,10,.05),rgba(9,9,10,.55) 100%)}
-.jt-mini>*{position:relative}
-.jt-mini .m1{font:700 9.5px Outfit,Inter,sans-serif;color:var(--dc-gold-lit, #F0D6A6);letter-spacing:.01em;text-shadow:0 1px 6px rgba(0,0,0,.7)}
-.jt-mini .m2{font:700 9.5px Outfit,Inter,sans-serif;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.7)}
-.jt-mini.q{background:#111 url(/marketing-assets/reel-quran.webp) center/cover}
-.jt-mini .mq{font:400 13px 'Scheherazade New','Amiri','KFGQPC HAFS Uthmanic Script',serif;color:#fff;line-height:1.2;text-shadow:0 1px 6px rgba(0,0,0,.8)}
-.jt-mini .mt{width:30px;height:2.5px;border-radius:2px;background:rgba(255,255,255,.75)}
+.jt-row{display:flex;gap:10px;align-items:stretch}
+.jt-card{position:relative;flex:1;display:flex;gap:12px;align-items:center;padding:11px 12px;border-radius:12px;text-align:left;cursor:pointer;background:var(--dc-bg-deep, #101013);border:1px solid var(--dc-n-212127, #212127);transition:border-color .18s ease}
+.jt-card .jt-body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.jt-card .t{font:600 14px Outfit,Inter,sans-serif;color:var(--dc-n-d2d2d8, #D2D2D8);transition:color .15s ease}
+.jt-card .d{font:400 11px Outfit,Inter,sans-serif;line-height:1.4;color:var(--dc-ink-dim, #8B8B93);transition:color .15s ease}
+.jt-card .k{position:absolute;top:9px;right:10px;font-size:15px;color:var(--dc-gold-lit, #F0D6A6);opacity:0;transform:translateX(6px);transition:opacity .15s ease,transform .15s ease}
+.jt-mini{flex:none;width:44px;height:78px;border-radius:7px;border:1px solid var(--dc-line, #26262A);background:linear-gradient(180deg,var(--dc-bg-alt, #1A1A1E) 0%,var(--dc-bg-deepest, #0E0E11) 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;overflow:hidden;filter:saturate(.55);opacity:.7;transition:filter .15s ease,opacity .15s ease,border-color .15s ease}
+.jt-mini .m1{font:700 7px Outfit,Inter,sans-serif;color:var(--dc-gold-lit, #F0D6A6);letter-spacing:.01em}
+.jt-mini .m2{font:700 7px Outfit,Inter,sans-serif;color:var(--dc-n-9aa0a6, #9AA0A6)}
+.jt-mini .mq{font:400 10px 'Scheherazade New','Amiri','KFGQPC HAFS Uthmanic Script',serif;color:var(--dc-ink, #F2F2F4);line-height:1}
+.jt-mini .mt{width:22px;height:2.5px;border-radius:2px;background:var(--dc-ink-dim, #8B8B93);opacity:.7}
 .jt-card:not(.on):hover{border-color:var(--dc-n-3a3a42, #3A3A42)}
-.jt-card.on{border-color:rgba(240,214,166,.7);box-shadow:0 0 0 1px rgba(240,214,166,.35),0 18px 40px rgba(0,0,0,.5)}
+.jt-card.on{border-color:rgba(240,214,166,.7)}
 .jt-card.on .t{color:var(--dc-n-f6f6f8, #F6F6F8)}
 .jt-card.on .d{color:var(--dc-ink-soft, #A2A2AA)}
 .jt-card.on .k{opacity:1;transform:translateX(0)}
@@ -2829,7 +2822,6 @@ select:focus{outline:none;border-color:var(--blue)}
 <script src="/studio-adapter.js"></script>
 <script src="/studio-mobile.js"></script>
 <script src="/studio-templates.js"></script>
-<script src="/studio-job.js"></script>
 <script src="/studio-deenai.js"></script>
 <script src="/studio-notify.js"></script>
 
@@ -6215,12 +6207,12 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          a textarea is where it is most obvious. */
       if(jobBriefEl.dataset.built!=='1'){
         jobBriefEl.dataset.built='1';
-        jobBriefEl.style.cssText='display:block;margin:6px 0 0';
+        jobBriefEl.style.cssText='display:block;margin:14px 0 2px';
         jobBriefEl.innerHTML=
           '<label style="display:block;position:relative">'
-            +'<textarea id="jobBriefBox" rows="2" maxlength="'+max+'" '
+            +'<textarea id="jobBriefBox" rows="3" maxlength="'+max+'" '
               +'placeholder="e.g. the parts about repentance, or the story he tells about his mother" '
-              +'style="width:100%;box-sizing:border-box;resize:vertical;min-height:56px;padding:12px 13px 24px;'
+              +'style="width:100%;box-sizing:border-box;resize:vertical;min-height:78px;padding:12px 13px 26px;'
               +'border-radius:11px;border:1px solid var(--dc-line, #26262A);background:var(--dc-n-131315, #131315);'
               +'color:var(--dc-ink, #F2F2F4);font:400 13.5px/1.5 Outfit,Inter,sans-serif;outline:none;'
               +'transition:border-color .16s ease, box-shadow .16s ease"></textarea>'
@@ -6314,8 +6306,8 @@ function studioWanted(){return window.STUDIO_SHELL===true}
          The choice explains itself before a word of the description is read.
          Pure CSS, class-driven so hover/selected/mobile live in the
          stylesheet; the paint only toggles .on. */
-      if(jobTypeEl.dataset.built!=='7'){
-        jobTypeEl.dataset.built='7';
+      if(jobTypeEl.dataset.built!=='6'){
+        jobTypeEl.dataset.built='6';
         jobTypeEl.style.cssText='display:block;margin:14px 0 12px';
         jobTypeEl.innerHTML='<div class="jt-row">'
           +'<button type="button" class="jt-card" data-kind="lecture">'
@@ -6326,7 +6318,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
             +'<span class="jt-body"><span class="t">Islamic lecture</span><span class="d">Captions what is said. Moments are scored and cut for you.</span></span>'
             +'</button>'
           +'<button type="button" class="jt-card" data-kind="quran">'
-            +'<span class="jt-mini q"><span class="mq bgt-anim" style="animation-name:bgtL1">\u0627\u0644\u0644\u0651\u064E\u0647\u064F \u0646\u064F\u0648\u0631\u064F</span><span class="mt bgt-anim" style="animation-name:bgtL2"></span></span>'
+            +'<span class="jt-mini"><span class="mq bgt-anim" style="animation-name:bgtL1">\u0627\u0644\u0644\u0651\u064E\u0647\u064F \u0646\u064F\u0648\u0631\u064F</span><span class="mt bgt-anim" style="animation-name:bgtL2"></span></span>'
             +'<span class="jt-body"><span class="t">Quran recitation</span><span class="d">Captions the ayah from the Quran itself, with its translation.</span></span>'
             +'</button>'
           +'</div>'
@@ -6399,9 +6391,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
        Sizes are the template's real captionFontSize scaled into the thumb,
        through the same Win-cell divisor libass uses, so a style that renders
        large looks large here. */
-    const MINI_W = 172;
-    /* The job panel (studio-job.js) draws the same thumbnails, so the two cannot disagree. */
-    window.dcTplMiniHtml = function(t){ return tplMiniHtml(t); };
+    const MINI_W = 124;
     function tplMiniHtml(t){
       /* Three looks are black and white, not one: monochrome is flat, noir
          hard, silver soft. A thumb that only knew about the first drew the
@@ -6452,7 +6442,7 @@ function studioWanted(){return window.STUDIO_SHELL===true}
           + line('finds rest', px(t.captionFontSize), queued, 'bgtL2');
       }
       const inset = t.captionHorizontal === 'center' ? '0 7px' : '0 6px';
-      return `<span class="bgt-thumb${t.captionMode === 'quran' ? ' bgt-q' : ''}" style="display:flex;flex-direction:column;align-items:${align};justify-content:${justify};padding:12px ${inset};${mono ? 'filter:grayscale(1);' : ''}">`
+      return `<span class="bgt-thumb" style="display:flex;flex-direction:column;align-items:${align};justify-content:${justify};padding:9px ${inset};${mono ? 'filter:grayscale(1);' : ''}">`
         + `<span style="display:flex;flex-direction:column;align-items:${align};gap:1px;max-width:100%">${inner}</span></span>`;
     }
     /* The job panel is a flex column with max-height: 88vh and overflow:
@@ -6825,6 +6815,41 @@ function studioWanted(){return window.STUDIO_SHELL===true}
         ui.jobPublishTo=now.length===ui.jobPublishTo.length?[...ui.jobPublishTo,k]:now;
         paintJobDest(vals);
       });
+    }
+
+    /* The rights confirmation gates runGenerate in the adapter (a job cannot
+       start without it), so the box that satisfies it belongs on the step that
+       holds the Generate button -- put on step one, the refusal names a control
+       seven steps back and reads as a dead button. Host-rendered into the same
+       #studioJobSlot the destinations use, so it costs no design re-import and
+       a re-import cannot renumber it away. The markup is built ONCE and only
+       `checked` is patched per paint: rebuilding it on every tick would take
+       the keyboard focus out of the box being ticked. */
+    const jobRightsEl=document.createElement('div');jobRightsEl.id='studioJobRights';
+    let jobRightsBox=null,jobRightsToggle=null;
+    function paintJobRights(vals){
+      alive(jobRightsEl);
+      const ui=StudioAdapter.ui;
+      const open=Boolean(ui.job)&&Boolean(vals.jobIsStepReview);
+      jobRightsEl.classList.toggle('hide',!open);
+      /* Read from the LATEST bindings rather than a closure over the paint that
+         built the box, or the tick calls a function from a stale render. */
+      jobRightsToggle=vals.toggleJobRights||null;
+      if(!open){jobRightsEl.dataset.sig='';return}
+      const slot=$('#studioJobSlot');
+      if(slot&&jobRightsEl.parentElement!==slot)slot.appendChild(jobRightsEl);
+      if(jobRightsEl.dataset.sig!=='r'||!jobRightsBox||!jobRightsBox.isConnected){
+        jobRightsEl.dataset.sig='r';
+        jobRightsEl.style.cssText='display:block;margin:14px 0 0';
+        jobRightsEl.innerHTML='<label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;'
+          +'font-size:12px;line-height:1.55;color:var(--dc-ink-dim, #8B8B93)">'
+          +'<input type="checkbox" style="margin:2px 0 0;flex:none;accent-color:#D9B478">'
+          +'<span>I own this video, or I have permission from the rights holder to clip it and publish the clips.</span>'
+          +'</label>';
+        jobRightsBox=jobRightsEl.querySelector('input');
+        jobRightsBox.onchange=()=>{if(jobRightsToggle)jobRightsToggle()};
+      }
+      jobRightsBox.checked=Boolean(vals.jobRightsConfirmed);
     }
 
     function paintJobBackground(vals){
@@ -12469,8 +12494,8 @@ function paintStudio(){
   paintJobType(vals);
   paintJobBackground(vals);
   paintJobDest(vals);
+  paintJobRights(vals);
   paintJobMusic(vals);
-  if(window.StudioJob)window.StudioJob.paint(vals,DATA);
   paintTemplatesLayout();
   paintHelp();
   /* DATA is in paintStudio's scope and not in the painter's -- the trap this
