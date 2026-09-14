@@ -117,11 +117,30 @@ test('an explicit setting never raises a smaller box', () => {
   assert.equal(engine.concurrencyLimit(), 2);
 });
 
+/*
+ * THE SLOTS ARE THE SUBJECT, AND THEY ARE SYNCHRONOUS. The fake worker's own
+ * createJob counter is on the far side of a loopback socket, and `pump()`
+ * dispatches runRemoteAux WITHOUT awaiting it -- deliberately, or the queue
+ * would run one job at a time -- so when pump() returns each POST is still in
+ * flight. Asserting that counter at the moment of return measures the network
+ * rather than the cap: under CPU load it failed 2 runs in 10 with `1 !== 2`
+ * while the pump had correctly started two, and its uncapped twin failed 4 in
+ * 10. Measured with a probe: `dispatched=2 creates-at-return=1
+ * creates-after-wait=2`, every time.
+ *
+ * So the cap is read off `activeJobCount()`, which is `running.size` and moves
+ * synchronously as each job is dispatched, and the worker's counter is kept as
+ * corroboration -- WAITED FOR, so a slow hop is not a failure, and then held
+ * still, so a cap that leaks another job late still is.
+ */
 test('the pump obeys the cap rather than the box', async () => {
   calls.create = 0;
   for (let i = 0; i < 5; i += 1) queueRerender(`cap-${i}`);
   await engine.pump();
-  assert.equal(calls.create, 2, 'four slots on the box, two asked for here');
+  assert.equal(engine.activeJobCount(), 2, 'four slots on the box, two asked for here');
+  assert.ok(await until(() => calls.create >= 2), `the worker received ${calls.create} of 2`);
+  await sleep(200);
+  assert.equal(calls.create, 2, 'and nothing followed the two');
 });
 
 /*

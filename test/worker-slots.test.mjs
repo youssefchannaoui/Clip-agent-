@@ -141,9 +141,19 @@ test('the pump starts exactly as many jobs as the box reports, not one', async (
   calls.create = 0;
   for (let i = 0; i < 5; i += 1) queueRerender(`slot-${i}`);
   await engine.pump();
-  assert.equal(calls.create, BOX_SLOTS, `the box has ${BOX_SLOTS} slots and the queue holds 5`);
+  // Read off the slots, not off the fake worker's counter: pump() dispatches
+  // without awaiting, so each createJob POST is still crossing the loopback
+  // socket when it returns. Counting arrivals there measured the network and
+  // failed 4 runs in 10 under load (`1 !== 3`, `2 !== 3`) with all three jobs
+  // correctly started. See the note in worker-slots-capped.test.mjs.
+  assert.equal(engine.activeJobCount(), BOX_SLOTS, `the box has ${BOX_SLOTS} slots and the queue holds 5`);
   // And it is genuinely bounded rather than merely slow: a second pump with
   // three already in flight starts nothing more.
   await engine.pump();
-  assert.equal(calls.create, BOX_SLOTS, 'a second pump does not overfill the box');
+  assert.equal(engine.activeJobCount(), BOX_SLOTS, 'a second pump does not overfill the box');
+  // The far side agrees once it has had the chance -- waited for, then held
+  // still, so a fourth job arriving late is a failure rather than a pass.
+  assert.ok(await until(() => calls.create >= BOX_SLOTS), `the worker received ${calls.create} of ${BOX_SLOTS}`);
+  await sleep(200);
+  assert.equal(calls.create, BOX_SLOTS, 'and nothing followed them');
 });
