@@ -19248,3 +19248,41 @@ Facebook is read FROM THE SOURCE, for the reason `buffer-double-post` already
 gives: the property is an ORDERING one, and the network shape of the
 `video_reels` API is not verified anywhere in this repo -- so a stub would be
 asserting against an invented contract.
+
+## `-vsync` WAS REMOVED IN FFMPEG 9.0, and it read as a product regression (14 Sept 2026)
+
+*Test only -- no `src/` or `worker/` change, so no release. The count does not
+move either: the test was always counted, it was simply failing.*
+
+`TrackerRunsTests.test_A_CUT_LANDS_ON_ONE_FRAME_AND_THE_SUBJECT_IS_CENTRED`
+failed locally with **`AssertionError: 0 != 6 : six frames either side of the
+cut`** -- which reads as the speaker tracker having stopped cutting, on the one
+test that renders real frames to prove it does.
+
+Nothing was wrong with the tracker. The frame-extraction step passed
+`-vsync 0`, **ffmpeg 9.0 removed that option**, the run died with
+`Unrecognized option 'vsync'` and wrote no frames at all. `-fps_mode
+passthrough` is the spelling from 5.0 onwards and produces the same six frames;
+the old one is kept behind it so the test still runs on an older box, since
+nothing else here needs a modern ffmpeg.
+
+**THE REAL DEFECT WAS THE SILENCE, and it is the reusable half.** That step ran
+with `capture_output=True` and no `check` -- so a step that could not START was
+indistinguishable from one that found nothing, and a dead option presented as a
+failing assertion about the product. The return code is checked now, and with
+both spellings replaced by a bogus option the failure reads *"neither -fps_mode
+nor -vsync was accepted: Unrecognized option ..."* instead of `0 != 6`.
+
+**Production does not use `-vsync` anywhere** -- swept across `worker/`, `src/`,
+`test/`, `scripts/` and `.github/`, and this test was the only occurrence. So
+nothing that renders a customer's clip was ever affected.
+
+CI never saw it: the class skips per test where ffmpeg is absent, and the runner
+has none. **This is the mirror of the case-sensitive-path trap** -- green in CI
+and red on the only machine anyone runs the suite on -- and the third entry in
+this file of that shape. It is also why `npm test` was not fully green locally
+for days while the branch was green: **973 Python, 0 failures** now.
+
+**An ffmpeg invocation in a test ages with the local ffmpeg.** Anything spawning
+it should check the return code, or the next removed option will look like this
+one did.

@@ -130,10 +130,30 @@ class TrackerRunsTests(unittest.TestCase):
 
         frames = self.temp / "walk"
         frames.mkdir(exist_ok=True)
-        subprocess.run(
-            [FFMPEG, "-y", "-v", "error", "-i", str(rendered),
-             "-vf", r"select='gte(n\,57)*lte(n\,62)'", "-vsync", "0",
-             str(frames / "f-%02d.png")], capture_output=True, timeout=180)
+        # `-vsync` WAS REMOVED IN FFMPEG 9.0, and this is what that cost: the
+        # extraction died with "Unrecognized option 'vsync'", wrote no frames,
+        # and the assertion below reported `0 != 6` -- which reads as the
+        # tracker having stopped cutting rather than as an argument ffmpeg no
+        # longer takes. `-fps_mode passthrough` is the spelling from 5.0
+        # onwards; the old one is kept behind it so the test still runs on a box
+        # older than that, since nothing else here needs a modern ffmpeg.
+        #
+        # AND IT IS CHECKED. Run with capture_output and no check, a step that
+        # cannot start is indistinguishable from a step that found nothing --
+        # which is exactly how a dead option looked like a product regression.
+        picked = None
+        for pacing in (["-fps_mode", "passthrough"], ["-vsync", "0"]):
+            done_pick = subprocess.run(
+                [FFMPEG, "-y", "-v", "error", "-i", str(rendered),
+                 "-vf", r"select='gte(n\,57)*lte(n\,62)'", *pacing,
+                 str(frames / "f-%02d.png")], capture_output=True, timeout=180)
+            if done_pick.returncode == 0:
+                picked = pacing
+                break
+        self.assertIsNotNone(
+            picked,
+            "neither -fps_mode nor -vsync was accepted: "
+            + done_pick.stderr.decode("utf-8", "replace")[-300:])
         seen = []
         for index, frame in enumerate(sorted(frames.glob("f-*.png"))):
             raw = subprocess.run(
