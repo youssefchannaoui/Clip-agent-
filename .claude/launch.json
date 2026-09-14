@@ -31,6 +31,30 @@
         "src/server.js"
       ],
       "port": 3412
+    },
+    {
+      "name": "sweep",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATA_DIR=/tmp/dc-sweep-data",
+        "PORT=3413",
+        "AUTH_REQUIRED=false",
+        "BACKUP_ENABLED=false",
+        "PROCESSING_MODE=local",
+        "PUBLIC_BASE_URL=http://localhost:3413",
+        "SOCIAL_PUBLISH_ENABLED=true",
+        "SOCIAL_TOKEN_KEY=sweepsweepsweepsweepsweepsweepsweep12",
+        "APP_SESSION_SECRET=sweepsweepsweepsweepsweepsweepsweep12",
+        "TIKTOK_CLIENT_KEY=t",
+        "TIKTOK_CLIENT_SECRET=ts",
+        "META_APP_ID=m",
+        "META_APP_SECRET=ms",
+        "BUFFER_CLIENT_ID=b",
+        "BUFFER_CLIENT_SECRET=bs",
+        "node",
+        "src/server.js"
+      ],
+      "port": 3413
     }
   ]
 }

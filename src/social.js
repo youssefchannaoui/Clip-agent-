@@ -1884,12 +1884,47 @@ async function publishBuffer(clip, target, userId) {
       ... on MutationError { message }
     }
   }`;
-  const data = await bufferGraphql(accessToken, query, {
-    channelId: String(target.accountId), text: captionText(clip, 5000), url: publicMediaUrl(clip.id),
-  });
+  /*
+   * createPost CREATES THE POST, so the attempt is recorded before it is made
+   * rather than after it returns -- the same guard media_publish carries, for
+   * the same reason. bufferGraphql goes through jsonRequest, which wraps a
+   * timeout or a dropped connection as `retryable: true`; without this, a lost
+   * RESPONSE to a call Buffer actually honoured would be retried and put a
+   * SECOND post in the queue, up to socialMaxAttempts times. Buffer is the
+   * road for YouTube, Instagram and Facebook, so this is three platforms.
+   *
+   * It does not make the call idempotent -- Buffer's mutation takes no client
+   * id this code can rely on. It makes the ambiguity visible instead of
+   * silent, which is what stops the duplicate.
+   */
+  const alreadyAttempted = Boolean(target.providerState?.publishAttemptedAt);
+  target.providerState = { ...target.providerState, stage: 'publishing', publishAttemptedAt: Date.now() };
+  save();
+  let data;
+  try {
+    data = await bufferGraphql(accessToken, query, {
+      channelId: String(target.accountId), text: captionText(clip, 5000), url: publicMediaUrl(clip.id),
+    });
+  } catch (error) {
+    if (alreadyAttempted && error?.retryable !== false) {
+      throw new SocialError(
+        'Buffer did not answer, and this clip has already been sent to Buffer once. '
+        + 'Check the Buffer queue for it before retrying, so it is not posted twice.',
+        { provider: 'buffer', retryable: false },
+      );
+    }
+    throw error;
+  }
   const result = data?.createPost;
   if (result?.message) throw new SocialError(`Buffer could not create this post: ${result.message}`, { provider: 'buffer' });
-  if (!result?.post?.id) throw new SocialError('Buffer did not confirm that the post was created.', { provider: 'buffer', retryable: true });
+  if (!result?.post?.id) {
+    throw new SocialError(
+      alreadyAttempted
+        ? 'Buffer did not confirm the post, and this clip has been sent to Buffer before. Check the Buffer queue before retrying, so it is not posted twice.'
+        : 'Buffer did not confirm that the post was created.',
+      { provider: 'buffer', retryable: !alreadyAttempted },
+    );
+  }
   return { postId: result.post.id, postUrl: '', providerState: { stage: result.post.status || 'scheduled', dueAt: result.post.dueAt || '' } };
 }
 
