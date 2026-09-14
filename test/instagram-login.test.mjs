@@ -211,7 +211,16 @@ test('disconnecting one road leaves the other alone', () => {
   // Instagram connected directly, and the reverse.
   const fn = code.slice(code.indexOf('export async function disconnect('));
   const body = fn.slice(0, fn.indexOf('\n}'));
-  assert.match(body, /\['youtube', 'meta', 'tiktok', 'instagram'\]/, 'instagram is a provider you can disconnect');
+  /*
+   * The PROPERTY, not the literal list. This pinned the exact array and went
+   * red when `buffer` joined it -- a provider being ADDED is the one change
+   * this assertion should never fail on, and rewriting the expected list each
+   * time is how a guard stops guarding anything. What matters is that
+   * instagram is still a provider you can disconnect.
+   */
+  const accepted = /if \(!\[([^\]]*)\]\.includes\(provider\)\) throw/.exec(body);
+  assert.ok(accepted, 'disconnect must refuse an unknown provider');
+  assert.match(accepted[1], /'instagram'/, 'instagram is a provider you can disconnect');
   assert.match(body, /provider === 'meta' \? \['instagram', 'facebook'\] : \[provider\]/,
     'only meta unlinks both');
 });
@@ -232,10 +241,29 @@ test('with no Instagram app the row behaves exactly as it did', async () => {
 });
 
 test('the callback and the connect routes accept instagram', () => {
+  /*
+   * Instagram is what this asserts, so instagram is what it looks for.
+   *
+   * It used to pin each matcher's WHOLE alternation, and went red when the
+   * provider list moved underneath it -- `youtube` left all three when direct
+   * YouTube OAuth was retired for Buffer, and `buffer` took its place. Neither
+   * of those is a fact about Instagram, and rewriting the expected list to
+   * match the code is how a route guard stops being one.
+   */
   const server = read('src/server.js');
-  assert.match(server, /\/auth\\\/\(youtube\|meta\|tiktok\|instagram\)\\\/callback/);
-  assert.match(server, /api\\\/social\\\/\(youtube\|meta\|tiktok\|instagram\)\\\/connect/);
-  assert.match(server, /api\\\/social\\\/\(youtube\|meta\|tiktok\|instagram\)\\\/disconnect/);
+  const alternation = pattern => {
+    const found = new RegExp(pattern).exec(server);
+    assert.ok(found, `no route matching ${pattern}`);
+    return found[1].split('|');
+  };
+  for (const [name, pattern] of [
+    ['callback', String.raw`\/\^\\\/auth\\\/\(([a-z|]+)\)\\\/callback\$\/`],
+    ['connect', String.raw`\^\\\/api\\\/social\\\/\(([a-z|]+)\)\\\/connect\$`],
+    ['disconnect', String.raw`\^\\\/api\\\/social\\\/\(([a-z|]+)\)\\\/disconnect\$`],
+  ]) {
+    assert.ok(alternation(pattern).includes('instagram'),
+      `the ${name} route must accept instagram`);
+  }
 });
 
 test('a second Instagram is allowed exactly as far as the allowance goes', () => {

@@ -40,7 +40,11 @@ function seed(durationMs) {
       meta: [{ provider: 'meta', accountId: 'm1', tokens: {}, accounts: [
         { pageId: 'p1', pageName: 'The Page', instagramId: 'i1', instagramName: 'insta', token: '' },
       ] }],
-      youtube: [{ provider: 'youtube', accountId: 'y1', name: 'Main', tokens: {} }],
+      // Through Buffer: direct YouTube OAuth is retired, so a stored direct
+      // connection resolves to no account and this fixture's YouTube leg would
+      // vanish -- which is the leg that proves Facebook's length rule drops
+      // ONLY Facebook.
+      buffer: { provider: 'buffer', tokens: {}, accounts: [{ provider: 'youtube', id: 'y1', name: 'Main' }] },
     },
   };
   state.userSettings = { [userId]: { publishingSettings: {

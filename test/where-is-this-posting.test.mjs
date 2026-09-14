@@ -42,11 +42,18 @@ function seed({ tiktok = true } = {}) {
   state.authUsers = [{ id: userId, email: 'w@example.com', role: 'creator' }];
   state.socialConnections = {
     [userId]: {
-      youtube: [
-        { provider: 'youtube', accountId: 'y1', name: 'Main', tokens: {} },
-        { provider: 'youtube', accountId: 'y2', name: 'Shorts', tokens: {} },
-        { provider: 'youtube', accountId: 'y3', name: 'Arabic', tokens: {} },
-      ],
+      /*
+       * YouTube through BUFFER, TikTok direct -- which is how the two
+       * platforms are actually reached since direct YouTube OAuth was retired.
+       * A direct YouTube fixture resolves to no account at all now, so the
+       * preview would come back empty and this file would be asserting the
+       * cap against nothing.
+       */
+      buffer: { provider: 'buffer', tokens: {}, accounts: [
+        { provider: 'youtube', id: 'y1', name: 'Main' },
+        { provider: 'youtube', id: 'y2', name: 'Shorts' },
+        { provider: 'youtube', id: 'y3', name: 'Arabic' },
+      ] },
       tiktok: [{ provider: 'tiktok', accountId: 't1', name: 'tt', tokens: {} }],
     },
   };

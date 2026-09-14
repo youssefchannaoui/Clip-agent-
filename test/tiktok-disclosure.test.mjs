@@ -18,6 +18,10 @@ process.env.SOCIAL_PUBLISH_ENABLED = 'true';
 process.env.PUBLIC_BASE_URL = 'https://app.test';
 process.env.TIKTOK_CLIENT_KEY = 'tiktok-client';
 process.env.TIKTOK_CLIENT_SECRET = 'tiktok-secret';
+// YouTube is reached through Buffer, so Buffer is what has to be configured
+// for the connect below to be drivable at all.
+process.env.BUFFER_CLIENT_ID = 'buffer-client';
+process.env.BUFFER_CLIENT_SECRET = 'buffer-secret';
 // Needed by the YouTube comparison below. Without them completeOAuth throws
 // "youtube OAuth is not configured", the test's own catch swallowed it, and
 // its assertion passed having exercised nothing at all -- found when the
@@ -246,15 +250,33 @@ test('YouTube switches on the moment it connects, because nothing else is requir
     enabled: false,
     youtube: { ...store.publishingSettings(USER).youtube, enabled: false },
   });
+  /*
+   * DRIVEN THROUGH BUFFER, which is YouTube's only road since direct OAuth was
+   * retired. The rule under test has not moved -- a platform with nothing else
+   * to choose is switched on by connecting alone, where TikTok above needs an
+   * audience picked first -- so what changed is the connect being driven, not
+   * the property being asserted.
+   */
   const realFetch = globalThis.fetch;
+  let graphqlCalls = 0;
   globalThis.fetch = async (url) => {
     const u = String(url);
-    if (u.includes('token')) return new Response(JSON.stringify({ access_token: 'yt', refresh_token: 'r', expires_in: 3600 }), { status: 200, headers: { 'content-type': 'application/json' } });
-    return new Response(JSON.stringify({ items: [{ id: 'chan-1', snippet: { title: 'A channel' } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (u.includes('token')) return new Response(JSON.stringify({ access_token: 'buf', refresh_token: 'r', expires_in: 3600 }), { status: 200, headers: { 'content-type': 'application/json' } });
+    // Buffer's GraphQL endpoint answers twice: the organizations, then that
+    // organization's channels.
+    graphqlCalls += 1;
+    const body = graphqlCalls === 1
+      ? { data: { account: { organizations: [{ id: 'org1', name: 'Org' }] } } }
+      : { data: { channels: [{ id: 'chan-1', name: 'A channel', service: 'youtube' }] } };
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   try {
-    const start = social.oauthStartUrl('youtube', USER);
-    await social.completeOAuth('youtube', new URL('https://app.test/auth/youtube/callback?code=abc&state=' + encodeURIComponent(start.split('state=')[1])));
+    // Parsed rather than split on 'state=': Buffer's start URL is PKCE, so the
+    // state is not the last parameter and a naive split takes the challenge
+    // with it.
+    const start = social.oauthStartUrl('buffer', USER);
+    const state = new URL(start).searchParams.get('state');
+    await social.completeOAuth('buffer', new URL(`https://app.test/auth/buffer/callback?code=abc&state=${encodeURIComponent(state)}`));
   } finally { globalThis.fetch = realFetch; }
 
   const settings = store.publishingSettings(USER);

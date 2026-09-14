@@ -107,13 +107,26 @@ test('a token past its expiry with no refresh token is flagged by the server; a 
     const ct = Buffer.concat([c.update(JSON.stringify(value), 'utf8'), c.final()]);
     return `v1.${iv.toString('base64url')}.${c.getAuthTag().toString('base64url')}.${ct.toString('base64url')}`;
   };
-  const conn = token => ({ provider: 'youtube', accountId: 'UC1', name: 'Main', avatar: '', token: encrypt(token), connectedAt: Date.now() });
+  /*
+   * THE CREDENTIAL THIS ASKS ABOUT IS BUFFER'S.
+   *
+   * The rule is unchanged -- expired with nothing to renew it with is a
+   * reconnect, expired with a refresh token is not -- but YouTube is reached
+   * through Buffer now, so Buffer holds the token whose health the YouTube row
+   * reports. Seeding a direct YouTube connection here would assert the rule
+   * against a credential no publish path reads.
+   */
+  const conn = token => ({
+    provider: 'buffer', accountId: 'buf1', name: 'Buffer', avatar: '',
+    token: encrypt(token), connectedAt: Date.now(),
+    accounts: [{ provider: 'youtube', id: 'UC1', name: 'Main' }],
+  });
   store.state.socialConnections ||= {};
-  store.state.socialConnections.u9 = { youtube: conn({ access_token: 'dead', expiresAt: Date.now() - DAY }) };
+  store.state.socialConnections.u9 = { buffer: conn({ access_token: 'dead', expiresAt: Date.now() - DAY }) };
   assert.equal(social.connectionStatus({ id: 'u9' }).providers.youtube.needsReconnect, true, 'expired, nothing to renew it with');
-  store.state.socialConnections.u9 = { youtube: conn({ access_token: 'old', refresh_token: 'r', expiresAt: Date.now() - DAY }) };
+  store.state.socialConnections.u9 = { buffer: conn({ access_token: 'old', refresh_token: 'r', expiresAt: Date.now() - DAY }) };
   assert.equal(social.connectionStatus({ id: 'u9' }).providers.youtube.needsReconnect, false, 'expired but renewable: not a reconnect');
-  store.state.socialConnections.u9 = { youtube: conn({ access_token: 'live', expiresAt: Date.now() + DAY }) };
+  store.state.socialConnections.u9 = { buffer: conn({ access_token: 'live', expiresAt: Date.now() + DAY }) };
   assert.equal(social.connectionStatus({ id: 'u9' }).providers.youtube.needsReconnect, false, 'live');
   assert.equal(social.connectionStatus({ id: 'u9' }).providers.tiktok.needsReconnect, false, 'never connected is not "needs reconnecting"');
   fs.rmSync(dir, { recursive: true, force: true });
