@@ -2170,7 +2170,6 @@
     if (key === 'instagram' && status && status.instagramLogin) return 'instagram';
     // YouTube has no connect route of its own -- it is reached through Buffer.
     // Sending the button at 'youtube' is a press that hits a 404.
-    if (status && status.viaBuffer) return 'buffer';
     return OAUTH_OF[key] || key;
   }
   var PLATFORMS = ['youtube', 'tiktok', 'instagram', 'facebook'];
@@ -10373,6 +10372,14 @@
            * not the button.
            */
           connectWith: p.connectWith,
+          /*
+           * Whether Google still shows its "hasn't verified this app" screen
+           * on the way through. Carried explicitly for the same reason
+           * `connectWith` above it is -- this binding picks its fields one by
+           * one, so an omission here is invisible: the row renders perfectly
+           * and the notice simply never appears.
+           */
+          unverifiedNotice: Boolean(p.status && p.status.unverifiedNotice),
           // Opens the combined dialog rather than a per-platform one: seeing all
           // four at once is what makes the publishing picture legible.
           open: function (e) { stop(e); global.StudioAdapter.onOpenConnections(p.key); },

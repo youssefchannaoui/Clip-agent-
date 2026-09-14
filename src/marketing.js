@@ -1016,10 +1016,12 @@ export function privacy({ base, currentUser }) {
    * rule for this page. Two consequences worth stating rather than
    * rediscovering:
    *
-   *   - `channels.list` is NOT mentioned any more. Production no longer calls
-   *     it: providerConfigured('youtube') needs directYoutubeOAuthEnabled,
-   *     which defaults false, and /auth/social/youtube/start is a 404. Saying
-   *     otherwise would be a false statement in a privacy policy.
+   *   - `channels.list?mine=true` IS mentioned again, because production calls
+   *     it again: the Buffer brokerage was removed on 14 Sept and a customer
+   *     connects their own channel directly. It ran for three days saying the
+   *     opposite, which is the shape to avoid -- this paragraph and
+   *     `providerConfigured('youtube')` move together or one of them is a
+   *     false statement in a document Google reads during verification.
    *   - Google sign-in IS mentioned, because it was restored on 14 Sept and
    *     receives Google user data (openid, email, profile). That is what makes
    *     the Limited Use affirmation apply and required, rather than decorative.
@@ -1032,7 +1034,7 @@ export function privacy({ base, currentUser }) {
     + `<p>We store the account details you provide, a hashed password where you sign in with email, and your project settings, submitted source details, generated clips, captions, templates, schedules and publishing preferences. This is used only to run your workspace and to support you.</p>`
 
     + `<h2>Signing in with Google or Apple</h2>`
-    + `<p>If you choose “Continue with Google”, DeenClipped asks Google only for <strong>openid</strong>, <strong>email</strong> and <strong>profile</strong>. That returns your name, email address, profile picture and Google account identifier, and they are used only to create and identify your DeenClipped account. No other Google permission is requested: DeenClipped does <strong>not</strong> request, store or display YouTube statistics, watch history, analytics, comments, subscribers, contacts, Drive files or mail. DeenClipped <strong>does not use the YouTube API to search, browse, list, or retrieve</strong> anyone’s videos, and holds no YouTube channel credential of its own.</p>`
+    + `<p>If you choose “Continue with Google”, DeenClipped asks Google only for <strong>openid</strong>, <strong>email</strong> and <strong>profile</strong>. That returns your name, email address, profile picture and Google account identifier, and they are used only to create and identify your DeenClipped account. No other Google permission is requested: DeenClipped does <strong>not</strong> request, store or display YouTube statistics, watch history, analytics, comments, subscribers, contacts, Drive files or mail. DeenClipped <strong>does not use the YouTube API to search, browse, list, or retrieve</strong> anyone else’s videos. Connecting a YouTube channel to publish to is a separate, optional step, described under <strong>Connected publishing accounts</strong> below.</p>`
     + `<p>DeenClipped’s use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener" target="_blank">Google API Services User Data Policy</a>, including the Limited Use requirements. You can review Google’s own terms in the <a href="https://policies.google.com/privacy" rel="noopener" target="_blank">Google Privacy Policy</a>, and you can withdraw DeenClipped’s access at any time at <a href="https://myaccount.google.com/permissions" rel="noopener" target="_blank">https://myaccount.google.com/permissions</a>. Signing in with Apple works the same way and returns only your name and an email address, which may be a private relay address.</p>`
 
     + `<h2>Source links and uploads</h2>`
@@ -1043,7 +1045,8 @@ export function privacy({ base, currentUser }) {
     + `<p>A link import caches the video’s title, duration and thumbnail so the studio can show you what you are clipping. Those cached details are <strong>automatically deleted after 30 days</strong> by a sweep that runs daily. Clips you have already made are yours and are not removed by it.</p>`
 
     + `<h2>Connected publishing accounts</h2>`
-    + `<p>YouTube, Instagram and Facebook are connected through Buffer. DeenClipped receives a Buffer authorisation token and the channel details needed to send only the clips you approve or schedule. DeenClipped does not receive or store a Google OAuth token for a YouTube channel through this flow. A connection can be removed at any time from the <strong>Connections screen</strong>, which stops any future publishing from DeenClipped; you can also manage the channel inside Buffer.</p>`
+    + `<p>Connecting a <strong>YouTube</strong> channel is optional and separate from signing in. If you choose to, DeenClipped asks Google for exactly two permissions: <strong>youtube.upload</strong>, to upload the clips you approve to your own channel, and <strong>youtube.readonly</strong>, used for a single <code>channels.list</code> call with <code>mine=true</code> so the Connections screen can show which channel you connected. Nothing else is read. DeenClipped does <strong>not</strong> request or store view counts, watch time, analytics, comments, subscribers or watch history, and uses no Google API on anyone else’s videos.</p>`
+    + `<p>What that leaves stored is: the <strong>channel identifier</strong> and <strong>channel name</strong> of the channel you connected, its picture, and the <strong>uploaded video id</strong> of each clip DeenClipped posts for you, so the app can link you to the post it made. The cached channel name and picture are <strong>automatically deleted after 30 days</strong> by a daily sweep, in line with YouTube API Services policy III.E.4. Instagram and Facebook are connected through Meta, and TikTok directly. A connection can be removed at any time from the <strong>Connections screen</strong>, which stops any future publishing from DeenClipped, and you can revoke Google’s grant independently at <a href="https://myaccount.google.com/permissions" rel="noopener" target="_blank">https://myaccount.google.com/permissions</a>.</p>`
 
     + `<h2>TikTok</h2>`
     + `<p>TikTok may be connected directly. DeenClipped stores the encrypted token and account identifier needed to publish clips you explicitly approve or schedule, and asks for your audience and interaction choices per post, as TikTok requires. It does not request your follower list, comments or direct messages.</p>`
@@ -1083,7 +1086,7 @@ export function terms({ base, currentUser }) {
     + `<p>Use DeenClipped only with content you own or have permission to use, and you will be asked to confirm that before each job starts. You are responsible for the videos, links, clips, captions and posts you create or publish. A URL import is not an official YouTube download feature and may be unavailable because of source availability, permissions, provider access or platform restrictions.</p>`
 
     + `<h2>Connected platforms</h2>`
-    + `<p>YouTube, Instagram and Facebook publishing is connected through Buffer. TikTok may be connected directly. Nothing is published until you approve or schedule it, and a connection can be removed at any time from the <strong>Connections screen</strong>. You remain responsible for following each platform’s own rules, including the <a href="https://www.youtube.com/t/terms" rel="noopener" target="_blank">YouTube Terms of Service</a> where your clips are published there. Where you sign in with Google, the <a href="https://policies.google.com/privacy" rel="noopener" target="_blank">Google Privacy Policy</a> also applies to the information Google shares with us.</p>`
+    + `<p>YouTube, Instagram, Facebook and TikTok are each connected directly, and each is optional. Nothing is published until you approve or schedule it, and a connection can be removed at any time from the <strong>Connections screen</strong>. You remain responsible for following each platform’s own rules, including the <a href="https://www.youtube.com/t/terms" rel="noopener" target="_blank">YouTube Terms of Service</a> where your clips are published there. Where you sign in with Google, the <a href="https://policies.google.com/privacy" rel="noopener" target="_blank">Google Privacy Policy</a> also applies to the information Google shares with us.</p>`
 
     + `<h2>Billing and availability</h2>`
     + `<p>Some features use tokens, subscriptions or paid plans. Checkout shows the applicable billing terms before payment. Features may change, pause or be removed, and DeenClipped does not guarantee uninterrupted access to an external source or platform.</p>`

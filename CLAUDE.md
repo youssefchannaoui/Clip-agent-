@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2092 JS + 973 Python**
+- `npm test` and `npm run check` must pass. Currently **2087 JS + 973 Python**
   (17 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -19286,3 +19286,176 @@ for days while the branch was green: **973 Python, 0 failures** now.
 **An ffmpeg invocation in a test ages with the local ffmpeg.** Anything spawning
 it should check the return code, or the next removed option will look like this
 one did.
+
+**The count fell 2092 -> 2087 at v3.200.0** and that is a REMOVAL rather than
+tests vanishing: `buffer-double-post` (5) and `youtube-road-gone` (5) went with
+the brokerage they pinned, two of posting-health's became one, and
+`buffer-removed` added 7. Every property either survived in another file
+(`publish-lifecycle` already carried the double-post guards) or went with the
+code it described.
+
+## Buffer is removed, YouTube connects on its own login, and the warning screen is NAMED (v3.200.0, 14 Sept 2026)
+
+Youssef: "we need to figure out how do we remove those unsafe pages ... The
+only reason why I did that buffer thing is specifically for that. So remove
+buffer, figure out a way ... there's so many AI clippers out there that ...
+don't have any unsafe pages, which it looks sketchy."
+
+### THE ANSWER TO THE QUESTION, because it decides everything else
+
+The screen is Google's **"Google hasn't verified this app"**, and it has exactly
+one cause: an authorization request carrying a **sensitive** scope on a project
+whose data-access verification is not granted. `youtube.upload` is sensitive.
+So:
+
+- **No setting, scope trick or consent-screen option removes it.** Test users,
+  Internal user type and a tidier scope list all fail to: Internal is
+  Workspace-only, and `channels.list?mine=true` genuinely needs
+  `youtube.readonly`, which is sensitive too.
+- **Sign-in is NOT affected.** `auth.js` asks for `openid email profile` only --
+  all non-sensitive -- so the first screen a new customer meets is clean. The
+  warning is on the YouTube CONNECT, which is later and optional.
+- **The clippers with no warning screen do not post to YouTube.** Choppity,
+  quso.ai, HiClip, Revid, Vmaker take a URL and hand back a file: no OAuth, no
+  scopes, no verification, nothing to warn about. The ones that DO post went
+  through verification. There is no third road, and Buffer was an attempt at
+  one.
+
+So the two ways past it are finish verification (resubmitted 9 Sept, under
+review) or stop uploading on the customer's behalf. Everything below follows
+from that.
+
+### What the brokerage actually cost, measured rather than argued
+
+- **Every customer needed their own Buffer account and subscription**, in front
+  of their first post, on a funnel whose oldest number is accounts that sign up
+  and never import. Free Buffer is 3 channels / 10 queued posts against Studio's
+  8 a day.
+- **`mode: addToQueue` posts on BUFFER'S schedule**, so the posting windows, the
+  week grid and the month pips describe times that are not when a clip goes out.
+- **`pollTarget` had no `buffer` branch**, so a clip was filed posted with an
+  empty `postUrl` the moment Buffer accepted the queue item. If Buffer then
+  failed to publish, nothing here ever learned.
+- **TikTok was never carried**, so the dialog held two connection models.
+- **And no channel was ever connected in production.** Read off the Render log
+  rather than the code: there is no `Connected Buffer with N supported
+  channel(s)` line anywhere, and three `Connect your YouTube channel through
+  Buffer` failures. **From 15:53 on 11 Sept until this release, YouTube posted
+  nothing at all.** The failures stopped on 12 Sept only because the clips
+  exhausted their five attempts.
+
+So the brokerage bought a worse product and did not buy the thing it was for.
+
+### The removal, and the two halves that are easy to miss
+
+`social.js` (59 sites), `config.js`, three route matchers in `server.js`, the
+dialog's `useBuffer` branch and `studio-adapter.js`'s `viaBuffer`.
+`test/buffer-removed.test.mjs` walks the whole of `src/` for any surviving
+`buffer*` identifier, because **a half-removed brokerage is worse than either
+state**: a stray `viaBuffer` makes `selectedAccount` answer for a road with no
+token behind it, and the clip then fails at its slot rather than at a save.
+
+- **`DIRECT_YOUTUBE_OAUTH_ENABLED` defaulted FALSE**, so a fresh deployment
+  could not publish to YouTube at all and nothing said why. The flag is gone
+  rather than re-defaulted: a switch nobody reads that can turn the product off
+  is the dead-flag-holding-live-code-hostage shape this file already records.
+- **THREE matchers needed `youtube` back, not one.** Connect is the one that
+  drew a dead button; without the CALLBACK a grant can be given and never
+  stored, and without DISCONNECT a customer cannot take it back.
+- **`retireDirectYoutubeConnections` is deleted**, and `posting-health` pins it
+  as ABSENT. The shape is what did the damage rather than the platform: a boot
+  pass that deletes stored OAuth credentials took three channels in production
+  and would have taken any reconnected one at the next deploy. Nothing that runs
+  unattended at boot may delete a customer's connection.
+
+### `targetUnreachable` is gone, and TWO guard tests are why
+
+v3.197.1 added it for "this ACCOUNT has no road at all", which was true and
+certain while YouTube needed a Buffer channel. With the brokerage gone the only
+remaining spelling of "no road" is a missing connection or a missing environment
+variable -- **both fixed by reconnecting**, so the clip should wait rather than
+have its destination deleted at boot.
+
+The first cut of this release widened it to "any platform the deployment cannot
+reach" and **`facebook-reels-length` caught it firing on a healthy TikTok**;
+narrowed to YouTube, the same file caught it again on a healthy YouTube. That is
+the dangerous direction -- deleting somebody's scheduled post because an
+operator has not set a variable yet -- and after two catches the honest answer
+was that the function no longer has a safe case. `healImpossibleTargets` asks
+`platformRefusal` alone again, which is the Facebook length rule and nothing
+about credentials.
+
+### THE PRIVACY POLICY WOULD HAVE GONE FALSE IN THE SAME COMMIT
+
+This is the half most likely to be missed, and it lands in a document Google
+reads during an active verification review. The policy said, correctly for
+three days:
+
+> DeenClipped ... **holds no YouTube channel credential of its own**.
+
+and `youtube-compliance.test.mjs` had *dropped* `channels.list` and the two
+scopes from its required list, each with a note saying **"if direct YouTube
+OAuth is ever switched back on, the old list comes back here and to the policy
+together."** That day is this release. Both are restored -- the policy now names
+`youtube.upload`, `youtube.readonly`, `channels.list` with `mine=true`, the
+channel identifier, the channel name and the uploaded video id, plus the 30-day
+retention -- and the test requires every one of them. **The claim and the code
+move together or the branch goes red.**
+
+### The notice, which is the only half of the screen that IS ours
+
+`config.googleUnverifiedNotice` (`GOOGLE_UNVERIFIED_NOTICE`, **default true**)
+-> `providers.youtube.unverifiedNotice` -> one line on the YouTube row, drawn
+only BEFORE the connection exists: *Google will show "Google hasn't verified
+this app" -- our review is with Google now. Choose Advanced, then Continue.*
+
+An unexpected warning reads as a dodgy app; an expected one reads as a queue.
+It claims nothing about removing the screen, because nothing can.
+
+- **The SERVER decides**, so it goes off in one place. **Set
+  `GOOGLE_UNVERIFIED_NOTICE=false` the day verification lands** -- a notice that
+  outlives the thing it describes tells every customer the app is unverified
+  when it is not.
+- **Carried explicitly through the `connections` binding**, which picks its
+  fields one by one: the exact trap `connectWith` already paid for in that file,
+  where the row renders perfectly and the value is simply undefined.
+
+### A red probe came back green, for the NINTH time in this file
+
+Probe G deleted the `${verifyNotice(r,linked)}` CALL SITE and the suite stayed
+green, because the test asserted only that the function was DEFINED. A function
+nobody calls is the same as no function. The call site is pinned now and the
+probe is red. Nine probes in total, all proven.
+
+**And a probe that edits nothing proves nothing:** G's first attempt was written
+in an unquoted bash heredoc, so `${...}` was expanded by the shell, the
+replacement matched nothing and the run reported green. Every probe here asserts
+it changed the file before the test runs.
+
+### The save test was failing 2 runs in 5, and it was not this release
+
+`state-save-failure.test.mjs` was the only failure in an otherwise green suite,
+and it reproduced **2 of 5 at HEAD in a clean worktree with none of this in the
+tree** -- so it was pre-existing, and `store.js` is not in this diff. The cause
+is a fixed `await settle(120)`: `save()` opens `if (writing) { dirty = true;
+return; }`, so a save called while another is in flight does not write -- the
+running write re-saves when it lands, and whether that finishes inside 120ms
+depends on how much else saved during import (the starter-nasheed seed made that
+a real amount). It waits for the CONDITION now: **8 of 8 clean**.
+
+**Wait for the condition, never for a duration** -- and a test failing two times
+in five is worse than no test, because a phone session cannot trust the tick.
+
+### What is NOT proven
+
+**No channel has been connected since the removal.** The app-side chain is
+driven by test; whether Google's consent flow completes end to end is one
+Connect press on production -- and it is the same code that ran before 11 Sept,
+which was working.
+
+### Traps paid again
+
+`pkill -f` kills the calling shell; a macOS `sed -i ''` on `bufferChannels(`
+renames call sites and NOT `const bufferChannels = (`, leaving a file whose
+helper and callers disagree; and `git checkout` was not used on any file
+carrying work -- every probe restored from a scratchpad copy.

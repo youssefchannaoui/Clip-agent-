@@ -88,16 +88,13 @@ test('a CUSTOMER record holding three still posts to one, and says which', () =>
   // owner fixture here would assert the cap against the one account exempt
   // from it and pass for the wrong reason.
   state.authUsers = [{ id: userId, email: 'c@example.com', role: 'creator' }];
-  // SEEDED THROUGH BUFFER, because direct YouTube OAuth is retired: since the
-  // move, `selectedAccount` resolves a stored direct connection to null, so a
-  // fixture holding one tests a road that no longer exists rather than the cap.
-  // The LAW here is unchanged -- one channel per platform for a customer,
-  // whatever the record holds -- only the road it is tested through moved.
-  state.socialConnections = { [userId]: { buffer: { provider: 'buffer', tokens: {}, accounts: [
-    { provider: 'youtube', id: 'y1', name: 'Main' },
-    { provider: 'youtube', id: 'y2', name: 'Shorts' },
-    { provider: 'youtube', id: 'y3', name: 'Arabic' },
-  ] } } };
+  // Three channels on the account's own YouTube login. The LAW is that a
+  // customer still reaches ONE of them, whatever the record holds.
+  state.socialConnections = { [userId]: { youtube: [
+    { provider: 'youtube', accountId: 'y1', name: 'Main' },
+    { provider: 'youtube', accountId: 'y2', name: 'Shorts' },
+    { provider: 'youtube', accountId: 'y3', name: 'Arabic' },
+  ] } };
   state.userSettings = { [userId]: { publishingSettings: {
     enabled: true,
     youtube: { enabled: true, accountId: 'y1', accountIds: ['y1', 'y2', 'y3'] },
@@ -139,10 +136,10 @@ test('the OLD share-out mode is gone, and its replacement cannot reach a custome
   const userId = 'u_share';
   state.authUsers = [{ id: userId, email: 's@example.com', role: 'creator',
     billing: { plan: 'studio_yearly', status: 'active' } }];
-  state.socialConnections = { [userId]: { buffer: { provider: 'buffer', tokens: {}, accounts: [
-    { provider: 'youtube', id: 'y1', name: 'Main' },
-    { provider: 'youtube', id: 'y2', name: 'Shorts' },
-  ] } } };
+  state.socialConnections = { [userId]: { youtube: [
+    { provider: 'youtube', accountId: 'y1', name: 'Main' },
+    { provider: 'youtube', accountId: 'y2', name: 'Shorts' },
+  ] } };
   state.userSettings = { [userId]: { publishingSettings: {
     enabled: true, shareOut: true,
     youtube: { enabled: true, accountId: 'y1', accountIds: ['y1', 'y2'] },

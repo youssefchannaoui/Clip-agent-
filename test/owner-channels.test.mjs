@@ -42,14 +42,13 @@ const uid = 'u_owner';
 const tok = { access_token: 'a', expiry: Date.now() + 9e6, refresh_token: 'r' };
 function seed({ shareOut }) {
   state.authUsers = [{ id: uid, email: 'owner@deenclipped.test', role: 'owner' }];
-  // Through Buffer, which is the operator's own road to three YouTube channels
-  // now that direct OAuth is retired. The rule under test is the ALLOWANCE and
-  // the share-out, neither of which knows which road a channel came in on.
-  state.socialConnections = { [uid]: { buffer: { provider: 'buffer', tokens: tok, accounts: [
-    { provider: 'youtube', id: 'y1', name: 'Main' },
-    { provider: 'youtube', id: 'y2', name: 'Shorts' },
-    { provider: 'youtube', id: 'y3', name: 'Arabic' },
-  ] } } };
+  // The operator's three YouTube channels, on their own login. The rules under
+  // test are the ALLOWANCE and the share-out.
+  state.socialConnections = { [uid]: { youtube: [
+    { provider: 'youtube', accountId: 'y1', name: 'Main', token: tok },
+    { provider: 'youtube', accountId: 'y2', name: 'Shorts', token: tok },
+    { provider: 'youtube', accountId: 'y3', name: 'Arabic', token: tok },
+  ] } };
   state.userSettings = { [uid]: { publishingSettings: {
     enabled: true, shareOut,
     youtube: { enabled: true, accountId: 'y1', accountIds: ['y1', 'y2', 'y3'] },

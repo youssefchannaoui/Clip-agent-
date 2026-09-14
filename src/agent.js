@@ -716,23 +716,24 @@ export function healImpossibleTargets() {
     const keep = targets.filter(target => {
       if (target.status !== 'scheduled') return true;
       /*
-       * TWO DIFFERENT QUESTIONS, and both have to be asked here.
+       * ONE QUESTION ONLY: is this CLIP wrong for that platform -- a 62-second
+       * clip against Facebook Reels' 60. It is answered by the same function
+       * the uploader asks, so the review card, the heal and the publish cannot
+       * disagree about what will be refused.
        *
-       * platformRefusal: this CLIP is wrong for that platform (a 62-second
-       * clip against Facebook Reels' 60). targetUnreachable: this ACCOUNT has
-       * no road to that platform at all -- which is what three days of failed
-       * YouTube posts were, after the direct OAuth road was retired on 11 Sept
-       * and Buffer had not been connected in its place.
-       *
-       * Dropping is SELF-HEALING rather than destructive: tick() re-derives an
-       * empty target list at the slot, so the moment Buffer is connected
-       * (which re-enables YouTube through enableOnConnect) these clips take
-       * the road again by themselves. Leaving them is what costs -- five
-       * attempts each, on a doubling backoff, against a destination that
-       * cannot exist.
+       * IT DELIBERATELY DOES NOT ASK WHETHER THE ACCOUNT CAN REACH THE
+       * PLATFORM. A companion check for that (`targetUnreachable`) was written
+       * on 14 Sept 2026 for the Buffer brokerage, where YouTube genuinely had
+       * no road and never could until Buffer was connected. Buffer was removed
+       * the same day, and without it the only remaining spelling of "no road"
+       * is a missing connection or a missing environment variable -- both of
+       * which are FIXED BY RECONNECTING, so the clip should wait rather than
+       * have its destination deleted at boot. Two guard tests caught it firing
+       * on a healthy TikTok and then on a healthy YouTube; deleting somebody's
+       * scheduled post because an operator has not set a variable yet is the
+       * dangerous direction, and this asks nothing about credentials at all.
        */
-      const refusal = social.platformRefusal(target.provider, clip)
-        || social.targetUnreachable(target, clip.userId);
+      const refusal = social.platformRefusal(target.provider, clip);
       if (!refusal) return true;
       log(`"${clip.title || clip.id}" will not post to ${target.provider}: ${refusal}`, 'warn', clip.userId);
       dropped += 1;

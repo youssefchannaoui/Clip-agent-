@@ -41,20 +41,14 @@ const channel = n => ({
 /*
  * THE SAME CHANNELS, THROUGH THE ROAD THAT EXISTS.
  *
- * `addConnection(..., 'youtube', ...)` still stores a direct connection and the
- * tests above still use it -- that storage is what an account which connected
- * before the Buffer move has on disk, and it must keep resolving. But direct
- * YouTube OAuth is retired, so `selectedAccount` answers null for one, and a
- * PUBLISH-path fixture built that way tests a road nobody can take rather than
- * the allowance it is named for.
- *
- * Buffer keeps its channels as accounts on one connection, keyed `id`.
+ * A stored YouTube connection is a LIST, so several channels on one account is
+ * the ordinary shape rather than a special case -- which is what the allowance
+ * these tests are named for is about.
  */
-const bufferChannels = (bag, userId, ns) => {
-  bag[userId] = { ...(bag[userId] || {}), buffer: {
-    provider: 'buffer', tokens: {}, connectedAt: Date.now(),
-    accounts: ns.map(n => ({ provider: 'youtube', id: `chan-${n}`, name: `Channel ${n}` })),
-  } };
+const seedChannels = (bag, userId, ns) => {
+  bag[userId] = { ...(bag[userId] || {}), youtube: ns.map(n => ({
+    provider: 'youtube', accountId: `chan-${n}`, name: `Channel ${n}`, connectedAt: Date.now(),
+  })) };
 };
 
 test('a second channel is added, not written over the first', () => {
@@ -135,7 +129,7 @@ test('a stored list of three still posts to exactly one, the first', () => {
   //
   // `accountName` still comes off the RESOLVED connection, so a wrong
   // resolution shows up here as the wrong channel rather than as no channel.
-  bufferChannels(state.socialConnections, studio.id, [1, 2, 3]);
+  seedChannels(state.socialConnections, studio.id, [1, 2, 3]);
   store.setPublishingSettings(studio, {
     enabled: true,
     youtube: { enabled: true, accountIds: ['chan-1', 'chan-2', 'chan-3'] },
@@ -155,7 +149,7 @@ test('a blank account id is honoured only while there is exactly one channel', (
   // Every account written before multi-account has a blank id in its settings
   // and must keep publishing. With several connected, blank is ambiguous --
   // and guessing is how a clip lands on the wrong channel.
-  bufferChannels(state.socialConnections, studio.id, [1]);
+  seedChannels(state.socialConnections, studio.id, [1]);
   store.setPublishingSettings(studio, { enabled: true, youtube: { enabled: true, accountIds: [] } });
   const clip = {
     id: 'mc-legacy', userId: studio.id, projectId: 'p', title: 'Legacy', status: 'approved',
@@ -165,7 +159,7 @@ test('a blank account id is honoured only while there is exactly one channel', (
   assert.equal(social.enabledTargetsForClip(clip).filter(t => t.provider === 'youtube').length, 1,
     'one connection and no chosen id still publishes');
 
-  bufferChannels(state.socialConnections, studio.id, [1, 2]);
+  seedChannels(state.socialConnections, studio.id, [1, 2]);
   assert.equal(social.enabledTargetsForClip(clip).filter(t => t.provider === 'youtube').length, 0,
     'two connections and no chosen id publishes nowhere rather than guessing');
 });

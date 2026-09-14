@@ -175,11 +175,10 @@ test('and one with still nowhere to go stays ready rather than churning', async 
 
 /* ------------------------------------------------------------------ 4 */
 /*
- * Facebook, read from the source for the reason test/buffer-double-post.test.mjs
- * already gives: the property is an ORDERING one (stamp before the call, refuse
- * or resolve after), and the network shape of Facebook's video_reels API is not
- * verified anywhere in this repo -- so a stub would be asserting against an
- * invented contract.
+ * Facebook, read from the source rather than driven: the property is an
+ * ORDERING one (stamp before the call, refuse or resolve after), and the
+ * network shape of Facebook's video_reels API is not verified anywhere in this
+ * repo -- so a stub would be asserting against an invented contract.
  */
 function uploadFacebookBody() {
   const at = socialSource.indexOf('async function uploadFacebook(');
@@ -230,7 +229,7 @@ test('the question is asked in ONE place, so both callers get the same answer', 
 test('the providers that already had a guard still have one', () => {
   // A regression here is silent: the duplicate only ever appears at the
   // platform, never in a log on this side.
-  assert.match(socialSource, /publishAttemptedAt/, 'Instagram and Buffer');
+  assert.match(socialSource, /publishAttemptedAt/, 'Instagram');
   assert.match(socialSource, /youtubeUploadStatus/, 'YouTube resumable session');
 });
 

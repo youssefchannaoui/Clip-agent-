@@ -19,6 +19,11 @@ import test from 'node:test';
  * ONE platform with no second way in. Three days, and the only symptom a
  * customer could see was a button that did nothing.
  *
+ * Buffer was removed on 14 September and YouTube connects directly again, so
+ * the matcher has to carry `youtube` and `configured` has to mean the Google
+ * client -- the same trap pointing the other way, which is why this guard is
+ * written against the PAIR rather than against either spelling.
+ *
  * This is the general guard rather than a note about YouTube: any platform the
  * dialog can offer must send people at an OAuth target the server accepts.
  */
@@ -34,8 +39,8 @@ process.env.PUBLIC_BASE_URL = 'https://deenclipped.online';
 // Every road configured, so the status object reports each platform at its
 // most capable -- which is exactly when a wrong target is drawn as a live
 // button rather than hidden behind "credentials missing".
-process.env.BUFFER_CLIENT_ID = 'b';
-process.env.BUFFER_CLIENT_SECRET = 'bs';
+process.env.GOOGLE_CLIENT_ID = 'g';
+process.env.GOOGLE_CLIENT_SECRET = 'gs';
 process.env.META_APP_ID = 'm';
 process.env.META_APP_SECRET = 'ms';
 process.env.TIKTOK_CLIENT_KEY = 't';
@@ -87,13 +92,15 @@ test('every platform the dialog can offer sends people at a route that exists', 
   assert.ok(offered.length >= 3, `expected several platforms offered, got ${offered.join(' | ')}`);
 });
 
-test('YouTube is offered through Buffer, which is the only road it has', () => {
+test('YouTube is offered on its own login, and the route accepts it', () => {
   const status = social.connectionStatus({ id: 'u1', email: 'a@example.com' });
-  assert.equal(status.providers.youtube.viaBuffer, true);
-  assert.equal(oauthForKey('youtube', status.providers.youtube), 'buffer');
+  assert.equal(status.providers.youtube.configured, true, 'a Google client is set, so the row is live');
+  assert.equal(oauthForKey('youtube', status.providers.youtube), 'youtube');
+  assert.ok(routeTargets().has('youtube'), 'and /api/social/youtube/connect must exist to receive it');
+  assert.equal(status.providers.youtube.viaBuffer, undefined, 'no brokerage is claimed any more');
 });
 
-test('with Buffer unconfigured, YouTube says so rather than offering a dead button', async () => {
+test('with no Google client, YouTube says so rather than offering a dead button', async () => {
   /*
    * The honest half. `configured` has to mean a road a customer can take: a
    * row claiming otherwise draws a live button that reaches nothing, which is
@@ -108,36 +115,36 @@ test('with Buffer unconfigured, YouTube says so rather than offering a dead butt
     const social = await import(${JSON.stringify(new URL('../src/social.js', import.meta.url).href)});
     const s = social.connectionStatus({ id: 'u1', email: 'a@example.com' });
     process.stdout.write(${JSON.stringify(MARK)} + JSON.stringify(s.providers.youtube.configured) + ${JSON.stringify(MARK)});`;
-  const env = { ...process.env, DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'dc-nobuf-')) };
-  delete env.BUFFER_CLIENT_ID;
-  delete env.BUFFER_CLIENT_SECRET;
+  const env = { ...process.env, DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'dc-noyt-')) };
+  delete env.GOOGLE_CLIENT_ID;
+  delete env.GOOGLE_CLIENT_SECRET;
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
     env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
   });
   const answer = out.split(MARK)[1];
-  assert.equal(answer, 'false', 'no Buffer means no YouTube road, and the row must say it');
+  assert.equal(answer, 'false', 'no Google client means no YouTube road, and the row must say it');
 });
 
-test('the publish refusal says which of the two failures it is', async () => {
+test('the publish refusal names the deployment, not a button that is absent', async () => {
   /*
-   * "Connect your YouTube channel through Buffer" is only actionable when the
-   * Connect button exists. With Buffer unconfigured it names a control that is
-   * not on the screen, and every scheduled clip repeats it -- which is what
-   * this outage looked like from the customer's side for three days.
+   * With no Google client there is no Connect button on the YouTube row, so a
+   * refusal telling somebody to press it sends them looking for a control that
+   * is not on the screen -- and every scheduled clip repeats it, which is what
+   * the brokered outage looked like from the customer's side for three days.
    */
   const src = read('src/social.js');
-  const at = src.indexOf("target.provider === 'youtube' && !config.directYoutubeOAuthEnabled");
-  assert.ok(at > 0, 'the YouTube refusal must exist');
-  const branch = src.slice(at, at + 1400);
-  assert.match(branch, /providerConfigured\('buffer'\)/,
-    'the message must depend on whether Buffer is configured at all');
-  assert.match(branch, /no Buffer credentials are configured/,
-    'and say so plainly when it is not, rather than naming a button that is absent');
+  const at = src.indexOf("target.provider === 'youtube' && !providerConfigured('youtube')");
+  assert.ok(at > 0, 'the YouTube refusal must exist and must ask providerConfigured');
+  const branch = src.slice(at, at + 1200);
+  assert.match(branch, /not set up on this deployment/,
+    'it is the deployment that is unconfigured, and the message must say so');
+  assert.doesNotMatch(branch, /press Connect|Open Connections/,
+    'naming a control that is not drawn is the fault this test exists for');
 });
 
-test('TikTok still connects directly, and is not swept into Buffer', () => {
-  // Buffer does not carry TikTok, so routing it there would break the one
-  // platform that was still working through its own login.
+test('TikTok still connects directly', () => {
+  // It was the one platform the brokerage never carried, and it must keep its
+  // own login now that every other platform has one again.
   const status = social.connectionStatus({ id: 'u1', email: 'a@example.com' });
   assert.notEqual(status.providers.tiktok.viaBuffer, true);
   assert.equal(oauthForKey('tiktok', status.providers.tiktok), 'tiktok');

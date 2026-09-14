@@ -447,20 +447,32 @@ export const config = {
   googleClientSecret: String(process.env.GOOGLE_CLIENT_SECRET || '').trim(),
   // Emergency compatibility switch for isolated tests only. The HTTP routes
   // never expose direct YouTube OAuth, regardless of this value.
-  directYoutubeOAuthEnabled: boolean(process.env.DIRECT_YOUTUBE_OAUTH_ENABLED, false),
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || '',
   googleAuthBase: (process.env.GOOGLE_AUTH_BASE || 'https://accounts.google.com').replace(/\/+$/, ''),
   googleTokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
   googleRevokeUrl: process.env.GOOGLE_REVOKE_URL || 'https://oauth2.googleapis.com/revoke',
   youtubeApiBase: (process.env.YOUTUBE_API_BASE || 'https://www.googleapis.com').replace(/\/+$/, ''),
-  // Buffer owns the platform OAuth grants.  DeenClipped only receives a
-  // Buffer grant and sends rendered, already-approved MP4s to Buffer's API.
-  // Keep these server-only: a browser must never see the client secret.
-  bufferClientId: String(process.env.BUFFER_CLIENT_ID || '').trim(),
-  bufferClientSecret: String(process.env.BUFFER_CLIENT_SECRET || '').trim(),
-  bufferRedirectUri: String(process.env.BUFFER_REDIRECT_URI || '').trim(),
-  bufferAuthBase: (process.env.BUFFER_AUTH_BASE || 'https://auth.buffer.com').replace(/\/+$/, ''),
-  bufferApiBase: (process.env.BUFFER_API_BASE || 'https://api.buffer.com').replace(/\/+$/, ''),
+  /*
+   * WARN PEOPLE ABOUT GOOGLE'S OWN SCREEN BEFORE THEY MEET IT.
+   *
+   * Connecting a YouTube channel needs `youtube.upload`, which Google
+   * classifies as a SENSITIVE scope -- so until the project's data-access
+   * verification is granted, Google shows "Google hasn't verified this app"
+   * with the real action hidden behind Advanced. Nothing this product does can
+   * remove that screen: it is not a setting, a scope trick or a consent-screen
+   * option, and the only two ways past it are to finish verification or to
+   * stop uploading on the customer's behalf.
+   *
+   * What it CAN do is stop the screen reading as a sketchy surprise, which is
+   * a different problem and entirely ours. Default ON, because it is true
+   * today (resubmitted 9 Sept 2026, under review).
+   *
+   * SET GOOGLE_UNVERIFIED_NOTICE=false THE DAY VERIFICATION LANDS. A notice
+   * that outlives the thing it describes is the stale-claim failure this repo
+   * keeps paying for, and this one would be telling every customer the app is
+   * unverified when it is not.
+   */
+  googleUnverifiedNotice: boolean(process.env.GOOGLE_UNVERIFIED_NOTICE, true),
   // No YOUTUBE_DATA_API_KEY here on purpose. Nothing in this product asks the
   // YouTube Data API about a video, and an unread key sitting in config is how
   // a `videos.list` call quietly comes back -- which is the exact thing Google

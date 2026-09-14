@@ -94,23 +94,27 @@ test('III.A.2d: the privacy policy lists the API Data actually accessed', () => 
    * information, including API Data, the client accesses, collects, stores
    * and uses. That obligation is unchanged; WHAT IS ACCESSED changed.
    *
-   * Until 11 Sept 2026 this list was the YouTube publishing scopes -- channel
-   * identifier, channel name, uploaded video id, youtube.upload,
-   * youtube.readonly. Production no longer holds any of them: publishing goes
-   * through Buffer, directYoutubeOAuthEnabled defaults false and
-   * /auth/social/youtube/start is a 404. Naming them would put a false
-   * statement in a privacy policy, which is a worse fault than the omission
-   * this test was written to catch.
+   * This list was emptied of its YouTube half on 11 Sept 2026, when publishing
+   * was brokered through Buffer and the product genuinely held none of it --
+   * naming them then would have put a false statement in a privacy policy,
+   * which is a worse fault than the omission this test catches. That entry
+   * closed by saying the old list comes back the day direct OAuth does.
    *
-   * What the product DOES receive from Google is the sign-in profile, so that
-   * is what the policy must now list. If direct YouTube OAuth is ever switched
-   * back on, the old list comes back here and to the policy together.
+   * IT CAME BACK ON 14 SEPT 2026. Buffer was removed, a customer connects
+   * their own channel again, and the policy names both halves: the sign-in
+   * profile AND the YouTube publishing data. The two move together or one of
+   * them is a false statement in a document Google reads during verification.
    */
   for (const item of [
     'openid',
     'email',
     'profile',
     'Google account identifier',
+    'youtube.upload',
+    'youtube.readonly',
+    'channel identifier',
+    'channel name',
+    'uploaded video id',
   ]) {
     assert.ok(marketing.includes(item), `the policy must state: ${item}`);
   }
@@ -201,29 +205,22 @@ test('the YouTube mark is unmodified, uncontained and at least 20px', () => {
 
 test('the privacy policy names the Google data it receives, the retention and the way out', async () => {
   /*
-   * `channels.list` WAS required here and is deliberately gone, 14 Sept 2026.
+   * `channels.list` was dropped from this list on 11 Sept 2026, while
+   * publishing was brokered through Buffer and production genuinely did not
+   * call it. That entry closed by saying it comes back the day direct OAuth
+   * does -- AND IT DID, on 14 Sept, so it is back in both the policy and here.
    *
-   * Production no longer calls it: providerConfigured('youtube') needs
-   * directYoutubeOAuthEnabled, which defaults false, and
-   * /auth/social/youtube/start is a 404. Publishing goes through Buffer, and
-   * Buffer holds the YouTube connection. Keeping the assertion would force a
-   * statement into the privacy policy that the code does not do, which is a
-   * worse fault than the one this test was written to catch.
-   *
-   * What replaces it is the Google data the app DOES receive. Sign-in was
-   * restored on 14 Sept and asks for openid, email and profile -- so Google
-   * user data reaches this product, the Limited Use affirmation genuinely
-   * applies, and the revocation link is genuinely actionable. Every other
-   * assertion below is unchanged and still true: tokens are still stored
-   * encrypted (TikTok, and the Buffer token), the 30-day sweep in
-   * youtube-retention.js still runs, and no statistics are requested anywhere.
-   *
-   * If direct YouTube OAuth is ever switched back on, `channels.list` comes
-   * back to both the policy and this list.
+   * It is the ONE read this product makes, with `mine=true`, and naming it is
+   * what makes the "only your own channel" sentence above checkable rather
+   * than a claim. Everything else below is unchanged: tokens are stored
+   * encrypted, the 30-day sweep in youtube-retention.js still runs, and no
+   * statistics are requested anywhere.
    */
   const marketing = await import('../src/marketing.js');
   const html = marketing.privacy({ base: 'https://deenclipped.online', currentUser: null });
   for (const needle of [
+    'channels.list',                                    // the one read it makes
+    'mine=true',                                        // and the scope of it
     'Google API Services User Data Policy',             // the affirmation it owes
     'Limited Use requirements',                         // and the part that binds
     'encrypted OAuth access and refresh tokens',        // what is stored

@@ -45,42 +45,30 @@ function seedYoutube(userId) {
   };
 }
 
-test('the YouTube retirement deletes credentials ONCE and can never take another', () => {
-  state.authUsers = [{ id: 'u1', email: 'a@example.com', role: 'user' }];
-  delete state.authSettings.directYoutubeRetiredAt;
-  seedYoutube('u1');
-
-  const first = social.retireDirectYoutubeConnections();
-  assert.equal(first, 1, 'the one-time pass removes the stored connection');
-  assert.ok(Number(state.authSettings.directYoutubeRetiredAt), 'and stamps that it has run');
-
+test('NO BOOT MIGRATION DELETES A STORED CREDENTIAL', () => {
   /*
-   * THE CASE THAT MATTERS. The customer reconnects, and the next deploy must
-   * leave it alone. Before the stamp this returned 1 again and the channel
-   * silently vanished for a second time.
+   * `retireDirectYoutubeConnections` is gone with the Buffer brokerage it was
+   * written for (14 Sept 2026). It is pinned as ABSENT rather than quietly
+   * dropped, because the shape is what did the damage rather than the
+   * particular platform: a start-up pass that removes stored OAuth credentials
+   * ran on every boot, took three channels in production at 15:53 on 11 Sept,
+   * and would have taken any reconnected one again at the next deploy. A
+   * customer's connection is theirs; nothing that runs unattended at boot may
+   * delete one.
+   *
+   * Written against the SOURCE because there is no longer a function to call,
+   * and CI has no browser or box -- this is exactly the shape that is invisible
+   * when it comes back: the app boots, the suite stays green, and somebody's
+   * channel is simply gone.
    */
-  seedYoutube('u1');
-  const second = social.retireDirectYoutubeConnections();
-  assert.equal(second, 0, 'a channel reconnected afterwards survives the next boot');
-  assert.ok(state.socialConnections.u1.youtube, 'and is still there to publish with');
-});
-
-test('it stamps even when it removed nothing, so it cannot lie in wait', () => {
-  /*
-   * A deployment with no YouTube connection today would otherwise stay armed
-   * for ever and eat the first channel somebody connects tomorrow -- which is
-   * every deployment except the one this migration was written for.
-   */
-  state.authUsers = [{ id: 'u2', email: 'b@example.com', role: 'user' }];
-  state.socialConnections = {};
-  delete state.authSettings.directYoutubeRetiredAt;
-
-  assert.equal(social.retireDirectYoutubeConnections(), 0, 'nothing to remove');
-  assert.ok(Number(state.authSettings.directYoutubeRetiredAt), 'stamped anyway');
-
-  seedYoutube('u2');
-  assert.equal(social.retireDirectYoutubeConnections(), 0, 'the later connection is safe');
-  assert.ok(state.socialConnections.u2.youtube, 'and survives');
+  const src = fs.readFileSync(path.join(path.dirname(path.dirname(new URL(import.meta.url).pathname)), 'src/social.js'), 'utf8');
+  assert.equal(social.retireDirectYoutubeConnections, undefined, 'the retirement pass must not come back');
+  assert.doesNotMatch(src, /retireDirectYoutubeConnections/, 'nor linger in social.js');
+  assert.doesNotMatch(
+    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''),
+    /directYoutubeRetiredAt/,
+    'and neither must its stamp, which is only meaningful to a pass that deletes',
+  );
 });
 
 test('a destination switched on with no channel is REPORTED, not passed over', () => {

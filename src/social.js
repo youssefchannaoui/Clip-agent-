@@ -80,22 +80,18 @@ function redirectUri(provider) {
     meta: config.metaRedirectUri,
     tiktok: config.tiktokRedirectUri,
     instagram: config.instagramRedirectUri,
-    buffer: config.bufferRedirectUri,
   }[provider];
   return explicit || `${baseUrl()}/auth/${provider}/callback`;
 }
 function providerConfigured(provider) {
   if (!config.socialTokenKey || config.socialTokenKey.length < 32 || !config.publicBaseUrl) return false;
-  // YouTube publishing is brokered through Buffer. Keeping a direct Google
-  // OAuth path alive would make the rejected client reachable again.
-  if (provider === 'youtube') return Boolean(config.directYoutubeOAuthEnabled && config.googleClientId && config.googleClientSecret);
+  if (provider === 'youtube') return Boolean(config.googleClientId && config.googleClientSecret);
   if (provider === 'meta') return Boolean(config.metaAppId && config.metaAppSecret);
   if (provider === 'tiktok') return Boolean(config.tiktokClientKey && config.tiktokClientSecret);
   // The DIRECT Instagram login, which is its own app id and secret. Kept
   // separate from 'meta' on purpose: a deployment may have either, both or
   // neither, and the Instagram ROW is offered when EITHER can reach it.
   if (provider === 'instagram') return Boolean(config.instagramClientId && config.instagramClientSecret);
-  if (provider === 'buffer') return Boolean(config.bufferClientId && config.bufferClientSecret);
   return false;
 }
 /*
@@ -233,23 +229,9 @@ async function jsonRequest(url, options = {}, provider = '') {
 }
 
 export function oauthStartUrl(provider, userId) {
-  if (!['youtube', 'meta', 'tiktok', 'instagram', 'buffer'].includes(provider)) throw new SocialError('Unknown social provider.');
+  if (!['youtube', 'meta', 'tiktok', 'instagram'].includes(provider)) throw new SocialError('Unknown social provider.');
   if (!providerConfigured(provider)) throw new SocialError(`${provider} OAuth is not configured in the deployment environment.`);
   const stateText = signState(provider, userId);
-  if (provider === 'buffer') {
-    const verifier = crypto.randomBytes(48).toString('base64url');
-    // The verifier is server-side state, never supplied by the browser.
-    const nonce = JSON.parse(Buffer.from(stateText.split('.')[0], 'base64url').toString('utf8')).nonce;
-    state.oauthStates[nonce].codeVerifier = verifier;
-    save();
-    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
-    const query = new URLSearchParams({
-      client_id: config.bufferClientId, redirect_uri: redirectUri('buffer'), response_type: 'code',
-      scope: 'account:read posts:read posts:write offline_access', state: stateText,
-      code_challenge: challenge, code_challenge_method: 'S256', prompt: 'consent',
-    });
-    return `${config.bufferAuthBase}/auth?${query}`;
-  }
   if (provider === 'youtube') {
     const query = new URLSearchParams({
       client_id: config.googleClientId,
@@ -417,52 +399,6 @@ async function connectYouTube(code, userId) {
     { max: billing.accountsPerPlatform(userById(userId), 'youtube') });
   enableOnConnect(userId, ['youtube']);
   save(); log(`Connected YouTube channel "${connection.name}" and switched it on.`, 'info', userId);
-}
-
-const BUFFER_PROVIDER = Object.freeze({ youtube: 'youtube', instagram: 'instagram', facebook: 'facebook' });
-function bufferProvider(service) {
-  const name = String(service || '').trim().toLowerCase();
-  return BUFFER_PROVIDER[name] || '';
-}
-
-async function bufferGraphql(accessToken, query, variables = {}) {
-  const data = await jsonRequest(config.bufferApiBase, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, variables }),
-  }, 'Buffer');
-  if (Array.isArray(data?.errors) && data.errors.length) throw new SocialError(`Buffer error: ${data.errors[0]?.message || 'request failed'}`, { provider: 'buffer' });
-  return data?.data || {};
-}
-
-async function bufferChannels(accessToken) {
-  const account = await bufferGraphql(accessToken, 'query { account { organizations { id name } } }');
-  const organizations = account?.account?.organizations || [];
-  const rows = [];
-  for (const organization of organizations) {
-    const result = await bufferGraphql(accessToken, 'query Channels($organizationId: ID!) { channels(input: { organizationId: $organizationId }) { id name service } }', { organizationId: organization.id });
-    for (const channel of result?.channels || []) {
-      const provider = bufferProvider(channel.service);
-      if (provider) rows.push({ id: String(channel.id), name: String(channel.name || provider), provider, service: String(channel.service || '') });
-    }
-  }
-  return rows;
-}
-
-async function connectBuffer(code, userId, codeVerifier) {
-  if (!codeVerifier) throw new SocialError('The Buffer connection request expired. Start the connection again.', { provider: 'buffer' });
-  const token = await jsonRequest(`${config.bufferAuthBase}/token`, {
-    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: config.bufferClientId, client_secret: config.bufferClientSecret, grant_type: 'authorization_code', code, redirect_uri: redirectUri('buffer'), code_verifier: codeVerifier }),
-  }, 'Buffer');
-  if (!token.access_token || !token.refresh_token) throw new SocialError('Buffer did not return a reusable connection. Reconnect and approve access.', { provider: 'buffer' });
-  const accounts = await bufferChannels(token.access_token);
-  setConnection(state.socialConnections, userId, 'buffer', {
-    provider: 'buffer', accountId: 'buffer', name: 'Buffer', accounts,
-    token: encrypt({ ...token, expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000 }), connectedAt: Date.now(),
-  });
-  enableOnConnect(userId, [...new Set(accounts.map(row => row.provider))]);
-  save(); log(`Connected Buffer with ${accounts.length} supported channel${accounts.length === 1 ? '' : 's'}.`, 'info', userId);
 }
 
 const META_PAGE_FIELDS = 'id,name,access_token,instagram_business_account{id,username,name,profile_picture_url}';
@@ -747,8 +683,7 @@ export async function completeOAuth(provider, callbackUrl) {
    * the redirect and its message are unchanged.
    */
   try {
-    if (provider === 'buffer') await connectBuffer(code, userId, codeVerifier);
-    else if (provider === 'youtube') await connectYouTube(code, userId);
+    if (provider === 'youtube') await connectYouTube(code, userId);
     else if (provider === 'meta') await connectMeta(code, userId);
     else if (provider === 'tiktok') await connectTikTok(code, userId);
     else if (provider === 'instagram') await connectInstagram(code, userId);
@@ -776,8 +711,8 @@ export async function disconnect(provider, user, accountId = '') {
    * leaves any Page-derived Instagram in place, because the two roads are
    * independent and taking one away must not take the other with it.
    */
-  const affected = provider === 'buffer' ? PROVIDERS : provider === 'meta' ? ['instagram', 'facebook'] : [provider];
-  if (!['youtube', 'meta', 'tiktok', 'instagram', 'buffer'].includes(provider)) throw new SocialError('Unknown provider.');
+  const affected = provider === 'meta' ? ['instagram', 'facebook'] : [provider];
+  if (!['youtube', 'meta', 'tiktok', 'instagram'].includes(provider)) throw new SocialError('Unknown provider.');
   // Meta is one login carrying its Pages inside it, so there is no per-account
   // credential to remove -- disconnecting it is all or nothing, and an account
   // id here would silently match nothing and remove nothing.
@@ -807,7 +742,7 @@ export async function disconnect(provider, user, accountId = '') {
   for (const name of affected) {
     const item = settings[name] || {};
     const left = (item.accountIds || []).filter(id => accountId ? String(id) !== String(accountId) : false);
-    const stillConnected = provider === 'buffer' ? false : connectionListFor(state.socialConnections, userId, provider).length > 0;
+    const stillConnected = connectionListFor(state.socialConnections, userId, provider).length > 0;
     next[name] = {
       ...item,
       accountIds: left, accountId: left[0] || '',
@@ -870,12 +805,7 @@ function connectionFo(userId, provider, accountId) {
 }
 
 function youtubeSummary(userId) {
-  return [...bufferAccounts(userId, 'youtube'), ...(config.directYoutubeOAuthEnabled ? connections(userId, 'youtube').flatMap(c => youtubeEntry(c)) : [])];
-}
-function bufferConnection(userId) { return connection(userId, 'buffer'); }
-function bufferAccounts(userId, provider) {
-  const conn = bufferConnection(userId);
-  return (conn?.accounts || []).filter(item => item.provider === provider).map(item => ({ ...item, viaBuffer: true, needsReconnect: needsReconnect(conn) }));
+  return connections(userId, 'youtube').flatMap(c => youtubeEntry(c));
 }
 /**
  * Whether a stored credential can still be used without the person coming
@@ -898,10 +828,7 @@ function youtubeEntry(c) {
   return c ? [{ id: c.accountId, name: c.name, avatar: c.avatar || '', needsReconnect: needsReconnect(c) }] : [];
 }
 function metaSummaries(kind, userId) {
-  const fromBuffer = bufferAccounts(userId, kind).map(item => kind === 'facebook'
-    ? { id: item.id, pageId: item.id, pageName: item.name, name: item.name, viaBuffer: true }
-    : { id: item.id, instagramId: item.id, instagramName: item.name, name: item.name, viaBuffer: true });
-  return [...fromBuffer, ...(connection(userId, 'meta')?.accounts || []).filter(item => kind === 'facebook' ? item.pageId : item.instagramId).map(item => kind === 'facebook'
+  return [...(connection(userId, 'meta')?.accounts || []).filter(item => kind === 'facebook' ? item.pageId : item.instagramId).map(item => kind === 'facebook'
     ? { id: item.pageId, name: item.pageName, avatar: '' }
     : { id: item.instagramId, name: item.instagramName || `${item.pageName} Instagram`, avatar: item.instagramAvatar || '', pageId: item.pageId })];
 }
@@ -928,7 +855,7 @@ function instagramDirect(userId) {
 function instagramSummaries(userId) {
   const seen = new Set();
   const out = [];
-  for (const item of [...bufferAccounts(userId, 'instagram'), ...instagramDirect(userId), ...metaSummaries('instagram', userId)]) {
+  for (const item of [...instagramDirect(userId), ...metaSummaries('instagram', userId)]) {
     const id = String(item.id || '');
     if (!id || seen.has(id)) continue;
     seen.add(id);
@@ -942,56 +869,12 @@ function tiktokSummary(userId) {
   }));
 }
 
-/**
- * The direct Google/YouTube OAuth integration was retired in favour of
- * Buffer. Remove the dormant refresh tokens as the server starts instead of
- * leaving credentials that no supported route can use. Existing clips stay
- * untouched; only future YouTube posting is switched off until the user picks
- * the same channel through Buffer.
- */
-export function retireDirectYoutubeConnections() {
-  /* ONCE, EVER -- and the stamp is the whole of it. This DELETES stored
-   * credentials, and it used to run on every boot: a channel reconnected
-   * today was deleted again at the next deploy, with the customer given no
-   * reason and no way out. It ran for real in production on 11 Sept 2026
-   * ("Retired 3 direct YouTube OAuth connections") and must never be able to
-   * take another one.
-   *
-   * The stamp is written even when it removed NOTHING, which is the case that
-   * matters: a deployment with no YouTube connection today would otherwise
-   * stay armed for ever and eat the first one somebody makes tomorrow.
-   */
-  state.authSettings = state.authSettings || {};
-  if (Number(state.authSettings.directYoutubeRetiredAt)) return 0;
-  let removed = 0;
-  for (const userId of Object.keys(state.socialConnections || {})) {
-    if (!removeConnection(state.socialConnections, userId, 'youtube')) continue;
-    removed += 1;
-    const user = userById(userId);
-    if (!user?.id) continue;
-    const settings = publishingSettings(user);
-    const next = {
-      ...settings,
-      youtube: { ...(settings.youtube || {}), enabled: false, accountId: '', accountIds: [] },
-    };
-    if (!['instagram', 'facebook', 'tiktok'].some(provider => next[provider]?.enabled)) next.enabled = false;
-    setPublishingSettings(user, next);
-  }
-  state.authSettings.directYoutubeRetiredAt = Date.now();
-  save();
-  if (removed) {
-    log(`Retired ${removed} direct YouTube OAuth connection${removed === 1 ? '' : 's'}; future YouTube publishing now goes through Buffer. This runs once and will not run again.`, 'info');
-  }
-  return removed;
-}
-
 export function connectionStatus(user) {
   const userId = user?.id || user || '';
   const youtube = connection(userId, 'youtube');
   const meta = connection(userId, 'meta');
   const instagramConn = connection(userId, 'instagram');
   const tiktok = connection(userId, 'tiktok');
-  const buffer = bufferConnection(userId);
   const securityReady = Boolean(config.socialTokenKey && config.socialTokenKey.length >= 32);
   const publicBaseUrlReady = Boolean(config.publicBaseUrl);
   return {
@@ -1023,38 +906,33 @@ export function connectionStatus(user) {
       // a credential that cannot be renewed, or a connection whose last test
       // failed. Never derived from "configured but not connected".
       /*
-       * `configured` means A ROAD A CUSTOMER CAN ACTUALLY TAKE, and for
-       * YouTube that is Buffer alone. There is no /api/social/youtube/connect
-       * route -- the connect matcher accepts meta, tiktok, instagram and
-       * buffer -- so reporting configured because a direct client id happens
-       * to be set draws a Connect button that reaches nothing. That shipped,
-       * and it is invariant 9 on the one row with no other way in.
-       *
-       * `viaBuffer` is what the dialog sends somebody to. Restoring direct
-       * YouTube means restoring the route as well as the flag, and
-       * test/connect-routes.test.mjs fails until both are there.
+       * `configured` means A ROAD A CUSTOMER CAN ACTUALLY TAKE. For YouTube
+       * that is the deployment's own Google OAuth client plus the
+       * /api/social/youtube/connect route -- reporting configured without the
+       * route draws a Connect button that reaches nothing, which is what
+       * shipped while YouTube was brokered, and is invariant 9 on the one row
+       * with no other way in. test/connect-routes.test.mjs fails unless the
+       * flag and the route agree.
        */
-      youtube: { configured: providerConfigured('buffer'), viaBuffer: true, connected: youtubeSummary(userId).length > 0, accounts: youtubeSummary(userId), lastTestAt: buffer?.lastTestAt || youtube?.lastTestAt || null, lastTestError: buffer?.lastTestError || youtube?.lastTestError || null, needsReconnect: youtubeSummary(userId).some(a => a.needsReconnect) || Boolean(buffer?.lastTestError) || Boolean(youtube?.lastTestError) },
+      youtube: { configured: providerConfigured('youtube'), unverifiedNotice: config.googleUnverifiedNotice, connected: youtubeSummary(userId).length > 0, accounts: youtubeSummary(userId), lastTestAt: youtube?.lastTestAt || null, lastTestError: youtube?.lastTestError || null, needsReconnect: youtubeSummary(userId).some(a => a.needsReconnect) || Boolean(youtube?.lastTestError) },
       // Instagram is the one platform with TWO roads in, and the row reports
       // both: `configured` is whether either can reach it, `instagramLogin`
       // is whether the direct one is available, which is what decides the
       // button the dialog draws.
       instagram: {
-        configured: providerConfigured('buffer') || instagramConfigured(),
+        configured: instagramConfigured(),
         instagramLogin: providerConfigured('instagram'),
         metaLogin: providerConfigured('meta'),
         connected: instagramSummaries(userId).length > 0,
         accounts: instagramSummaries(userId),
         lastTestAt: instagramConn?.lastTestAt || meta?.lastTestAt || null,
         lastTestError: instagramConn?.lastTestError || meta?.lastTestError || null,
-        needsReconnect: bufferAccounts(userId, 'instagram').some(a => a.needsReconnect)
-          || instagramDirect(userId).some(a => a.needsReconnect) || Boolean(buffer?.lastTestError) || Boolean(instagramConn?.lastTestError)
+        needsReconnect: instagramDirect(userId).some(a => a.needsReconnect) || Boolean(instagramConn?.lastTestError)
           || (instagramDirect(userId).length === 0 && Boolean(meta?.lastTestError)),
       },
-      facebook: { configured: providerConfigured('buffer') || providerConfigured('meta'), connected: metaSummaries('facebook', userId).length > 0, accounts: metaSummaries('facebook', userId), lastTestAt: buffer?.lastTestAt || meta?.lastTestAt || null, lastTestError: buffer?.lastTestError || meta?.lastTestError || null, needsReconnect: Boolean(buffer?.lastTestError) || Boolean(meta?.lastTestError) },
+      facebook: { configured: providerConfigured('meta'), connected: metaSummaries('facebook', userId).length > 0, accounts: metaSummaries('facebook', userId), lastTestAt: meta?.lastTestAt || null, lastTestError: meta?.lastTestError || null, needsReconnect: Boolean(meta?.lastTestError) },
       tiktok: { configured: providerConfigured('tiktok'), connected: tiktokSummary(userId).length > 0, accounts: tiktokSummary(userId), requiresManualApproval: true, lastTestAt: tiktok?.lastTestAt || null, lastTestError: tiktok?.lastTestError || null, needsReconnect: tiktokSummary(userId).some(a => a.needsReconnect) || Boolean(tiktok?.lastTestError) },
     },
-    buffer: { configured: providerConfigured('buffer'), connected: Boolean(buffer), accounts: buffer?.accounts || [], needsReconnect: needsReconnect(buffer), lastTestError: buffer?.lastTestError || null },
   };
 }
 
@@ -1094,8 +972,6 @@ function oneOf(provider, accountId, userId) {
  * to the first of these". The screen and the publish path disagreed.
  */
 function connectedAccountIds(provider, userId) {
-  const buffered = bufferAccounts(userId, provider).map(item => String(item.id || '')).filter(Boolean);
-  if (buffered.length) return buffered;
   if (provider === 'youtube' || provider === 'tiktok') {
     return connections(userId, provider).map(item => String(item?.accountId || '')).filter(Boolean);
   }
@@ -1111,10 +987,7 @@ function connectedAccountIds(provider, userId) {
 
 function selectedAccount(provider, accountId, userId) {
   if (!userId) return null;
-  const buffered = bufferAccounts(userId, provider);
-  const bufferMatch = accountId ? buffered.find(item => String(item.id) === String(accountId)) : (buffered.length === 1 ? buffered[0] : null);
-  if (bufferMatch) return bufferMatch;
-  if (provider === 'youtube') return config.directYoutubeOAuthEnabled ? oneOf('youtube', accountId, userId) : null;
+  if (provider === 'youtube') return oneOf('youtube', accountId, userId);
   if (provider === 'facebook') return (connection(userId, 'meta')?.accounts || []).find(item => item.pageId === accountId) || null;
   if (provider === 'instagram') {
     /*
@@ -1318,44 +1191,6 @@ export function platformRefusal(provider, clip, { assumeKnown = false } = {}) {
   if (!seconds && !assumeKnown) return '';
   if (seconds < limit.minSeconds || seconds > limit.maxSeconds) {
     return `${limit.label} publishing requires a ${limit.minSeconds}\u2013${limit.maxSeconds} second video; this clip is ${Math.ceil(seconds)} seconds.`;
-  }
-  return '';
-}
-
-/**
- * THE DESTINATION HAS NO ROAD AT ALL -- not "this clip is wrong for it", which
- * is platformRefusal's question, but "this account cannot reach this platform
- * however long we retry".
- *
- * Measured on production, 14 Sept 2026: `retireDirectYoutubeConnections` ran on
- * 11 Sept ("Retired 3 direct YouTube OAuth connections"), and from that minute
- * every scheduled YouTube clip failed with "Connect your YouTube channel
- * through Buffer before publishing." The sweep correctly switched
- * `youtube.enabled` off, so no NEW clip targets YouTube -- but `targets` are
- * stamped once at schedule time and `tick()` only re-derives an EMPTY list
- * (v3.115.2), so every clip scheduled before that minute still named a road
- * that had been taken away. Three days of red rows for a destination nothing
- * could ever deliver.
- *
- * IT ASKS THE SAME TWO QUESTIONS publishTarget ASKS, IN THE SAME ORDER, and
- * that is the whole reason it can be trusted: a second implementation of
- * "can this publish" would eventually disagree with the one that actually
- * publishes, and the disagreement would read as clips vanishing.
- *
- * Deliberately narrow. Only YouTube-with-no-Buffer-channel is answered,
- * because it is the one case that is CERTAIN and ACCOUNT-WIDE -- publishTarget
- * throws before any network call is made. An expired token is NOT this: it can
- * be renewed by reconnecting and the clip should wait, which is what
- * `needsReconnect` and `markCredentialDead` are for.
- */
-export function targetUnreachable(target, userId) {
-  const provider = String(target?.provider || '');
-  if (!provider || !userId) return '';
-  if (selectedAccount(provider, target?.accountId || '', userId)?.viaBuffer) return '';
-  if (provider === 'youtube' && !config.directYoutubeOAuthEnabled) {
-    return providerConfigured('buffer')
-      ? 'YouTube posts through Buffer, and no Buffer channel is connected on this account.'
-      : 'YouTube publishing is not configured on this deployment.';
   }
   return '';
 }
@@ -1732,27 +1567,6 @@ async function youtubeToken(userId, accountId = '') {
   return token.access_token;
 }
 
-async function bufferToken(userId) {
-  const conn = bufferConnection(userId);
-  if (!conn?.token) throw new SocialError('Buffer is not connected.', { provider: 'buffer' });
-  let token = decrypt(conn.token);
-  if (Number(token.expiresAt || 0) > Date.now() + 5 * 60_000) return token.access_token;
-  if (!token.refresh_token) throw new SocialError('The Buffer connection has expired. Reconnect Buffer in Connections.', { provider: 'buffer' });
-  let refreshed;
-  try {
-    refreshed = await jsonRequest(`${config.bufferAuthBase}/token`, {
-      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ client_id: config.bufferClientId, client_secret: config.bufferClientSecret, grant_type: 'refresh_token', refresh_token: token.refresh_token }),
-    }, 'Buffer');
-  } catch (error) {
-    conn.lastTestAt = Date.now(); conn.lastTestError = error.message; save();
-    throw new SocialError(`The Buffer connection has expired: ${error.message} Reconnect Buffer in Connections.`, { provider: 'buffer' });
-  }
-  token = mergeRefreshedToken(token, refreshed, 'Buffer', 3600);
-  conn.token = encrypt(token); save();
-  return token.access_token;
-}
-
 async function tiktokToken(userId, accountId = '') {
   const conn = connectionFo(userId, 'tiktok', accountId);
   if (!conn?.token) throw new SocialError('TikTok is not connected.');
@@ -1806,17 +1620,7 @@ export async function testConnection(provider, accountId = '', user) {
   const testedAt = Date.now();
   try {
     let result;
-    const bufferAccount = selectedAccount(provider, accountId, userId);
-    if (bufferAccount?.viaBuffer) {
-      const token = await bufferToken(userId);
-      const accounts = await bufferChannels(token);
-      if (!accounts.some(item => String(item.id) === String(bufferAccount.id) && item.provider === provider)) {
-        throw new SocialError(`That ${provider} channel is no longer connected in Buffer.`, { provider: 'buffer' });
-      }
-      const conn = bufferConnection(userId);
-      conn.accounts = accounts; conn.lastTestAt = testedAt; conn.lastTestError = null;
-      result = { provider, accountId: bufferAccount.id, name: bufferAccount.name, viaBuffer: true };
-    } else if (provider === 'youtube') {
+    if (provider === 'youtube') {
       const accessToken = await youtubeToken(userId, accountId);
       const profile = await jsonRequest(`${config.youtubeApiBase}/youtube/v3/channels?part=id,snippet&mine=true`, { headers: { Authorization: `Bearer ${accessToken}` } }, 'YouTube');
       const channel = profile?.items?.[0];
@@ -1912,59 +1716,6 @@ function captionText(clip, max = 2200) {
 }
 /** The caption exactly as a platform receives it, for tests. */
 export const captionTextFor = captionText;
-
-async function publishBuffer(clip, target, userId) {
-  const accessToken = await bufferToken(userId);
-  const query = `mutation CreateVideoPost($channelId: ID!, $text: String!, $url: String!) {
-    createPost(input: { channelId: $channelId, text: $text, schedulingType: automatic, mode: addToQueue,
-      assets: [{ video: { url: $url, metadata: { thumbnailOffset: 2000 } } }] }) {
-      ... on PostActionSuccess { post { id dueAt status } }
-      ... on MutationError { message }
-    }
-  }`;
-  /*
-   * createPost CREATES THE POST, so the attempt is recorded before it is made
-   * rather than after it returns -- the same guard media_publish carries, for
-   * the same reason. bufferGraphql goes through jsonRequest, which wraps a
-   * timeout or a dropped connection as `retryable: true`; without this, a lost
-   * RESPONSE to a call Buffer actually honoured would be retried and put a
-   * SECOND post in the queue, up to socialMaxAttempts times. Buffer is the
-   * road for YouTube, Instagram and Facebook, so this is three platforms.
-   *
-   * It does not make the call idempotent -- Buffer's mutation takes no client
-   * id this code can rely on. It makes the ambiguity visible instead of
-   * silent, which is what stops the duplicate.
-   */
-  const alreadyAttempted = Boolean(target.providerState?.publishAttemptedAt);
-  target.providerState = { ...target.providerState, stage: 'publishing', publishAttemptedAt: Date.now() };
-  save();
-  let data;
-  try {
-    data = await bufferGraphql(accessToken, query, {
-      channelId: String(target.accountId), text: captionText(clip, 5000), url: publicMediaUrl(clip.id),
-    });
-  } catch (error) {
-    if (alreadyAttempted && error?.retryable !== false) {
-      throw new SocialError(
-        'Buffer did not answer, and this clip has already been sent to Buffer once. '
-        + 'Check the Buffer queue for it before retrying, so it is not posted twice.',
-        { provider: 'buffer', retryable: false },
-      );
-    }
-    throw error;
-  }
-  const result = data?.createPost;
-  if (result?.message) throw new SocialError(`Buffer could not create this post: ${result.message}`, { provider: 'buffer' });
-  if (!result?.post?.id) {
-    throw new SocialError(
-      alreadyAttempted
-        ? 'Buffer did not confirm the post, and this clip has been sent to Buffer before. Check the Buffer queue before retrying, so it is not posted twice.'
-        : 'Buffer did not confirm that the post was created.',
-      { provider: 'buffer', retryable: !alreadyAttempted },
-    );
-  }
-  return { postId: result.post.id, postUrl: '', providerState: { stage: result.post.status || 'scheduled', dueAt: result.post.dueAt || '' } };
-}
 
 async function youtubeUploadStatus(uploadUrl, accessToken, totalSize) {
   const res = await fetch(uploadUrl, {
@@ -2209,8 +1960,8 @@ async function uploadFacebook(clip, target, file, userId) {
   if (target.providerState.stage !== 'published') {
     /*
      * `upload_phase: finish` PUBLISHES THE REEL, so the attempt is recorded
-     * before it is made rather than after it returns -- the guard Instagram and
-     * Buffer already carry, for the same reason. jsonRequest wraps a timeout or
+     * before it is made rather than after it returns -- the guard Instagram
+     * already carries, for the same reason. jsonRequest wraps a timeout or
      * a dropped connection as `retryable: true`, so without this a lost
      * RESPONSE to a finish Facebook actually honoured came back here and
      * published again.
@@ -2562,20 +2313,16 @@ function publishingAccountFor(clip, target) {
 
 export async function publishTarget(clip, target, file) {
   const userId = publishingAccountFor(clip, target);
-  if (selectedAccount(target.provider, target.accountId, userId)?.viaBuffer) return publishBuffer(clip, target, userId);
-  if (target.provider === 'youtube' && !config.directYoutubeOAuthEnabled) {
+  if (target.provider === 'youtube' && !providerConfigured('youtube')) {
     /*
-     * SAY WHICH OF THE TWO IT IS. "Connect your YouTube channel through
-     * Buffer" is only actionable when Buffer is configured and the Connect
-     * button therefore exists. When it is not, that sentence sends somebody to
-     * look for a control that is not on the screen, and every scheduled clip
-     * says it -- which is exactly what three days of this outage looked like
-     * from the customer's side.
+     * Said as the deployment's problem rather than the customer's. With no
+     * Google client there is no Connect button on the YouTube row, so telling
+     * somebody to press it sends them looking for a control that is not on the
+     * screen -- which is exactly what three days of the brokered outage looked
+     * like from their side.
      */
     throw new SocialError(
-      providerConfigured('buffer')
-        ? 'Connect your YouTube channel through Buffer before publishing. Open Connections and press Connect on the YouTube row.'
-        : 'YouTube publishing is not set up on this deployment: it goes through Buffer, and no Buffer credentials are configured. Nothing can be connected until they are.',
+      'YouTube publishing is not set up on this deployment: no Google OAuth credentials are configured, so no channel can be connected.',
       { provider: 'youtube', retryable: false },
     );
   }
