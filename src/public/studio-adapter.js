@@ -1247,13 +1247,13 @@
   var EXPLAIN_PUBLISH = [
     {
       match: /unaudited_client_can_only_post_to_private_accounts|has not finished reviewing/i,
-      title: 'TikTok has not reviewed this app yet',
-      cause: 'Until TikTok approves the app, it will only deliver posts to a TikTok account that is itself set to private. Nothing is wrong with the clip, the connection or your account — TikTok is refusing the destination, not the video.',
+      title: 'TikTok is treating this app as unreviewed',
+      cause: 'TikTok approved DeenClipped on 14 September 2026, so this code should not arrive. When it does, the approval is not in effect for the key that sent the request \u2014 which points at the connection rather than at the clip. Nothing is wrong with the clip or the render.',
       fixes: [
-        'Set that TikTok account to private and the clip posts immediately.',
-        'Or finish the TikTok app review, after which public posting is allowed.',
-        'Retrying without changing one of those two things will fail the same way.',
-        'YouTube is unaffected — clips going there have already posted.',
+        'Reconnect TikTok in Channels, then press Test connection \u2014 that refreshes the audiences TikTok currently allows.',
+        'Setting that TikTok account to private posts the clip immediately in the meantime.',
+        'Retrying without doing one of those will fail the same way.',
+        'YouTube, Instagram and Facebook are unaffected \u2014 clips going there have already posted.',
       ],
     },
     {

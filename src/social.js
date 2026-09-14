@@ -172,9 +172,18 @@ async function parseResponse(res) {
 // -- a sentence with no fault and no fix in it. The code is what carries both,
 // so it is kept, and the ones with a real answer are answered here.
 const TIKTOK_GUIDANCE = {
+  /*
+   * KEPT AFTER APPROVAL, DELIBERATELY. TikTok approved the app on 14 Sept
+   * 2026, so this code should no longer arrive -- and if it does, the approval
+   * is not in effect for the app or key that sent the request, which is a
+   * different and more useful thing to say than the old "finish the review".
+   * Deleting the entry would put the raw code in front of a customer on the one
+   * day it means something has gone wrong.
+   */
   unaudited_client_can_only_post_to_private_accounts:
-    'TikTok has not finished reviewing this app yet, and an unreviewed app may only post to a TikTok account that is set to private. '
-    + 'Switch the account to private to keep posting now, or complete the app review to post from a public one.',
+    'TikTok is treating this app as unreviewed, so it will only deliver to a TikTok account that is itself private. '
+    + 'DeenClipped passed TikTok review, so this points at the connection rather than the clip: reconnect TikTok in Channels and run Test connection. '
+    + 'Setting that account to private posts it immediately in the meantime.',
   privacy_level_option_mismatch:
     'The audience chosen for TikTok is not one this account currently allows. Run Test connection in Channels, then pick from the audiences it offers.',
   reached_active_user_cap:

@@ -357,6 +357,41 @@ test('no public page advertises frame-level editing, or still calls the editor g
   }
 });
 
+test('no public page still says TikTok can only post privately', async () => {
+  /*
+   * TikTok approved the app on 14 September 2026. Until then
+   * /tools/youtube-to-tiktok carried a whole section headed "Until TikTok
+   * reviews an app, it may only post to a private account", ending:
+   *
+   *   "If you need to post publicly to TikTok today, that is not yet possible
+   *    through this and you should know before you pay."
+   *
+   * True when written, and the worst kind of stale claim once it was not: a
+   * public page talking a prospect out of buying. The same shape as the editor
+   * gate above, which is why it is pinned the same way -- that one shipped
+   * "coming soon" copy for a release after the editor had shipped.
+   *
+   * WHAT IS DELIBERATELY NOT BANNED is the per-post audience choice. That is
+   * TikTok's permanent rule for every third-party tool rather than a stage, so
+   * the page should go on explaining it; only the claim that DeenClipped is
+   * unreviewed is forbidden.
+   */
+  /*
+   * The alternation was measured against the real sentences rather than
+   * guessed: the first cut wrote `reviews?`, which does not match "has
+   * REVIEWED", so a probe restoring the exact FAQ line that shipped came back
+   * GREEN. A guard that cannot catch the wording it was written for guards
+   * nothing.
+   */
+  const stale = /\b(unaudited|(has|have|had) not (been )?(audited|reviewed)|until TikTok (has )?review(s|ed)?)\b|not yet possible through this/i;
+  for (const page of seo.SEO_PAGES) {
+    const { body } = await get(page.path);
+    const main = body.slice(body.indexOf('<main'), body.indexOf('</main>'));
+    const hit = main.match(stale);
+    assert.equal(hit, null, `${page.path} still says the app is unreviewed: "${hit && hit[0]}"`);
+  }
+});
+
 test('no public page invents numbers about customers or results', async () => {
   const invented = /\b(\d[\d,]*\+? (creators|users|customers|clips posted))|\b(\d+% (faster|more|increase))|\btrusted by\b|\bgo viral\b|\bguaranteed\b/i;
   for (const page of seo.SEO_PAGES) {

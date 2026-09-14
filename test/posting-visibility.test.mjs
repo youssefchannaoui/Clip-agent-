@@ -54,7 +54,11 @@ test('a TikTok refusal explains itself instead of linking to the guidelines', ()
       message: 'Please review our integration guidelines at https://developers.tiktok.com/doc/content-sharing-guidelines/',
     },
   }, 'TikTok', 'Forbidden');
-  assert.match(detail, /has not finished reviewing this app/i, 'say what is wrong');
+  // The PROPERTY: a sentence rather than TikTok's bare link. The wording moved
+  // when TikTok approved the app on 14 Sept 2026 -- the code is kept because
+  // the day it arrives is the day the connection is wrong -- and a test naming
+  // the old sentence would have gone red against a copy fix.
+  assert.match(detail, /unreviewed|not reviewed|not finished reviewing/i, 'say what is wrong');
   assert.match(detail, /private/i, 'and what would let it post today');
   assert.doesNotMatch(detail, /^Please review our integration guidelines/,
     'the bare link was the whole of what an operator used to get');

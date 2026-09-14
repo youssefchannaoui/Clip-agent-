@@ -1,5 +1,19 @@
 # TikTok app: submission state and the secret problem
 
+> **APPROVED — 14 September 2026.** TikTok passed the app review. Everything
+> below is the record of what was submitted and why; it is history, not a
+> to-do. The `unaudited_client_can_only_post_to_private_accounts` restriction
+> it was written under no longer applies, so a connected account can post at
+> whatever audience TikTok offers it.
+>
+> **The product-level proof is Test connection**, not this file: `Channels →
+> TikTok → Test` calls `queryTikTokCreator` and stores the audiences TikTok
+> currently allows on that account. If `PUBLIC_TO_EVERYONE` is among them, the
+> approval is live on the API. Until a Test has run in the last 24 hours the
+> app refuses to enable TikTok at all, by design — TikTok requires the current
+> options to be shown rather than a cached guess.
+
+
 Recorded 24 Aug 2026 by reading the developer portal against the code.
 
 | | |

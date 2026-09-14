@@ -167,8 +167,8 @@ export const SEO_COPY = {
     sections: [
       { heading: "TikTok makes YOU choose who sees it, every time",
         body: "TikTok’s content-sharing rules say a third-party tool may not preselect a privacy level, so DeenClipped shows the audience options your account actually allows — fetched live from TikTok rather than from a list we hardcoded — with nothing chosen. You pick. This is the one place in the product where a required setting is deliberately left blank, and if it looks like friction, it is: removing it would fail the very review that governs posting here." },
-      { heading: "Until TikTok reviews an app, it may only post to a private account",
-        body: "This is the rule that surprises people, and it is not specific to DeenClipped. An app TikTok has not audited can only publish to a TikTok account that is itself set to private — try it against a public account and TikTok returns a 403 pointing at its guidelines. DeenClipped translates that code into a sentence rather than showing you the raw refusal, but it cannot lift the rule. If you need to post publicly to TikTok today, that is not yet possible through this and you should know before you pay." },
+      { heading: "The audiences on offer are your account’s, read live",
+        body: "Which audiences a TikTok account may post to is TikTok's to decide, and it differs between accounts, so DeenClipped never hardcodes the list. It asks your connected account what it currently allows and shows you that — what is on offer is what will actually be accepted. Run Test connection in Channels to refresh it; the panel will not send a clip against an audience TikTok is not currently offering for that account." },
       { heading: "Comments, Duet and Stitch come from your account, not from us",
         body: "Those three settings are fetched from your connected TikTok account when you open the posting panel, so what is offered is what your account actually permits. If your account disables Duet, the option is greyed with the reason. There is also a commercial-content disclosure and a music-usage confirmation, both unticked, both TikTok’s requirements rather than ours." },
       { heading: "Cross-posting from YouTube: the part worth thinking about",
@@ -178,9 +178,9 @@ export const SEO_COPY = {
     ],
     faqs: [
       { q: "Can I post to TikTok automatically from DeenClipped?",
-        a: "You can schedule it, but not without a decision: TikTok requires the creator to choose a privacy level with nothing preselected, so every clip needs that choice. And until TikTok has reviewed the app, posting only works to a TikTok account that is set to private." },
+        a: "You can schedule it, but not without a decision: TikTok requires the creator to choose a privacy level with nothing preselected, so every clip needs that choice. That one is permanent — it is TikTok’s rule for every third-party tool, not a stage DeenClipped is passing through." },
       { q: "Why did my TikTok post fail with a 403?",
-        a: "The most common cause is the unaudited-app rule: the app has not passed TikTok review, so it may only post to a private account. DeenClipped keeps TikTok’s error code and translates the known ones into a sentence, rather than showing you a bare link to the guidelines." },
+        a: "TikTok refuses in two parts — a code saying which rule, and a message that is often just a link to its guidelines — so DeenClipped keeps the code and translates the known ones into a sentence. The usual causes are an audience your account does not currently allow, a daily post limit, a duplicate, or a connection that needs reconnecting. The row names which, and Retry re-sends only that destination." },
       { q: "Does DeenClipped add a watermark to TikTok posts?",
         a: "Only the DeenClipped watermark on the free plan, which paid plans remove. Nothing adds a TikTok or YouTube watermark — the clip is rendered from your source, so it carries whatever was in the original frame and nothing else." },
       { q: "What size should a TikTok video be?",

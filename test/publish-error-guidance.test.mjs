@@ -29,13 +29,26 @@ const publishRow = (error, provider = 'tiktok') => ({
 });
 const importRow = error => ({ text: 'Import failed · A lecture', full: error, meta: error });
 
-test('TikTok’s unaudited-app refusal is explained as what it is', () => {
+test('TikTok’s unaudited-app code still has an answer after approval', () => {
+  /*
+   * TikTok APPROVED the app on 14 Sept 2026, so this code should no longer
+   * arrive. The entry is kept rather than deleted, because the day it does
+   * arrive is the day something is wrong with the connection -- and deleting
+   * it would put a raw TikTok code in front of a customer on exactly that day.
+   *
+   * Pinned as a PROPERTY, not as the sentence: this file has already been
+   * rewritten once because it named the words rather than what they have to
+   * do. What it must do is give a step that works NOW and never answer a
+   * publish refusal with import advice.
+   */
   const g = explain(publishRow(
     'TikTok returned 403: TikTok has not finished reviewing this app yet [unaudited_client_can_only_post_to_private_accounts]'));
-  assert.match(g.title, /TikTok has not reviewed this app/i);
+  assert.match(g.title, /TikTok/i, 'the card must name the platform that refused');
   const steps = g.fixes.join(' ');
-  assert.match(steps, /set that TikTok account to private/i, 'the step that actually works today');
-  assert.match(steps, /app review/i, 'and the permanent fix');
+  assert.match(steps, /reconnect|Test connection/i, 'the step that actually works now that review has passed');
+  assert.match(steps, /private/i, 'and the one that posts it immediately in the meantime');
+  assert.doesNotMatch(steps, /finish the TikTok app review|complete the app review/i,
+    'review is DONE -- telling somebody to go and do it is advice for a solved problem');
   assert.ok(!/Upload MP4|Download the video/i.test(steps),
     'it must never answer a publish refusal with import advice');
 });
@@ -166,7 +179,10 @@ test('the guidance that is left is about the render, not the watermark', () => {
 
   // Every entry that was already there still wins its own case. A wrong
   // WINNER was the entire bug the last time this table was touched (v3.30.0).
-  assert.match(title('TikTok returned 403: TikTok has not finished reviewing this app'), /not reviewed/i);
+  // Either spelling: what this line pins is the WINNER, not the wording. It
+  // went red when the copy moved from "has not reviewed" to "treating this app
+  // as unreviewed" -- a change with no effect on which entry answers.
+  assert.match(title('TikTok returned 403: TikTok has not finished reviewing this app'), /unreviewed|not reviewed/i);
   assert.match(title('spam_risk: too many pending posts'), /rate-limiting/i);
   assert.match(title('no access token for that account'), /expired/i);
 });

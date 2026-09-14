@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2087 JS + 973 Python**
+- `npm test` and `npm run check` must pass. Currently **2088 JS + 973 Python**
   (17 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10379,7 +10379,7 @@ platform and only one of them is yes.
 | Platform | Public? | Why |
 |---|---|---|
 | **YouTube** | **Yes, but capped at 100 accounts EVER** | OAuth consent screen is *In production*, User type *External* — so anyone can connect. But the app is **unverified**, which imposes a **100-user lifetime cap** (2 used) that "cannot be reset or changed", and users may meet the "unverified app" warning screen. Lifting it needs Google verification. |
-| **TikTok** | **No** | Submitted for review 4 Sept. An unaudited app may only post to a TikTok account that is itself private. |
+| **TikTok** | **YES — approved 14 Sept 2026** | The app review passed, so the unaudited-app restriction is gone and a connected account posts at whatever audience TikTok offers it. The audience is still CHOSEN per post with nothing preselected — that is TikTok's permanent rule for every third-party tool, not a stage. **Proof that it is live on the API is Channels → TikTok → Test**, which stores `privacy_level_options`; `PUBLIC_TO_EVERYONE` among them is the answer. |
 | **Facebook** | **No** | The Meta app is **Unpublished** (development mode) and the permissions are at **Standard Access**. Only someone with a ROLE on the app can connect. |
 | **Instagram** | **No** | Same Meta app, and it points at `eurotrimau` rather than a DeenClipped account. |
 
@@ -10519,18 +10519,28 @@ likeliest reason for a second rejection if one comes.
    product copy was corrected to stop naming a closed review as the cause
    while still warning that Google can override; it deliberately stops short
    of promising public. **One real upload settles it.**
-2. **TikTok app review** — record the demo and submit (`TIKTOK-SUBMISSION.md`).
-   Until then an unreviewed app may only post to a TikTok account that is
-   itself private; setting the account private is the way to post today.
-   **The sandbox question is answered (3 Sept 2026)** and the answer is in that
-   file: the recording MUST be made against the sandbox (the App review page
-   says so in as many words), the sandbox already exists with its icon and
-   target user, and it points at the real production callback — so the video
-   can be shot on the live site. The one cost is that the sandbox has its own
-   client key/secret, so recording means swapping the Render pair, reconnecting
-   TikTok, recording, and swapping back. Everything else on that submission is
-   verified live: both domain-verification files serve 200, /terms and /privacy
-   serve 200, and the icon is still on the Mac. **Only the recording is left.**
+2. ~~**TikTok app review**~~ — **APPROVED 14 Sept 2026.** Reported by Youssef
+   from the developer portal. The `unaudited_client_can_only_post_to_private_accounts`
+   restriction that has blocked public TikTok posting since August is lifted,
+   and `TIKTOK-SUBMISSION.md` is now history rather than a to-do.
+   **Nothing in this repo had to change to allow it**, which was checked rather
+   than assumed: the audiences come from `queryTikTokCreator`'s
+   `privacy_level_options` and are never hardcoded, so the picker widens by
+   itself the moment TikTok offers more. What DID change is copy — a public SEO
+   page was telling prospects *"if you need to post publicly to TikTok today,
+   that is not yet possible through this and you should know before you pay"*,
+   which is the worst kind of stale claim: one that talks a customer out of
+   buying.
+   **THE PROOF IS `Channels → TikTok → Test`, and it is a real gate rather than
+   a nicety.** `validateFor` refuses to enable TikTok at all unless a Test has
+   run in the last 24 hours (TikTok requires the CURRENT options to be shown,
+   not a cached guess), and then refuses any audience not in
+   `creatorInfo.privacy_level_options`. So the cached options from the
+   unaudited era hold `SELF_ONLY` alone, and until a Test refreshes them a
+   public choice is correctly refused. Sequence: reconnect TikTok (the refresh
+   token is dead — open item 6), press **Test connection**, then pick the
+   audience. `PUBLIC_TO_EVERYONE` appearing is the confirmation that the
+   approval reached the API.
 3. ~~**Worker deploy on Hetzner.**~~ **DONE, and it deploys itself now.**
    Kept rather than deleted because this entry was stale for two days and a
    session acting on it would waste an hour arming a workflow that is already
@@ -19459,3 +19469,95 @@ which was working.
 renames call sites and NOT `const bufferChannels = (`, leaving a file whose
 helper and callers disagree; and `git checkout` was not used on any file
 carrying work -- every probe restored from a scratchpad copy.
+
+## TikTok approved the app, and the stale claims were the work (v3.200.1, 14 Sept 2026)
+
+Youssef: "OMG CHECK TIKTOK ITS APPROVEED". Reported from the developer portal,
+which no session can reach — so what follows is the half that IS checkable.
+
+### NOTHING IN THE CODE HAD TO CHANGE, and that was checked rather than assumed
+
+Every audience TikTok allows comes from `queryTikTokCreator`'s
+`privacy_level_options`, stored on the connection and read at save time. There
+is no hardcoded list and nothing anywhere forces `SELF_ONLY` — `store.js`'s own
+comment records why the default is BLANK ("a pre-filled 'SELF_ONLY' is a choice
+the product made for you", which TikTok's guidelines forbid). So the picker
+widens by itself the moment TikTok offers more, and the only reason to touch
+the repo at all was copy.
+
+### THE PROOF IS `Channels → TikTok → Test`, AND IT IS A REAL GATE
+
+`validateFor` refuses to enable TikTok unless a Test has run in the last 24
+hours — TikTok requires the CURRENT options to be displayed rather than a
+cached guess — and then refuses any audience absent from
+`creatorInfo.privacy_level_options`. The cached options from the unaudited era
+hold `SELF_ONLY` alone, so **a public choice is correctly refused until a Test
+refreshes them.** That makes the product its own verification: reconnect,
+press Test, and `PUBLIC_TO_EVERYONE` appearing is the approval reaching the API.
+
+Worth stating because it reads like a bug otherwise: somebody who hears
+"approved", goes to pick Public and is refused has not found a fault — they
+have found the gate doing its job with a stale cache behind it.
+
+### What was actually wrong: copy, and one line of it was costing sales
+
+`/tools/youtube-to-tiktok` carried a whole section headed *"Until TikTok reviews
+an app, it may only post to a private account"*, ending:
+
+> If you need to post publicly to TikTok today, that is not yet possible
+> through this and you should know before you pay.
+
+True when written and **false the moment approval landed** — a public page
+talking a prospect out of buying. Two FAQs said the same, and the in-app
+failure card's fix list still read *"finish the TikTok app review"*, which is
+advice for a solved problem.
+
+**They are rewritten to be independent of the audit state**, which is the point
+rather than a nicety: the section now explains that the audiences are read live
+from the account (permanently true, and the reason nothing is hardcoded), and
+the scheduling FAQ says the per-post audience choice is *"TikTok's rule for
+every third-party tool, not a stage DeenClipped is passing through"*. Copy
+pinned to a stage rots when the stage ends; copy pinned to a mechanism does not.
+
+### The error entry is KEPT, and its advice inverted
+
+`unaudited_client_can_only_post_to_private_accounts` should never arrive now.
+It is kept anyway, because **the day it does arrive is the day the approval is
+not in effect for the key that sent the request** — and deleting the entry
+would put a raw TikTok code in front of a customer on exactly that day. What
+changed is the answer: reconnect and Test, rather than go and finish a review
+that is finished.
+
+### THREE TESTS PINNED THE WORDING RATHER THAN THE BEHAVIOUR
+
+`publish-error-guidance` (twice) and `posting-visibility` went red against a
+copy fix that changed no behaviour — one of them asserting `/not reviewed/i`
+against a title that now says "unreviewed". All three are repinned to the
+property: the right ENTRY still wins its own code, the card still names the
+platform, the steps still work today, and a publish refusal is still never
+answered with import advice. A new assertion forbids the retired advice
+outright, so "finish the app review" cannot come back.
+
+That is the thirteenth time in this file a test has named a word instead of a
+behaviour, and the second in two releases.
+
+### And a guard so the page cannot rot back
+
+`seo-architecture` now fails if any public page says the app is unaudited or
+unreviewed — the same shape as the editor-gate guard directly above it, which
+exists because "coming soon" copy outlived the editor by a release.
+
+**Its first regex could not catch the sentence it was written for.** It wrote
+`until TikTok (has )?reviews?`, which does not match "has REVIEWED", so a probe
+restoring the exact FAQ line that shipped came back GREEN. Measured against the
+real strings, not guessed.
+
+**And it caught my own replacement copy**, which opened "TikTok limits an app it
+has not reviewed to posting privately" — a statement about the RULE that a
+skimming prospect cannot tell from a statement about US. Rewritten to explain
+the mechanism instead (audiences differ per account, so the list is never
+hardcoded), which is both unambiguous and the actual reason.
+
+**What is deliberately NOT banned is the per-post audience choice.** That is
+TikTok's permanent rule for every third-party tool, the pages should go on
+explaining it, and only the unreviewed claim is forbidden.
