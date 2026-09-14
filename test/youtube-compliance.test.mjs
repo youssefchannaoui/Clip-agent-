@@ -89,13 +89,28 @@ test('III.E.4: the stamp is written when the metadata is cached', () => {
 });
 
 test('III.A.2d: the privacy policy lists the API Data actually accessed', () => {
-  // Google's finding was that the policy did not explain what user information,
-  // including API Data, the client accesses, collects, stores and uses.
+  /*
+   * Google's finding was that the policy did not explain what user
+   * information, including API Data, the client accesses, collects, stores
+   * and uses. That obligation is unchanged; WHAT IS ACCESSED changed.
+   *
+   * Until 11 Sept 2026 this list was the YouTube publishing scopes -- channel
+   * identifier, channel name, uploaded video id, youtube.upload,
+   * youtube.readonly. Production no longer holds any of them: publishing goes
+   * through Buffer, directYoutubeOAuthEnabled defaults false and
+   * /auth/social/youtube/start is a 404. Naming them would put a false
+   * statement in a privacy policy, which is a worse fault than the omission
+   * this test was written to catch.
+   *
+   * What the product DOES receive from Google is the sign-in profile, so that
+   * is what the policy must now list. If direct YouTube OAuth is ever switched
+   * back on, the old list comes back here and to the policy together.
+   */
   for (const item of [
-    'Channel identifier, channel name and channel profile image',
-    'video identifier of a clip DeenClipped uploaded',
-    'youtube.upload',
-    'youtube.readonly',
+    'openid',
+    'email',
+    'profile',
+    'Google account identifier',
   ]) {
     assert.ok(marketing.includes(item), `the policy must state: ${item}`);
   }
@@ -104,9 +119,16 @@ test('III.A.2d: the privacy policy lists the API Data actually accessed', () => 
 test('III.A.2d: the policy says the API is used only for the customer\'s own channel', () => {
   // This is the sentence Google's reviewer needs to find, and it has to stay
   // true of the code -- the two tests above are what keep it true.
-  assert.match(marketing, /limited to <strong>your own channel<\/strong>/);
   assert.match(marketing, /does not use the YouTube API to search, browse, list, or retrieve/);
-  assert.match(marketing, /read from that video's own public watch page/);
+  /*
+   * "read from that video's own public watch page" described the fallback that
+   * replaced videos.list in v3.182.0. Since then the title, duration and
+   * thumbnail are read by yt-dlp on DeenClipped's OWN processing server
+   * (probe_source_metadata), behind the residential pool -- so the watch-page
+   * sentence is no longer how it works, and the import disclosure below is.
+   */
+  assert.match(marketing, /yt-dlp/);
+  assert.match(marketing, /No Google credentials are sent<\/strong> to the downloader/);
 });
 
 test('III.A.2d: the policy states the retention period and the statistics position', () => {
@@ -177,11 +199,33 @@ test('the YouTube mark is unmodified, uncontained and at least 20px', () => {
   assert.match(page, /:has\(> i\.ph-youtube-logo:first-child\)\{[^}]*border-color:transparent/);
 });
 
-test('the privacy policy names the API calls, the retention and the way out', async () => {
+test('the privacy policy names the Google data it receives, the retention and the way out', async () => {
+  /*
+   * `channels.list` WAS required here and is deliberately gone, 14 Sept 2026.
+   *
+   * Production no longer calls it: providerConfigured('youtube') needs
+   * directYoutubeOAuthEnabled, which defaults false, and
+   * /auth/social/youtube/start is a 404. Publishing goes through Buffer, and
+   * Buffer holds the YouTube connection. Keeping the assertion would force a
+   * statement into the privacy policy that the code does not do, which is a
+   * worse fault than the one this test was written to catch.
+   *
+   * What replaces it is the Google data the app DOES receive. Sign-in was
+   * restored on 14 Sept and asks for openid, email and profile -- so Google
+   * user data reaches this product, the Limited Use affirmation genuinely
+   * applies, and the revocation link is genuinely actionable. Every other
+   * assertion below is unchanged and still true: tokens are still stored
+   * encrypted (TikTok, and the Buffer token), the 30-day sweep in
+   * youtube-retention.js still runs, and no statistics are requested anywhere.
+   *
+   * If direct YouTube OAuth is ever switched back on, `channels.list` comes
+   * back to both the policy and this list.
+   */
   const marketing = await import('../src/marketing.js');
   const html = marketing.privacy({ base: 'https://deenclipped.online', currentUser: null });
   for (const needle of [
-    'channels.list',                                    // what is called
+    'Google API Services User Data Policy',             // the affirmation it owes
+    'Limited Use requirements',                         // and the part that binds
     'encrypted OAuth access and refresh tokens',        // what is stored
     'automatically deleted after 30 days',              // how long
     'https://policies.google.com/privacy',              // Google's own policy
@@ -190,6 +234,23 @@ test('the privacy policy names the API calls, the retention and the way out', as
   ]) {
     assert.ok(html.includes(needle), `privacy policy must state: ${needle}`);
   }
+});
+
+test('the policy does not claim a Google API call production cannot make', async () => {
+  /*
+   * The other half of the same rule, and the one that would have caught the
+   * 11 September rewrite from the opposite direction: a policy describing
+   * YouTube Data API calls while the routes 404 is as wrong as one that omits
+   * a call it really makes. This fails the day somebody restores the copy
+   * without restoring the code.
+   */
+  const marketing = await import('../src/marketing.js');
+  const html = marketing.privacy({ base: 'https://deenclipped.online', currentUser: null });
+  const src = fs.readFileSync(path.join(ROOT, 'src/config.js'), 'utf8');
+  const directOff = /directYoutubeOAuthEnabled:\s*boolean\([^,]+,\s*false\)/.test(src);
+  if (!directOff) return;   // direct OAuth is on: the call is real and may be named
+  assert.ok(!html.includes('channels.list'),
+    'production cannot call channels.list, so the policy must not say it does');
 });
 
 test('the URL-processing section describes production, not the local-mode path', async () => {
