@@ -2431,7 +2431,20 @@ export async function publishTarget(clip, target, file) {
   const userId = publishingAccountFor(clip, target);
   if (selectedAccount(target.provider, target.accountId, userId)?.viaBuffer) return publishBuffer(clip, target, userId);
   if (target.provider === 'youtube' && !config.directYoutubeOAuthEnabled) {
-    throw new SocialError('Connect your YouTube channel through Buffer before publishing.', { provider: 'youtube', retryable: false });
+    /*
+     * SAY WHICH OF THE TWO IT IS. "Connect your YouTube channel through
+     * Buffer" is only actionable when Buffer is configured and the Connect
+     * button therefore exists. When it is not, that sentence sends somebody to
+     * look for a control that is not on the screen, and every scheduled clip
+     * says it -- which is exactly what three days of this outage looked like
+     * from the customer's side.
+     */
+    throw new SocialError(
+      providerConfigured('buffer')
+        ? 'Connect your YouTube channel through Buffer before publishing. Open Connections and press Connect on the YouTube row.'
+        : 'YouTube publishing is not set up on this deployment: it goes through Buffer, and no Buffer credentials are configured. Nothing can be connected until they are.',
+      { provider: 'youtube', retryable: false },
+    );
   }
   if (target.provider === 'instagram') return startInstagram(clip, target, userId);
   if (!file || !fs.existsSync(file)) throw new SocialError('The rendered clip file is missing.', { provider: target.provider });

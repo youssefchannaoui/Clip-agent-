@@ -118,6 +118,23 @@ test('with Buffer unconfigured, YouTube says so rather than offering a dead butt
   assert.equal(answer, 'false', 'no Buffer means no YouTube road, and the row must say it');
 });
 
+test('the publish refusal says which of the two failures it is', async () => {
+  /*
+   * "Connect your YouTube channel through Buffer" is only actionable when the
+   * Connect button exists. With Buffer unconfigured it names a control that is
+   * not on the screen, and every scheduled clip repeats it -- which is what
+   * this outage looked like from the customer's side for three days.
+   */
+  const src = read('src/social.js');
+  const at = src.indexOf("target.provider === 'youtube' && !config.directYoutubeOAuthEnabled");
+  assert.ok(at > 0, 'the YouTube refusal must exist');
+  const branch = src.slice(at, at + 1400);
+  assert.match(branch, /providerConfigured\('buffer'\)/,
+    'the message must depend on whether Buffer is configured at all');
+  assert.match(branch, /no Buffer credentials are configured/,
+    'and say so plainly when it is not, rather than naming a button that is absent');
+});
+
 test('TikTok still connects directly, and is not swept into Buffer', () => {
   // Buffer does not carry TikTok, so routing it there would break the one
   // platform that was still working through its own login.
