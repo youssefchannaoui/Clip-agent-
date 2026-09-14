@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2079 JS + 973 Python**
+- `npm test` and `npm run check` must pass. Currently **2092 JS + 973 Python**
   (17 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -19158,3 +19158,93 @@ controls quietly go back to being too small to hit.
 **The CSP inline-script hash is computed at server start**, so the preview server
 was restarted after every index.html edit. Eleventh recorded occurrence, and it
 cost a run here too.
+
+## Four ways the publishing lifecycle let a clip down (v3.199.0, 14 Sept 2026)
+
+The rest of the "not fixed" list. Each was found by reading the path rather than
+by a report, and each is silent: the app renders, the suite stays green, and a
+clip either goes out when it should not or sits still when it should go.
+
+### 1. A clip could be rejected WHILE IT WAS GOING OUT
+
+`rejectClip` refused a POSTED clip and nothing else. So a clip mid-upload was
+marked rejected and `clip.targets = []` wiped the in-flight target with it --
+**while the upload carried on at the platform.** Instagram and TikTok finish
+asynchronously (a container, then a poll), so the post could go live minutes
+later with the app showing the clip as rejected and NO TARGET LEFT to record
+where it went. The one thing worse than a clip posting when it should not is
+that, plus no record of it.
+
+`moveClipToSlot` has always refused on exactly this set (`publishing`,
+`processing`); reject simply never asked. And the window is short but it is
+precisely the window a person presses the button in -- the clip is on screen
+*because* it is going out.
+
+### 2. Moving a clip to a slot left the old backoff on it
+
+A failed target carries `nextTryAt` on a doubling backoff **capped at six
+hours**. The move changed `scheduledAt` and nothing else, so the new slot
+arrived and tick()'s own condition -- `!target.nextTryAt || target.nextTryAt <=
+Date.now()` -- was still false: **the clip sat on the slot it was dragged to and
+did not go out, with the calendar showing it in the right place.**
+
+`publishNow` has always cleared it, because a person asking for it NOW is not
+asking to serve out a backoff; a person dragging a clip onto a slot is saying
+the same thing about that slot. **Both clips in a swap**, or the fault just
+moves to the other one -- which is the harder one to notice, because nobody
+dragged it.
+
+### 3. `ready` WAS TERMINAL, and that is where clips went to die
+
+v3.115.2 stopped a clip being filed `ready` wrongly AT ITS SLOT. It did nothing
+for one already filed: **nothing anywhere looked at a `ready` clip again**, so an
+approved clip that reached its slot with nowhere to go stayed there for ever,
+and connecting a channel an hour later released nothing. Every one had to be
+found and pressed by hand.
+
+**IT IS ALSO THE OTHER HALF OF v3.197.1, and that release's claim was too strong
+without it.** Dropping a destination with no road leaves an empty target list;
+without this the clip lands on `ready` and the "it takes the road again by
+itself" that entry promised does not happen. It does now.
+
+Asked the CHEAP way, on the QUIET path: `plannedChannelsFor` uses the same
+builder tick() would, so the two cannot disagree about whether there is anywhere
+to go -- and it logs nothing, where the loud path would write "no account
+selected" for every ready clip on every tick.
+
+**THE GUARD I FIRST WROTE FOR THE EXPORT-BY-HAND CASE WAS DEAD, and the test
+found it.** `publishingSettings().enabled` cannot be false: v3.116.0 retired
+that master switch with a read-time correction that hardcodes `enabled: true`.
+So the condition read as a protection that was not there, and the test written
+for it duly failed against correct code. It is gone; what actually protects that
+case is the planned-channel question, and the test says so. (The same dead
+conjunct sits on the scheduled branch above it -- harmless, and named rather
+than quietly changed.)
+
+### 4. Facebook published and recorded the attempt afterwards
+
+`upload_phase: 'finish'` PUBLISHES THE REEL, and the attempt was recorded after
+it returned. `jsonRequest` wraps a timeout or a dropped connection as
+`retryable: true`, so a lost RESPONSE to a finish Facebook actually honoured came
+back here and published again. That is the Buffer double-post shape (v3.196.0)
+and the one Instagram already guards; Facebook had neither.
+
+**FACEBOOK IS THE ONE PLATFORM WHERE THE AMBIGUITY CAN BE RESOLVED RATHER THAN
+ONLY MADE VISIBLE**, which is why this does more than refuse: the video id is
+stable across the session, so the Reel is ASKED whether it published --
+YouTube's resumable-session trick (`youtubeUploadStatus`) applied here.
+Refusing, with the Page named as the place to look, is the fallback for when the
+question itself cannot be answered. `facebookReelPermalink` is ONE function
+because it both fills in a post URL and resolves a publish, and two copies would
+eventually disagree about whether a Reel is live.
+
+### Verified
+
+13 tests, **six probes proven red** -- including the two that pin the dangerous
+directions: a guard that refused every rejection would take the button away, and
+a `ready` clip re-armed with no road would churn every tick. 2092 JS / 0 fail.
+
+Facebook is read FROM THE SOURCE, for the reason `buffer-double-post` already
+gives: the property is an ORDERING one, and the network shape of the
+`video_reels` API is not verified anywhere in this repo -- so a stub would be
+asserting against an invented contract.

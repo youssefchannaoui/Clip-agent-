@@ -134,6 +134,25 @@ export function rejectClip(id) {
   if (clip.status === 'posted' || (clip.targets || []).some(target => target.status === 'posted')) {
     throw new Error('A clip that has already posted cannot be rejected.');
   }
+  /*
+   * AND NOT WHILE IT IS GOING OUT.
+   *
+   * This refused a POSTED clip and nothing else, so a clip mid-upload was
+   * marked rejected and `clip.targets = []` below wiped the in-flight target
+   * with it -- while the upload carried on at the platform. Instagram and
+   * TikTok finish asynchronously (a container, then a poll), so the Reel could
+   * go live minutes later with the app showing the clip as rejected and no
+   * target left to record where it went. The one thing worse than a clip
+   * posting when it should not is that, plus no record of it.
+   *
+   * `moveClipToSlot` has always refused on exactly this set; reject simply
+   * never asked. The window is short and it is the window a person actually
+   * presses the button in -- the clip is on screen because it is going out.
+   */
+  const flying = (clip.targets || []).find(target => ['publishing', 'processing'].includes(target.status));
+  if (flying) {
+    throw new Error(`This clip is being uploaded to ${flying.provider} right now and cannot be rejected until that finishes.`);
+  }
   clip.status = 'rejected';
   clip.rejectedAt = Date.now();
   clip.scheduledAt = null;
@@ -253,6 +272,29 @@ export function moveClipToSlot(clipId, at) {
   // read time in server.js, so there is nothing else to keep in step.
   clip.scheduledAt = when;
   if (held) held.scheduledAt = from;
+  /*
+   * A MOVE HAS TO CLEAR THE OLD BACKOFF, or it silently does not take.
+   *
+   * A target that has failed carries `nextTryAt` on a doubling backoff capped
+   * at SIX HOURS. Moving the clip changes `scheduledAt` and nothing else, so
+   * the new slot arrives and tick()'s own condition -- `!target.nextTryAt ||
+   * target.nextTryAt <= Date.now()` -- is still false: the clip sits on the
+   * slot it was dragged to and does not go out, for up to six hours, with the
+   * calendar showing it in the right place.
+   *
+   * `publishNow` has always done this (`if (target.status !== 'posted')
+   * target.nextTryAt = Date.now()`), because a person asking for it NOW is not
+   * asking to serve out a backoff. A person dragging a clip onto a slot is
+   * saying the same thing about that slot.
+   *
+   * Both clips: a swap moves the held one too, and leaving ITS backoff stale
+   * would just move the fault to the other clip.
+   */
+  for (const item of held ? [clip, held] : [clip]) {
+    for (const target of item.targets || []) {
+      if (target.status !== 'posted') delete target.nextTryAt;
+    }
+  }
   save();
   log(held
     ? `Swapped two scheduled clips on the calendar.`
@@ -1061,6 +1103,49 @@ export async function tick() {
         }
         if (publishingSettings(ownerOfRecord(clip)).enabled && clip.targets?.length) await publishClip(clip);
         else { clip.status = 'ready'; clip.readyAt = Date.now(); log(`"${clip.title}" is ready to download and post.`, 'info', ownerOf(clip)); }
+      } else if (clip.status === 'ready' && !clip.postedAt && !clip.targets?.length) {
+        /*
+         * `ready` WAS TERMINAL, AND THAT IS WHERE CLIPS WENT TO DIE.
+         *
+         * The branch above stops a clip being filed `ready` wrongly AT ITS SLOT
+         * (v3.115.2). It does nothing for one already filed -- nothing anywhere
+         * looked at a `ready` clip again, so an approved clip that reached its
+         * slot with nowhere to go stayed there for ever, and connecting a
+         * channel an hour later released nothing. Every one of them had to be
+         * found and pressed by hand.
+         *
+         * It is the other half of v3.197.1: dropping a destination that has no
+         * road leaves an empty target list, and without this the clip lands
+         * here and the "it takes the road again by itself" that release
+         * promised would not have happened.
+         *
+         * ASKED THE CHEAP WAY, on the QUIET path: plannedChannelsFor uses the
+         * same builder tick() would, so the two cannot disagree about whether
+         * there is anywhere to go -- and it logs nothing, where the loud path
+         * would write "no account selected" for every ready clip on every tick.
+         *
+         * THE ONLY THING PROTECTING THE EXPORT-BY-HAND CASE IS THAT QUESTION,
+         * and the first cut of this guarded it with `publishingSettings().enabled`
+         * as well -- which is DEAD. v3.116.0 retired that master switch with a
+         * read-time correction that hardcodes `enabled: true`, so the condition
+         * can never be false and reads as a protection that is not there. The
+         * test written for it duly failed against correct code. (The same dead
+         * conjunct sits on the scheduled branch above; harmless, and not this
+         * release's to touch.)
+         *
+         * So: an account with nothing connected, or every platform unticked,
+         * has no planned channel and is never re-armed. That is what `ready`
+         * legitimately means for somebody exporting by hand, and it is the
+         * empty-target guard plus this question that keeps it to the stranded
+         * ones.
+         */
+        if (social.plannedChannelsFor(clip).length) {
+          clip.status = 'scheduled';
+          // It has already waited past its slot; there is nothing to wait for.
+          clip.scheduledAt = Date.now();
+          delete clip.readyAt;
+          log(`"${clip.title}" has somewhere to post again and is back on the schedule.`, 'info', ownerOf(clip));
+        }
       } else if (clip.status === 'publishing' || clip.targets?.some(target => activeTarget(target) && (!target.nextTryAt || target.nextTryAt <= Date.now()))) {
         await publishClip(clip);
       }

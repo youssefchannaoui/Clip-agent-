@@ -2207,22 +2207,82 @@ async function uploadFacebook(clip, target, file, userId) {
   }
 
   if (target.providerState.stage !== 'published') {
-    const finishParams = new URLSearchParams({
-      upload_phase: 'finish', access_token: accessToken, video_id: videoId, video_state: 'PUBLISHED',
-      description: captionText(clip, 5000), title: String(clip.title || '').slice(0, 255),
-    });
-    const finish = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(account.pageId)}/video_reels?${finishParams}`, { method: 'POST' }, 'Facebook');
-    if (!finish?.success) throw new SocialError('Facebook did not confirm that the Reel was published.', { retryable: true, provider: 'facebook' });
+    /*
+     * `upload_phase: finish` PUBLISHES THE REEL, so the attempt is recorded
+     * before it is made rather than after it returns -- the guard Instagram and
+     * Buffer already carry, for the same reason. jsonRequest wraps a timeout or
+     * a dropped connection as `retryable: true`, so without this a lost
+     * RESPONSE to a finish Facebook actually honoured came back here and
+     * published again.
+     *
+     * FACEBOOK IS THE ONE PLATFORM WHERE THE AMBIGUITY CAN BE RESOLVED RATHER
+     * THAN ONLY MADE VISIBLE, and that is why this does more than refuse: the
+     * video id is stable across the whole session, so the Reel can simply be
+     * ASKED whether it published. That is YouTube's resumable-session trick
+     * (`youtubeUploadStatus`) applied here. Refusing is the fallback for when
+     * the question itself cannot be answered.
+     */
+    const alreadyAttempted = Boolean(target.providerState.publishAttemptedAt);
+    target.providerState = { ...target.providerState, publishAttemptedAt: Date.now() };
+    save();
+
+    let finish;
+    try {
+      const finishParams = new URLSearchParams({
+        upload_phase: 'finish', access_token: accessToken, video_id: videoId, video_state: 'PUBLISHED',
+        description: captionText(clip, 5000), title: String(clip.title || '').slice(0, 255),
+      });
+      finish = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(account.pageId)}/video_reels?${finishParams}`, { method: 'POST' }, 'Facebook');
+    } catch (error) {
+      if (!alreadyAttempted) throw error;
+      // Asked, not guessed: a permalink means the previous attempt landed.
+      const live = await facebookReelPermalink(videoId, accessToken);
+      if (!live) {
+        throw new SocialError(
+          'Facebook did not answer, and this clip has already been sent to Facebook once. '
+          + 'Check the Page for it before retrying, so it is not posted twice.',
+          { provider: 'facebook', retryable: false },
+        );
+      }
+      target.providerState = { stage: 'published', videoId };
+      save();
+      return { postId: videoId, postUrl: live };
+    }
+    if (!finish?.success) {
+      // Same question, for the answer that arrived and did not say success.
+      const live = alreadyAttempted ? await facebookReelPermalink(videoId, accessToken) : '';
+      if (live) {
+        target.providerState = { stage: 'published', videoId };
+        save();
+        return { postId: videoId, postUrl: live };
+      }
+      throw new SocialError(
+        alreadyAttempted
+          ? 'Facebook did not confirm the Reel, and this clip has been sent to Facebook before. Check the Page before retrying, so it is not posted twice.'
+          : 'Facebook did not confirm that the Reel was published.',
+        { retryable: !alreadyAttempted, provider: 'facebook' },
+      );
+    }
     target.providerState = { stage: 'published', videoId };
     save();
   }
 
-  let postUrl = '';
+  return { postId: videoId, postUrl: await facebookReelPermalink(videoId, accessToken) };
+}
+
+/**
+ * Has this Reel published? A permalink is Facebook's own answer.
+ *
+ * Swallows its failure deliberately and answers '' -- it is consulted both to
+ * fill in a post URL (where not having one costs nothing) and to resolve an
+ * ambiguous publish (where '' means "cannot tell", and the caller then refuses
+ * rather than retrying). Both callers want the same safe direction.
+ */
+async function facebookReelPermalink(videoId, accessToken) {
   try {
     const details = await jsonRequest(`${config.metaGraphBase}/${config.metaGraphVersion}/${encodeURIComponent(videoId)}?fields=permalink_url&access_token=${encodeURIComponent(accessToken)}`, {}, 'Facebook');
-    postUrl = details?.permalink_url || '';
-  } catch {}
-  return { postId: videoId, postUrl };
+    return details?.permalink_url || '';
+  } catch { return ''; }
 }
 
 async function startInstagram(clip, target, userId) {
