@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2050 JS + 973 Python**
+- `npm test` and `npm run check` must pass. Currently **2062 JS + 973 Python**
   (17 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -18865,3 +18865,92 @@ session's Buffer OAuth work and the rights gate, which had landed in the same
 files an hour earlier. `git log HEAD..origin/<branch>` first, merge, and then
 `git revert` the specific commits -- three-way merge keeps the other side's
 edits where they do not collide, and flags the one file where they do.
+
+## A cancelled subscription kept everything it was paying for (v3.197.0, 14 Sept 2026)
+
+Youssef, asked what should happen when somebody cancels: **"cut them off at
+period end"**. No grace period, and the decision was his because this fix
+DECIDES WHO GETS LOCKED OUT -- a wrong Stripe status list here locks out paying
+customers.
+
+### The leak, and why nothing anywhere reported it
+
+`clearSubscription` -- the one thing that flips an account back to free -- runs
+only on the `customer.subscription.deleted` webhook. **This deployment's
+signing secret has been rejecting deliveries since 29 Aug.** So a cancelled
+account keeps `billing.plan = 'pro_monthly'` for ever, and every reader
+(`paidTierOf`, `walletAllowance`, `isPaid`) reads that field directly: a Pro
+subscription cancelled forty days ago was indistinguishable from an active one
+-- same 650 tokens, DeenAI unlocked, clips still going out.
+
+This is the second-net pattern (v3.39.0) applied to the other end of the
+lifecycle. `confirmCheckoutSession` is the second net for a PURCHASE; nothing
+was the second net for a CANCELLATION.
+
+- **ONE resolved answer, read by every consumer.** `subscriptionEnded(billing)`
+  answers "is the paid period over", `activePlanId` turns that into the plan
+  the account is actually ON, and `paidTierOf`, `walletAllowance`, `isPaid` and
+  `publicBilling` all read it. Four readers deciding this separately is how the
+  header comes to say Pro beside a wallet that says 0.
+- **IT READS AND NEVER WRITES.** A resolved-on-read answer self-heals if Stripe
+  later disagrees; a write is permanent. The same call the publishing switch
+  (v3.116.0) and the posting windows (v3.146.0) make, and a test drives it.
+- **IT IS DELIBERATELY NARROW, and the narrowness is the whole safety
+  argument.** With the webhook failing, a stale `periodEnd` is the NORMAL state
+  of a healthy renewing subscriber -- so reading that on its own as an ending
+  would lock out every paying customer at once. A stale `periodEnd` alone is
+  never enough: it counts only alongside `cancelAtPeriodEnd`. Most of
+  `test/subscription-ended.test.mjs` pins that direction rather than the fix,
+  because **the dangerous failure is the other one**.
+- **`past_due` and `unpaid` are NOT endings.** Stripe retries those for weeks
+  and most are paid in the end; treating one as an ending cuts off a customer
+  who is about to pay. `TERMINAL_SUBSCRIPTION_STATUSES` is `canceled`,
+  `cancelled` (our own `clearSubscription` writes the British spelling) and
+  `incomplete_expired`.
+- **The operator is never cut off** (`unlimited` short-circuits first), and a
+  running access code outranks an ending -- a tester mid-fortnight keeps what
+  they were given.
+- **Bought top-up tokens survive.** They are a balance somebody paid for, not
+  an allowance the plan grants.
+
+### The screen stopped contradicting itself, and one branch came back from the dead
+
+`publicBilling` reported `billing.plan` verbatim, so a lapsed Pro account read
+**"Current plan: Pro"** beside a wallet of zero. It now reports `free` /
+`Basic` / status `cancelled` with `endedAt`, and a `subscription_ended` notice
+is the FIRST blocking notice -- before the grant block, gated on `!grant.active`
+-- which is what makes `canPublish` false, since that is derived from the
+blocking notices (v3.142.0) so the sentence a person reads IS the reason their
+clips are held.
+
+The adapter's `'canceled' || 'cancelled'` -> "Cancelled" pill branch had been
+**unreachable since it was written**, because nothing ever set that status; it
+works now. The `planNote` also stopped telling a lapsed Pro subscriber their
+FREE TRIAL had ended.
+
+### A RED PROBE CAME BACK GREEN, and it found two things
+
+The checkout probe ("refuses the plan they just lost") passed against both
+versions. Two causes, and the second is the more useful:
+
+1. The test had no `fetch` stub, so `liveSubscription` -> `stripeGet` -> a real
+   network call -> `.catch(() => null)` -> null, and the guard was never
+   reached. **The test passed vacuously.**
+2. More importantly, `liveSubscription` filters to
+   `['active','trialing','past_due','unpaid']` -- so a genuinely ended
+   subscription returns null and the "already on that plan" guard is
+   **unreachable for the ended case**. The `createCheckoutSession` change is
+   belt-and-braces consistency, not a reachable bug fix, and the test says so.
+
+One of my own assertions was also wrong rather than the code: it asserted the
+owner's `status` reads `active`, when `publicBilling` reports `billing.status`
+verbatim for an unlimited account. Corrected to assert what actually matters --
+the owner is unlimited whatever the row says, and is never told their own
+product has cut them off.
+
+12 tests, all 7 probes proven red, 2062 JS / 0 fail.
+
+**What this does NOT fix: the signing secret is still wrong** (open item 4 and
+the v3.27.0 entry). This makes the app right about a cancellation without the
+webhook; it does not make renewals, plan changes or the books right, and those
+still need the secret.

@@ -10292,6 +10292,18 @@
             + ' Top-up tokens you bought stay on the account.';
         }
         /*
+         * A subscription that has actually ENDED, rather than one winding down.
+         * Stated before the free-trial line below, because "your free trial has
+         * ended" is the wrong sentence for somebody whose paid period ran out --
+         * and on an established account that is the line they would have read.
+         */
+        if ((status === 'canceled' || status === 'cancelled') && (current.plan || 'free') === 'free') {
+          return (current.endedAt
+            ? 'Your subscription ended on ' + billingDate(current.endedAt) + '. '
+            : 'Your subscription has ended. ')
+            + 'Choose a plan to start importing and posting again \u2014 your clips are untouched.';
+        }
+        /*
          * The grant's fortnight is the window that applies, so it is stated
          * before the free week -- which runs underneath it and is not what
          * decides anything while a code is live.

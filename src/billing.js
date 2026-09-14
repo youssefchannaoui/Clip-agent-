@@ -323,6 +323,86 @@ export function plans() {
 }
 
 /**
+ * Stripe statuses that can only ever mean the subscription is OVER.
+ *
+ * `past_due` and `unpaid` are deliberately absent: Stripe goes on retrying
+ * those for weeks and most of them are paid in the end, so treating one as an
+ * ending is cutting off a customer who is about to pay. Our own
+ * `clearSubscription` writes the British spelling, hence both.
+ */
+const TERMINAL_SUBSCRIPTION_STATUSES = Object.freeze([
+  'canceled', 'cancelled', 'incomplete_expired',
+]);
+
+/**
+ * THE PAID PERIOD IS OVER -- decided locally, never waiting on a webhook.
+ *
+ * `clearSubscription` runs on `customer.subscription.deleted`, and that one
+ * webhook was the only thing that had ever moved an account back to free. So
+ * the entire wind-down rested on a delivery this deployment demonstrably
+ * drops: the signing secret has been rejecting them since 29 Aug (see
+ * `webhookSecretNote`). Measured on the live data before this was written --
+ * a Pro subscription cancelled forty days ago was indistinguishable from an
+ * active one: the same 650 tokens, DeenAI unlocked, clips still going out.
+ * Somebody who cancelled kept everything they had cancelled.
+ *
+ * This is the second net, and it is v3.39.0's argument pointed the other way:
+ * neither direction of the billing lifecycle may depend on a webhook that does
+ * not arrive.
+ *
+ * IT IS DELIBERATELY NARROW, BECAUSE THE TWO WAYS OF BEING WRONG ARE NOT
+ * EQUAL. Cut off somebody who has paid and they cannot work and they write in;
+ * leave somebody a day past their period and it costs pennies. So only two
+ * things count as over, and neither can describe a customer whose money is
+ * still good:
+ *
+ *   - A cancellation that WE OR STRIPE RECORDED (`cancelAtPeriodEnd`, written
+ *     by `setCancelAtPeriodEnd` from Stripe's own response, or by the webhook)
+ *     whose end instant has passed. Stripe will not renew it, so there is no
+ *     late payment that could make this reading wrong.
+ *   - A status Stripe documents as terminal.
+ *
+ * A STALE `periodEnd` ON ITS OWN IS NEVER ENOUGH, and that is the whole care
+ * in this function. With the webhook failing, a period end in the past is the
+ * NORMAL state of a perfectly good renewing subscriber -- their renewal simply
+ * never reached us. Reading that as an ending would lock out every paying
+ * customer on the deployment at once, which is precisely the mistake this was
+ * held back from shipping to avoid.
+ *
+ * It READS and never writes, like the retired publishing switch and the
+ * truncated posting windows before it: if Stripe later says the subscription
+ * is alive after all, the answer corrects itself with nothing to repair.
+ */
+export function subscriptionEnded(billing = {}) {
+  const none = { ended: false, at: null, reason: '' };
+  if (!billing || !billing.plan) return none;
+  if (normalisePlanId(billing.plan) === 'free' || billing.plan === 'admin') return none;
+
+  const status = String(billing.status || '').toLowerCase();
+  if (TERMINAL_SUBSCRIPTION_STATUSES.includes(status)) {
+    return { ended: true, at: Number(billing.periodEnd || 0) || null, reason: 'status' };
+  }
+
+  if (billing.cancelAtPeriodEnd) {
+    const at = Number(billing.cancelAt || billing.periodEnd || 0);
+    if (at && now() >= at) return { ended: true, at, reason: 'cancelled' };
+  }
+  return none;
+}
+
+/**
+ * The plan this account is actually ON right now.
+ *
+ * ONE answer, so the tier, the wallet, the paid check and the checkout button
+ * cannot disagree about whether a subscription is still running -- which is
+ * exactly how a screen comes to say "Current plan: Pro" beside an empty
+ * allowance.
+ */
+function activePlanId(billing = {}) {
+  return subscriptionEnded(billing).ended ? 'free' : (billing?.plan || 'free');
+}
+
+/**
  * Which tier this account is on.
  *
  * The operator counts as Studio: the person running the product must never be
@@ -358,8 +438,11 @@ export function tierOf(user) {
 export function paidTierOf(user) {
   if (!user) return 'basic';
   const billing = ensureUserBilling(user);
-  const id = normalisePlanId(billing?.plan || 'free');
-  if (id === 'free' || !billing?.plan) return 'basic';
+  // The ACTIVE plan, so a subscription whose period has ended stops buying
+  // features the moment it ends rather than whenever a webhook happens to land.
+  const plan = activePlanId(billing);
+  const id = normalisePlanId(plan || 'free');
+  if (id === 'free' || !plan) return 'basic';
   return id.startsWith('studio') ? 'studio' : 'pro';
 }
 
@@ -515,7 +598,9 @@ function allowance(planId) {
  * so the customer's first paid day starts on a clean full allowance.
  */
 function walletAllowance(billing = {}, user = null) {
-  const planId = normalisePlanId(billing.plan || 'free');
+  // An ended subscription resolves to free here too, or the tier would drop
+  // while the wallet went on handing out a paid plan's tokens.
+  const planId = normalisePlanId(activePlanId(billing));
   const full = allowance(planId);
   // The free plan IS the trial: a fixed number of tokens inside a fixed number
   // of days. Once the window closes the allowance is nothing, not a smaller
@@ -726,7 +811,8 @@ export function planFeatures(user) {
 // the operator's own account must never be locked out of its own features.
 export function isPaid(user) {
   const billing = ensureUserBilling(user);
-  return Boolean(billing && billing.plan && billing.plan !== 'free');
+  const plan = activePlanId(billing);
+  return Boolean(billing && plan && plan !== 'free');
 }
 
 export function isUnlimited(user) {
@@ -738,7 +824,10 @@ export function publicBilling(user) {
   if (!user) return { enabled: config.stripeEnabled, plans: plans(), tokenRatePerMinute: tokenRate() };
   const billing = ensureUserBilling(user);
   const unlimited = isUnlimited(user);
-  const currentPlan = billing.plan || 'free';
+  const ended = unlimited ? { ended: false, at: null, reason: '' } : subscriptionEnded(billing);
+  // The plan the screen DESCRIBES is the one the account is on, so the header,
+  // the plan card and the allowance under them cannot tell three stories.
+  const currentPlan = ended.ended ? 'free' : (billing.plan || 'free');
   const allow = unlimited ? Infinity : walletAllowance(billing, user);
   const used = Number(billing.tokensUsed || 0);
   const reserved = Number(billing.tokensReserved || 0);
@@ -750,6 +839,28 @@ export function publicBilling(user) {
   const free = unlimited ? { expired: false, daysLeft: null, endsAt: null } : freeWindow(user, billing);
   const grant = unlimited ? grantState({}) : grantState(billing);
   const notices = [];
+  /*
+   * A SUBSCRIPTION THAT HAS ENDED SPEAKS BEFORE EVERYTHING ELSE.
+   *
+   * It is the most recent and most specific thing true of the account, and the
+   * adapter shows only the first blocking notice -- so a lapsed subscriber
+   * must not be told instead about a free week that ran out months ago.
+   *
+   * Silenced while a code is RUNNING: a grant raises the tier and the wallet
+   * on its own, so that account genuinely has access and blocking it would
+   * stop somebody working for no reason.
+   */
+  if (!unlimited && ended.ended && !grant.active) {
+    notices.push({
+      id: `subscription-ended-${ended.at || 0}`,
+      kind: 'subscription_ended',
+      title: 'Your subscription has ended',
+      message: 'Your paid period is over, so importing and posting are paused. '
+        + 'Choose a plan to pick up where you left off — your lectures, clips and templates are untouched.',
+      action: 'Choose plan',
+      blocking: true,
+    });
+  }
   /*
    * The grant speaks first, and silences the free-window pair while it has
    * anything to say. A tester's fortnight is the recent and specific truth;
@@ -795,7 +906,7 @@ export function publicBilling(user) {
   // announced before it arrives and stated plainly once it has. Silenced only
   // while a grant is RUNNING, or once one has ended and taken the account with
   // it -- there the grant's own sentence is the recent and specific truth.
-  if (!unlimited && !grant.active && !(grant.ended && free.expired) && currentPlan === 'free' && free.endsAt) {
+  if (!unlimited && !ended.ended && !grant.active && !(grant.ended && free.expired) && currentPlan === 'free' && free.endsAt) {
     if (free.expired) {
       notices.push({
         id: `free-ended-${free.endsAt}`,
@@ -897,7 +1008,10 @@ export function publicBilling(user) {
         .filter(([key]) => !planFeatures(user)[key])
         .map(([key, feature]) => [key, { label: feature.label, tier: feature.tier, tierName: TIERS[feature.tier]?.name || feature.tier }])),
       features: planFeatures(user),
-      status: billing.status || 'free',
+      // Reported as cancelled once the period is genuinely over. The adapter has
+      // had a branch for exactly this state since v3.23.0 and nothing could ever
+      // reach it, because no path set the status without also clearing the plan.
+      status: ended.ended ? 'cancelled' : (billing.status || 'free'),
       unlimited,
       allowance: unlimited ? null : allow,
       baseRemaining,
@@ -909,10 +1023,14 @@ export function publicBilling(user) {
       periodStart: billing.periodStart || null,
       periodEnd: billing.periodEnd || null,
       periodEndsInDays,
-      cancelAtPeriodEnd: Boolean(billing.cancelAtPeriodEnd),
+      // "Ending soon" is a promise about the future, so it stops the moment the
+      // ending has happened -- otherwise the card reads as winding down forever.
+      cancelAtPeriodEnd: !ended.ended && Boolean(billing.cancelAtPeriodEnd),
       // Stripe's own cancel_at when it sent one, else the period end -- which is
       // when access actually stops either way.
-      cancelAt: billing.cancelAtPeriodEnd ? (billing.cancelAt || billing.periodEnd || null) : null,
+      cancelAt: !ended.ended && billing.cancelAtPeriodEnd ? (billing.cancelAt || billing.periodEnd || null) : null,
+      // When the paid period actually ran out, so the screen can say the date.
+      endedAt: ended.ended ? (ended.at || null) : null,
       trial,
       freeTrial: unlimited ? { endsAt: null, daysLeft: null, expired: false } : freeWindow(user, billing),
       // The screen shows the grant while it runs and says so once it has
@@ -1267,7 +1385,10 @@ export async function createCheckoutSession(user, planId, currency = '') {
   const billing = ensureUserBilling(user);
   const existing = await liveSubscription(user);
   if (existing) {
-    if (normalisePlanId(billing.plan) === plan.id) throw new Error(`You are already on ${plan.name}.`);
+    // Against the ACTIVE plan: somebody whose Pro month has ended is not "already
+    // on Pro", and refusing them the one button that would fix it is the worst
+    // possible place for this guard to be wrong.
+    if (normalisePlanId(activePlanId(billing)) === plan.id) throw new Error(`You are already on ${plan.name}.`);
     return switchSubscriptionPlan(user, existing, plan);
   }
 
