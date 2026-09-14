@@ -1022,7 +1022,19 @@ export function connectionStatus(user) {
       // `needsReconnect` is the one flag the browser reads to say "reconnect":
       // a credential that cannot be renewed, or a connection whose last test
       // failed. Never derived from "configured but not connected".
-      youtube: { configured: providerConfigured('buffer') || providerConfigured('youtube'), connected: youtubeSummary(userId).length > 0, accounts: youtubeSummary(userId), lastTestAt: buffer?.lastTestAt || youtube?.lastTestAt || null, lastTestError: buffer?.lastTestError || youtube?.lastTestError || null, needsReconnect: youtubeSummary(userId).some(a => a.needsReconnect) || Boolean(buffer?.lastTestError) || Boolean(youtube?.lastTestError) },
+      /*
+       * `configured` means A ROAD A CUSTOMER CAN ACTUALLY TAKE, and for
+       * YouTube that is Buffer alone. There is no /api/social/youtube/connect
+       * route -- the connect matcher accepts meta, tiktok, instagram and
+       * buffer -- so reporting configured because a direct client id happens
+       * to be set draws a Connect button that reaches nothing. That shipped,
+       * and it is invariant 9 on the one row with no other way in.
+       *
+       * `viaBuffer` is what the dialog sends somebody to. Restoring direct
+       * YouTube means restoring the route as well as the flag, and
+       * test/connect-routes.test.mjs fails until both are there.
+       */
+      youtube: { configured: providerConfigured('buffer'), viaBuffer: true, connected: youtubeSummary(userId).length > 0, accounts: youtubeSummary(userId), lastTestAt: buffer?.lastTestAt || youtube?.lastTestAt || null, lastTestError: buffer?.lastTestError || youtube?.lastTestError || null, needsReconnect: youtubeSummary(userId).some(a => a.needsReconnect) || Boolean(buffer?.lastTestError) || Boolean(youtube?.lastTestError) },
       // Instagram is the one platform with TWO roads in, and the row reports
       // both: `configured` is whether either can reach it, `instagramLogin`
       // is whether the direct one is available, which is what decides the

@@ -2168,6 +2168,9 @@
   var OAUTH_OF = { youtube: 'youtube', instagram: 'meta', facebook: 'meta', tiktok: 'tiktok' };
   function oauthFor(key, status) {
     if (key === 'instagram' && status && status.instagramLogin) return 'instagram';
+    // YouTube has no connect route of its own -- it is reached through Buffer.
+    // Sending the button at 'youtube' is a press that hits a 404.
+    if (status && status.viaBuffer) return 'buffer';
     return OAUTH_OF[key] || key;
   }
   var PLATFORMS = ['youtube', 'tiktok', 'instagram', 'facebook'];
