@@ -673,7 +673,24 @@ export function healImpossibleTargets() {
     if (!targets.length) continue;
     const keep = targets.filter(target => {
       if (target.status !== 'scheduled') return true;
-      const refusal = social.platformRefusal(target.provider, clip);
+      /*
+       * TWO DIFFERENT QUESTIONS, and both have to be asked here.
+       *
+       * platformRefusal: this CLIP is wrong for that platform (a 62-second
+       * clip against Facebook Reels' 60). targetUnreachable: this ACCOUNT has
+       * no road to that platform at all -- which is what three days of failed
+       * YouTube posts were, after the direct OAuth road was retired on 11 Sept
+       * and Buffer had not been connected in its place.
+       *
+       * Dropping is SELF-HEALING rather than destructive: tick() re-derives an
+       * empty target list at the slot, so the moment Buffer is connected
+       * (which re-enables YouTube through enableOnConnect) these clips take
+       * the road again by themselves. Leaving them is what costs -- five
+       * attempts each, on a doubling backoff, against a destination that
+       * cannot exist.
+       */
+      const refusal = social.platformRefusal(target.provider, clip)
+        || social.targetUnreachable(target, clip.userId);
       if (!refusal) return true;
       log(`"${clip.title || clip.id}" will not post to ${target.provider}: ${refusal}`, 'warn', clip.userId);
       dropped += 1;

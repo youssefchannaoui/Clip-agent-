@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2062 JS + 973 Python**
+- `npm test` and `npm run check` must pass. Currently **2069 JS + 973 Python**
   (17 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -18954,3 +18954,77 @@ product has cut them off.
 the v3.27.0 entry). This makes the app right about a cancellation without the
 webhook; it does not make renewals, plan changes or the books right, and those
 still need the secret.
+
+## The road was taken away and the clips went on driving at it (v3.197.1, 14 Sept 2026)
+
+Youssef: "fix buffer issue as well". **Found in the deployment's own log rather
+than in the code**, which is why it had gone three days unreported:
+
+    11 Sept 15:53  Retired 3 direct YouTube OAuth connections; future YouTube
+                   publishing now goes through Buffer.
+    11 Sept 23:00  youtube (DeenClipped) publishing failed ...
+    12 Sept 04:00  youtube (DeenClipped) publishing failed ...
+    12 Sept 06:30  youtube (DeenClipped) publishing failed ...
+                   "Connect your YouTube channel through Buffer before
+                    publishing."
+
+**EVERY SCHEDULED YOUTUBE CLIP HAS FAILED SINCE THE MINUTE THE SWEEP RAN.**
+
+### Whose fault it was, precisely
+
+`retireDirectYoutubeConnections` did its half correctly: it removed the dormant
+direct credentials AND switched `youtube.enabled` off, so no NEW clip targets
+YouTube. What it could not do is reach the rows already on disk. **`targets` are
+stamped ONCE at schedule time and `tick()` only re-derives an EMPTY list**
+(v3.115.2) -- so every clip scheduled before that minute still named a road that
+had just been taken away, and went on failing at its slot, five attempts each on
+a doubling backoff, against a destination that could not exist.
+
+This is v3.135.0's Facebook Reels shape asking a DIFFERENT question. That one is
+"this CLIP is wrong for that platform" (a 62-second clip against Reels' 60);
+this one is "this ACCOUNT has no road to that platform at all". Same remedy,
+`healImpossibleTargets`, which now asks both.
+
+- **`targetUnreachable` ASKS THE SAME TWO QUESTIONS `publishTarget` ASKS, IN
+  THE SAME ORDER**, and that is the whole reason it can be trusted to delete
+  somebody's scheduled destination. A second implementation of "can this
+  publish" would eventually disagree with the one that actually publishes, and
+  the disagreement would read as posts silently vanishing.
+- **DELIBERATELY NARROW.** Only YouTube-with-no-Buffer-channel is answered,
+  because it is the one case that is CERTAIN and ACCOUNT-WIDE -- publishTarget
+  throws before any network call. **An expired token is NOT this**: it can be
+  renewed by reconnecting and the clip should WAIT, which is what
+  `needsReconnect` and `markCredentialDead` are for. Widening this to "the
+  credential looks unhealthy" would delete scheduled posts over a bad ten
+  minutes.
+- **DROPPING IS SELF-HEALING HERE, not destructive, and that is what makes it
+  the right remedy.** `tick()` re-derives an empty target list at the slot, and
+  `connectBuffer` calls `enableOnConnect` -- so connecting Buffer re-enables
+  YouTube and these clips take the road again BY THEMSELVES. The clip keeps its
+  slot and its approval, so nothing is re-reviewed. A test drives exactly that.
+- **Only a `scheduled` target, and never a posted clip.** A FAILED target is
+  deliberately left alone too: it is the record of what happened, the row says
+  why in actionable words (v3.194.1), and erasing it would hide the outage
+  rather than end it.
+
+### The dangerous direction is the other one
+
+A drop that fired on a WORKING destination would delete scheduled posts at boot
+with nothing on any screen to say so. Most of `test/youtube-road-gone.test.mjs`
+pins that: the identical target is KEPT the moment Buffer carries the channel,
+TikTok is untouched throughout, and `targetUnreachable` is driven directly in
+both states. The probe that removes the `viaBuffer` check fails two tests.
+
+Seven tests, all four probes proven red -- and one of my own was vacuous first:
+the self-healing test asserted the clip kept its slot and approval, which is
+true whether or not anything was dropped, so it survived the probe that removed
+the whole fix. It asserts the drop as well now, and the probe then fails both.
+
+### WHAT THIS DOES NOT FIX, and it is Youssef's to do
+
+**Buffer is configured on the deployment and no channel is connected to it.**
+The refusal message proves the first half (it only says "Connect your YouTube
+channel through Buffer" when `providerConfigured('buffer')` is true), and the
+empty channel list is the second. This release stops the failing; it cannot
+connect an account. **Connections -> YouTube -> Connect** is the whole of it,
+and the clips resume on their own afterwards.

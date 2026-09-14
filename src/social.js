@@ -1322,6 +1322,44 @@ export function platformRefusal(provider, clip, { assumeKnown = false } = {}) {
   return '';
 }
 
+/**
+ * THE DESTINATION HAS NO ROAD AT ALL -- not "this clip is wrong for it", which
+ * is platformRefusal's question, but "this account cannot reach this platform
+ * however long we retry".
+ *
+ * Measured on production, 14 Sept 2026: `retireDirectYoutubeConnections` ran on
+ * 11 Sept ("Retired 3 direct YouTube OAuth connections"), and from that minute
+ * every scheduled YouTube clip failed with "Connect your YouTube channel
+ * through Buffer before publishing." The sweep correctly switched
+ * `youtube.enabled` off, so no NEW clip targets YouTube -- but `targets` are
+ * stamped once at schedule time and `tick()` only re-derives an EMPTY list
+ * (v3.115.2), so every clip scheduled before that minute still named a road
+ * that had been taken away. Three days of red rows for a destination nothing
+ * could ever deliver.
+ *
+ * IT ASKS THE SAME TWO QUESTIONS publishTarget ASKS, IN THE SAME ORDER, and
+ * that is the whole reason it can be trusted: a second implementation of
+ * "can this publish" would eventually disagree with the one that actually
+ * publishes, and the disagreement would read as clips vanishing.
+ *
+ * Deliberately narrow. Only YouTube-with-no-Buffer-channel is answered,
+ * because it is the one case that is CERTAIN and ACCOUNT-WIDE -- publishTarget
+ * throws before any network call is made. An expired token is NOT this: it can
+ * be renewed by reconnecting and the clip should wait, which is what
+ * `needsReconnect` and `markCredentialDead` are for.
+ */
+export function targetUnreachable(target, userId) {
+  const provider = String(target?.provider || '');
+  if (!provider || !userId) return '';
+  if (selectedAccount(provider, target?.accountId || '', userId)?.viaBuffer) return '';
+  if (provider === 'youtube' && !config.directYoutubeOAuthEnabled) {
+    return providerConfigured('buffer')
+      ? 'YouTube posts through Buffer, and no Buffer channel is connected on this account.'
+      : 'YouTube publishing is not configured on this deployment.';
+  }
+  return '';
+}
+
 export function plannedChannelsFor(clip) {
   let targets = [];
   try { targets = enabledTargetsForClip(clip, { quiet: true, assumeConsent: true }); }
