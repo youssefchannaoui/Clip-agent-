@@ -70,25 +70,31 @@ test('sign-in is not left switched off by default, so the lockout cannot repeat'
   }
 });
 
-test('an account with no password still has a way back in', () => {
+test('an account with no password has a way back in, and it is no longer the button', () => {
   /*
-   * This is what made the lockout total rather than inconvenient, and it is
-   * worth pinning whichever way sign-in is configured: a provider-only account
-   * cannot sign in with a password it never set, and cannot reset one either.
-   * If Google sign-in is ever switched off again, THIS is the thing that has
-   * to be built first.
+   * WRITTEN EARLIER TODAY ASSERTING THE OPPOSITE, and corrected here.
+   *
+   * It pinned the blanket refusal -- `if (!user || !user.passwordHash) return
+   * { sent: false }` -- as the thing that made the lockout total, on the
+   * reasoning that restoring the button was the fix. Then Render turned out to
+   * hold no Google credentials at all, so the button cannot come back until
+   * somebody supplies them, and "the provider button must exist" stopped being
+   * a guarantee this code can make.
+   *
+   * The refusal is now narrowed to accounts whose provider still WORKS, and a
+   * stranded one gets a recovery link instead. That is pinned properly in
+   * test/stranded-account.test.mjs, driving the real function both ways; what
+   * is kept here is the one-line reason the email form alone is not an answer.
    */
   const auth = withoutComments(read('src/auth.js'));
   assert.match(
     auth,
-    /if \(!user \|\| !user\.passwordHash\) return \{ sent: false \}/,
-    'reset still declines silently for a provider-only account',
-  );
-  assert.match(
-    auth,
     /already connected with Google or Apple/,
-    'and the password form still points at the provider button',
+    'the password form still points at the provider, so it cannot be the only way back',
   );
-  // So the provider button must exist. That is the assertion above; this test
-  // records WHY it matters rather than adding a second copy of it.
+  assert.doesNotMatch(
+    auth,
+    /if \(!user \|\| !user\.passwordHash\) return \{ sent: false \}/,
+    'the blanket refusal is what stranded every Google account; it must not come back',
+  );
 });

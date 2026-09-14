@@ -204,7 +204,28 @@ export function lectureFailedMessage({ title, reason, dashboardUrl }) {
   };
 }
 
-export function passwordResetMessage(link) {
+export function passwordResetMessage(link, { stranded = false } = {}) {
+  /*
+   * TWO MESSAGES, because they answer two different situations and "reset your
+   * password" is wrong for one of them. An account created with Google or
+   * Apple has never had a password, so being told to RESET one reads as a
+   * message meant for somebody else -- which is exactly when a real email gets
+   * taken for a phishing attempt and ignored. `stranded` is that case: the
+   * sign-in provider they chose is no longer available on this deployment, and
+   * this link is how they get back in.
+   */
+  if (stranded) {
+    return {
+      subject: 'Set a password for your DeenClipped account',
+      text: `You asked for a way back into your DeenClipped account.\n\nThis account was created with Google or Apple sign-in, and that option is not available at the moment, so you can set a password instead:\n\n${link}\n\nThe link works once and expires in one hour. Your account, lectures and clips are untouched. If that was not you, ignore this — nothing has changed.`,
+      html: shell(
+        'Set a password',
+        'This account was created with Google or Apple sign-in, and that option is not available at the moment. This link lets you set a password instead. It works once and expires in one hour. If you did not ask for it, ignore this message — nothing has changed.',
+        'Set a password',
+        link,
+      ),
+    };
+  }
   return {
     subject: 'Reset your DeenClipped password',
     text: `Someone asked to reset the password for this DeenClipped account:\n\n${link}\n\nThe link works once and expires in one hour. If that was not you, ignore this — your password has not changed.`,

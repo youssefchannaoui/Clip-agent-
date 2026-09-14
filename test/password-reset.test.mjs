@@ -24,6 +24,16 @@ process.env.APP_SESSION_SECRET = 'password-reset-test-secret-long';
 process.env.EMAIL_API_KEY = 'test-key';
 process.env.EMAIL_FROM = 'hello@deenclipped.online';
 process.env.PUBLIC_BASE_URL = 'https://deenclipped.online';
+/*
+ * Google sign-in CONFIGURED, deliberately, because the back-door test below
+ * depends on it. A provider-only account is refused a reset while its provider
+ * still works, and is let through when none of them do -- so on a deployment
+ * with no Google credentials that account is stranded rather than protected,
+ * and the refusal it is asserting would be the wrong answer. See
+ * test/stranded-account.test.mjs for the other half.
+ */
+process.env.GOOGLE_SIGNIN_CLIENT_ID = 'reset-test-google-client';
+process.env.GOOGLE_SIGNIN_CLIENT_SECRET = 'reset-test-google-secret';
 
 const sent = [];
 const realFetch = globalThis.fetch;
@@ -157,7 +167,7 @@ test('a Google account is not given a password by the back door', async () => {
   const res = await form('/auth/forgot', { email: 'sso@test' });
   assert.equal(res.headers.get('location'), '/reset?sent=1', 'same answer as always');
   assert.equal(sent.length, 0,
-    'an SSO account has no password to reset; sending a link would quietly add a second way in');
+    'an SSO account whose provider still works must not be given a second way in');
 });
 
 test('a dead link says so on arrival, not after retyping a password', async () => {

@@ -557,10 +557,32 @@ export async function requestPasswordReset(email, baseUrlValue) {
   ensureAuthState();
   const clean = cleanEmail(email);
   const user = (state.authUsers || []).find(item => cleanEmail(item.email) === clean);
-  // A Google or Apple account has no password to reset. Sending a link that
-  // sets one would quietly add a second way into an account whose owner chose
-  // single sign-on, so those are left alone -- silently, for the same reason.
-  if (!user || !user.passwordHash) return { sent: false };
+  if (!user) return { sent: false };
+  /*
+   * A GOOGLE OR APPLE ACCOUNT HAS NO PASSWORD, and refusing it a reset was
+   * right for exactly as long as the button it chose still worked.
+   *
+   * The original reasoning -- that a link setting a password quietly adds a
+   * second way into an account whose owner chose single sign-on -- has a
+   * precondition nobody wrote down: that the owner's chosen way in is still
+   * on the screen. On 11 Sept 2026 Google sign-in was switched off and its
+   * credentials were removed from the deployment, and this branch turned
+   * every account created with it into one that could not sign in with a
+   * password, could not reset one, and was told by the email form to use a
+   * button that was no longer drawn. Three days, no way back, the operator's
+   * own account included.
+   *
+   * So the rule is narrowed rather than dropped: a provider-only account is
+   * refused while ANY of its providers can still be used, and is let through
+   * when none of them can. It is self-healing -- restore the credentials and
+   * the refusal comes back on its own, with no flag to remember.
+   *
+   * The security bar is unchanged either way: the link goes to the address on
+   * file, which is the same address the provider vouched for.
+   */
+  const stranded = !user.passwordHash
+    && !Object.keys(user.providers || {}).some(provider => configured(provider));
+  if (!user.passwordHash && !stranded) return { sent: false };
   if (!Array.isArray(state.authResets)) state.authResets = [];
   const raw = token(24);
   state.authResets = state.authResets
@@ -568,9 +590,11 @@ export async function requestPasswordReset(email, baseUrlValue) {
   state.authResets.push({ userId: user.id, hash: sha256(raw), createdAt: now(), expiresAt: now() + RESET_TTL_MS });
   save();
   const link = `${String(baseUrlValue || config.publicBaseUrl || '').replace(/\/+$/, '')}/reset?token=${encodeURIComponent(raw)}`;
-  const message = mailer.passwordResetMessage(link);
+  const message = mailer.passwordResetMessage(link, { stranded });
   const sent = await mailer.send({ to: user.email, ...message });
-  log(`Password reset requested for ${user.email || user.id}.`, 'info', user.id);
+  log(stranded
+    ? `Recovery link sent to ${user.email || user.id}: the sign-in provider on this account is not available, so a password can be set.`
+    : `Password reset requested for ${user.email || user.id}.`, 'info', user.id);
   return { sent };
 }
 
