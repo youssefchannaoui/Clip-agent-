@@ -688,6 +688,21 @@ body.dc-page-hidden .slh-stages .st-line.live::after { animation-play-state: pau
    wrapped two-per-line, which reads as a tag cloud rather than a list of
    accounts. Each channel gets its own full-width row. */
 .studio-conn-accounts { grid-area: accounts; display: flex; flex-direction: column; align-items: stretch; width: 100%; min-width: 0; }
+/* COMING SOON: quieter than every other row, and plainly not a fault. A held
+   platform gets no switch, no buttons and no account line -- an empty control
+   reads as broken where an absent one reads as not yet. The mark keeps its
+   brand colour at half strength so the row is still recognisably that platform
+   at a glance. */
+/* QUIETED BY TOKEN, NEVER BY A BLANKET OPACITY. `opacity: .72` on the row was
+   the first cut and it fades the TEXT toward the ground as well as the chrome:
+   measured, the name fell to 3.38 night / 3.26 paper and the pill's ink to 3.02
+   on paper -- three of four under AA, on a row whose only job is to be read.
+   The mark is decoration and may fade; the words take a quiet ink instead. */
+.studio-conn-row.is-soon { grid-template-areas: "mark who state"; grid-template-columns: auto 1fr auto; }
+.studio-conn-row.is-soon:hover { border-color: var(--dc-line-soft, #1E1E22); background: none; }
+.studio-conn-row.is-soon .studio-conn-mark i { opacity: .55; }
+.studio-conn-row.is-soon .who b { color: var(--dc-ink-dim, #8B8B93); }
+.studio-conn-state.soon { border-color: rgba(217,180,120,.30); background: rgba(217,180,120,.07); color: var(--dc-gold, #D9B478); }
 .studio-conn-verify { grid-column: 1 / -1; display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; padding: 9px 11px;
   border: 1px solid rgba(217,180,120,.28); border-radius: 8px; background: rgba(217,180,120,.06);
   font-size: 11.5px; line-height: 17px; color: var(--dc-ink-dim, #8B8B93); }
@@ -7718,13 +7733,19 @@ function renderStudio(){
       connEls.list.innerHTML=shareOutRow()+rows.map((r,i)=>{
         const colour=(r.heroDotStyle.match(/background: (#[0-9A-Fa-f]{6})/)||[])[1]||'var(--dc-ink-faint, #85858E)';
         const off=/Not configured/.test(r.note);
-        const linked=!off&&!/Connect to publish/.test(r.note);
+        /* HELD BACK ON PURPOSE, which is not the same as unconfigured and must
+           not look like it. The Meta app is Unpublished with Standard Access,
+           so a live-looking Connect would work for the operator and fail for
+           everybody else. It outranks every other state on the row: there is
+           nothing to say about an account on a platform nobody can connect. */
+        const soon=Boolean(r.comingSoon)&&!/^Active$/.test(r.note);
+        const linked=!off&&!soon&&!/Connect to publish/.test(r.note);
         /* The pill beside the name says what state this is in, so the line
            under it is just the account. It used to repeat the state as words
            as well, and the two together truncated mid-sentence. */
         /* For Instagram, WHICH login gets you in -- the one thing somebody with
            no Facebook account needs to know before pressing anything. */
-        const detail=off?'Not set up on the server yet':linked?r.handle
+        const detail=soon?'Being set up — it will appear here when it opens':off?'Not set up on the server yet':linked?r.handle
           :r.key==='instagram'
             ?(r.connectWith==='Instagram'
               ?'Log in with Instagram — no Facebook Page needed'
@@ -7737,8 +7758,8 @@ function renderStudio(){
         const on=/^Active$/.test(r.note)&&!stale;
         /* Four states worth telling apart at a glance: publishing, needing a
            reconnect, connected but switched off, and not connected at all. */
-        const stateClass=on?'on':linked?'idle':'';
-        const stateWord=off?'Unavailable':stale?'Needs reconnecting':on?'Publishing':linked?'Paused':'Not connected';
+        const stateClass=soon?'soon':on?'on':linked?'idle':'';
+        const stateWord=soon?'Coming soon':off?'Unavailable':stale?'Needs reconnecting':on?'Publishing':linked?'Paused':'Not connected';
         /* WHAT PRESSING THIS ACTUALLY DOES, said on the button.
 
            Youssef, 8 Sept 2026: "to add, like, more than one account, I don't
@@ -7760,6 +7781,11 @@ function renderStudio(){
           :!linked?`Sign in with ${r.connectWith||r.name} to publish here`
           :canAdd?`Connect another ${r.name} channel — ${(r.accounts||[]).length} of ${allowedHere} connected. Signing in with the same one refreshes it instead.`
           :`Sign in again to refresh this ${r.name} connection`;
+        if(soon)return `<div class="studio-conn-row is-soon">
+          <span class="studio-conn-mark"><i class="${esc(r.icon)}" style="color:${esc(colour)}"></i></span>
+          <span class="who"><b>${esc(r.name)}</b><span>${esc(detail)}</span></span>
+          <span class="studio-conn-state soon">${esc(stateWord)}</span>
+        </div>`;
         return `<div class="studio-conn-row">
           <span class="studio-conn-mark"><i class="${esc(r.icon)}" style="color:${esc(colour)}"></i></span>
           <span class="who"><b>${esc(r.name)}</b><span>${esc(detail)}</span></span>

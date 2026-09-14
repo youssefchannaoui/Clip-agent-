@@ -929,6 +929,7 @@ export function connectionStatus(user) {
       // is whether the direct one is available, which is what decides the
       // button the dialog draws.
       instagram: {
+        comingSoon: config.metaComingSoon,
         configured: instagramConfigured(),
         instagramLogin: providerConfigured('instagram'),
         metaLogin: providerConfigured('meta'),
@@ -939,7 +940,7 @@ export function connectionStatus(user) {
         needsReconnect: instagramDirect(userId).some(a => a.needsReconnect) || Boolean(instagramConn?.lastTestError)
           || (instagramDirect(userId).length === 0 && Boolean(meta?.lastTestError)),
       },
-      facebook: { configured: providerConfigured('meta'), connected: metaSummaries('facebook', userId).length > 0, accounts: metaSummaries('facebook', userId), lastTestAt: meta?.lastTestAt || null, lastTestError: meta?.lastTestError || null, needsReconnect: Boolean(meta?.lastTestError) },
+      facebook: { comingSoon: config.metaComingSoon, configured: providerConfigured('meta'), connected: metaSummaries('facebook', userId).length > 0, accounts: metaSummaries('facebook', userId), lastTestAt: meta?.lastTestAt || null, lastTestError: meta?.lastTestError || null, needsReconnect: Boolean(meta?.lastTestError) },
       tiktok: { configured: providerConfigured('tiktok'), connected: tiktokSummary(userId).length > 0, accounts: tiktokSummary(userId), requiresManualApproval: true, lastTestAt: tiktok?.lastTestAt || null, lastTestError: tiktok?.lastTestError || null, needsReconnect: tiktokSummary(userId).some(a => a.needsReconnect) || Boolean(tiktok?.lastTestError) },
     },
   };

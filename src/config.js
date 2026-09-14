@@ -473,6 +473,23 @@ export const config = {
    * unverified when it is not.
    */
   googleUnverifiedNotice: boolean(process.env.GOOGLE_UNVERIFIED_NOTICE, true),
+  /*
+   * INSTAGRAM AND FACEBOOK ARE HELD BACK, and it is a product decision rather
+   * than a missing credential (Youssef, 14 Sept 2026: "Meta, I don't really
+   * care ... if you can put on connections coming soon or something for it").
+   *
+   * The Meta app is Unpublished with Standard Access, so only somebody with a
+   * ROLE on it can connect -- a row that looked live would draw a Connect
+   * button that works for the operator and fails for everybody else, which is
+   * worse than saying nothing. Saying "coming soon" is the honest version of
+   * the state it is actually in.
+   *
+   * Its own flag rather than reading providerConfigured: the credentials ARE
+   * set, so configuration cannot answer this question, and the operator may
+   * want the rows live again the moment Meta's app review passes without a
+   * deploy.
+   */
+  metaComingSoon: boolean(process.env.META_COMING_SOON, true),
   // No YOUTUBE_DATA_API_KEY here on purpose. Nothing in this product asks the
   // YouTube Data API about a video, and an unread key sitting in config is how
   // a `videos.list` call quietly comes back -- which is the exact thing Google

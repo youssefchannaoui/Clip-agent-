@@ -10380,6 +10380,10 @@
            * and the notice simply never appears.
            */
           unverifiedNotice: Boolean(p.status && p.status.unverifiedNotice),
+          // Held back deliberately rather than unconfigured -- see
+          // config.metaComingSoon. Carried explicitly for the same reason as
+          // the line above: this binding picks its fields one by one.
+          comingSoon: Boolean(p.status && p.status.comingSoon),
           // Opens the combined dialog rather than a per-platform one: seeing all
           // four at once is what makes the publishing picture legible.
           open: function (e) { stop(e); global.StudioAdapter.onOpenConnections(p.key); },

@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2088 JS + 973 Python**
+- `npm test` and `npm run check` must pass. Currently **2093 JS + 973 Python**
   (17 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -10378,7 +10378,7 @@ platform and only one of them is yes.
 
 | Platform | Public? | Why |
 |---|---|---|
-| **YouTube** | **Yes, but capped at 100 accounts EVER** | OAuth consent screen is *In production*, User type *External* — so anyone can connect. But the app is **unverified**, which imposes a **100-user lifetime cap** (2 used) that "cannot be reset or changed", and users may meet the "unverified app" warning screen. Lifting it needs Google verification. |
+| **YouTube** | **Yes, but capped at 100 accounts EVER** | OAuth consent screen is *In production*, User type *External* — so anyone can connect. But the app is **unverified**, which imposes a **100-user lifetime cap** (2 used) that "cannot be reset or changed", and users meet the "unverified app" warning screen. **Lifting it needs verification, and the request was CANCELLED on 12 Sept 2026 at our own request** — see *Google data access: WITHDRAWN AND CANCELLED* above. Google's standing objection is ToS **2b**, third-party rights, about the product's URL ingestion rather than about API use, so it is a product decision rather than a resubmission. |
 | **TikTok** | **YES — approved 14 Sept 2026** | The app review passed, so the unaudited-app restriction is gone and a connected account posts at whatever audience TikTok offers it. The audience is still CHOSEN per post with nothing preselected — that is TikTok's permanent rule for every third-party tool, not a stage. **Proof that it is live on the API is Channels → TikTok → Test**, which stores `privacy_level_options`; `PUBLIC_TO_EVERYONE` among them is the answer. |
 | **Facebook** | **No** | The Meta app is **Unpublished** (development mode) and the permissions are at **Standard Access**. Only someone with a ROLE on the app can connect. |
 | **Instagram** | **No** | Same Meta app, and it points at `eurotrimau` rather than a DeenClipped account. |
@@ -10392,9 +10392,54 @@ The Google **100-user cap is the one that cannot be undone** — it applies over
 the project's lifetime. Verification is the only way past it, and it is worth
 starting before the count climbs rather than after.
 
-### Google data access: rejected, refilled, RESUBMITTED (9 Sept 2026)
+### Google data access: WITHDRAWN AND CANCELLED (12 Sept 2026)
 
-**It is under review as of 9 Sept 2026** -- Verification centre reads
+**READ THIS BEFORE ACTING ON ANYTHING BELOW IT.** Measured from the mailbox on
+14 Sept 2026, not recalled — this section said "under review" for two days after
+it stopped being true, and that claim was repeated twice in a session before
+anybody opened the thread.
+
+The real sequence, thread `1a08144f13c9b5d9`:
+
+    8 Sept 13:46  Google refuses — ToS 5a (arbitrary YouTube videos)
+    9 Sept 06:36  our reply: videos.list removed, own-channel use only
+    9 Sept 17:48  Google refuses AGAIN — now 2b AND 5a
+   10 Sept 16:33  a reply claiming URL ingestion was removed (later trashed)
+   10 Sept 17:08  a CORRECTION: "DeenClipped retains its URL-based workflow"
+   11 Sept 08:04  Google refuses AGAIN — **Section 2b alone**
+   11 Sept 15:36  **we withdrew**: "not requesting re-approval ... handled
+                  through Buffer ... no further action requested"
+   12 Sept 08:29  **Google CANCELLED the verification request.**
+
+**So there is nothing in a queue.** Verification is not pending, not slow, and
+not waiting on a reviewer. It was closed at our own request, and the reason
+given to Google was the Buffer brokerage — **which was removed on 14 Sept**, so
+the stated basis of the withdrawal no longer exists.
+
+**THE OBJECTION MOVED, AND THE LAST ONE IS THE HARD ONE.** 5a is about content
+reached THROUGH a Google API, and v3.182.0 answered it by deleting
+`videos.list`. The final refusal drops 5a and cites **2b alone** — *"You will
+not use the APIs to encourage or promote illegal activity or violation of third
+party rights"* — which is about the PRODUCT, not about API use. Google's
+position is that downloading arbitrary YouTube videos with yt-dlp and cutting
+derivative clips violates third-party rights, and that they will not grant
+OAuth to an app that does it, whether or not their API is involved.
+
+**The rights-attestation answer has already been tried and refused.** The
+10 Sept reply described the server-enforced `sourceRightsConfirmed` gate; the
+11 Sept refusal followed it.
+
+So the options are a product decision rather than a paperwork one, and none of
+them is free: restrict URL ingestion to a channel the customer has connected
+and proven they own; drop URL ingestion for uploads only; stop publishing to
+YouTube from the app; or leave it unverified at the 100-user cap with the
+warning screen. **Nothing is broken meanwhile** — cancelling a verification
+request does not revoke the OAuth client, so YouTube publishing still works
+today for up to 100 accounts, with the warning.
+
+**WHAT THIS SECTION USED TO SAY**, kept because the stale version was acted on:
+
+**It was under review as of 9 Sept 2026** -- Verification centre reads
 *"Your app's data access is under review."* The rejection below is history and
 is kept because the two gaps it names are the ones that will be checked again.
 
@@ -19561,3 +19606,63 @@ hardcoded), which is both unambiguous and the actual reason.
 **What is deliberately NOT banned is the per-post audience choice.** That is
 TikTok's permanent rule for every third-party tool, the pages should go on
 explaining it, and only the unreviewed claim is forbidden.
+
+## Meta is held behind "coming soon", and the Google answer was in the mailbox (v3.201.0, 14 Sept 2026)
+
+Youssef: "Meta, I don't really care ... if you can put on connections coming
+soon or something for it, like, make it look very nice and sleek ... and let's
+try and get this YouTube thing so we cannot have any, like, unsafe looking."
+
+### THE FINDING IS THAT THE VERIFICATION WAS CANCELLED, NOT PENDING
+
+See *Google data access: WITHDRAWN AND CANCELLED* above for the measured
+timeline. It is recorded twice on purpose: this file claimed "under review" for
+two days after it stopped being true, and that claim was repeated twice in a
+session before anybody opened the thread. **A verification state is a fact about
+somebody else's queue and rots the moment it is written down — read the mailbox,
+do not recall it.**
+
+The substance, because it changes what "figure out a way" means: the final
+refusal (11 Sept) cites ToS **2b alone** — third-party rights — having dropped
+5a. 5a is about content reached THROUGH a Google API and v3.182.0 answered it.
+2b is about the PRODUCT: Google's position is that downloading arbitrary YouTube
+videos and cutting derivative clips violates third-party rights, whether or not
+their API is involved. The `sourceRightsConfirmed` attestation was described to
+them on 10 Sept and refused on 11 Sept, so that answer is already spent.
+
+### Meta: held, and held is not broken
+
+`config.metaComingSoon` (`META_COMING_SOON`, default true) →
+`providers.{instagram,facebook}.comingSoon` → a row with a gold **Coming soon**
+pill, the platform's own mark at half strength, one line of explanation, and
+**nothing to press**.
+
+- **Its own flag, never derived from `providerConfigured`.** The Meta
+  credentials ARE set, so configuration cannot answer this question. What makes
+  it honest rather than cosmetic is that the Meta app is Unpublished at Standard
+  Access — only somebody with a ROLE on it can connect — so a live-looking
+  Connect works for the operator and fails for every customer, after sending
+  them to Facebook and back.
+- **`soon` outranks `linked`**, which is the whole correctness of it: a stale
+  account left on a held platform must not draw a Reconnect button for a login
+  nobody can complete. `linked` is computed FROM `soon`.
+- **An absent control, never an empty one.** A disabled button reads as broken;
+  no button reads as not yet. The held row returns early with mark, name and
+  pill alone, and a test asserts none of the four control attributes appears in
+  that branch.
+- **One variable brings both back together** when Meta's review passes — no
+  deploy, and the same shape as `GOOGLE_UNVERIFIED_NOTICE`.
+
+### QUIETED BY TOKEN, NEVER BY A BLANKET OPACITY
+
+`opacity: .72` on the row was the first cut and it is the trap worth recording:
+it fades the TEXT toward the ground along with the chrome. Measured on the real
+tokens — night card #17171A, paper #FFFFFF — the name fell to **3.38 night /
+3.26 paper** and the pill's ink to **3.02 on paper**: three of four under AA, on
+a row whose only job is to be read. Without it they are **5.29 / 6.04 / 8.09 /
+5.13**. The MARK is decoration and may fade; words take a quiet ink instead.
+
+Six red probes proven, including the two that pin the dangerous direction —
+TikTok or YouTube swept into the hold would take the two working platforms off
+the screen, and a held row draws no Connect, so there would be no way back from
+the UI.
