@@ -411,12 +411,30 @@ export const config = {
     .split(',').map(entry => entry.trim().toLowerCase()).filter(Boolean),
   adminName: process.env.ADMIN_NAME || 'DeenClipped Admin',
 
-  // Google sign-in is deliberately opt-in and has credentials separate from
-  // any legacy YouTube publishing client. A rejected publishing OAuth client
-  // must never quietly turn "Continue with Google" back on at login.
-  googleSigninEnabled: boolean(process.env.GOOGLE_SIGNIN_ENABLED, false),
-  googleSigninClientId: String(process.env.GOOGLE_SIGNIN_CLIENT_ID || '').trim(),
-  googleSigninClientSecret: String(process.env.GOOGLE_SIGNIN_CLIENT_SECRET || '').trim(),
+  /*
+   * SIGN-IN IS NOT PUBLISHING, and conflating the two locked every Google
+   * customer out of this product for three days (11-14 Sept 2026).
+   *
+   * The unverified-app warning Youssef wanted gone is triggered by SENSITIVE
+   * or RESTRICTED scopes. Publishing asked for `youtube.upload` and
+   * `youtube.readonly`, which are both -- and that is what showed the screen.
+   * Sign-in asks for `openid email profile` and nothing else: Google
+   * documents those as non-sensitive, needing no verification and showing no
+   * warning. Retiring the publishing scopes removed the screen; switching
+   * sign-in off as well removed it from nobody and stranded everyone who had
+   * joined with Google, because such an account has no password, cannot reset
+   * one, and is told to use the button that is no longer drawn.
+   *
+   * So a dedicated GOOGLE_SIGNIN_* pair still wins when it is set, and the
+   * project's own client is the fallback rather than nothing. The earlier note
+   * here worried that a rejected PUBLISHING client would quietly turn login
+   * back on; it cannot do harm, because the rejection attaches to scopes this
+   * flow does not request. GOOGLE_SIGNIN_ENABLED=false still turns it off
+   * outright, so the switch survives for whoever wants it.
+   */
+  googleSigninEnabled: boolean(process.env.GOOGLE_SIGNIN_ENABLED, true),
+  googleSigninClientId: String(process.env.GOOGLE_SIGNIN_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').trim(),
+  googleSigninClientSecret: String(process.env.GOOGLE_SIGNIN_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '').trim(),
   googleSigninRedirectUri: process.env.GOOGLE_SIGNIN_REDIRECT_URI || '',
 
   appleSigninClientId: String(process.env.APPLE_SIGNIN_CLIENT_ID || '').trim(),

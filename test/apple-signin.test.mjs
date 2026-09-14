@@ -68,6 +68,10 @@ function page(env) {
   const clean = { ...process.env };
   for (const key of Object.keys(clean)) {
     if (key.startsWith('APPLE_SIGNIN_') || key.startsWith('GOOGLE_SIGNIN_')) delete clean[key];
+    // The project's own Google client is a FALLBACK for sign-in, so it decides
+    // these cases too. Left inherited, this file answers differently on a
+    // machine that happens to export it than it does on the runner.
+    if (key === 'GOOGLE_CLIENT_ID' || key === 'GOOGLE_CLIENT_SECRET') delete clean[key];
   }
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dc-apple-'));
   try {
@@ -136,9 +140,50 @@ test('Google sign-in is shown only when explicitly enabled', () => {
   assert.ok(html.includes('or use email'), 'one provider still earns the divider');
 });
 
-test('Google credentials alone never switch on a sign-in button', () => {
+/*
+ * REVERSED ON 14 SEPT 2026, deliberately, and this note is the reason.
+ *
+ * This used to assert that credentials alone must NOT draw the button -- that
+ * an explicit GOOGLE_SIGNIN_ENABLED was required on top of them. The intent
+ * was that a refused PUBLISHING client could never quietly turn login back on.
+ *
+ * What it cost: the switch defaulted off, so from 11 to 14 September every
+ * account that had joined with Google was locked out of the product. Such an
+ * account has no password, `requestPasswordReset` returns `{ sent: false }`
+ * for it, and the email form tells it to use the button that is no longer
+ * drawn. There was no way back in, and that included the operator's own
+ * account.
+ *
+ * The worry it was guarding does not survive contact with the scopes. Sign-in
+ * asks for `openid email profile`, which Google documents as non-sensitive:
+ * no verification, and no unverified-app screen. A refusal attaches to the
+ * SENSITIVE scopes the publishing flow used to request, and those are gone.
+ *
+ * So credentials that can work now draw the button, and the switch survives as
+ * an override. Both halves are pinned below -- the first is the lockout, the
+ * second is the decision the earlier author wanted to keep available.
+ */
+test('credentials that can work DO draw the button, so the lockout cannot repeat', () => {
   const { html } = page({ GOOGLE_SIGNIN_CLIENT_ID: 'g', GOOGLE_SIGNIN_CLIENT_SECRET: 's' });
-  assert.ok(!html.includes('Continue with Google'));
+  assert.ok(html.includes('Continue with Google'), 'off by default is the lockout, shipped');
+});
+
+test('the project client is the fallback rather than nothing', () => {
+  const { html } = page({ GOOGLE_CLIENT_ID: 'g', GOOGLE_CLIENT_SECRET: 's' });
+  assert.ok(html.includes('Continue with Google'), 'a deployment with only these is not locked out');
+});
+
+test('GOOGLE_SIGNIN_ENABLED=false still wins over any credentials', () => {
+  const { html } = page({
+    GOOGLE_SIGNIN_CLIENT_ID: 'g', GOOGLE_SIGNIN_CLIENT_SECRET: 's',
+    GOOGLE_SIGNIN_ENABLED: 'false',
+  });
+  assert.ok(!html.includes('Continue with Google'), 'the off switch has to stay real');
+});
+
+test('no credentials still means no button, never a dead one', () => {
+  const { html } = page({});
+  assert.ok(!html.includes('Continue with Google'), 'an unusable provider is omitted, not greyed');
 });
 
 test('the shape check claims only what it can prove', () => {
