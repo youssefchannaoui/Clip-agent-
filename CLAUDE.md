@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2069 JS + 973 Python**
+- `npm test` and `npm run check` must pass. Currently **2075 JS + 973 Python**
   (17 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -19028,3 +19028,79 @@ channel through Buffer" when `providerConfigured('buffer')` is true), and the
 empty channel list is the second. This release stops the failing; it cannot
 connect an account. **Connections -> YouTube -> Connect** is the whole of it,
 and the clips resume on their own afterwards.
+
+## Every affiliate had earned zero, and the books were the reason (v3.198.0, 14 Sept 2026)
+
+On the "not fixed" list as "affiliate earnings reading zero". The display chain
+turned out to be clean -- `publicView` -> `statementFor` -> `commissions()`,
+with no binding reading the wrong field anywhere. **The zero is real, and it is
+the webhook again.**
+
+`commissions()` is computed from `state.revenueEvents` rows of
+`kind: 'subscription'`, and those were written in exactly ONE place: the
+`invoice.paid` / `invoice.payment_succeeded` webhook handler. The signing secret
+has been rejecting deliveries since 29 Aug, so no such row has been written
+since -- **every affiliate statement reads 0, the operator's ledger owes nobody
+anything, and `metrics.js` has been reporting no paid conversions**, all from
+one missing row. Same root cause as the cancelled subscription that kept its
+allowance (v3.197.0), reaching a different surface.
+
+### The reasoning that kept it broken was right, and stopped being right
+
+`confirmCheckoutSession` -- the second net (v3.39.0) -- has deliberately not
+recorded subscription revenue since it was written, and this file says why:
+*"inventing an invoice would double-count against the real one when it
+arrives"*. **That is exactly right about a FORGED id.** It stops being right the
+moment the session carries the REAL one.
+
+`session.invoice`, expanded, IS the invoice `invoice.paid` will name. So
+`recordRevenue`'s dedupe on the Stripe object id makes the redelivery a no-op --
+the same property that has always made `grantTopup` safe to run from both nets,
+and the same one this file already describes a test driving in that order. The
+books catch up now instead of waiting on a credential.
+
+- **A TRIAL books nothing**, because `amount_paid` is 0 and `recordRevenue`
+  returns on a zero amount. Correct rather than a gap: no money arrived, so
+  there is nothing to book and no commission to owe.
+- **A session with no invoice books nothing and still grants the plan.** The
+  customer being made whole never depended on this, and a books change must not
+  be able to take that away.
+- **The charge id travels**, because a refund names the CHARGE and an invoice id
+  alone cannot be joined to it -- which is what `clawbacks` and the void state
+  hang off. Without it the 30-day hold is a delay that checks nothing.
+
+### The probe that matters, and three faults in my own test first
+
+**Probe B replaces Stripe's invoice id with one of ours (`confirm:<session>`)
+and fails THREE tests**, including the double-count. That is the exact failure
+the original comment feared, and it is now caught rather than avoided.
+
+Three things were wrong with the test before the code was, and each is a trap
+this file already records:
+
+1. **The fixture named `state.affiliateApplications`; `apply()` writes
+   `state.affiliates`.** Every commission vanished for a reason that had nothing
+   to do with the code under test -- the fixture-does-not-match-production trap,
+   fourth occurrence here.
+2. **`config.js` has no default export**, so `(await import(...)).default` was
+   `undefined`, affiliates.js fell back to its own **percent-0** stub, and the
+   test reported zero earnings while proving the fix for zero earnings.
+3. **`totals` is keyed by CURRENCY** and nothing converts between them (the rule
+   the pricing pages hold), so there is no single total to read. `totals.aud.pending`
+   is the figure, and `?? 0` on a field that does not exist passes vacuously
+   either way.
+
+**Probe C -- dropping the `invoice` expansion -- fails only the one test written
+for it**, and that is the point of writing it: without the expansion
+`session.invoice` is a bare id string, the object check below it fails, and the
+books quietly stay empty **with every other test still passing on a fixture that
+supplies the object anyway.**
+
+6 tests, 4 probes proven red, 2075 JS / 0 fail.
+
+**Still Youssef's: the signing secret** (open item 4). This makes the affiliate
+programme and the paid-conversion count right for a NEW subscription without the
+webhook. It does not recover the commissions on subscriptions already paid while
+the secret was broken -- those invoices were never seen by this deployment at
+all, and fixing the secret inside Stripe's ~3-day retry window is the only thing
+that can redeliver them.

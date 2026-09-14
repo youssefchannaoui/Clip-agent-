@@ -1831,7 +1831,7 @@ export async function confirmCheckoutSession(user, sessionId) {
   // a query string, and everything else here trusts that it named a session.
   if (!/^cs_[A-Za-z0-9_]{8,255}$/.test(id)) throw new Error('That is not a Checkout session.');
 
-  const session = await stripeGet(`/checkout/sessions/${id}`, { 'expand[]': ['subscription', 'line_items'] });
+  const session = await stripeGet(`/checkout/sessions/${id}`, { 'expand[]': ['subscription', 'line_items', 'invoice'] });
   // stripeGet answers null rather than throwing on a deployment with no key,
   // so that the owner dashboard still renders. Here that is a refusal.
   if (!session) throw new Error('Stripe is not configured on this deployment.');
@@ -1887,6 +1887,42 @@ export async function confirmCheckoutSession(user, sessionId) {
     billing.status = 'checkout_complete';
     user.updatedAt = now();
     save();
+  }
+  /*
+   * THE BOOKS CATCH UP HERE TOO, and ONLY because the id is Stripe's OWN.
+   *
+   * This function has deliberately not recorded subscription revenue since it
+   * was written: "inventing an invoice would double-count against the real one
+   * when it arrives". That reasoning is exactly right about a FORGED id, and it
+   * stops being right the moment the session carries the real one.
+   *
+   * What it cost meanwhile was not only the books. `state.revenueEvents` rows
+   * of kind 'subscription' are the ONLY thing affiliate commission is computed
+   * from (src/affiliates.js), and the only thing the owner funnel counts a paid
+   * conversion from -- so with the signing secret rejecting deliveries since 29
+   * Aug, EVERY AFFILIATE HAS EARNED ZERO on every real subscription, and the
+   * funnel has been reporting none.
+   *
+   * `session.invoice` expanded IS the invoice `invoice.paid` will name, so
+   * `recordRevenue`'s dedupe on the Stripe object id makes the redelivery a
+   * no-op -- the same property that makes grantTopup safe to run from both
+   * nets, and the same one a test drives in that order.
+   *
+   * A trial is `amount_paid: 0` and recordRevenue returns on a zero amount,
+   * which is correct rather than a gap: no money arrived, so there is nothing
+   * to book and nothing to pay commission on.
+   */
+  const invoice = typeof session.invoice === 'object' && session.invoice ? session.invoice : null;
+  if (invoice?.id) {
+    recordRevenue({
+      kind: 'subscription', userId: user.id,
+      amountMinor: invoice.amount_paid, currency: invoice.currency || session.currency,
+      description: invoice.lines?.data?.[0]?.description || 'Subscription invoice',
+      stripeId: String(invoice.id),
+      // Kept for the same reason the webhook keeps it: a refund names the
+      // CHARGE, and affiliate commission is voided on that join.
+      chargeId: String(typeof invoice.charge === 'string' ? invoice.charge : invoice.charge?.id || ''),
+    });
   }
   return { ok: true, applied: true, kind: 'subscription', plan: ensureUserBilling(user).plan, status: ensureUserBilling(user).status };
 }
