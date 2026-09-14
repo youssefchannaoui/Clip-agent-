@@ -233,7 +233,7 @@ These were each a real bug and each has a test named after it.
 
 ## Verification standard
 
-- `npm test` and `npm run check` must pass. Currently **2075 JS + 973 Python**
+- `npm test` and `npm run check` must pass. Currently **2079 JS + 973 Python**
   (17 Python skipped) — the skips are where ffmpeg is absent, which is CI.
   These numbers were once wrong by more than a factor of
   two, which made them worse than absent — they still read as authoritative.
@@ -19104,3 +19104,57 @@ webhook. It does not recover the commissions on subscriptions already paid while
 the secret was broken -- those invoices were never seen by this deployment at
 all, and fixing the secret inside Stripe's ~3-day retry window is the only thing
 that can redeliver them.
+
+## The live bar's controls were under the 44px floor (v3.198.1, 14 Sept 2026)
+
+The last two controls left from the phone sweep. Measured at 375px: the text
+buttons **81x28** and the collapse icon **22x22** -- on a bar that FLOATS OVER
+THE CONTENT, whose icon is the only way to get it out of the way.
+
+- **The BUTTON is 44 and paints nothing; a `::before` draws the box it used to
+  be.** v3.126.1 settled the rule and its trap in one line -- *a control that
+  measures 40px is not a 44px target whatever its hit area is*, because an audit
+  measures the ELEMENT's rect -- so widening the hit region with a pseudo-element
+  is not an answer. Same device as the phone's own switch (a 48x44 button
+  drawing a 40x22 track).
+- **The icon needed a WIDTH as well as a height**, which is the half a
+  height-only fix silently misses: 44 tall and 22 wide is not a target, and it
+  LOOKS fixed.
+
+### DOCUMENT ORDER BEAT IT TWICE, AND HALF-APPLIED LOOKED RIGHT
+
+`.slb-btn` and `.slb-icon` are plain class selectors declared BELOW where the
+override was first written, so at equal specificity the base rules won on order.
+Measured: **22px wide with a 44px height** -- and that is worse than no fix at
+all, because the height reads as correct and only a width measurement finds it.
+
+Id-scoping every selector was the second attempt and fought the same battle one
+rule at a time; it still lost `#studioLiveBar.slb-min .slb-head`, which is
+(1,2,0) and beats any reasonable id-scoping of the same rule. **The block is
+declared after the rules it overrides now, and a test pins that**, because it is
+the property that broke twice while looking written.
+
+### The "minimised" pill came out BIGGER than the thing it minimises
+
+`#slbMin` is deliberately NOT in the `slb-min` display:none list -- it is the way
+back -- so the pill carries a 44px control now, and inside its own 7px padding
+that measured **63px against the open bar's 57**. The comment written with the
+first cut said the pill "draws NEITHER control", which was simply false. Its
+padding gives back what the bigger button took; both are 57 now, and the test
+asserts the premise (that `#slbMin` is still drawn there) as well as the padding.
+
+### Measured
+
+    375px  every control 44px, `under44` empty, pill 63 -> 57, no page overflow
+    1440   buttons 81.4x27.6, icon 22x22 -- and the ::before's `content`
+           computes to `none`, so the pseudo-element is not created off the
+           phone at ALL
+
+Five probes proven red. A SOURCE test, for the reason `rail-nav` and the
+overflow-anchor test are: CI has no browser, and this is exactly the shape that
+is invisible when it goes -- the app renders, the suite stays green, and the
+controls quietly go back to being too small to hit.
+
+**The CSP inline-script hash is computed at server start**, so the preview server
+was restarted after every index.html edit. Eleventh recorded occurrence, and it
+cost a run here too.

@@ -134,6 +134,20 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
   #studioLiveBar { width: calc(100vw - 24px); bottom: 12px; }
   #studioLiveBar.slb-min { width: min(320px, calc(100vw - 24px)); translate: calc(50vw - 100% - 12px) 0; }
 }
+/* A 44px TARGET THAT STILL DRAWS SMALL.
+   The live bar's two controls measured 81x28 and 22x22 -- both under the 44px
+   floor this product holds for a phone, on a bar that floats over the content
+   and is the only way to collapse it. v3.126.1 settled the rule and the trap
+   in one line: A CONTROL THAT MEASURES 40px IS NOT A 44px TARGET WHATEVER ITS
+   HIT AREA IS, because an audit measures the ELEMENT's rect -- so widening the
+   hit region with a pseudo-element is not an answer.
+   So the BUTTON is 44 tall and paints nothing, and a ::before draws the box it
+   used to be. That is the device the phone's own switch already uses (a 48x44
+   button drawing a 40x22 track). The bar grows by the difference and the head
+   gives back what it can: measured 38px -> 52px of head on a 390px screen.
+   ::before rather than a grid cell, because .slb-icon centres its glyph with
+   place-items and a second flow child would push it off centre. */
+
 .slb-head { display: flex; align-items: center; gap: 10px; padding: 11px 14px; }
 .slb-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--dc-n-7fd1a6, #7FD1A6); box-shadow: 0 0 0 3px rgba(127,209,166,.14); animation: dcPulse 1.8s ease-in-out infinite; }
 .slb-title { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -163,6 +177,44 @@ body.studio-active .toasts { left: auto; right: 18px; bottom: 18px; transform: n
 .slb-stages { flex: none; }
 .slb-stages .st em { display: none; }
 .slb-stages .st-line { min-width: 8px; margin: 0 4px; }
+/* THE LIVE BAR'S CONTROLS ON A PHONE: 44px TARGETS THAT STILL DRAW SMALL.
+   They measured 81x28 and 22x22 -- both under the floor this product holds for
+   a phone, on a bar that floats over the content and whose icon is the only
+   way to collapse it. v3.126.1 settled the rule and its trap in one line: A
+   CONTROL THAT MEASURES 40px IS NOT A 44px TARGET WHATEVER ITS HIT AREA IS,
+   because an audit measures the ELEMENT's rect -- so widening the hit region
+   with a pseudo-element is not an answer. The BUTTON is 44 and paints nothing;
+   a ::before draws the box it used to be. Same device as the phone's own
+   switch (a 48x44 button drawing a 40x22 track).
+
+   IT SITS HERE, BELOW THE RULES IT OVERRIDES, ON PURPOSE. Written above them
+   it lost on document order at equal specificity and measured 22px wide with a
+   44px height -- half-applied, which is worse than not applied because the
+   height looks right. Id-scoping it fought the same battle one rule at a time
+   and still lost the .slb-min pair, which is (1,2,0). Order is the fix. */
+@media (max-width: 820px) {
+  .slb-head { padding: 4px 10px; }
+  .slb-btn, .slb-icon {
+    position: relative; min-height: 44px; height: auto; border: 0; background: none;
+    display: grid; place-items: center;
+  }
+  .slb-btn { padding: 0 9px; }
+  .slb-icon { width: 44px; }
+  .slb-btn::before, .slb-icon::before {
+    content: ''; position: absolute; z-index: -1;
+    border: 1px solid var(--dc-line, #26262A); border-radius: 7px;
+    background: var(--dc-bg-raised, #17171A);
+  }
+  /* The box each one used to be, drawn where it was. */
+  .slb-btn::before { inset: 8px 0; }
+  .slb-icon::before { inset: 11px; }
+  /* THE COLLAPSED PILL DRAWS ONE CONTROL, NOT NONE -- #slbMin is the way back,
+     so it is deliberately absent from the slb-min display:none list. Measured,
+     a 44px button inside the pill's own 7px padding made the "minimised" pill
+     63px against the open bar's 57. The pill is the SMALLER state and has to
+     stay it, so its padding gives back what the bigger button took. */
+  #studioLiveBar.slb-min .slb-head { padding: 4px 6px 4px 13px; }
+}
 
 /* Live work — the stable Home section, at the top of the library column.
    Docked it is an ordinary card in the page flow and takes the column's width,
